@@ -2,9 +2,11 @@ import React from "react";
 import { View, Text, Pressable, Linking } from "react-native";
 import { useUserStore } from "../store/userStore";
 import { getCustomerPortalUrl } from "../services/stripe";
+import { useAuth } from "../providers/AuthProvider";
 
 export default function ProfileScreen() {
   const { profile } = useUserStore();
+  const { logout } = useAuth();
   async function manageSubscription() {
     const url = await getCustomerPortalUrl();
     if (url) Linking.openURL(url);
@@ -33,6 +35,12 @@ export default function ProfileScreen() {
         className="bg-indigo-600 rounded-xl px-4 py-3 mt-8 items-center"
       >
         <Text className="text-white font-semibold">Manage Subscription</Text>
+      </Pressable>
+      <Pressable
+        onPress={logout}
+        className="bg-gray-200 dark:bg-gray-800 rounded-xl px-4 py-3 mt-4 items-center"
+      >
+        <Text className="text-black dark:text-white font-semibold">Logout</Text>
       </Pressable>
     </View>
   );

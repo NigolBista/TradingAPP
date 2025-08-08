@@ -6,14 +6,17 @@ import "./global.css";
 import RootNavigation from "./src/navigation";
 import { ThemeProvider } from "./src/providers/ThemeProvider";
 import { StripeProvider } from "./src/providers/StripeProvider";
+import { AuthProvider } from "./src/providers/AuthProvider";
 
 export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
         <StripeProvider>
-          <StatusBar style="auto" />
-          <RootNavigation />
+          <AuthProvider>
+            <StatusBar style="auto" />
+            <RootNavigation />
+          </AuthProvider>
         </StripeProvider>
       </ThemeProvider>
     </SafeAreaProvider>
