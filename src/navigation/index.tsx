@@ -13,9 +13,13 @@ import WatchlistScreen from "../screens/WatchlistScreen";
 import AIInsightsScreen from "../screens/AIInsightsScreen";
 import JourneyScreen from "../screens/JourneyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import LoginScreen from "../screens/LoginScreen";
+import RegisterScreen from "../screens/RegisterScreen";
+import { useAuth } from "../providers/AuthProvider";
 
 const Tab = createBottomTabNavigator();
 const RootStack = createNativeStackNavigator();
+const AuthStack = createNativeStackNavigator();
 
 function Tabs() {
   return (
@@ -44,13 +48,27 @@ function Tabs() {
   );
 }
 
+function AuthRoutes() {
+  return (
+    <AuthStack.Navigator screenOptions={{ headerShown: false }}>
+      <AuthStack.Screen name="Login" component={LoginScreen} />
+      <AuthStack.Screen name="Register" component={RegisterScreen} />
+    </AuthStack.Navigator>
+  );
+}
+
 export default function RootNavigation() {
   const scheme = useColorScheme();
+  const { user } = useAuth();
   return (
     <NavigationContainer theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
-      <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        <RootStack.Screen name="Root" component={Tabs} />
-      </RootStack.Navigator>
+      {user ? (
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          <RootStack.Screen name="Root" component={Tabs} />
+        </RootStack.Navigator>
+      ) : (
+        <AuthRoutes />
+      )}
     </NavigationContainer>
   );
 }
