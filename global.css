@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App global styles */
+body {
+  background-color: #0b0f1a;
+}

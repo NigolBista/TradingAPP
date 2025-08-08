@@ -1,0 +1,11 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "jsx": "react-jsx",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "types": ["react", "react-native"]
+  },
+  "include": ["index.ts", "App.tsx", "src", "nativewind-env.d.ts"]
+}
