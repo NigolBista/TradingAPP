@@ -1,47 +1,178 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { registerForPushNotificationsAsync } from "../services/notifications";
+import { useUserStore } from "../store/userStore";
+import { supabase } from "../lib/supabase";
+import type { User } from "@supabase/supabase-js";
 
-type User = {
-  id: string;
-  email: string;
-};
+export type AuthUser = { id: string; email?: string; user_metadata?: any };
 
 type AuthContextType = {
-  user: User | null;
+  user: AuthUser | null;
+  loading: boolean;
+  demoLogin: () => void;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  register: (
+    email: string,
+    password: string,
+    fullName?: string
+  ) => Promise<void>;
+  logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  const setProfile = useUserStore((s) => s.setProfile);
+  const resetProfile = useUserStore((s) => s.reset);
 
   useEffect(() => {
     registerForPushNotificationsAsync();
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email,
+          user_metadata: session.user.user_metadata,
+        });
+        setProfile({
+          email: session.user.email,
+          subscriptionTier: "Free",
+          skillLevel: session.user.user_metadata?.skill_level || "Beginner",
+          traderType:
+            session.user.user_metadata?.trader_type || "Long-term holder",
+        });
+      }
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        setUser({
+          id: session.user.id,
+          email: session.user.email,
+          user_metadata: session.user.user_metadata,
+        });
+        setProfile({
+          email: session.user.email,
+          subscriptionTier: "Free",
+          skillLevel: session.user.user_metadata?.skill_level || "Beginner",
+          traderType:
+            session.user.user_metadata?.trader_type || "Long-term holder",
+        });
+      } else {
+        setUser(null);
+        resetProfile();
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
+  function demoLogin() {
+    const demo: AuthUser = { id: "demo-user", email: "demo@gpt5.app" };
+    setUser(demo);
+    setProfile({
+      email: demo.email,
+      subscriptionTier: "Free",
+      skillLevel: "Beginner",
+      traderType: "Long-term holder",
+    });
+  }
+
   async function login(email: string, password: string) {
-    if (!email || !password) {
-      throw new Error("Missing credentials");
+    if (!email || !password) throw new Error("Email and password are required");
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error("Please enter a valid email address");
     }
-    setUser({ id: "1", email });
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.toLowerCase().trim(),
+      password,
+    });
+
+    if (error) throw error;
   }
 
-  async function register(email: string, password: string) {
-    await login(email, password);
+  async function register(email: string, password: string, fullName?: string) {
+    if (!email || !password) throw new Error("Email and password are required");
+
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error("Please enter a valid email address");
+    }
+
+    // Password validation
+    if (password.length < 6) {
+      throw new Error("Password must be at least 6 characters long");
+    }
+
+    const { error } = await supabase.auth.signUp({
+      email: email.toLowerCase().trim(),
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          skill_level: "Beginner",
+          trader_type: "Long-term holder",
+        },
+      },
+    });
+
+    if (error) throw error;
   }
 
-  function logout() {
-    setUser(null);
+  async function logout() {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   }
 
-  return (
-    <AuthContext.Provider value={{ user, login, register, logout }}>
-      {children}
-    </AuthContext.Provider>
+  async function resetPassword(email: string) {
+    if (!email) throw new Error("Email is required");
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error("Please enter a valid email address");
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(
+      email.toLowerCase().trim()
+    );
+    if (error) throw error;
+  }
+
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      demoLogin,
+      login,
+      register,
+      logout,
+      resetPassword,
+    }),
+    [user, loading]
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

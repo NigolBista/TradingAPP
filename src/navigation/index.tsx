@@ -6,7 +6,12 @@ import {
 } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import { useColorScheme } from "react-native";
+import {
+  useColorScheme,
+  View,
+  ActivityIndicator,
+  StyleSheet,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import DashboardScreen from "../screens/DashboardScreen";
 import WatchlistScreen from "../screens/WatchlistScreen";
@@ -21,28 +26,60 @@ const Tab = createBottomTabNavigator();
 const RootStack = createNativeStackNavigator();
 const AuthStack = createNativeStackNavigator();
 
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+  },
+  loadingContainerDark: {
+    backgroundColor: "#000000",
+  },
+});
+
 function Tabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName: keyof typeof Ionicons.glyphMap;
+
+          switch (route.name) {
+            case "Dashboard":
+              iconName = focused ? "analytics" : "analytics-outline";
+              break;
+            case "Watchlist":
+              iconName = focused ? "list" : "list-outline";
+              break;
+            case "AI Insights":
+              iconName = focused ? "sparkles" : "sparkles-outline";
+              break;
+            case "Journey":
+              iconName = focused ? "school" : "school-outline";
+              break;
+            case "Profile":
+              iconName = focused ? "person" : "person-outline";
+              break;
+            default:
+              iconName = "help-outline";
+          }
+
+          return <Ionicons name={iconName} size={size} color={color} />;
+        },
         headerShown: false,
-        tabBarIcon: ({ color, size }) => {
-          const map: Record<string, any> = {
-            Dashboard: "stats-chart",
-            Watchlist: "bookmarks",
-            "AI Insights": "sparkles",
-            "Trader's Journey": "school",
-            Profile: "person",
-          };
-          const name = map[route.name as keyof typeof map] || "ellipse";
-          return <Ionicons name={name} size={size} color={color} />;
+        tabBarActiveTintColor: "#6366f1",
+        tabBarInactiveTintColor: "#9ca3af",
+        tabBarStyle: {
+          backgroundColor: "#ffffff",
+          borderTopColor: "#e5e7eb",
         },
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Watchlist" component={WatchlistScreen} />
       <Tab.Screen name="AI Insights" component={AIInsightsScreen} />
-      <Tab.Screen name="Trader's Journey" component={JourneyScreen} />
+      <Tab.Screen name="Journey" component={JourneyScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
@@ -59,7 +96,30 @@ function AuthRoutes() {
 
 export default function RootNavigation() {
   const scheme = useColorScheme();
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <NavigationContainer theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
+        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+          <RootStack.Screen
+            name="Loading"
+            component={() => (
+              <View
+                style={[
+                  styles.loadingContainer,
+                  scheme === "dark" && styles.loadingContainerDark,
+                ]}
+              >
+                <ActivityIndicator size="large" color="#6366f1" />
+              </View>
+            )}
+          />
+        </RootStack.Navigator>
+      </NavigationContainer>
+    );
+  }
+
   return (
     <NavigationContainer theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
       {user ? (
