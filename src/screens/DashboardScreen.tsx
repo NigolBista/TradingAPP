@@ -280,25 +280,69 @@ export default function DashboardScreen() {
     try {
       setLoading(candles.length === 0);
 
-      // Simplified data loading for demo
-      const c = parseDummyFromJson();
-      if (!c.length) {
-        const dummyCandles = generateDummyCandles(
-          interval === "daily" ? 120 : 180,
-          interval === "daily" ? 86_400_000 : 300_000
+      // Try to fetch real market data using Alpha Vantage
+      try {
+        console.log(
+          `Fetching real data for ${symbol} with interval ${interval}`
         );
-        setCandles(dummyCandles);
-      } else {
-        setCandles(c);
+        const realCandles = await fetchCandles(symbol, {
+          interval: interval,
+          providerOverride: "alphaVantage",
+          outputSize: "compact",
+        });
+
+        if (realCandles && realCandles.length > 0) {
+          console.log(
+            `Successfully fetched ${realCandles.length} candles for ${symbol}`
+          );
+          setCandles(realCandles);
+        } else {
+          console.log("No real data available, using dummy data");
+          throw new Error("No real data available");
+        }
+      } catch (apiError) {
+        console.warn(
+          "Failed to fetch real market data, falling back to dummy data:",
+          apiError
+        );
+
+        // Fallback to dummy data
+        const c = parseDummyFromJson();
+        if (!c.length) {
+          const dummyCandles = generateDummyCandles(
+            interval === "daily" ? 120 : 180,
+            interval === "daily" ? 86_400_000 : 300_000
+          );
+          setCandles(dummyCandles);
+        } else {
+          setCandles(c);
+        }
       }
 
-      // Mock news and insights
-      setNews([
-        { title: "Market Update", description: "Latest market movements" },
-        { title: "Tech Earnings", description: "Technology sector earnings" },
-      ]);
+      // Try to fetch real news
+      try {
+        const realNews = await fetchNews(symbol);
+        if (realNews && realNews.length > 0) {
+          setNews(realNews);
+        } else {
+          throw new Error("No news available");
+        }
+      } catch (newsError) {
+        console.warn("Failed to fetch real news, using mock data:", newsError);
+        // Mock news fallback
+        setNews([
+          { title: "Market Update", description: "Latest market movements" },
+          { title: "Tech Earnings", description: "Technology sector earnings" },
+        ]);
+      }
+
       setInsight(
-        "Market showing positive momentum with strong tech sector performance."
+        `Market analysis for ${symbol}: Based on recent price action and market sentiment, showing ${
+          candles.length > 0 &&
+          candles[candles.length - 1].close > candles[candles.length - 2]?.close
+            ? "positive"
+            : "mixed"
+        } momentum.`
       );
       setSentiment({ label: "Positive", score: 0.75 });
     } catch (error) {

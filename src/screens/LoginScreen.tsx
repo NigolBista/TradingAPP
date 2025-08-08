@@ -11,6 +11,7 @@ import {
   Alert,
   StyleSheet,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { useAuth } from "../providers/AuthProvider";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -21,7 +22,6 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
-    backgroundImage: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
   },
   scrollContent: {
     flexGrow: 1,
@@ -206,7 +206,7 @@ export default function LoginScreen({ navigation }: any) {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <View style={styles.gradient}>
+      <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.gradient}>
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.content}>
             {/* Header */}
@@ -323,7 +323,7 @@ export default function LoginScreen({ navigation }: any) {
             </View>
           </View>
         </ScrollView>
-      </View>
+      </LinearGradient>
     </KeyboardAvoidingView>
   );
 }

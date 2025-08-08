@@ -59,7 +59,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
       openaiApiKey: process.env.OPENAI_API_KEY,
-      marketProvider: process.env.MARKET_PROVIDER || "polygon",
+      marketProvider: process.env.MARKET_PROVIDER || "alphaVantage",
       polygonApiKey: process.env.POLYGON_API_KEY,
       yahooApiKey: process.env.YAHOO_FINANCE_API_KEY,
       newsApiKey: process.env.NEWS_API_KEY,
