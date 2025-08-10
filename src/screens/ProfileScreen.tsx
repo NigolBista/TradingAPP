@@ -16,6 +16,12 @@ import { useUserStore } from "../store/userStore";
 import Card from "../components/common/Card";
 import Button from "../components/common/Button";
 import Input from "../components/common/Input";
+import {
+  scheduleDailyBriefing,
+  scheduleWeeklyDigest,
+  scheduleEducationalTip,
+  cancelAllScheduledNotifications,
+} from "../services/notifications";
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -43,6 +49,9 @@ export default function ProfileScreen() {
   const [confThreshold, setConfThreshold] = useState<string>(
     String(profile?.signalConfidenceThreshold ?? 70)
   );
+  const [dailyBriefTime, setDailyBriefTime] = useState("8:00");
+  const [weeklyDigest, setWeeklyDigest] = useState(true);
+  const [educationalTips, setEducationalTips] = useState(true);
 
   // Edit profile state
   const [editEmail, setEditEmail] = useState(profile?.email || "");
@@ -438,9 +447,27 @@ export default function ProfileScreen() {
                   </View>
                   <Switch
                     value={pushNotifications}
-                    onValueChange={(v) => {
+                    onValueChange={async (v) => {
                       setPushNotifications(v);
                       setProfile({ notificationsEnabled: v });
+                      if (v) {
+                        // Schedule notifications when enabled
+                        if (dailyBriefTime) {
+                          const [hour, minute] = dailyBriefTime.split(":");
+                          await scheduleDailyBriefing(
+                            parseInt(hour),
+                            parseInt(minute)
+                          );
+                        }
+                        if (weeklyDigest) {
+                          await scheduleWeeklyDigest();
+                        }
+                        if (educationalTips) {
+                          await scheduleEducationalTip();
+                        }
+                      } else {
+                        await cancelAllScheduledNotifications();
+                      }
                     }}
                   />
                 </View>
@@ -482,6 +509,49 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                   <Switch value={marketOpen} onValueChange={setMarketOpen} />
+                </View>
+
+                <View className="flex-row justify-between items-center">
+                  <View>
+                    <Text className="font-medium text-gray-900 dark:text-white">
+                      Weekly Market Digest
+                    </Text>
+                    <Text className="text-sm text-gray-500 dark:text-gray-400">
+                      Weekly outlook every Monday morning
+                    </Text>
+                  </View>
+                  <Switch
+                    value={weeklyDigest}
+                    onValueChange={setWeeklyDigest}
+                  />
+                </View>
+
+                <View className="flex-row justify-between items-center">
+                  <View>
+                    <Text className="font-medium text-gray-900 dark:text-white">
+                      Educational Tips
+                    </Text>
+                    <Text className="text-sm text-gray-500 dark:text-gray-400">
+                      Daily trading tips and insights
+                    </Text>
+                  </View>
+                  <Switch
+                    value={educationalTips}
+                    onValueChange={setEducationalTips}
+                  />
+                </View>
+
+                <View>
+                  <Text className="font-medium text-gray-900 dark:text-white mb-2">
+                    Daily Brief Time
+                  </Text>
+                  <Input
+                    label="Time (HH:MM)"
+                    value={dailyBriefTime}
+                    onChangeText={setDailyBriefTime}
+                    placeholder="8:00"
+                    className="mb-3"
+                  />
                 </View>
 
                 <View className="flex-row justify-between items-center">

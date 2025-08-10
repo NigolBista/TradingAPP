@@ -22,6 +22,9 @@ import ProfileScreen from "../screens/ProfileScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
 import MarketScreenerScreen from "../screens/MarketScreenerScreen";
+import StockDetailScreen from "../screens/StockDetailScreen";
+import SignalsFeedScreen from "../screens/SignalsFeedScreen";
+import NewsInsightsScreen from "../screens/NewsInsightsScreen";
 import { useAuth } from "../providers/AuthProvider";
 
 const Tab = createBottomTabNavigator();
@@ -60,6 +63,12 @@ function Tabs() {
             case "AI Insights":
               iconName = focused ? "sparkles" : "sparkles-outline";
               break;
+            case "Signals":
+              iconName = focused ? "radio" : "radio-outline";
+              break;
+            case "News":
+              iconName = focused ? "newspaper" : "newspaper-outline";
+              break;
             case "Profile":
               iconName = focused ? "person" : "person-outline";
               break;
@@ -80,8 +89,8 @@ function Tabs() {
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Watchlist" component={WatchlistScreen} />
-      <Tab.Screen name="Scanner" component={MarketScreenerScreen} />
-      <Tab.Screen name="AI Insights" component={AIInsightsScreen} />
+      <Tab.Screen name="Signals" component={SignalsFeedScreen} />
+      <Tab.Screen name="News" component={NewsInsightsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
@@ -132,6 +141,10 @@ export default function RootNavigation() {
             name="ChartFullScreen"
             component={ChartFullScreen}
           />
+          <RootStack.Screen name="StockDetail" component={StockDetailScreen} />
+          <RootStack.Screen name="Scanner" component={MarketScreenerScreen} />
+          <RootStack.Screen name="Journey" component={JourneyScreen} />
+          <RootStack.Screen name="AIInsights" component={AIInsightsScreen} />
         </RootStack.Navigator>
       ) : (
         <AuthRoutes />

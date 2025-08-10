@@ -10,9 +10,9 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useUserStore } from "../store/userStore";
 import Card from "../components/common/Card";
 import Button from "../components/common/Button";
-import { useUserStore } from "../store/userStore";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -35,6 +35,15 @@ interface Lesson {
   duration: string;
   completed: boolean;
   content?: string;
+  quiz?: QuizQuestion[];
+}
+
+interface QuizQuestion {
+  id: string;
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation: string;
 }
 
 interface Achievement {
@@ -301,7 +310,7 @@ const challenges: TradingChallenge[] = [
 ];
 
 export default function JourneyScreen() {
-  const profile = useUserStore((state) => state.profile);
+  const { profile, setProfile } = useUserStore();
   const [activeTab, setActiveTab] = useState<
     "learning" | "achievements" | "challenges"
   >("learning");
@@ -309,6 +318,12 @@ export default function JourneyScreen() {
     null
   );
   const [showLessonModal, setShowLessonModal] = useState(false);
+  const [showQuizModal, setShowQuizModal] = useState(false);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [quizScore, setQuizScore] = useState(0);
+  const [showQuizResults, setShowQuizResults] = useState(false);
+  const [currentQuiz, setCurrentQuiz] = useState<QuizQuestion[] | null>(null);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [userProgress, setUserProgress] = useState({
     totalXP: 450,
