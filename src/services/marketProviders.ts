@@ -89,7 +89,7 @@ export type MarketDataResolution =
   | "5" // 5 minutes
   | "15" // 15 minutes
   | "30" // 30 minutes
-  | "H" // 1 hour
+  | "1H" // 1 hour
   | "D" // 1 day
   | "W" // 1 week
   | "M"; // 1 month
@@ -104,8 +104,9 @@ export async function fetchMarketDataCandles(
   console.log(`MarketData API Token available: ${!!apiToken}`);
 
   if (!apiToken) {
-    console.log("No MarketData API token found, falling back to Yahoo");
-    return fetchYahooCandles(symbol);
+    throw new Error(
+      "MarketData API token missing. Set extra.marketDataApiToken."
+    );
   }
 
   // Calculate date range for historical data
@@ -119,7 +120,7 @@ export async function fetchMarketDataCandles(
     resolution === "15" ||
     resolution === "30"
       ? 30
-      : resolution === "H"
+      : resolution === "1H"
       ? 120
       : resolution === "D"
       ? 365
@@ -186,8 +187,7 @@ export async function fetchMarketDataCandles(
     return candles;
   } catch (error) {
     console.error("MarketData API error:", error);
-    console.log("Falling back to Yahoo Finance");
-    return fetchYahooCandles(symbol);
+    throw error;
   }
 }
 

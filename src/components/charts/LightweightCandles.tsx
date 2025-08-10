@@ -71,13 +71,14 @@ export default function LightweightCandles({
   const html = `<!doctype html><html><head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
-      html,body,#wrap{margin:0;padding:0;height:100%;}
-      #c{position:relative;height:100%;}
+      html,body,#wrap{margin:0;padding:0;height:100%;width:100%;}
+      #c{position:relative;height:100%;width:100%;}
       #t{position:absolute;left:12px;top:12px;padding:8px 12px;border-radius:12px;font:13px -apple-system,Segoe UI,Roboto,Helvetica,Arial;background:rgba(17,24,39,.9);color:#ffffff;z-index:10;box-shadow:0 8px 25px rgba(0,0,0,0.15);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);}
       #controls{position:absolute;right:12px;top:12px;z-index:10;display:flex;gap:8px;}
       .btn{padding:6px 12px;border:none;border-radius:8px;font:12px -apple-system,Segoe UI,Roboto,Helvetica,Arial;cursor:pointer;background:rgba(17,24,39,.8);color:#ffffff;transition:all 0.2s;}
       .btn:hover{background:rgba(37,99,235,.8);}
       .btn.active{background:#2563eb;}
+      #debug{position:absolute;bottom:10px;left:10px;background:rgba(255,0,0,0.8);color:white;padding:5px;font-size:10px;z-index:100;}
     </style>
     </head><body>
     <div id="wrap">
@@ -88,10 +89,40 @@ export default function LightweightCandles({
           <button class="btn" onclick="resetZoom()">Reset</button>
         </div>
       </div>
+      <div id="debug">Loading...</div>
     </div>
-    <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
     <script>
+      const debugEl = document.getElementById('debug');
+      function log(msg) {
+        debugEl.textContent = msg;
+        try {
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ debug: msg }));
+        } catch(e) {}
+      }
+      
+      // Wait for library to load
+      function initChart() {
+        try {
+          log('Script started');
+          
+          if (!window.LightweightCharts) {
+            log('LightweightCharts not loaded!');
+            throw new Error('LightweightCharts library not available');
+          }
+          
+          log('LightweightCharts loaded');
+          
+          const container = document.getElementById('c');
+          if (!container) {
+            throw new Error('Chart container not found');
+          }
+          
+          log('Container found, creating chart');
       const dark = ${JSON.stringify(theme)} === 'dark';
+      const showVolume = ${JSON.stringify(showVolume)};
+      const showGrid = ${JSON.stringify(showGrid)};
+      const showCrosshair = ${JSON.stringify(showCrosshair)};
       const chartOptions = {
         height: ${height},
         layout: { 
@@ -143,7 +174,14 @@ export default function LightweightCandles({
         }
       };
 
-      const chart = LightweightCharts.createChart(document.getElementById('c'), chartOptions);
+      log('Creating chart with options');
+      const chart = LightweightCharts.createChart(container, chartOptions);
+      
+      if (!chart) {
+        throw new Error('Failed to create chart instance');
+      }
+      
+      log('Chart created successfully');
       
       let mainSeries;
       const type = ${JSON.stringify(type)};
@@ -179,8 +217,14 @@ export default function LightweightCandles({
         });
       }
       
-      const data = ${JSON.stringify(series)};
-      mainSeries.setData(data);
+      const raw = ${JSON.stringify(series)};
+      log('Raw data length: ' + raw.length);
+      const seriesData = (type === 'area' || type === 'line') 
+        ? raw.map(d => ({ time: d.time, value: d.close }))
+        : raw;
+      log('Setting data on main series');
+      mainSeries.setData(seriesData);
+      log('Data set on main series');
 
       // Add Moving Averages
       ${
@@ -225,7 +269,7 @@ export default function LightweightCandles({
           scaleMargins: { top: 0.7, bottom: 0 }
         });
         
-        const volumeData = data.map(d => ({
+        const volumeData = raw.map(d => ({
           time: d.time,
           value: d.volume,
           color: (d.close >= d.open) ? 'rgba(22,163,74,0.5)' : 'rgba(220,38,38,0.5)'
@@ -297,36 +341,70 @@ export default function LightweightCandles({
         chart.timeScale().resetTimeScale();
       }
 
-      // Auto-fit content on load
+      // Ensure width and fit on load
       setTimeout(() => {
+        log('Applying width: ' + container.clientWidth);
+        chart.applyOptions({ width: container.clientWidth });
         chart.timeScale().fitContent();
+        log('Chart fitted and ready');
       }, 100);
 
       // Handle window resize
       function handleResize() {
-        chart.applyOptions({ width: document.getElementById('c').clientWidth });
+        chart.applyOptions({ width: container.clientWidth });
       }
       
       window.addEventListener('resize', handleResize);
       
       // Post ready message
-      window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ 
-        ready: true, 
-        count: data.length,
-        type: type
-      }));
+      try {
+        const count = Array.isArray(raw) ? raw.length : 0;
+        log('Posting ready message');
+        window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ 
+          ready: true, 
+          count,
+          type
+        }));
+      } catch (e) {
+        log('postMessage error: ' + e.message);
+      }
+      
+        } catch (globalError) {
+          log('Global error: ' + globalError.message);
+          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ 
+            error: globalError.message 
+          }));
+        }
+      }
+      
+      // Try to initialize immediately, or wait for library to load
+      if (window.LightweightCharts) {
+        initChart();
+      } else {
+        // Wait for script to load
+        let attempts = 0;
+        const checkForLibrary = setInterval(() => {
+          attempts++;
+          if (window.LightweightCharts) {
+            clearInterval(checkForLibrary);
+            initChart();
+          } else if (attempts > 50) { // 5 seconds max
+            clearInterval(checkForLibrary);
+            log('Library load timeout');
+          }
+        }, 100);
+      }
     </script>
   </body></html>`;
 
   return (
     <View
-      className="rounded-xl overflow-hidden bg-white dark:bg-gray-800"
-      style={{ height }}
+      style={{ height, width: "100%", borderRadius: 12, overflow: "hidden" }}
     >
       <WebView
         originWhitelist={["*"]}
         source={{ html }}
-        style={{ height }}
+        style={{ height, width: "100%" }}
         javaScriptEnabled={true}
         domStorageEnabled={true}
         startInLoadingState={false}
@@ -334,6 +412,20 @@ export default function LightweightCandles({
         scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
+        onMessage={(e) => {
+          try {
+            const msg = JSON.parse(e.nativeEvent.data);
+            console.log("LightweightCandles WebView message:", msg);
+          } catch {
+            console.log(
+              "LightweightCandles WebView message:",
+              e.nativeEvent.data
+            );
+          }
+        }}
+        onError={(e) => {
+          console.warn("LightweightCandles WebView error:", e.nativeEvent);
+        }}
       />
     </View>
   );

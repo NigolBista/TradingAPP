@@ -99,22 +99,23 @@ export default function RootNavigation() {
   const { user, loading } = useAuth();
 
   if (loading) {
+    function LoadingScreen() {
+      return (
+        <View
+          style={[
+            styles.loadingContainer,
+            scheme === "dark" && styles.loadingContainerDark,
+          ]}
+        >
+          <ActivityIndicator size="large" color="#6366f1" />
+        </View>
+      );
+    }
+
     return (
       <NavigationContainer theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
-          <RootStack.Screen
-            name="Loading"
-            component={() => (
-              <View
-                style={[
-                  styles.loadingContainer,
-                  scheme === "dark" && styles.loadingContainerDark,
-                ]}
-              >
-                <ActivityIndicator size="large" color="#6366f1" />
-              </View>
-            )}
-          />
+          <RootStack.Screen name="Loading" component={LoadingScreen} />
         </RootStack.Navigator>
       </NavigationContainer>
     );

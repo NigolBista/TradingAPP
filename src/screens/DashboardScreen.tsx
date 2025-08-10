@@ -276,19 +276,39 @@ export default function DashboardScreen() {
     loadData();
   }, [symbol, interval]);
 
+  function mapIntervalToResolution(
+    i: typeof interval
+  ): "1" | "5" | "15" | "30" | "1H" | "D" {
+    switch (i) {
+      case "1min":
+        return "1";
+      case "5min":
+        return "5";
+      case "15min":
+        return "15";
+      case "30min":
+        return "30";
+      case "60min":
+        return "1H";
+      case "daily":
+      default:
+        return "D";
+    }
+  }
+
   async function loadData() {
     try {
       setLoading(candles.length === 0);
 
       // Try to fetch real market data using Alpha Vantage
       try {
+        const resolution = mapIntervalToResolution(interval);
         console.log(
-          `Fetching real data for ${symbol} with interval ${interval}`
+          `Fetching MarketData for ${symbol} with resolution ${resolution}`
         );
         const realCandles = await fetchCandles(symbol, {
-          interval: interval,
-          providerOverride: "alphaVantage",
-          outputSize: "compact",
+          providerOverride: "marketData",
+          resolution,
         });
 
         if (realCandles && realCandles.length > 0) {
