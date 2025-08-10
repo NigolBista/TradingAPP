@@ -1,5 +1,10 @@
 // Deprecated: replaced by services/marketProviders
-export type Provider = "yahoo" | "finnhub" | "polygon" | "alphaVantage";
+export type Provider =
+  | "yahoo"
+  | "finnhub"
+  | "polygon"
+  | "alphaVantage"
+  | "marketData";
 export interface Candle {
   time: number;
   open: number;

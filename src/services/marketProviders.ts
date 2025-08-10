@@ -83,7 +83,115 @@ export async function fetchPolygonCandles(
   }));
 }
 
-// Alpha Vantage TIME_SERIES_DAILY_ADJUSTED or INTRADAY
+// MarketData.app resolutions
+export type MarketDataResolution =
+  | "1" // 1 minute
+  | "5" // 5 minutes
+  | "15" // 15 minutes
+  | "30" // 30 minutes
+  | "H" // 1 hour
+  | "D" // 1 day
+  | "W" // 1 week
+  | "M"; // 1 month
+
+// MarketData.app candles (requires API token)
+export async function fetchMarketDataCandles(
+  symbol: string,
+  resolution: MarketDataResolution = "D",
+  limit: number = 120
+): Promise<Candle[]> {
+  const apiToken = (Constants.expoConfig?.extra as any)?.marketDataApiToken;
+  console.log(`MarketData API Token available: ${!!apiToken}`);
+
+  if (!apiToken) {
+    console.log("No MarketData API token found, falling back to Yahoo");
+    return fetchYahooCandles(symbol);
+  }
+
+  // Calculate date range for historical data
+  const to = new Date();
+  const from = new Date();
+
+  // Adjust date range based on resolution
+  const daysBack =
+    resolution === "1" ||
+    resolution === "5" ||
+    resolution === "15" ||
+    resolution === "30"
+      ? 30
+      : resolution === "H"
+      ? 120
+      : resolution === "D"
+      ? 365
+      : resolution === "W"
+      ? 365 * 2
+      : 365 * 5; // Monthly
+
+  from.setDate(to.getDate() - daysBack);
+
+  const formatDate = (d: Date) => d.toISOString().split("T")[0];
+
+  const url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
+    symbol
+  )}/?from=${formatDate(from)}&to=${formatDate(to)}&limit=${limit}`;
+
+  console.log(`Fetching MarketData candles from: ${url}`);
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${apiToken}`,
+      "Content-Type": "application/json",
+    };
+
+    const json = await fetchJson(url, headers);
+    console.log(`MarketData response status:`, json?.s);
+
+    // Check for API errors
+    if (json?.s !== "ok") {
+      const errorMsg = json?.errmsg || "Unknown error";
+      console.warn("MarketData API error:", errorMsg);
+      console.warn("Full response:", JSON.stringify(json, null, 2));
+      return [];
+    }
+
+    const timestamps = json.t || [];
+    const opens = json.o || [];
+    const highs = json.h || [];
+    const lows = json.l || [];
+    const closes = json.c || [];
+    const volumes = json.v || [];
+
+    if (timestamps.length === 0) {
+      console.warn(`No data found for symbol: ${symbol}`);
+      return [];
+    }
+
+    console.log(`Found ${timestamps.length} data points for ${symbol}`);
+
+    const candles: Candle[] = timestamps
+      .map((t: number, i: number) => ({
+        time: t * 1000, // Convert Unix timestamp to milliseconds
+        open: opens[i],
+        high: highs[i],
+        low: lows[i],
+        close: closes[i],
+        volume: volumes[i],
+      }))
+      .filter(
+        (c: Candle) => Number.isFinite(c.open) && Number.isFinite(c.close)
+      )
+      .sort((a: Candle, b: Candle) => a.time - b.time);
+
+    console.log(`Successfully parsed ${candles.length} candles for ${symbol}`);
+    return candles;
+  } catch (error) {
+    console.error("MarketData API error:", error);
+    console.log("Falling back to Yahoo Finance");
+    return fetchYahooCandles(symbol);
+  }
+}
+
+// Alpha Vantage TIME_SERIES_DAILY, WEEKLY, MONTHLY (non-adjusted) or INTRADAY
 export type AlphaVantageInterval =
   | "1min"
   | "5min"
@@ -100,18 +208,24 @@ export async function fetchAlphaVantageCandles(
   outputSize: "compact" | "full" = "compact"
 ): Promise<Candle[]> {
   const apiKey = (Constants.expoConfig?.extra as any)?.alphaVantageApiKey;
-  if (!apiKey) return fetchYahooCandles(symbol);
+  console.log(`Alpha Vantage API Key available: ${!!apiKey}`);
+
+  if (!apiKey) {
+    console.log("No Alpha Vantage API key found, falling back to Yahoo");
+    return fetchYahooCandles(symbol);
+  }
+
   let url: string;
   if (interval === "daily") {
-    url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=${encodeURIComponent(
+    url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${encodeURIComponent(
       symbol
     )}&outputsize=${outputSize}&apikey=${apiKey}`;
   } else if (interval === "weekly") {
-    url = `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY_ADJUSTED&symbol=${encodeURIComponent(
+    url = `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=${encodeURIComponent(
       symbol
     )}&apikey=${apiKey}`;
   } else if (interval === "monthly") {
-    url = `https://www.alphavantage.co/query?function=TIME_SERIES_MONTHLY_ADJUSTED&symbol=${encodeURIComponent(
+    url = `https://www.alphavantage.co/query?function=TIME_SERIES_MONTHLY&symbol=${encodeURIComponent(
       symbol
     )}&apikey=${apiKey}`;
   } else {
@@ -119,40 +233,77 @@ export async function fetchAlphaVantageCandles(
       symbol
     )}&interval=${interval}&outputsize=${outputSize}&apikey=${apiKey}`;
   }
+
+  console.log(
+    `Fetching Alpha Vantage data from: ${url.replace(apiKey, "API_KEY_HIDDEN")}`
+  );
+
   const json = await fetchJson(url);
+  console.log(`Alpha Vantage response keys:`, Object.keys(json));
+
+  // Check for API errors
   if (json?.Note || json?.Information || json?.["Error Message"]) {
-    // Alpha Vantage throttle or error; return empty to trigger fallback by caller
+    const errorMsg = json?.Note || json?.Information || json?.["Error Message"];
+    console.warn("Alpha Vantage API error:", errorMsg);
+    console.warn("Full response:", JSON.stringify(json, null, 2));
     return [];
   }
+
+  // Determine the correct key for the time series data
   const key =
     interval === "daily"
       ? "Time Series (Daily)"
       : interval === "weekly"
-      ? "Weekly Adjusted Time Series"
+      ? "Weekly Time Series"
       : interval === "monthly"
-      ? "Monthly Adjusted Time Series"
+      ? "Monthly Time Series"
       : `Time Series (${interval})`;
+
+  console.log(`Looking for key: "${key}"`);
   const series = json[key] || {};
+
+  if (Object.keys(series).length === 0) {
+    console.warn(
+      `No data found for key "${key}". Available keys:`,
+      Object.keys(json)
+    );
+    console.warn("Full JSON response:", JSON.stringify(json, null, 2));
+    return [];
+  }
+
   const entries = Object.entries(series) as [string, any][];
+  console.log(`Found ${entries.length} data points for ${symbol}`);
+
   const candles: Candle[] = entries
-    .map(([date, v]) => ({
-      time: new Date(date).getTime(),
-      open: parseFloat(v["1. open"]) || parseFloat(v["1. open "]),
-      high: parseFloat(v["2. high"]) || parseFloat(v["2. high "]),
-      low: parseFloat(v["3. low"]) || parseFloat(v["3. low "]),
-      close: parseFloat(v["4. close"]) || parseFloat(v["4. close "]),
-      volume:
-        parseFloat(v["6. volume"]) || parseFloat(v["5. volume"]) || undefined,
-    }))
+    .map(([date, v]) => {
+      // Handle non-adjusted data format
+      const open = parseFloat(v["1. open"]);
+      const high = parseFloat(v["2. high"]);
+      const low = parseFloat(v["3. low"]);
+      const close = parseFloat(v["4. close"]);
+      const volume = parseFloat(v["5. volume"]) || undefined;
+
+      return {
+        time: new Date(date).getTime(),
+        open,
+        high,
+        low,
+        close,
+        volume,
+      };
+    })
     .filter((c) => Number.isFinite(c.open) && Number.isFinite(c.close))
     .sort((a, b) => a.time - b.time);
+
+  console.log(`Successfully parsed ${candles.length} candles for ${symbol}`);
   return candles;
 }
 
 export interface FetchCandlesOptions {
   interval?: AlphaVantageInterval;
+  resolution?: MarketDataResolution;
   outputSize?: "compact" | "full";
-  providerOverride?: "polygon" | "alphaVantage" | "yahoo";
+  providerOverride?: "polygon" | "alphaVantage" | "yahoo" | "marketData";
 }
 
 export async function fetchCandles(
@@ -162,7 +313,11 @@ export async function fetchCandles(
   const provider =
     options.providerOverride ||
     (Constants.expoConfig?.extra as any)?.marketProvider ||
-    "polygon";
+    "marketData"; // Default to MarketData.app
+
+  if (provider === "marketData") {
+    return fetchMarketDataCandles(symbol, options.resolution || "D");
+  }
   if (provider === "polygon") return fetchPolygonCandles(symbol);
   if (provider === "alphaVantage")
     return fetchAlphaVantageCandles(
