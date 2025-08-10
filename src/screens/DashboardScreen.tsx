@@ -10,6 +10,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import LightweightCandles from "../components/charts/LightweightCandles";
+import AdvancedTradingChart from "../components/charts/AdvancedTradingChart";
+import TradingViewChart from "../components/charts/TradingViewChart";
 import { fetchCandles, fetchNews } from "../services/marketProviders";
 import NewsList from "../components/insights/NewsList";
 import { generateInsights } from "../services/ai";
@@ -554,7 +556,7 @@ export default function DashboardScreen() {
               <ActivityIndicator size="large" color="#6366f1" />
             </View>
           ) : (
-            <LightweightCandles data={candles} height={300} type={chartKind} />
+            <TradingViewChart symbol={symbol} height={520} />
           )}
         </View>
 
