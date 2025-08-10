@@ -29,19 +29,24 @@ async function fetchJson(url: string, headers: Record<string, string> = {}) {
 async function fetchMarketDataNews(symbol: string): Promise<NewsItem[]> {
   const token = (Constants.expoConfig?.extra as any)?.marketDataApiToken;
   if (!token) throw new Error("MarketData API token missing for news");
-  // Note: If MarketData.app provides a news endpoint, set it here via env EXPO_EXTRA
-  const baseUrl = (Constants.expoConfig?.extra as any)?.marketDataNewsBaseUrl;
-  if (!baseUrl)
-    throw new Error(
-      "MarketData news base URL not configured (extra.marketDataNewsBaseUrl)"
-    );
-  const url = `${baseUrl.replace(/\/$/, "")}?symbol=${encodeURIComponent(
-    symbol
-  )}&limit=20`;
+
+  // Default to MarketData.app official news endpoint when baseUrl isn't provided
+  // Docs: https://api.marketdata.app/
+  const configuredBaseUrl = (Constants.expoConfig?.extra as any)
+    ?.marketDataNewsBaseUrl;
+  const baseUrl = (
+    configuredBaseUrl?.trim()?.length
+      ? configuredBaseUrl
+      : "https://api.marketdata.app/v1/news"
+  ).replace(/\/$/, "");
+
+  // Fetch latest premium news for symbol
+  const url = `${baseUrl}?symbol=${encodeURIComponent(symbol)}&limit=20`;
   const json = await fetchJson(url, {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   });
+
   const items = (json?.data || json?.news || json || []) as any[];
   return items.slice(0, 20).map((a: any, idx: number) => ({
     id: a.id || a.url || `${symbol}-${idx}`,

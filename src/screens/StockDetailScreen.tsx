@@ -10,7 +10,7 @@ import {
   TextInput,
   Alert,
 } from "react-native";
-import { RouteProp, useRoute } from "@react-navigation/native";
+import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import AdvancedTradingChart, {
   type LWCDatum,
@@ -104,6 +104,7 @@ const styles = StyleSheet.create({
 
 export default function StockDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "StockDetail">>();
+  const navigation = useNavigation();
   const symbol = route.params?.symbol || "AAPL";
 
   const [loading, setLoading] = useState(true);
@@ -200,8 +201,36 @@ export default function StockDetailScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{symbol}</Text>
-        <Text style={styles.headerSubtitle}>${currentPrice.toFixed(2)}</Text>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={{ padding: 8, marginRight: 8 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#fff" />
+            </Pressable>
+            <View>
+              <Text style={styles.headerTitle}>{symbol}</Text>
+              <Text style={styles.headerSubtitle}>
+                ${currentPrice.toFixed(2)}
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            onPress={() =>
+              (navigation as any).navigate("ChartFullScreen", { symbol })
+            }
+            style={{ padding: 8 }}
+          >
+            <Ionicons name="expand" size={24} color="#00D4AA" />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView style={{ flex: 1 }}>
@@ -210,6 +239,15 @@ export default function StockDetailScreen() {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Price & Indicators</Text>
             <View style={styles.actionsRow}>
+              <Pressable
+                style={[styles.actionBtn, { backgroundColor: "#00D4AA" }]}
+                onPress={() =>
+                  (navigation as any).navigate("ChartFullScreen", { symbol })
+                }
+              >
+                <Ionicons name="expand" size={16} color="#000" />
+                <Text style={styles.actionText}>Expand Chart</Text>
+              </Pressable>
               <Pressable style={styles.actionBtn} onPress={onSetAlert}>
                 <Ionicons name="notifications" size={16} color="#000" />
                 <Text style={styles.actionText}>Set Alert</Text>

@@ -3,6 +3,9 @@ export interface StockSearchResult {
   name: string;
   type: string;
   exchange?: string;
+  sector?: string;
+  industry?: string;
+  marketCap?: number;
 }
 
 // Popular stocks for quick selection
@@ -191,31 +194,64 @@ const POPULAR_STOCKS: StockSearchResult[] = [
 export async function searchStocks(
   query: string
 ): Promise<StockSearchResult[]> {
-  if (!query || query.length < 1) {
-    return POPULAR_STOCKS.slice(0, 20);
+  // Import the new stock data service
+  const { searchStocksAutocomplete } = await import("./stockData");
+
+  const Constants = (await import("expo-constants")).default;
+  const extra: any = Constants.expoConfig?.extra;
+  const token: string | undefined = extra?.marketDataApiToken;
+
+  // Try MarketData.app premium symbol search first if token present
+  if (token && (query?.length ?? 0) > 0) {
+    try {
+      // Reference: https://api.marketdata.app/
+      const url = `https://api.marketdata.app/v1/symbols/search?query=${encodeURIComponent(
+        query
+      )}&limit=15`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const rows: any[] = json?.data || json?.symbols || json || [];
+        const mapped: StockSearchResult[] = rows
+          .map((r: any) => ({
+            symbol: r.symbol || r.ticker || r.code,
+            name: r.name || r.description || "",
+            type: (r.type || r.assetType || "stock").toLowerCase(),
+            exchange: r.exchange || r.exch || undefined,
+          }))
+          .filter((m) => !!m.symbol);
+        const q = (query || "").toUpperCase();
+        return mapped
+          .filter((m) => m.symbol.toUpperCase().startsWith(q))
+          .slice(0, 15);
+      }
+    } catch {
+      // Ignore and fall back to local
+    }
   }
 
-  const normalizedQuery = query.toUpperCase();
+  // Use the comprehensive NASDAQ stock data for local search
+  try {
+    return await searchStocksAutocomplete(query, 15);
+  } catch (error) {
+    console.error("Failed to search stocks from local data:", error);
 
-  // Filter popular stocks by symbol or name
-  const filtered = POPULAR_STOCKS.filter(
-    (stock) =>
-      stock.symbol.includes(normalizedQuery) ||
-      stock.name.toUpperCase().includes(normalizedQuery)
-  );
+    // Ultimate fallback: filter popular list
+    if (!query || query.length < 1) {
+      return POPULAR_STOCKS.slice(0, 20);
+    }
 
-  // Sort by relevance (symbol matches first, then name matches)
-  filtered.sort((a, b) => {
-    const aSymbolMatch = a.symbol.startsWith(normalizedQuery);
-    const bSymbolMatch = b.symbol.startsWith(normalizedQuery);
-
-    if (aSymbolMatch && !bSymbolMatch) return -1;
-    if (!aSymbolMatch && bSymbolMatch) return 1;
-
-    return a.symbol.localeCompare(b.symbol);
-  });
-
-  return filtered.slice(0, 10);
+    const normalizedQuery = query.toUpperCase();
+    const filtered = POPULAR_STOCKS.filter(
+      (stock) =>
+        stock.symbol.startsWith(normalizedQuery) ||
+        stock.name.toUpperCase().includes(normalizedQuery)
+    );
+    filtered.sort((a, b) => a.symbol.localeCompare(b.symbol));
+    return filtered.slice(0, 15);
+  }
 }
 
 export function getPopularStocks(): StockSearchResult[] {

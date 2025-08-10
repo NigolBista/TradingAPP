@@ -29,6 +29,7 @@ export interface UserProfile {
   watchlist: string[]; // Keep for backward compatibility
   watchlists: Watchlist[];
   activeWatchlistId: string;
+  favorites: string[]; // Global favorites outside watchlists (Robinhood-style)
   accountSize?: number; // USD
   riskPerTradePct?: number; // % of account per trade
   signalConfidenceThreshold?: number; // 0-100
@@ -43,6 +44,8 @@ interface UserState {
   addToWatchlist: (watchlistId: string, symbol: string) => void;
   removeFromWatchlist: (watchlistId: string, symbol: string) => void;
   toggleFavorite: (watchlistId: string, symbol: string) => void;
+  toggleGlobalFavorite: (symbol: string) => void; // For global favorites like Robinhood
+  isGlobalFavorite: (symbol: string) => boolean;
   setActiveWatchlist: (id: string) => void;
   getActiveWatchlist: () => Watchlist | undefined;
   reset: () => void;
@@ -71,6 +74,7 @@ const defaultProfile: UserProfile = {
   watchlist: ["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA"], // Keep for backward compatibility
   watchlists: [defaultWatchlist],
   activeWatchlistId: "default",
+  favorites: ["AAPL", "TSLA"], // Global favorites like Robinhood
   accountSize: 10000,
   riskPerTradePct: 1,
   signalConfidenceThreshold: 70,
@@ -178,6 +182,25 @@ export const useUserStore = create<UserState>((set, get) => ({
         ),
       },
     }));
+  },
+
+  toggleGlobalFavorite: (symbol: string) => {
+    set((s) => {
+      const isCurrentlyFavorite = s.profile.favorites.includes(symbol);
+      return {
+        profile: {
+          ...s.profile,
+          favorites: isCurrentlyFavorite
+            ? s.profile.favorites.filter((fav) => fav !== symbol)
+            : [...s.profile.favorites, symbol],
+        },
+      };
+    });
+  },
+
+  isGlobalFavorite: (symbol: string) => {
+    const { profile } = get();
+    return profile.favorites.includes(symbol);
   },
 
   setActiveWatchlist: (id: string) => {

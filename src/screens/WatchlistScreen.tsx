@@ -26,14 +26,14 @@ import {
   type Watchlist,
   type WatchlistItem,
 } from "../store/userStore";
-import AdvancedTradingChart, {
-  type LWCDatum,
-} from "../components/charts/AdvancedTradingChart";
+// Removed AdvancedTradingChart import - now handled in StockDetailScreen
 import {
   searchStocks,
   getPopularStocks,
   type StockSearchResult,
 } from "../services/stockSearch";
+import StockAutocomplete from "../components/common/StockAutocomplete";
+import AddToWatchlistModal from "../components/common/AddToWatchlistModal";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -85,11 +85,14 @@ const styles = StyleSheet.create({
 
   // Stock cards
   stockCard: {
-    backgroundColor: "#2a2a2a",
+    backgroundColor: "#141414",
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    marginHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 8,
+    marginHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#1f1f1f",
   },
   stockHeader: {
     flexDirection: "row",
@@ -97,8 +100,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  stockSymbol: { fontSize: 18, fontWeight: "bold", color: "#ffffff" },
-  stockPrice: { fontSize: 16, fontWeight: "600", color: "#ffffff" },
+  stockSymbol: { fontSize: 16, fontWeight: "700", color: "#ffffff" },
+  stockPrice: { fontSize: 16, fontWeight: "700", color: "#ffffff" },
   stockChange: { fontSize: 14, fontWeight: "500" },
   positiveChange: { color: "#00D4AA" },
   negativeChange: { color: "#FF5722" },
@@ -111,8 +114,8 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   metricItem: { alignItems: "center" },
-  metricLabel: { fontSize: 12, color: "#888888", marginBottom: 4 },
-  metricValue: { fontSize: 14, fontWeight: "600", color: "#ffffff" },
+  metricLabel: { fontSize: 11, color: "#888888", marginBottom: 2 },
+  metricValue: { fontSize: 13, fontWeight: "600", color: "#ffffff" },
 
   // Add/Create modals
   modalOverlay: {
@@ -265,46 +268,46 @@ export default function WatchlistScreen() {
     addToWatchlist,
     removeFromWatchlist,
     toggleFavorite,
+    toggleGlobalFavorite,
+    isGlobalFavorite,
     setActiveWatchlist,
   } = useUserStore();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stockData, setStockData] = useState<StockData[]>([]);
-  const [selectedStock, setSelectedStock] = useState<string | null>(null);
-  const [chartData, setChartData] = useState<LWCDatum[]>([]);
+  // Removed chart-related states since we now navigate to StockDetailScreen
 
   // Modal states
   const [showCreateWatchlistModal, setShowCreateWatchlistModal] =
     useState(false);
+  const [showAddToWatchlistModal, setShowAddToWatchlistModal] = useState(false);
   const [newWatchlistName, setNewWatchlistName] = useState("");
   const [newWatchlistDescription, setNewWatchlistDescription] = useState("");
 
+  // View states
+  const [viewMode, setViewMode] = useState<"favorites" | "watchlist">(
+    "favorites"
+  ); // Start with favorites like Robinhood
+  const [selectedWatchlistId, setSelectedWatchlistId] = useState<string | null>(
+    null
+  );
+
   // Stock search states
-  const [stockSearchQuery, setStockSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<StockSearchResult[]>([]);
   const [selectedStocks, setSelectedStocks] = useState<StockSearchResult[]>([]);
   const [favoriteStocks, setFavoriteStocks] = useState<Set<string>>(new Set());
 
   const activeWatchlist = getActiveWatchlist();
 
   useEffect(() => {
-    loadWatchlistData();
-  }, [profile.activeWatchlistId, activeWatchlist]);
+    loadDisplayData();
+  }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists]);
 
   useEffect(() => {
-    async function performSearch() {
-      const results = await searchStocks(stockSearchQuery);
-      setSearchResults(results);
-    }
-    performSearch();
-  }, [stockSearchQuery]);
-
-  useEffect(() => {
-    // Load popular stocks when modal opens
+    // Reset selected stocks when modal opens
     if (showCreateWatchlistModal) {
-      const popular = getPopularStocks();
-      setSearchResults(popular);
+      setSelectedStocks([]);
+      setFavoriteStocks(new Set());
     }
   }, [showCreateWatchlistModal]);
 
@@ -324,8 +327,20 @@ export default function WatchlistScreen() {
   //   }
   // }, [activeWatchlist, selectedStock]);
 
-  async function loadWatchlistData() {
-    if (!activeWatchlist || activeWatchlist.items.length === 0) {
+  async function loadDisplayData() {
+    let symbols: string[] = [];
+
+    // Get symbols based on current view mode
+    if (viewMode === "favorites") {
+      symbols = profile.favorites;
+    } else if (selectedWatchlistId) {
+      const watchlist = profile.watchlists.find(
+        (w) => w.id === selectedWatchlistId
+      );
+      symbols = watchlist?.items.map((item) => item.symbol) || [];
+    }
+
+    if (symbols.length === 0) {
       setStockData([]);
       setLoading(false);
       setRefreshing(false);
@@ -336,12 +351,12 @@ export default function WatchlistScreen() {
       setLoading(true);
       const results: StockData[] = [];
 
-      for (const item of activeWatchlist.items) {
+      for (const symbol of symbols) {
         try {
-          const candles = await fetchCandles(item.symbol, { resolution: "D" });
+          const candles = await fetchCandles(symbol, { resolution: "D" });
 
           if (candles.length >= 2) {
-            const analysis = await performComprehensiveAnalysis(item.symbol, {
+            const analysis = await performComprehensiveAnalysis(symbol, {
               "1d": candles,
             });
 
@@ -353,7 +368,7 @@ export default function WatchlistScreen() {
               previousPrice > 0 ? (change / previousPrice) * 100 : 0;
 
             const stockData: StockData = {
-              symbol: item.symbol,
+              symbol,
               analysis,
               alerts: [],
               score: analysis.overallRating.score,
@@ -366,7 +381,7 @@ export default function WatchlistScreen() {
           } else {
             // Still add the stock even if we don't have full data
             const stockData: StockData = {
-              symbol: item.symbol,
+              symbol,
               analysis: {} as any, // Use placeholder analysis
               alerts: [],
               score: 0,
@@ -377,10 +392,10 @@ export default function WatchlistScreen() {
             results.push(stockData);
           }
         } catch (error) {
-          console.error(`Error loading data for ${item.symbol}:`, error);
+          console.error(`Error loading data for ${symbol}:`, error);
           // Still add the stock with placeholder data
           const stockData: StockData = {
-            symbol: item.symbol,
+            symbol,
             analysis: {} as any, // Use placeholder analysis
             alerts: [],
             score: 0,
@@ -392,51 +407,23 @@ export default function WatchlistScreen() {
         }
       }
 
-      // Sort by favorites first, then by performance
-      results.sort((a, b) => {
-        const aFavorite = activeWatchlist.items.find(
-          (item) => item.symbol === a.symbol
-        )?.isFavorite;
-        const bFavorite = activeWatchlist.items.find(
-          (item) => item.symbol === b.symbol
-        )?.isFavorite;
-
-        if (aFavorite && !bFavorite) return -1;
-        if (!aFavorite && bFavorite) return 1;
-        return b.changePercent - a.changePercent;
-      });
+      // Sort by performance for now (can add favorites sorting later)
+      results.sort((a, b) => b.changePercent - a.changePercent);
 
       setStockData(results);
     } catch (error) {
-      console.error("Error loading watchlist data:", error);
+      console.error("Error loading display data:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }
 
-  async function loadChartData(symbol: string) {
-    try {
-      const candles = await fetchCandles(symbol, { resolution: "D" });
-      const lwcData: LWCDatum[] = candles.map((candle) => ({
-        time: (candle as any).timestamp
-          ? (candle as any).timestamp / 1000
-          : Date.now() / 1000,
-        open: candle.open,
-        high: candle.high,
-        low: candle.low,
-        close: candle.close,
-        volume: candle.volume || 0,
-      }));
-      setChartData(lwcData);
-    } catch (error) {
-      console.error("Error loading chart data:", error);
-    }
-  }
+  // Removed loadChartData function - chart now handled in StockDetailScreen
 
   async function onRefresh() {
     setRefreshing(true);
-    await loadWatchlistData();
+    await loadDisplayData();
   }
 
   function handleCreateWatchlist() {
@@ -459,11 +446,10 @@ export default function WatchlistScreen() {
       setNewWatchlistDescription("");
       setSelectedStocks([]);
       setFavoriteStocks(new Set());
-      setStockSearchQuery("");
       setShowCreateWatchlistModal(false);
 
       // Refresh data
-      loadWatchlistData();
+      loadDisplayData();
     }
   }
 
@@ -496,37 +482,34 @@ export default function WatchlistScreen() {
   }
 
   function handleRemoveStock(symbol: string) {
-    if (!activeWatchlist) return;
+    if (viewMode === "favorites") {
+      // Remove from global favorites
+      toggleGlobalFavorite(symbol);
+      loadDisplayData();
+    } else if (selectedWatchlistId) {
+      // Remove from specific watchlist
+      const watchlist = profile.watchlists.find(
+        (w) => w.id === selectedWatchlistId
+      );
+      if (!watchlist) return;
 
-    Alert.alert(
-      "Remove Stock",
-      `Remove ${symbol} from ${activeWatchlist.name}?`,
-      [
+      Alert.alert("Remove Stock", `Remove ${symbol} from ${watchlist.name}?`, [
         { text: "Cancel", style: "cancel" },
         {
           text: "Remove",
           style: "destructive",
           onPress: () => {
-            removeFromWatchlist(activeWatchlist.id, symbol);
-            if (selectedStock === symbol) {
-              setSelectedStock(null);
-            }
-            loadWatchlistData();
+            removeFromWatchlist(selectedWatchlistId, symbol);
+            loadDisplayData();
           },
         },
-      ]
-    );
+      ]);
+    }
   }
 
-  function handleToggleFavorite(symbol: string) {
-    if (!activeWatchlist) return;
-    toggleFavorite(activeWatchlist.id, symbol);
-    loadWatchlistData();
-  }
-
-  function handleChartStockSelect(symbol: string) {
-    setSelectedStock(symbol);
-    loadChartData(symbol);
+  function handleStockPress(symbol: string) {
+    // Navigate to dedicated stock detail page
+    (navigation as any).navigate("StockDetail", { symbol });
   }
 
   function handleDeleteWatchlist(watchlistId: string) {
@@ -574,34 +557,92 @@ export default function WatchlistScreen() {
           }}
         >
           <View>
-            <Text style={styles.headerTitle}>Watchlists</Text>
+            <Text style={styles.headerTitle}>
+              {viewMode === "favorites"
+                ? "Favorites"
+                : selectedWatchlistId
+                ? profile.watchlists.find((w) => w.id === selectedWatchlistId)
+                    ?.name || "Watchlist"
+                : "Watchlists"}
+            </Text>
             <Text style={styles.headerSubtitle}>
-              {activeWatchlist?.name} • {activeWatchlist?.items.length || 0}{" "}
-              stocks
+              {viewMode === "favorites"
+                ? `${profile.favorites.length} favorite${
+                    profile.favorites.length !== 1 ? "s" : ""
+                  }`
+                : selectedWatchlistId
+                ? `${
+                    profile.watchlists.find((w) => w.id === selectedWatchlistId)
+                      ?.items.length || 0
+                  } stocks`
+                : `${profile.watchlists.length} watchlist${
+                    profile.watchlists.length !== 1 ? "s" : ""
+                  }`}
             </Text>
           </View>
           <Pressable
             style={{ padding: 8 }}
-            onPress={() => setShowCreateWatchlistModal(true)}
+            onPress={() => setShowAddToWatchlistModal(true)}
           >
-            <Ionicons name="add-circle" size={24} color="#00D4AA" />
+            <Ionicons name="add" size={24} color="#00D4AA" />
           </Pressable>
         </View>
       </View>
 
-      {/* Watchlist Selector */}
+      {/* View Selector - Favorites and Watchlists */}
       <View style={styles.watchlistSelector}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View style={{ flexDirection: "row", paddingHorizontal: 4 }}>
+            {/* Favorites Option */}
+            <Pressable
+              style={[
+                styles.watchlistChip,
+                viewMode === "favorites" &&
+                  !selectedWatchlistId &&
+                  styles.watchlistChipActive,
+              ]}
+              onPress={() => {
+                setViewMode("favorites");
+                setSelectedWatchlistId(null);
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Ionicons
+                  name="star"
+                  size={12}
+                  color={
+                    viewMode === "favorites" && !selectedWatchlistId
+                      ? "#00D4AA"
+                      : "#FFD700"
+                  }
+                  style={{ marginRight: 6 }}
+                />
+                <Text
+                  style={[
+                    styles.watchlistChipText,
+                    viewMode === "favorites" &&
+                      !selectedWatchlistId &&
+                      styles.watchlistChipTextActive,
+                  ]}
+                >
+                  Favorites
+                </Text>
+              </View>
+            </Pressable>
+
+            {/* Individual Watchlists */}
             {profile.watchlists.map((watchlist) => (
               <Pressable
                 key={watchlist.id}
                 style={[
                   styles.watchlistChip,
-                  profile.activeWatchlistId === watchlist.id &&
+                  selectedWatchlistId === watchlist.id &&
                     styles.watchlistChipActive,
                 ]}
-                onPress={() => setActiveWatchlist(watchlist.id)}
+                onPress={() => {
+                  setViewMode("watchlist");
+                  setSelectedWatchlistId(watchlist.id);
+                }}
                 onLongPress={() =>
                   !watchlist.isDefault && handleDeleteWatchlist(watchlist.id)
                 }
@@ -619,7 +660,7 @@ export default function WatchlistScreen() {
                   <Text
                     style={[
                       styles.watchlistChipText,
-                      profile.activeWatchlistId === watchlist.id &&
+                      selectedWatchlistId === watchlist.id &&
                         styles.watchlistChipTextActive,
                     ]}
                   >
@@ -628,57 +669,29 @@ export default function WatchlistScreen() {
                 </View>
               </Pressable>
             ))}
+
+            {/* Create New Watchlist */}
+            <Pressable
+              style={[styles.watchlistChip, { borderStyle: "dashed" }]}
+              onPress={() => setShowCreateWatchlistModal(true)}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Ionicons
+                  name="add"
+                  size={12}
+                  color="#888888"
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={[styles.watchlistChipText, { color: "#888888" }]}>
+                  New List
+                </Text>
+              </View>
+            </Pressable>
           </View>
         </ScrollView>
       </View>
 
-      {/* Chart Section */}
-      {selectedStock && chartData.length > 0 && (
-        <View style={styles.chartSection}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.sectionTitle}>{selectedStock} Chart</Text>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-            >
-              <Pressable
-                onPress={() =>
-                  (navigation as any).navigate("StockDetail", {
-                    symbol: selectedStock,
-                  })
-                }
-                style={{ padding: 4 }}
-              >
-                <Ionicons name="expand" size={20} color="#00D4AA" />
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setSelectedStock(null);
-                  setChartData([]);
-                }}
-                style={{ padding: 4 }}
-              >
-                <Ionicons name="close" size={20} color="#888888" />
-              </Pressable>
-            </View>
-          </View>
-          <AdvancedTradingChart
-            data={chartData}
-            height={300}
-            symbol={selectedStock}
-            currentPrice={
-              stockData.find((s) => s.symbol === selectedStock)?.currentPrice ||
-              0
-            }
-            priceChange={
-              stockData.find((s) => s.symbol === selectedStock)?.change || 0
-            }
-            priceChangePercent={
-              stockData.find((s) => s.symbol === selectedStock)
-                ?.changePercent || 0
-            }
-          />
-        </View>
-      )}
+      {/* Chart Section Removed - Now handled in StockDetailScreen */}
 
       {/* Stocks List */}
       <ScrollView
@@ -692,44 +705,35 @@ export default function WatchlistScreen() {
         }
         contentContainerStyle={{ paddingBottom: 32 }}
       >
-        {!activeWatchlist || activeWatchlist.items.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="list" size={48} color="#888888" />
-            <Text style={styles.emptyStateText}>
-              No stocks in this watchlist.{"\n"}
-              Add some stocks to get started!
-            </Text>
-          </View>
-        ) : stockData.length === 0 && loading ? (
+        {stockData.length === 0 && loading ? (
           <View style={styles.emptyState}>
             <ActivityIndicator size="large" color="#00D4AA" />
-            <Text style={styles.emptyStateText}>
-              Loading {activeWatchlist.items.length} stocks...
-            </Text>
+            <Text style={styles.emptyStateText}>Loading stocks...</Text>
           </View>
         ) : stockData.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="alert-circle" size={48} color="#FF5722" />
+            <Ionicons
+              name={viewMode === "favorites" ? "star-outline" : "list"}
+              size={48}
+              color="#888888"
+            />
             <Text style={styles.emptyStateText}>
-              Failed to load stock data.{"\n"}
-              Pull down to refresh.
+              {viewMode === "favorites"
+                ? "No favorites yet\nTap the star to add favorites!"
+                : selectedWatchlistId
+                ? "This watchlist is empty\nAdd some stocks to get started!"
+                : "Select a watchlist or view favorites"}
             </Text>
           </View>
         ) : (
           stockData.map((stock) => {
-            const item = activeWatchlist.items.find(
-              (i) => i.symbol === stock.symbol
-            );
-            const isSelected = selectedStock === stock.symbol;
+            const isGlobalFav = isGlobalFavorite(stock.symbol);
 
             return (
               <Pressable
                 key={stock.symbol}
-                style={[
-                  styles.stockCard,
-                  isSelected && { borderWidth: 1, borderColor: "#00D4AA" },
-                ]}
-                onPress={() => handleChartStockSelect(stock.symbol)}
+                style={styles.stockCard}
+                onPress={() => handleStockPress(stock.symbol)}
               >
                 <View style={styles.stockHeader}>
                   <View style={{ flex: 1 }}>
@@ -737,7 +741,7 @@ export default function WatchlistScreen() {
                       style={{ flexDirection: "row", alignItems: "center" }}
                     >
                       <Text style={styles.stockSymbol}>{stock.symbol}</Text>
-                      {item?.isFavorite && (
+                      {isGlobalFav && (
                         <Ionicons
                           name="star"
                           size={16}
@@ -772,46 +776,14 @@ export default function WatchlistScreen() {
                       marginLeft: 12,
                     }}
                   >
-                    {isSelected ? (
-                      <View style={{ alignItems: "center", marginRight: 8 }}>
-                        <Ionicons name="bar-chart" size={16} color="#00D4AA" />
-                        <Text
-                          style={{
-                            fontSize: 9,
-                            color: "#00D4AA",
-                            marginTop: 1,
-                          }}
-                        >
-                          Chart
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={{ alignItems: "center", marginRight: 8 }}>
-                        <Ionicons
-                          name="bar-chart-outline"
-                          size={16}
-                          color="#888888"
-                        />
-                        <Text
-                          style={{
-                            fontSize: 9,
-                            color: "#888888",
-                            marginTop: 1,
-                          }}
-                        >
-                          Chart
-                        </Text>
-                      </View>
-                    )}
-
                     <Pressable
                       style={styles.favoriteButton}
-                      onPress={() => handleToggleFavorite(stock.symbol)}
+                      onPress={() => toggleGlobalFavorite(stock.symbol)}
                     >
                       <Ionicons
-                        name={item?.isFavorite ? "star" : "star-outline"}
+                        name={isGlobalFav ? "star" : "star-outline"}
                         size={20}
-                        color={item?.isFavorite ? "#FFD700" : "#888888"}
+                        color={isGlobalFav ? "#FFD700" : "#888888"}
                       />
                     </Pressable>
 
@@ -946,68 +918,13 @@ export default function WatchlistScreen() {
             {/* Stock Search */}
             <View style={styles.stockSearchSection}>
               <Text style={styles.selectedStocksTitle}>Add Stocks</Text>
-              <TextInput
-                style={styles.stockSearchInput}
-                placeholder="Search stocks by symbol or name..."
-                placeholderTextColor="#888888"
-                value={stockSearchQuery}
-                onChangeText={setStockSearchQuery}
-                autoCapitalize="characters"
-                autoCorrect={false}
+              <StockAutocomplete
+                onStockSelect={handleStockSelect}
+                selectedStocks={selectedStocks}
+                maxResults={15}
+                placeholder="Search from 6,000+ NASDAQ stocks..."
+                containerStyle={{ marginBottom: 16 }}
               />
-
-              {/* Search Results */}
-              <ScrollView
-                style={styles.stockResultsContainer}
-                showsVerticalScrollIndicator={false}
-              >
-                {searchResults.map((stock) => {
-                  const isSelected = selectedStocks.some(
-                    (s) => s.symbol === stock.symbol
-                  );
-                  const isFavorite = favoriteStocks.has(stock.symbol);
-
-                  return (
-                    <Pressable
-                      key={stock.symbol}
-                      style={[
-                        styles.stockResultItem,
-                        isSelected && styles.stockResultItemSelected,
-                      ]}
-                      onPress={() => handleStockSelect(stock)}
-                    >
-                      <View style={styles.stockResultInfo}>
-                        <Text style={styles.stockResultSymbol}>
-                          {stock.symbol}
-                        </Text>
-                        <Text style={styles.stockResultName}>{stock.name}</Text>
-                        <Text style={styles.stockResultType}>{stock.type}</Text>
-                      </View>
-
-                      {isSelected && (
-                        <Pressable
-                          style={{ padding: 4, marginRight: 8 }}
-                          onPress={() => handleStockFavorite(stock.symbol)}
-                        >
-                          <Ionicons
-                            name={isFavorite ? "star" : "star-outline"}
-                            size={20}
-                            color={isFavorite ? "#FFD700" : "#888888"}
-                          />
-                        </Pressable>
-                      )}
-
-                      <Ionicons
-                        name={
-                          isSelected ? "checkmark-circle" : "add-circle-outline"
-                        }
-                        size={24}
-                        color={isSelected ? "#00D4AA" : "#888888"}
-                      />
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
             </View>
 
             {/* Selected Stocks */}
@@ -1058,6 +975,12 @@ export default function WatchlistScreen() {
           </ScrollView>
         </View>
       </Modal>
+
+      {/* Add to Watchlist Modal */}
+      <AddToWatchlistModal
+        visible={showAddToWatchlistModal}
+        onClose={() => setShowAddToWatchlistModal(false)}
+      />
     </View>
   );
 }
