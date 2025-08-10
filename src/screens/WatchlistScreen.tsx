@@ -12,6 +12,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import {
@@ -32,8 +33,10 @@ import {
   getPopularStocks,
   type StockSearchResult,
 } from "../services/stockSearch";
+import { getStockBySymbol } from "../services/stockData";
 import StockAutocomplete from "../components/common/StockAutocomplete";
 import AddToWatchlistModal from "../components/common/AddToWatchlistModal";
+import SwipeableStockItem from "../components/common/SwipeableStockItem";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -82,40 +85,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   sectionTitle: { fontSize: 18, fontWeight: "600", color: "#ffffff" },
-
-  // Stock cards
-  stockCard: {
-    backgroundColor: "#141414",
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginBottom: 8,
-    marginHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#1f1f1f",
-  },
-  stockHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  stockSymbol: { fontSize: 16, fontWeight: "700", color: "#ffffff" },
-  stockPrice: { fontSize: 16, fontWeight: "700", color: "#ffffff" },
-  stockChange: { fontSize: 14, fontWeight: "500" },
-  positiveChange: { color: "#00D4AA" },
-  negativeChange: { color: "#FF5722" },
-  favoriteButton: { padding: 8 },
-
-  // Metrics
-  metricsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 8,
-  },
-  metricItem: { alignItems: "center" },
-  metricLabel: { fontSize: 11, color: "#888888", marginBottom: 2 },
-  metricValue: { fontSize: 13, fontWeight: "600", color: "#ffffff" },
 
   // Add/Create modals
   modalOverlay: {
@@ -256,6 +225,7 @@ interface StockData extends ScanResult {
   currentPrice: number;
   change: number;
   changePercent: number;
+  companyName?: string;
 }
 
 export default function WatchlistScreen() {
@@ -353,6 +323,10 @@ export default function WatchlistScreen() {
 
       for (const symbol of symbols) {
         try {
+          // Get company name first
+          const stockInfo = await getStockBySymbol(symbol);
+          const companyName = stockInfo?.name || symbol;
+
           const candles = await fetchCandles(symbol, { resolution: "D" });
 
           if (candles.length >= 2) {
@@ -375,6 +349,7 @@ export default function WatchlistScreen() {
               currentPrice,
               change,
               changePercent,
+              companyName,
             };
 
             results.push(stockData);
@@ -388,6 +363,7 @@ export default function WatchlistScreen() {
               currentPrice: 0,
               change: 0,
               changePercent: 0,
+              companyName,
             };
             results.push(stockData);
           }
@@ -402,6 +378,7 @@ export default function WatchlistScreen() {
             currentPrice: 0,
             change: 0,
             changePercent: 0,
+            companyName: symbol, // Fallback to symbol if we can't get name
           };
           results.push(stockData);
         }
@@ -532,7 +509,7 @@ export default function WatchlistScreen() {
 
   if (loading && stockData.length === 0) {
     return (
-      <View style={styles.container}>
+      <GestureHandlerRootView style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Watchlists</Text>
           <Text style={styles.headerSubtitle}>Loading your stocks...</Text>
@@ -541,12 +518,12 @@ export default function WatchlistScreen() {
           <ActivityIndicator size="large" color="#00D4AA" />
           <Text style={styles.loadingText}>Loading watchlist data...</Text>
         </View>
-      </View>
+      </GestureHandlerRootView>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <GestureHandlerRootView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View
@@ -730,148 +707,18 @@ export default function WatchlistScreen() {
             const isGlobalFav = isGlobalFavorite(stock.symbol);
 
             return (
-              <Pressable
+              <SwipeableStockItem
                 key={stock.symbol}
-                style={styles.stockCard}
+                symbol={stock.symbol}
+                companyName={stock.companyName}
+                currentPrice={stock.currentPrice}
+                change={stock.change}
+                changePercent={stock.changePercent}
+                isGlobalFavorite={isGlobalFav}
                 onPress={() => handleStockPress(stock.symbol)}
-              >
-                <View style={styles.stockHeader}>
-                  <View style={{ flex: 1 }}>
-                    <View
-                      style={{ flexDirection: "row", alignItems: "center" }}
-                    >
-                      <Text style={styles.stockSymbol}>{stock.symbol}</Text>
-                      {isGlobalFav && (
-                        <Ionicons
-                          name="star"
-                          size={16}
-                          color="#FFD700"
-                          style={{ marginLeft: 8 }}
-                        />
-                      )}
-                    </View>
-                  </View>
-
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.stockPrice}>
-                      ${stock.currentPrice.toFixed(2)}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.stockChange,
-                        stock.change >= 0
-                          ? styles.positiveChange
-                          : styles.negativeChange,
-                      ]}
-                    >
-                      {stock.change >= 0 ? "+" : ""}
-                      {stock.changePercent.toFixed(2)}%
-                    </Text>
-                  </View>
-
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      marginLeft: 12,
-                    }}
-                  >
-                    <Pressable
-                      style={styles.favoriteButton}
-                      onPress={() => toggleGlobalFavorite(stock.symbol)}
-                    >
-                      <Ionicons
-                        name={isGlobalFav ? "star" : "star-outline"}
-                        size={20}
-                        color={isGlobalFav ? "#FFD700" : "#888888"}
-                      />
-                    </Pressable>
-
-                    <Pressable
-                      style={styles.favoriteButton}
-                      onPress={() => handleRemoveStock(stock.symbol)}
-                    >
-                      <Ionicons name="close" size={20} color="#FF5722" />
-                    </Pressable>
-                  </View>
-                </View>
-
-                <View style={styles.metricsRow}>
-                  <View style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>RSI</Text>
-                    <Text
-                      style={[
-                        styles.metricValue,
-                        {
-                          color:
-                            stock.analysis?.indicators?.rsi > 70
-                              ? "#FF5722"
-                              : stock.analysis?.indicators?.rsi < 30
-                              ? "#00D4AA"
-                              : "#ffffff",
-                        },
-                      ]}
-                    >
-                      {stock.analysis?.indicators?.rsi?.toFixed(0) || "—"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>Volume</Text>
-                    <Text
-                      style={[
-                        styles.metricValue,
-                        {
-                          color:
-                            stock.analysis?.indicators?.volume?.ratio > 1.5
-                              ? "#00D4AA"
-                              : "#ffffff",
-                        },
-                      ]}
-                    >
-                      {stock.analysis?.indicators?.volume?.ratio?.toFixed(1) ||
-                        "—"}
-                      x
-                    </Text>
-                  </View>
-
-                  <View style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>Signals</Text>
-                    <Text
-                      style={[
-                        styles.metricValue,
-                        {
-                          color:
-                            (stock.analysis?.signals?.length || 0) > 0
-                              ? "#00D4AA"
-                              : "#888888",
-                        },
-                      ]}
-                    >
-                      {stock.analysis?.signals?.length || 0}
-                    </Text>
-                  </View>
-
-                  <View style={styles.metricItem}>
-                    <Text style={styles.metricLabel}>Score</Text>
-                    <Text
-                      style={[
-                        styles.metricValue,
-                        {
-                          color:
-                            (stock.analysis?.overallRating?.score || 0) > 70
-                              ? "#00D4AA"
-                              : (stock.analysis?.overallRating?.score || 0) > 30
-                              ? "#ffffff"
-                              : "#FF5722",
-                        },
-                      ]}
-                    >
-                      {stock.analysis?.overallRating?.score?.toFixed(0) || "—"}
-                    </Text>
-                  </View>
-                </View>
-              </Pressable>
+                onToggleFavorite={() => toggleGlobalFavorite(stock.symbol)}
+                onRemove={() => handleRemoveStock(stock.symbol)}
+              />
             );
           })
         )}
@@ -981,6 +828,6 @@ export default function WatchlistScreen() {
         visible={showAddToWatchlistModal}
         onClose={() => setShowAddToWatchlistModal(false)}
       />
-    </View>
+    </GestureHandlerRootView>
   );
 }
