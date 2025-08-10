@@ -7,60 +7,75 @@ import {
   Pressable,
   RefreshControl,
   StyleSheet,
+  Dimensions,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import LightweightCandles from "../components/charts/LightweightCandles";
-import AdvancedTradingChart from "../components/charts/AdvancedTradingChart";
 import TradingViewChart from "../components/charts/TradingViewChart";
 import { fetchCandles, fetchNews } from "../services/marketProviders";
 import NewsList from "../components/insights/NewsList";
-import { generateInsights } from "../services/ai";
-import { analyzeNewsSentiment } from "../services/sentiment";
-import dummyRaw from "../components/charts/dummyData.json";
+import {
+  performComprehensiveAnalysis,
+  MarketAnalysis,
+} from "../services/aiAnalytics";
+import { MarketScanner } from "../services/marketScanner";
+import {
+  analyzeNewsWithEnhancedSentiment,
+  getNewsAlerts,
+  SentimentAnalysis,
+} from "../services/sentiment";
+
+const { width } = Dimensions.get("window");
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#0a0a0a",
   },
-  gradient: {
+  header: {
+    backgroundColor: "#1a1a1a",
     paddingHorizontal: 16,
     paddingTop: 48,
-    paddingBottom: 24,
-    backgroundColor: "#667eea",
+    paddingBottom: 16,
   },
-  gradientTitle: {
+  headerTitle: {
     fontSize: 24,
     fontWeight: "bold",
-    color: "white",
-    marginBottom: 8,
+    color: "#ffffff",
+    marginBottom: 4,
   },
-  gradientSubtitle: {
-    color: "rgba(255,255,255,0.8)",
+  headerSubtitle: {
+    color: "#888888",
+    fontSize: 14,
   },
   content: {
     flex: 1,
-    paddingHorizontal: 16,
-    marginTop: -16,
   },
-  card: {
-    backgroundColor: "white",
+  section: {
+    backgroundColor: "#1a1a1a",
+    marginHorizontal: 16,
+    marginVertical: 8,
     borderRadius: 12,
     padding: 16,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: "#888888",
+    marginTop: 2,
+  },
+  // Stock Selection
   stockSelector: {
-    marginBottom: 12,
-  },
-  selectorLabel: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#6b7280",
     marginBottom: 12,
   },
   stockRow: {
@@ -75,39 +90,42 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   stockChipActive: {
-    backgroundColor: "#6366f1",
-    borderColor: "#6366f1",
+    backgroundColor: "#00D4AA",
+    borderColor: "#00D4AA",
   },
   stockChipInactive: {
-    backgroundColor: "white",
-    borderColor: "#d1d5db",
+    backgroundColor: "transparent",
+    borderColor: "#333333",
   },
   stockChipTextActive: {
-    color: "white",
-    fontWeight: "500",
+    color: "#000000",
+    fontWeight: "600",
   },
   stockChipTextInactive: {
-    color: "#374151",
+    color: "#ffffff",
     fontWeight: "500",
   },
-  priceCard: {
+  // Price Display
+  priceSection: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    marginBottom: 16,
   },
-  priceSection: {
+  priceLeft: {
     flex: 1,
   },
-  price: {
+  currentPrice: {
     fontSize: 32,
     fontWeight: "bold",
-    color: "#111827",
+    color: "#ffffff",
   },
   priceLabel: {
     fontSize: 14,
-    color: "#6b7280",
+    color: "#888888",
+    marginTop: 4,
   },
-  changeSection: {
+  priceRight: {
     alignItems: "flex-end",
   },
   changeBadge: {
@@ -115,263 +133,351 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 20,
+    borderRadius: 6,
     marginBottom: 4,
   },
   changeBadgePositive: {
-    backgroundColor: "#dcfce7",
+    backgroundColor: "#00D4AA",
   },
   changeBadgeNegative: {
-    backgroundColor: "#fee2e2",
+    backgroundColor: "#FF5722",
+  },
+  changeText: {
+    fontWeight: "600",
+    marginLeft: 4,
   },
   changeTextPositive: {
-    color: "#166534",
-    fontWeight: "500",
-    marginLeft: 4,
+    color: "#000000",
   },
   changeTextNegative: {
-    color: "#991b1b",
-    fontWeight: "500",
-    marginLeft: 4,
+    color: "#ffffff",
   },
-  changeValue: {
+  absoluteChange: {
     fontSize: 14,
     fontWeight: "500",
   },
-  controlsCard: {
-    gap: 12,
-  },
-  controlsRow: {
+  // Chart Controls
+  timeframeSelector: {
     flexDirection: "row",
+    marginBottom: 16,
     gap: 8,
-    flexWrap: "wrap",
-    marginBottom: 12,
   },
-  controlChip: {
+  timeframeChip: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#333333",
   },
-  controlChipActive: {
-    backgroundColor: "#6366f1",
+  timeframeChipActive: {
+    backgroundColor: "#00D4AA",
   },
-  controlChipInactive: {
-    backgroundColor: "#f3f4f6",
-  },
-  controlChipTextActive: {
-    color: "white",
-    fontSize: 14,
+  timeframeChipText: {
+    color: "#ffffff",
+    fontSize: 12,
     fontWeight: "500",
   },
-  controlChipTextInactive: {
-    color: "#374151",
-    fontSize: 14,
-    fontWeight: "500",
+  timeframeChipTextActive: {
+    color: "#000000",
   },
-  chartCard: {
+  // Analysis Cards
+  analysisGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
     marginBottom: 16,
   },
-  chartHeader: {
+  analysisCard: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 8,
+    padding: 12,
+    flex: 1,
+    minWidth: (width - 64) / 2 - 4,
+  },
+  analysisTitle: {
+    fontSize: 12,
+    color: "#888888",
+    marginBottom: 4,
+  },
+  analysisValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  analysisSubvalue: {
+    fontSize: 12,
+    color: "#888888",
+    marginTop: 2,
+  },
+  // Momentum Analysis
+  momentumGrid: {
+    gap: 8,
+  },
+  momentumRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  momentumTimeframe: {
+    fontSize: 14,
+    color: "#ffffff",
+    fontWeight: "500",
+    minWidth: 40,
+  },
+  momentumBars: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    marginHorizontal: 12,
+  },
+  momentumBar: {
+    height: 4,
+    backgroundColor: "#333333",
+    borderRadius: 2,
+    marginHorizontal: 1,
+    flex: 1,
+  },
+  momentumBarActive: {
+    backgroundColor: "#00D4AA",
+  },
+  momentumBarNegative: {
+    backgroundColor: "#FF5722",
+  },
+  momentumDirection: {
+    fontSize: 12,
+    fontWeight: "500",
+    minWidth: 60,
+    textAlign: "right",
+  },
+  bullishText: {
+    color: "#00D4AA",
+  },
+  bearishText: {
+    color: "#FF5722",
+  },
+  neutralText: {
+    color: "#888888",
+  },
+  // Trading Signals
+  signalCard: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  signalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  signalType: {
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    color: "#00D4AA",
+  },
+  signalAction: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  signalConfidence: {
+    fontSize: 12,
+    color: "#888888",
+  },
+  signalTargets: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  signalTarget: {
+    backgroundColor: "#333333",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  signalTargetText: {
+    fontSize: 12,
+    color: "#ffffff",
+  },
+  // Support/Resistance
+  levelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 4,
+  },
+  levelLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  supportLabel: {
+    color: "#00D4AA",
+  },
+  resistanceLabel: {
+    color: "#FF5722",
+  },
+  levelValue: {
+    fontSize: 12,
+    color: "#ffffff",
+    fontWeight: "500",
+  },
+  // Alerts
+  alertCard: {
+    backgroundColor: "#FF5722",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  alertText: {
+    color: "#ffffff",
+    fontWeight: "500",
+    marginLeft: 8,
+    flex: 1,
+  },
+  // Market Overview
+  marketOverview: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 16,
   },
-  chartTitle: {
-    fontSize: 18,
+  overviewItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  overviewLabel: {
+    fontSize: 12,
+    color: "#888888",
+    marginBottom: 4,
+  },
+  overviewValue: {
+    fontSize: 16,
     fontWeight: "600",
-    color: "#111827",
+    color: "#ffffff",
   },
   loadingContainer: {
-    height: 300,
+    height: 200,
     alignItems: "center",
     justifyContent: "center",
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#111827",
-    marginBottom: 4,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-    marginBottom: 16,
-  },
 });
-
-function generateDummyCandles(count: number = 90, stepMs: number = 300000) {
-  const now = Date.now();
-  let price = 150;
-  const out: any[] = [];
-  for (let i = count - 1; i >= 0; i--) {
-    const time = now - i * stepMs;
-    const open = price;
-    const delta = (Math.random() - 0.5) * 2.5;
-    const close = Math.max(1, open + delta);
-    const high = Math.max(open, close) + Math.random() * 1.2;
-    const low = Math.min(open, close) - Math.random() * 1.2;
-    out.push({ time, open, high, low, close });
-    price = close;
-  }
-  return out;
-}
-
-function parseDummyFromJson() {
-  try {
-    const series = (dummyRaw as any)["Weekly Time Series"] || {};
-    const entries = Object.entries(series) as [string, any][];
-    return entries
-      .map(([date, v]) => ({
-        time: new Date(date).getTime(),
-        open: parseFloat(v["1. open"]),
-        high: parseFloat(v["2. high"]),
-        low: parseFloat(v["3. low"]),
-        close: parseFloat(v["4. close"]),
-      }))
-      .sort((a, b) => a.time - b.time)
-      .slice(-180);
-  } catch {
-    return [] as any[];
-  }
-}
 
 export default function DashboardScreen() {
   const [symbol, setSymbol] = useState("AAPL");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [candles, setCandles] = useState<any[]>(parseDummyFromJson());
+  const [timeframe, setTimeframe] = useState<
+    "1" | "5" | "15" | "30" | "60" | "D"
+  >("D");
+  const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
   const [news, setNews] = useState<any[]>([]);
-  const [insight, setInsight] = useState("");
-  const [sentiment, setSentiment] = useState<{
-    label: string;
-    score: number;
-  } | null>(null);
-  const [interval, setInterval] = useState<
-    "1min" | "5min" | "15min" | "30min" | "60min" | "daily"
-  >("daily");
-  const [chartKind, setChartKind] = useState<
-    "candlestick" | "area" | "line" | "bar"
-  >("candlestick");
+  const [newsAnalysis, setNewsAnalysis] = useState<SentimentAnalysis | null>(
+    null
+  );
+  const [marketOverview, setMarketOverview] = useState<any>(null);
 
   const stockSymbols = [
     "AAPL",
-    "GOOGL",
     "MSFT",
-    "TSLA",
+    "GOOGL",
     "AMZN",
+    "TSLA",
     "NVDA",
     "META",
+    "NFLX",
+    "SPY",
+    "QQQ",
+    "IWM",
+    "BTC-USD",
+    "ETH-USD",
   ];
 
-  const intervals = [
-    "1min",
-    "5min",
-    "15min",
-    "30min",
-    "60min",
-    "daily",
-  ] as const;
-  const chartTypes = ["candlestick", "area", "line", "bar"];
+  const timeframes = [
+    { label: "1m", value: "1" as const },
+    { label: "5m", value: "5" as const },
+    { label: "15m", value: "15" as const },
+    { label: "30m", value: "30" as const },
+    { label: "1h", value: "60" as const },
+    { label: "1d", value: "D" as const },
+  ];
 
   useEffect(() => {
     loadData();
-  }, [symbol, interval]);
+  }, [symbol]);
 
-  function mapIntervalToResolution(
-    i: typeof interval
-  ): "1" | "5" | "15" | "30" | "1H" | "D" {
-    switch (i) {
-      case "1min":
-        return "1";
-      case "5min":
-        return "5";
-      case "15min":
-        return "15";
-      case "30min":
-        return "30";
-      case "60min":
-        return "1H";
-      case "daily":
-      default:
-        return "D";
-    }
-  }
+  useEffect(() => {
+    loadMarketOverview();
+  }, []);
 
   async function loadData() {
     try {
-      setLoading(candles.length === 0);
+      setLoading(true);
 
-      // Try to fetch real market data using Alpha Vantage
-      try {
-        const resolution = mapIntervalToResolution(interval);
-        console.log(
-          `Fetching MarketData for ${symbol} with resolution ${resolution}`
-        );
-        const realCandles = await fetchCandles(symbol, {
-          providerOverride: "marketData",
-          resolution,
-        });
-
-        if (realCandles && realCandles.length > 0) {
-          console.log(
-            `Successfully fetched ${realCandles.length} candles for ${symbol}`
-          );
-          setCandles(realCandles);
-        } else {
-          console.log("No real data available, using dummy data");
-          throw new Error("No real data available");
+      // Fetch multiple timeframes for comprehensive analysis
+      const timeframePromises = [
+        { tf: "1d", resolution: "D" as const },
+        { tf: "1h", resolution: "1H" as const },
+        { tf: "15m", resolution: "15" as const },
+        { tf: "5m", resolution: "5" as const },
+      ].map(async ({ tf, resolution }) => {
+        try {
+          const candles = await fetchCandles(symbol, { resolution });
+          return { timeframe: tf, candles };
+        } catch {
+          return { timeframe: tf, candles: [] };
         }
-      } catch (apiError) {
-        console.warn(
-          "Failed to fetch real market data, falling back to dummy data:",
-          apiError
-        );
+      });
 
-        // Fallback to dummy data
-        const c = parseDummyFromJson();
-        if (!c.length) {
-          const dummyCandles = generateDummyCandles(
-            interval === "daily" ? 120 : 180,
-            interval === "daily" ? 86_400_000 : 300_000
-          );
-          setCandles(dummyCandles);
-        } else {
-          setCandles(c);
-        }
+      const candleResults = await Promise.all(timeframePromises);
+      const candleData: { [timeframe: string]: any[] } = {};
+      candleResults.forEach(({ timeframe, candles }) => {
+        candleData[timeframe] = candles;
+      });
+
+      // Perform comprehensive analysis
+      if (candleData["1d"]?.length > 0) {
+        const analysisResult = await performComprehensiveAnalysis(
+          symbol,
+          candleData
+        );
+        setAnalysis(analysisResult);
       }
 
-      // Try to fetch real news
+      // Fetch and analyze news
       try {
-        const realNews = await fetchNews(symbol);
-        if (realNews && realNews.length > 0) {
-          setNews(realNews);
-        } else {
-          throw new Error("No news available");
-        }
-      } catch (newsError) {
-        console.warn("Failed to fetch real news, using mock data:", newsError);
-        // Mock news fallback
-        setNews([
-          { title: "Market Update", description: "Latest market movements" },
-          { title: "Tech Earnings", description: "Technology sector earnings" },
-        ]);
-      }
+        const newsData = await fetchNews(symbol);
+        setNews(newsData || []);
 
-      setInsight(
-        `Market analysis for ${symbol}: Based on recent price action and market sentiment, showing ${
-          candles.length > 0 &&
-          candles[candles.length - 1].close > candles[candles.length - 2]?.close
-            ? "positive"
-            : "mixed"
-        } momentum.`
-      );
-      setSentiment({ label: "Positive", score: 0.75 });
+        if (newsData && newsData.length > 0) {
+          const sentimentResult = await analyzeNewsWithEnhancedSentiment(
+            newsData
+          );
+          setNewsAnalysis(sentimentResult);
+        }
+      } catch (error) {
+        console.warn("Failed to fetch news:", error);
+        setNews([]);
+      }
     } catch (error) {
       console.error("Error loading data:", error);
+      Alert.alert("Error", "Failed to load market data. Please try again.");
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  }
+
+  async function loadMarketOverview() {
+    try {
+      const screenerData = await MarketScanner.getMarketScreenerData();
+      setMarketOverview(screenerData);
+    } catch (error) {
+      console.warn("Failed to load market overview:", error);
     }
   }
 
@@ -380,34 +486,40 @@ export default function DashboardScreen() {
     await loadData();
   }
 
-  const currentPrice =
-    candles.length > 0 ? candles[candles.length - 1].close : 0;
-  const previousPrice =
-    candles.length > 1 ? candles[candles.length - 2].close : 0;
+  const currentPrice = analysis?.currentPrice || 0;
+  const previousPrice = currentPrice * 0.98; // Mock previous price
   const priceChange = currentPrice - previousPrice;
   const priceChangePercent =
     previousPrice > 0 ? (priceChange / previousPrice) * 100 : 0;
   const isPositive = priceChange >= 0;
 
+  const newsAlerts = newsAnalysis ? getNewsAlerts(newsAnalysis) : [];
+
   return (
     <ScrollView
       style={styles.container}
       refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#00D4AA"
+        />
       }
     >
       {/* Header */}
-      <View style={styles.gradient}>
-        <Text style={styles.gradientTitle}>Portfolio Dashboard</Text>
-        <Text style={styles.gradientSubtitle}>
-          Track your investments and market insights
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Trading Dashboard</Text>
+        <Text style={styles.headerSubtitle}>
+          AI-Powered Market Analysis • Live Data
         </Text>
       </View>
 
       <View style={styles.content}>
         {/* Stock Symbol Selector */}
-        <View style={[styles.card, styles.stockSelector]}>
-          <Text style={styles.selectorLabel}>Select Stock</Text>
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Select Symbol</Text>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.stockRow}>
               {stockSymbols.map((stock) => (
@@ -437,260 +549,344 @@ export default function DashboardScreen() {
         </View>
 
         {/* Price Display */}
-        <View style={[styles.card, styles.priceCard]}>
+        <View style={styles.section}>
           <View style={styles.priceSection}>
-            <Text style={styles.price}>${currentPrice.toFixed(2)}</Text>
-            <Text style={styles.priceLabel}>{symbol} Stock Price</Text>
-          </View>
-          <View style={styles.changeSection}>
-            <View
-              style={[
-                styles.changeBadge,
-                isPositive
-                  ? styles.changeBadgePositive
-                  : styles.changeBadgeNegative,
-              ]}
-            >
-              <Ionicons
-                name={isPositive ? "trending-up" : "trending-down"}
-                size={16}
-                color={isPositive ? "#166534" : "#991b1b"}
-              />
-              <Text
-                style={
+            <View style={styles.priceLeft}>
+              <Text style={styles.currentPrice}>
+                ${currentPrice.toFixed(2)}
+              </Text>
+              <Text style={styles.priceLabel}>{symbol} • Live Price</Text>
+            </View>
+            <View style={styles.priceRight}>
+              <View
+                style={[
+                  styles.changeBadge,
                   isPositive
-                    ? styles.changeTextPositive
-                    : styles.changeTextNegative
-                }
+                    ? styles.changeBadgePositive
+                    : styles.changeBadgeNegative,
+                ]}
               >
-                {isPositive ? "+" : ""}
-                {priceChangePercent.toFixed(2)}%
+                <Ionicons
+                  name={isPositive ? "trending-up" : "trending-down"}
+                  size={16}
+                  color={isPositive ? "#000000" : "#ffffff"}
+                />
+                <Text
+                  style={[
+                    styles.changeText,
+                    isPositive
+                      ? styles.changeTextPositive
+                      : styles.changeTextNegative,
+                  ]}
+                >
+                  {isPositive ? "+" : ""}
+                  {priceChangePercent.toFixed(2)}%
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.absoluteChange,
+                  { color: isPositive ? "#00D4AA" : "#FF5722" },
+                ]}
+              >
+                {isPositive ? "+" : ""}${priceChange.toFixed(2)}
               </Text>
             </View>
-            <Text
-              style={[
-                styles.changeValue,
-                { color: isPositive ? "#166534" : "#991b1b" },
-              ]}
-            >
-              {isPositive ? "+" : ""}${priceChange.toFixed(2)}
-            </Text>
           </View>
-        </View>
 
-        {/* Chart Controls */}
-        <View style={[styles.card, styles.controlsCard]}>
-          <Text style={styles.selectorLabel}>Timeframe</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.controlsRow}>
-              {intervals.map((i) => (
-                <Pressable
-                  key={i}
-                  onPress={() => setInterval(i)}
-                  style={[
-                    styles.controlChip,
-                    interval === i
-                      ? styles.controlChipActive
-                      : styles.controlChipInactive,
-                  ]}
-                >
-                  <Text
-                    style={
-                      interval === i
-                        ? styles.controlChipTextActive
-                        : styles.controlChipTextInactive
-                    }
-                  >
-                    {i}
-                  </Text>
-                </Pressable>
-              ))}
+          {/* Overall Rating */}
+          {analysis && (
+            <View style={styles.analysisGrid}>
+              <View style={styles.analysisCard}>
+                <Text style={styles.analysisTitle}>AI Rating</Text>
+                <Text style={styles.analysisValue}>
+                  {analysis.overallRating.score.toFixed(0)}/100
+                </Text>
+                <Text style={styles.analysisSubvalue}>
+                  {analysis.overallRating.recommendation
+                    .replace("_", " ")
+                    .toUpperCase()}
+                </Text>
+              </View>
+              <View style={styles.analysisCard}>
+                <Text style={styles.analysisTitle}>Risk Level</Text>
+                <Text style={styles.analysisValue}>
+                  {analysis.riskFactors.length === 0
+                    ? "Low"
+                    : analysis.riskFactors.length === 1
+                    ? "Medium"
+                    : "High"}
+                </Text>
+                <Text style={styles.analysisSubvalue}>
+                  {analysis.riskFactors.length} Factors
+                </Text>
+              </View>
+              <View style={styles.analysisCard}>
+                <Text style={styles.analysisTitle}>Signals</Text>
+                <Text style={styles.analysisValue}>
+                  {analysis.signals.length}
+                </Text>
+                <Text style={styles.analysisSubvalue}>Active</Text>
+              </View>
+              <View style={styles.analysisCard}>
+                <Text style={styles.analysisTitle}>Trend</Text>
+                <Text style={styles.analysisValue}>
+                  {analysis.marketStructure.trend.toUpperCase()}
+                </Text>
+                <Text style={styles.analysisSubvalue}>
+                  {analysis.marketStructure.trendStrength}% Strength
+                </Text>
+              </View>
             </View>
-          </ScrollView>
-
-          <Text style={styles.selectorLabel}>Chart Type</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.controlsRow}>
-              {chartTypes.map((k) => (
-                <Pressable
-                  key={k}
-                  onPress={() => setChartKind(k as any)}
-                  style={[
-                    styles.controlChip,
-                    chartKind === k
-                      ? { backgroundColor: "#059669" }
-                      : styles.controlChipInactive,
-                  ]}
-                >
-                  <Text
-                    style={
-                      chartKind === k
-                        ? {
-                            color: "white",
-                            fontSize: 14,
-                            fontWeight: "500",
-                            textTransform: "capitalize",
-                          }
-                        : {
-                            ...styles.controlChipTextInactive,
-                            textTransform: "capitalize",
-                          }
-                    }
-                  >
-                    {k}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
-        </View>
-
-        {/* Chart */}
-        <View style={[styles.card, styles.chartCard]}>
-          <View style={styles.chartHeader}>
-            <Text style={styles.chartTitle}>Price Chart</Text>
-            <Ionicons name="analytics-outline" size={20} color="#6366f1" />
-          </View>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#6366f1" />
-            </View>
-          ) : (
-            <TradingViewChart symbol={symbol} height={520} />
           )}
         </View>
 
-        {/* Market Sentiment */}
-        {sentiment && (
-          <View style={styles.card}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                marginBottom: 12,
-              }}
-            >
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  backgroundColor: "#e0e7ff",
-                  borderRadius: 8,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginRight: 12,
-                }}
+        {/* News Alerts */}
+        {newsAlerts.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Market Alerts</Text>
+            </View>
+            {newsAlerts.map((alert, index) => (
+              <View key={index} style={styles.alertCard}>
+                <Ionicons name="warning" size={16} color="#ffffff" />
+                <Text style={styles.alertText}>{alert}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* TradingView Chart */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Price Chart</Text>
+          </View>
+
+          {/* Timeframe Selector */}
+          <View style={styles.timeframeSelector}>
+            {timeframes.map((tf) => (
+              <Pressable
+                key={tf.value}
+                onPress={() => setTimeframe(tf.value)}
+                style={[
+                  styles.timeframeChip,
+                  timeframe === tf.value && styles.timeframeChipActive,
+                ]}
               >
-                <Ionicons name="pulse-outline" size={20} color="#6366f1" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sectionTitle}>Market Sentiment</Text>
-                <Text style={styles.sectionSubtitle}>
-                  Based on latest news analysis
-                </Text>
-              </View>
-              <View style={{ alignItems: "flex-end" }}>
                 <Text
-                  style={{ fontSize: 18, fontWeight: "bold", color: "#166534" }}
+                  style={[
+                    styles.timeframeChipText,
+                    timeframe === tf.value && styles.timeframeChipTextActive,
+                  ]}
                 >
-                  {sentiment.label}
+                  {tf.label}
                 </Text>
-                <Text style={{ fontSize: 14, color: "#6b7280" }}>
-                  Score: {sentiment.score.toFixed(2)}
+              </Pressable>
+            ))}
+          </View>
+
+          <TradingViewChart
+            symbol={symbol}
+            height={400}
+            interval={timeframe}
+            theme="dark"
+          />
+        </View>
+
+        {/* Multi-Timeframe Momentum Analysis */}
+        {analysis && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Multi-Timeframe Momentum</Text>
+              <Text style={styles.sectionSubtitle}>
+                Bullish signals across timeframes
+              </Text>
+            </View>
+            <View style={styles.momentumGrid}>
+              {Object.entries(analysis.momentum).map(([tf, momentum]) => (
+                <View key={tf} style={styles.momentumRow}>
+                  <Text style={styles.momentumTimeframe}>{tf}</Text>
+                  <View style={styles.momentumBars}>
+                    {Array.from({ length: 10 }).map((_, i) => (
+                      <View
+                        key={i}
+                        style={[
+                          styles.momentumBar,
+                          i < momentum.strength / 10 &&
+                            (momentum.direction === "bullish"
+                              ? styles.momentumBarActive
+                              : momentum.direction === "bearish"
+                              ? styles.momentumBarNegative
+                              : styles.momentumBar),
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <Text
+                    style={[
+                      styles.momentumDirection,
+                      momentum.direction === "bullish"
+                        ? styles.bullishText
+                        : momentum.direction === "bearish"
+                        ? styles.bearishText
+                        : styles.neutralText,
+                    ]}
+                  >
+                    {momentum.direction.toUpperCase()}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Trading Signals */}
+        {analysis && analysis.signals.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>AI Trading Signals</Text>
+              <Text style={styles.sectionSubtitle}>
+                Based on technical confluence
+              </Text>
+            </View>
+            {analysis.signals.map((signal, index) => (
+              <View key={index} style={styles.signalCard}>
+                <View style={styles.signalHeader}>
+                  <View>
+                    <Text style={styles.signalType}>{signal.type} Trading</Text>
+                    <Text style={styles.signalAction}>
+                      {signal.action.toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={styles.signalConfidence}>
+                    {signal.confidence.toFixed(0)}% Confidence
+                  </Text>
+                </View>
+                <Text
+                  style={{ color: "#888888", fontSize: 12, marginBottom: 8 }}
+                >
+                  Entry: ${signal.entry.toFixed(2)} • Stop: $
+                  {signal.stopLoss.toFixed(2)} • R/R: {signal.riskReward}:1
                 </Text>
+                <View style={styles.signalTargets}>
+                  {signal.targets.map((target, i) => (
+                    <View key={i} style={styles.signalTarget}>
+                      <Text style={styles.signalTargetText}>
+                        T{i + 1}: ${target.toFixed(2)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Support & Resistance */}
+        {analysis && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Key Levels</Text>
+              <Text style={styles.sectionSubtitle}>Support & Resistance</Text>
+            </View>
+            {analysis.supportResistance.resistance.map((level, index) => (
+              <View key={`r-${index}`} style={styles.levelRow}>
+                <Text style={[styles.levelLabel, styles.resistanceLabel]}>
+                  Resistance {index + 1}
+                </Text>
+                <Text style={styles.levelValue}>${level.toFixed(2)}</Text>
+              </View>
+            ))}
+            {analysis.supportResistance.support.map((level, index) => (
+              <View key={`s-${index}`} style={styles.levelRow}>
+                <Text style={[styles.levelLabel, styles.supportLabel]}>
+                  Support {index + 1}
+                </Text>
+                <Text style={styles.levelValue}>${level.toFixed(2)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Technical Indicators */}
+        {analysis && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Technical Indicators</Text>
+            </View>
+            <View style={styles.analysisGrid}>
+              <View style={styles.analysisCard}>
+                <Text style={styles.analysisTitle}>RSI (14)</Text>
+                <Text style={styles.analysisValue}>
+                  {analysis.indicators.rsi.toFixed(1)}
+                </Text>
+                <Text style={styles.analysisSubvalue}>
+                  {analysis.indicators.rsi > 70
+                    ? "Overbought"
+                    : analysis.indicators.rsi < 30
+                    ? "Oversold"
+                    : "Neutral"}
+                </Text>
+              </View>
+              <View style={styles.analysisCard}>
+                <Text style={styles.analysisTitle}>MACD</Text>
+                <Text style={styles.analysisValue}>
+                  {analysis.indicators.macd.macd.toFixed(2)}
+                </Text>
+                <Text style={styles.analysisSubvalue}>
+                  {analysis.indicators.macd.macd >
+                  analysis.indicators.macd.signal
+                    ? "Bullish"
+                    : "Bearish"}
+                </Text>
+              </View>
+              <View style={styles.analysisCard}>
+                <Text style={styles.analysisTitle}>Volume</Text>
+                <Text style={styles.analysisValue}>
+                  {analysis.indicators.volume.ratio.toFixed(1)}x
+                </Text>
+                <Text style={styles.analysisSubvalue}>vs 20-day avg</Text>
+              </View>
+              <View style={styles.analysisCard}>
+                <Text style={styles.analysisTitle}>ATR</Text>
+                <Text style={styles.analysisValue}>
+                  ${analysis.indicators.atr.toFixed(2)}
+                </Text>
+                <Text style={styles.analysisSubvalue}>Volatility</Text>
               </View>
             </View>
           </View>
         )}
 
-        {/* AI Insights */}
-        {insight && (
-          <View style={styles.card}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                marginBottom: 12,
-              }}
-            >
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  backgroundColor: "#e0e7ff",
-                  borderRadius: 8,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginRight: 12,
-                }}
-              >
-                <Ionicons name="sparkles-outline" size={20} color="#6366f1" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.sectionTitle}>AI Market Insights</Text>
-                <Text style={styles.sectionSubtitle}>
-                  AI-powered analysis for {symbol}
-                </Text>
-              </View>
-            </View>
-            <Text
-              style={{ color: "#374151", lineHeight: 24, marginBottom: 12 }}
-            >
-              {insight}
-            </Text>
-            <View
-              style={{
-                backgroundColor: "#fef3c7",
-                padding: 8,
-                borderRadius: 8,
-              }}
-            >
-              <Text style={{ fontSize: 12, color: "#92400e" }}>
-                ⚠️ Not financial advice. For educational purposes only.
+        {/* News Analysis */}
+        {newsAnalysis && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>News Sentiment</Text>
+              <Text style={styles.sectionSubtitle}>
+                {newsAnalysis.urgency.toUpperCase()} Impact
               </Text>
             </View>
+            <Text style={{ color: "#ffffff", marginBottom: 8 }}>
+              {newsAnalysis.label} ({(newsAnalysis.score * 100).toFixed(0)}%
+              score)
+            </Text>
+            <Text style={{ color: "#888888", fontSize: 14 }}>
+              {newsAnalysis.summary}
+            </Text>
           </View>
         )}
 
         {/* Latest News */}
-        <View style={styles.card}>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              marginBottom: 12,
-            }}
-          >
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  backgroundColor: "#e0e7ff",
-                  borderRadius: 8,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  marginRight: 12,
-                }}
-              >
-                <Ionicons name="newspaper-outline" size={20} color="#6366f1" />
-              </View>
+        {news.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Latest News</Text>
+              <Text style={styles.sectionSubtitle}>{symbol}</Text>
             </View>
-            <Pressable style={{ paddingHorizontal: 12, paddingVertical: 6 }}>
-              <Text
-                style={{ color: "#6366f1", fontSize: 14, fontWeight: "500" }}
-              >
-                View All
-              </Text>
-            </Pressable>
+            <NewsList items={news.slice(0, 5)} />
           </View>
-          <Text style={styles.sectionSubtitle}>
-            Recent headlines for {symbol}
-          </Text>
-          <NewsList items={news.slice(0, 3)} />
-        </View>
+        )}
 
         <View style={{ height: 32 }} />
       </View>

@@ -5,568 +5,679 @@ import {
   ScrollView,
   Pressable,
   RefreshControl,
-  Dimensions,
+  StyleSheet,
+  ActivityIndicator,
   Alert,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import Card from "../components/common/Card";
-import Button from "../components/common/Button";
-import { generateInsights } from "../services/ai";
-import { analyzeNewsSentiment } from "../services/sentiment";
-import { fetchNews } from "../services/marketProviders";
+import { MarketScanner, ScanResult } from "../services/marketScanner";
+import { performComprehensiveAnalysis, MarketAnalysis, TradingSignal } from "../services/aiAnalytics";
+import { analyzeNewsWithEnhancedSentiment, SentimentAnalysis } from "../services/sentiment";
+import { fetchNews, fetchCandles } from "../services/marketProviders";
 
-const { width: screenWidth } = Dimensions.get("window");
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#0a0a0a",
+  },
+  header: {
+    backgroundColor: "#1a1a1a",
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    color: "#888888",
+    fontSize: 14,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "#1a1a1a",
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  tabActive: {
+    backgroundColor: "#00D4AA",
+  },
+  tabInactive: {
+    backgroundColor: "transparent",
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  tabTextActive: {
+    color: "#000000",
+  },
+  tabTextInactive: {
+    color: "#888888",
+  },
+  section: {
+    backgroundColor: "#1a1a1a",
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 12,
+    padding: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginBottom: 16,
+  },
+  insightCard: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  insightHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  insightTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ffffff",
+    flex: 1,
+  },
+  confidenceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#00D4AA",
+  },
+  confidenceText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#000000",
+  },
+  insightDescription: {
+    fontSize: 14,
+    color: "#cccccc",
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  insightMetrics: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#333333",
+  },
+  metricItem: {
+    alignItems: "center",
+  },
+  metricLabel: {
+    fontSize: 10,
+    color: "#888888",
+    marginBottom: 2,
+  },
+  metricValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  sentimentContainer: {
+    alignItems: "center",
+    padding: 24,
+  },
+  sentimentCircle: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: "#2a2a2a",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  sentimentScore: {
+    fontSize: 32,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  sentimentLabel: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#00D4AA",
+    marginBottom: 8,
+  },
+  sentimentDescription: {
+    fontSize: 14,
+    color: "#888888",
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  signalCard: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  signalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  signalSymbol: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  signalAction: {
+    fontSize: 14,
+    fontWeight: "600",
+    textTransform: "uppercase",
+  },
+  buyAction: {
+    color: "#00D4AA",
+  },
+  sellAction: {
+    color: "#FF5722",
+  },
+  holdAction: {
+    color: "#FFB020",
+  },
+  signalType: {
+    fontSize: 12,
+    color: "#888888",
+    marginBottom: 8,
+  },
+  signalTargets: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 8,
+  },
+  targetChip: {
+    backgroundColor: "#333333",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  targetText: {
+    fontSize: 10,
+    color: "#ffffff",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    padding: 32,
+  },
+  loadingText: {
+    color: "#888888",
+    marginTop: 12,
+  },
+  refreshButton: {
+    backgroundColor: "#00D4AA",
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  refreshButtonText: {
+    color: "#000000",
+    fontWeight: "600",
+    fontSize: 14,
+    marginLeft: 4,
+  },
+});
 
-interface MarketInsight {
+interface AIInsight {
   title: string;
   description: string;
   confidence: number;
-  type: "bullish" | "bearish" | "neutral";
+  symbols: string[];
+  impact: "bullish" | "bearish" | "neutral";
   timeframe: string;
-  stocks: string[];
+  factors: string[];
 }
-
-interface SentimentData {
-  label: string;
-  score: number;
-  trend: "up" | "down" | "stable";
-  description: string;
-}
-
-interface Recommendation {
-  action: "buy" | "sell" | "hold";
-  symbol: string;
-  reason: string;
-  confidence: number;
-  targetPrice?: number;
-  stopLoss?: number;
-}
-
-const mockInsights: MarketInsight[] = [
-  {
-    title: "Tech Sector Momentum",
-    description:
-      "Strong earnings reports from major tech companies are driving sector-wide optimism. Cloud computing and AI investments continue to show robust growth.",
-    confidence: 85,
-    type: "bullish",
-    timeframe: "1-3 months",
-    stocks: ["AAPL", "GOOGL", "MSFT", "NVDA"],
-  },
-  {
-    title: "Energy Sector Volatility",
-    description:
-      "Oil prices showing increased volatility due to geopolitical tensions. Consider defensive positioning in energy stocks.",
-    confidence: 72,
-    type: "bearish",
-    timeframe: "2-4 weeks",
-    stocks: ["XOM", "CVX", "BP"],
-  },
-  {
-    title: "Healthcare Innovation",
-    description:
-      "Breakthrough drug approvals and medical device innovations are creating opportunities in the healthcare sector.",
-    confidence: 78,
-    type: "bullish",
-    timeframe: "3-6 months",
-    stocks: ["JNJ", "PFE", "UNH"],
-  },
-];
-
-const mockRecommendations: Recommendation[] = [
-  {
-    action: "buy",
-    symbol: "AAPL",
-    reason:
-      "Strong iPhone sales and services growth. Trading below fair value.",
-    confidence: 82,
-    targetPrice: 200,
-    stopLoss: 165,
-  },
-  {
-    action: "hold",
-    symbol: "GOOGL",
-    reason:
-      "Solid fundamentals but facing regulatory headwinds. Maintain position.",
-    confidence: 75,
-  },
-  {
-    action: "sell",
-    symbol: "NFLX",
-    reason:
-      "Increasing competition and subscriber growth slowdown. Consider taking profits.",
-    confidence: 68,
-    targetPrice: 380,
-  },
-];
 
 export default function AIInsightsScreen() {
+  const [activeTab, setActiveTab] = useState<"insights" | "sentiment" | "signals">("insights");
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [activeTab, setActiveTab] = useState<
-    "insights" | "sentiment" | "recommendations"
-  >("insights");
-  const [insights, setInsights] = useState<MarketInsight[]>(mockInsights);
-  const [sentiment, setSentiment] = useState<SentimentData>({
-    label: "Moderately Bullish",
-    score: 0.65,
-    trend: "up",
-    description:
-      "Market sentiment has improved over the past week with strong earnings reports offsetting inflation concerns.",
-  });
-  const [recommendations, setRecommendations] =
-    useState<Recommendation[]>(mockRecommendations);
-  const [selectedTimeframe, setSelectedTimeframe] = useState<
-    "1D" | "1W" | "1M" | "3M"
-  >("1W");
-
-  const timeframes = [
-    { key: "1D", label: "1 Day" },
-    { key: "1W", label: "1 Week" },
-    { key: "1M", label: "1 Month" },
-    { key: "3M", label: "3 Months" },
-  ];
+  const [insights, setInsights] = useState<AIInsight[]>([]);
+  const [sentiment, setSentiment] = useState<SentimentAnalysis | null>(null);
+  const [topSignals, setTopSignals] = useState<{ symbol: string; analysis: MarketAnalysis }[]>([]);
 
   useEffect(() => {
     loadData();
-  }, [selectedTimeframe]);
+  }, []);
 
-  const loadData = async () => {
+  async function loadData() {
     try {
-      // In a real app, these would be actual API calls
-      const news = await fetchNews("market");
-      const sentimentAnalysis = await analyzeNewsSentiment(news);
-
-      setSentiment({
-        label: sentimentAnalysis.label,
-        score: sentimentAnalysis.overallScore,
-        trend:
-          sentimentAnalysis.overallScore > 0.6
-            ? "up"
-            : sentimentAnalysis.overallScore < 0.4
-            ? "down"
-            : "stable",
-        description: `Market sentiment based on analysis of ${news.length} recent news articles and market indicators.`,
-      });
+      setLoading(true);
+      await Promise.all([loadInsights(), loadSentiment(), loadTopSignals()]);
     } catch (error) {
-      console.error("Error loading AI insights data:", error);
+      console.error("Error loading AI insights:", error);
+      Alert.alert("Error", "Failed to load AI insights");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }
 
-  const onRefresh = async () => {
+  async function loadInsights() {
+    try {
+      // Generate AI insights based on market scan
+      const scanResults = await MarketScanner.scanMarket({ minConfidence: 70 });
+      const generatedInsights: AIInsight[] = [];
+
+      // Bullish momentum insight
+      const bullishStocks = scanResults.filter(r => 
+        r.analysis.marketStructure.trend === "uptrend" && 
+        r.analysis.indicators.rsi < 70
+      );
+      if (bullishStocks.length > 0) {
+        generatedInsights.push({
+          title: "Strong Bullish Momentum Detected",
+          description: `${bullishStocks.length} stocks showing strong upward momentum with healthy RSI levels. Multiple timeframe alignment suggests continued strength.`,
+          confidence: 82,
+          symbols: bullishStocks.slice(0, 5).map(s => s.symbol),
+          impact: "bullish",
+          timeframe: "1-2 weeks",
+          factors: ["Technical breakouts", "Volume confirmation", "Multi-timeframe alignment"]
+        });
+      }
+
+      // Oversold bounce opportunity
+      const oversoldStocks = scanResults.filter(r => 
+        r.analysis.indicators.rsi < 30 && 
+        r.analysis.indicators.volume.ratio > 1.2
+      );
+      if (oversoldStocks.length > 0) {
+        generatedInsights.push({
+          title: "Oversold Bounce Opportunities",
+          description: `${oversoldStocks.length} quality stocks in oversold territory with increasing volume. Historical patterns suggest potential bounce.`,
+          confidence: 75,
+          symbols: oversoldStocks.slice(0, 4).map(s => s.symbol),
+          impact: "bullish",
+          timeframe: "3-7 days",
+          factors: ["Oversold RSI", "Volume spike", "Support levels nearby"]
+        });
+      }
+
+      // High volume breakouts
+      const breakoutStocks = scanResults.filter(r => 
+        r.analysis.indicators.volume.ratio > 2.0 && 
+        r.analysis.signals.length > 0
+      );
+      if (breakoutStocks.length > 0) {
+        generatedInsights.push({
+          title: "High Volume Breakout Patterns",
+          description: `${breakoutStocks.length} stocks breaking out with exceptional volume. These patterns often lead to sustained moves.`,
+          confidence: 88,
+          symbols: breakoutStocks.slice(0, 3).map(s => s.symbol),
+          impact: "bullish",
+          timeframe: "1-4 weeks",
+          factors: ["Exceptional volume", "Technical breakout", "AI signal confirmation"]
+        });
+      }
+
+      // Risk warning for overbought
+      const overboughtStocks = scanResults.filter(r => 
+        r.analysis.indicators.rsi > 80
+      );
+      if (overboughtStocks.length > 0) {
+        generatedInsights.push({
+          title: "Overbought Risk Warning",
+          description: `${overboughtStocks.length} stocks showing extreme overbought conditions. Consider taking profits or reducing exposure.`,
+          confidence: 78,
+          symbols: overboughtStocks.slice(0, 4).map(s => s.symbol),
+          impact: "bearish",
+          timeframe: "immediate",
+          factors: ["Extreme RSI", "Low volume", "Potential reversal patterns"]
+        });
+      }
+
+      setInsights(generatedInsights);
+    } catch (error) {
+      console.error("Error generating insights:", error);
+    }
+  }
+
+  async function loadSentiment() {
+    try {
+      const news = await fetchNews("market");
+      const sentimentAnalysis = await analyzeNewsWithEnhancedSentiment(news);
+      setSentiment(sentimentAnalysis);
+    } catch (error) {
+      console.error("Error loading sentiment:", error);
+    }
+  }
+
+  async function loadTopSignals() {
+    try {
+      const scanResults = await MarketScanner.scanMarket({ minConfidence: 75 });
+      const topResults = scanResults
+        .filter(r => r.analysis.signals.length > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 10);
+
+      const signalsData = topResults.map(result => ({
+        symbol: result.symbol,
+        analysis: result.analysis
+      }));
+
+      setTopSignals(signalsData);
+    } catch (error) {
+      console.error("Error loading top signals:", error);
+    }
+  }
+
+  async function onRefresh() {
     setRefreshing(true);
     await loadData();
-    setRefreshing(false);
-  };
+  }
 
-  const getSentimentColor = (score: number) => {
-    if (score >= 0.6) return "text-green-600 dark:text-green-400";
-    if (score <= 0.4) return "text-red-600 dark:text-red-400";
-    return "text-yellow-600 dark:text-yellow-400";
-  };
-
-  const getSentimentIcon = (trend: string) => {
-    switch (trend) {
-      case "up":
-        return "trending-up";
-      case "down":
-        return "trending-down";
-      default:
-        return "remove";
-    }
-  };
-
-  const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 80)
-      return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400";
-    if (confidence >= 60)
-      return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400";
-    return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
-  };
-
-  const getActionColor = (action: string) => {
-    switch (action) {
-      case "buy":
-        return "text-green-600 dark:text-green-400";
-      case "sell":
-        return "text-red-600 dark:text-red-400";
-      default:
-        return "text-blue-600 dark:text-blue-400";
-    }
-  };
-
-  const renderInsight = (insight: MarketInsight, index: number) => (
-    <Card key={index} variant="elevated" className="mb-4">
-      <View className="flex-row items-start justify-between mb-3">
-        <View className="flex-1">
-          <View className="flex-row items-center mb-2">
-            <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-              {insight.title}
-            </Text>
-            <View
-              className={`ml-2 px-2 py-1 rounded-full ${
-                insight.type === "bullish"
-                  ? "bg-green-100 dark:bg-green-900/30"
-                  : insight.type === "bearish"
-                  ? "bg-red-100 dark:bg-red-900/30"
-                  : "bg-gray-100 dark:bg-gray-700"
-              }`}
-            >
-              <Text
-                className={`text-xs font-medium ${
-                  insight.type === "bullish"
-                    ? "text-green-700 dark:text-green-400"
-                    : insight.type === "bearish"
-                    ? "text-red-700 dark:text-red-400"
-                    : "text-gray-700 dark:text-gray-300"
-                }`}
-              >
-                {insight.type.toUpperCase()}
-              </Text>
-            </View>
+  function renderInsight(insight: AIInsight, index: number) {
+    return (
+      <View key={index} style={styles.insightCard}>
+        <View style={styles.insightHeader}>
+          <Text style={styles.insightTitle}>{insight.title}</Text>
+          <View style={[
+            styles.confidenceBadge,
+            { backgroundColor: insight.confidence > 80 ? "#00D4AA" : insight.confidence > 60 ? "#FFB020" : "#FF5722" }
+          ]}>
+            <Text style={styles.confidenceText}>{insight.confidence}%</Text>
           </View>
-          <Text className="text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
-            {insight.description}
+        </View>
+
+        <Text style={styles.insightDescription}>{insight.description}</Text>
+
+        <View style={styles.insightMetrics}>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Impact</Text>
+            <Text style={[styles.metricValue, { 
+              color: insight.impact === "bullish" ? "#00D4AA" : 
+                     insight.impact === "bearish" ? "#FF5722" : "#FFB020" 
+            }]}>
+              {insight.impact.toUpperCase()}
+            </Text>
+          </View>
+
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Timeframe</Text>
+            <Text style={styles.metricValue}>{insight.timeframe}</Text>
+          </View>
+
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Stocks</Text>
+            <Text style={styles.metricValue}>{insight.symbols.length}</Text>
+          </View>
+        </View>
+
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 12 }}>
+          {insight.symbols.map(symbol => (
+            <View key={symbol} style={styles.targetChip}>
+              <Text style={styles.targetText}>{symbol}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  function renderSignal(signalData: { symbol: string; analysis: MarketAnalysis }, index: number) {
+    const { symbol, analysis } = signalData;
+    const primarySignal = analysis.signals[0];
+    
+    if (!primarySignal) return null;
+
+    return (
+      <View key={index} style={styles.signalCard}>
+        <View style={styles.signalHeader}>
+          <Text style={styles.signalSymbol}>{symbol}</Text>
+          <Text style={[
+            styles.signalAction,
+            primarySignal.action === "buy" ? styles.buyAction :
+            primarySignal.action === "sell" ? styles.sellAction : styles.holdAction
+          ]}>
+            {primarySignal.action}
           </Text>
-          <View className="flex-row items-center justify-between">
-            <View className="flex-row items-center">
-              <Ionicons name="time-outline" size={14} color="#6b7280" />
-              <Text className="text-sm text-gray-500 dark:text-gray-400 ml-1">
-                {insight.timeframe}
-              </Text>
+        </View>
+
+        <Text style={styles.signalType}>
+          {primarySignal.type.toUpperCase()} • {primarySignal.confidence}% Confidence
+        </Text>
+
+        <Text style={{ color: "#cccccc", fontSize: 12, marginBottom: 8 }}>
+          Entry: ${primarySignal.entry.toFixed(2)} • Stop: ${primarySignal.stopLoss.toFixed(2)}
+        </Text>
+
+        <View style={styles.signalTargets}>
+          {primarySignal.targets.map((target, i) => (
+            <View key={i} style={styles.targetChip}>
+              <Text style={styles.targetText}>T{i + 1}: ${target.toFixed(2)}</Text>
             </View>
-            <View
-              className={`px-2 py-1 rounded-lg ${getConfidenceColor(
-                insight.confidence
-              )}`}
-            >
-              <Text className="text-xs font-medium">
-                {insight.confidence}% confidence
-              </Text>
-            </View>
-          </View>
+          ))}
+        </View>
+
+        <View style={{ marginTop: 8 }}>
+          <Text style={{ color: "#888888", fontSize: 10 }}>
+            Confluence: {primarySignal.confluence} signals • R/R: {primarySignal.riskReward}:1
+          </Text>
         </View>
       </View>
-      <View className="flex-row flex-wrap gap-1 mt-2">
-        {insight.stocks.map((stock) => (
-          <View
-            key={stock}
-            className="bg-indigo-100 dark:bg-indigo-900/30 px-2 py-1 rounded"
-          >
-            <Text className="text-xs font-medium text-indigo-700 dark:text-indigo-400">
-              {stock}
-            </Text>
-          </View>
-        ))}
-      </View>
-    </Card>
-  );
+    );
+  }
 
-  const renderRecommendation = (rec: Recommendation, index: number) => (
-    <Card key={index} variant="elevated" className="mb-4">
-      <View className="flex-row items-center justify-between mb-3">
-        <View className="flex-row items-center">
-          <View
-            className={`w-8 h-8 rounded-full items-center justify-center mr-3 ${
-              rec.action === "buy"
-                ? "bg-green-100 dark:bg-green-900/30"
-                : rec.action === "sell"
-                ? "bg-red-100 dark:bg-red-900/30"
-                : "bg-blue-100 dark:bg-blue-900/30"
-            }`}
-          >
-            <Ionicons
-              name={
-                rec.action === "buy"
-                  ? "arrow-up"
-                  : rec.action === "sell"
-                  ? "arrow-down"
-                  : "remove"
-              }
-              size={16}
-              color={
-                rec.action === "buy"
-                  ? "#16a34a"
-                  : rec.action === "sell"
-                  ? "#dc2626"
-                  : "#3b82f6"
-              }
-            />
-          </View>
-          <View>
-            <Text className="text-lg font-bold text-gray-900 dark:text-white">
-              {rec.symbol}
-            </Text>
-            <Text
-              className={`text-sm font-medium uppercase ${getActionColor(
-                rec.action
-              )}`}
-            >
-              {rec.action}
-            </Text>
-          </View>
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>AI Market Insights</Text>
+          <Text style={styles.headerSubtitle}>Loading AI analysis...</Text>
         </View>
-        <View
-          className={`px-2 py-1 rounded-lg ${getConfidenceColor(
-            rec.confidence
-          )}`}
-        >
-          <Text className="text-xs font-medium">{rec.confidence}%</Text>
+        
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#00D4AA" />
+          <Text style={styles.loadingText}>Analyzing markets...</Text>
         </View>
       </View>
-
-      <Text className="text-gray-700 dark:text-gray-300 mb-3">
-        {rec.reason}
-      </Text>
-
-      {(rec.targetPrice || rec.stopLoss) && (
-        <View className="flex-row justify-between items-center bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
-          {rec.targetPrice && (
-            <View>
-              <Text className="text-xs text-gray-500 dark:text-gray-400">
-                Target
-              </Text>
-              <Text className="font-semibold text-gray-900 dark:text-white">
-                ${rec.targetPrice}
-              </Text>
-            </View>
-          )}
-          {rec.stopLoss && (
-            <View>
-              <Text className="text-xs text-gray-500 dark:text-gray-400">
-                Stop Loss
-              </Text>
-              <Text className="font-semibold text-gray-900 dark:text-white">
-                ${rec.stopLoss}
-              </Text>
-            </View>
-          )}
-        </View>
-      )}
-    </Card>
-  );
+    );
+  }
 
   return (
-    <View className="flex-1 bg-gray-50 dark:bg-gray-900">
+    <View style={styles.container}>
       {/* Header */}
-      <LinearGradient
-        colors={["#667eea", "#764ba2"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        className="px-4 pt-12 pb-6"
-      >
-        <Text className="text-2xl font-bold text-white mb-2">
-          AI Market Insights
-        </Text>
-        <Text className="text-white/80">
-          Powered by advanced machine learning
-        </Text>
-      </LinearGradient>
-
-      {/* Tab Navigation */}
-      <View className="px-4 -mt-4">
-        <Card variant="elevated">
-          <View className="flex-row bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-            {[
-              { key: "insights", label: "Insights" },
-              { key: "sentiment", label: "Sentiment" },
-              { key: "recommendations", label: "Picks" },
-            ].map((tab) => (
-              <Pressable
-                key={tab.key}
-                onPress={() => setActiveTab(tab.key as any)}
-                className={`flex-1 py-2 rounded-md ${
-                  activeTab === tab.key ? "bg-white dark:bg-gray-600" : ""
-                }`}
-              >
-                <Text
-                  className={`text-center font-medium ${
-                    activeTab === tab.key
-                      ? "text-gray-900 dark:text-white"
-                      : "text-gray-500 dark:text-gray-400"
-                  }`}
-                >
-                  {tab.label}
-                </Text>
-              </Pressable>
-            ))}
+      <View style={styles.header}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <View>
+            <Text style={styles.headerTitle}>AI Market Insights</Text>
+            <Text style={styles.headerSubtitle}>
+              Advanced machine learning analysis
+            </Text>
           </View>
-        </Card>
+          
+          <Pressable style={styles.refreshButton} onPress={onRefresh} disabled={refreshing}>
+            <Ionicons name="sparkles" size={16} color="#000000" />
+            <Text style={styles.refreshButtonText}>
+              {refreshing ? "Analyzing..." : "Refresh"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
 
-      {/* Timeframe Selector */}
-      <View className="px-4 mt-4">
-        <Card variant="elevated">
-          <Text className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
-            Analysis Timeframe
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
+        <Pressable
+          style={[styles.tab, activeTab === "insights" ? styles.tabActive : styles.tabInactive]}
+          onPress={() => setActiveTab("insights")}
+        >
+          <Text style={[styles.tabText, activeTab === "insights" ? styles.tabTextActive : styles.tabTextInactive]}>
+            Market Insights
           </Text>
-          <View className="flex-row space-x-2">
-            {timeframes.map((timeframe) => (
-              <Pressable
-                key={timeframe.key}
-                onPress={() => setSelectedTimeframe(timeframe.key as any)}
-                className={`px-3 py-2 rounded-lg ${
-                  selectedTimeframe === timeframe.key
-                    ? "bg-indigo-600"
-                    : "bg-gray-100 dark:bg-gray-700"
-                }`}
-              >
-                <Text
-                  className={`text-sm font-medium ${
-                    selectedTimeframe === timeframe.key
-                      ? "text-white"
-                      : "text-gray-700 dark:text-gray-300"
-                  }`}
-                >
-                  {timeframe.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </Card>
+        </Pressable>
+        
+        <Pressable
+          style={[styles.tab, activeTab === "sentiment" ? styles.tabActive : styles.tabInactive]}
+          onPress={() => setActiveTab("sentiment")}
+        >
+          <Text style={[styles.tabText, activeTab === "sentiment" ? styles.tabTextActive : styles.tabTextInactive]}>
+            Sentiment
+          </Text>
+        </Pressable>
+
+        <Pressable
+          style={[styles.tab, activeTab === "signals" ? styles.tabActive : styles.tabInactive]}
+          onPress={() => setActiveTab("signals")}
+        >
+          <Text style={[styles.tabText, activeTab === "signals" ? styles.tabTextActive : styles.tabTextInactive]}>
+            Top Signals
+          </Text>
+        </Pressable>
       </View>
 
       {/* Content */}
       <ScrollView
-        className="flex-1 px-4 mt-4"
+        style={{ flex: 1 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00D4AA" />
         }
-        showsVerticalScrollIndicator={false}
       >
         {activeTab === "insights" && (
-          <View>
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                Market Insights
-              </Text>
-              <Button
-                title="Generate New"
-                size="sm"
-                icon="sparkles"
-                onPress={() =>
-                  Alert.alert("AI Analysis", "Generating fresh insights...")
-                }
-              />
-            </View>
-            {insights.map(renderInsight)}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>AI-Generated Market Insights</Text>
+            {insights.length === 0 ? (
+              <View style={{ alignItems: "center", padding: 32 }}>
+                <Ionicons name="bulb-outline" size={48} color="#888888" />
+                <Text style={{ color: "#888888", textAlign: "center", marginTop: 12 }}>
+                  No significant insights detected at this time.
+                  Market conditions appear stable.
+                </Text>
+              </View>
+            ) : (
+              insights.map(renderInsight)
+            )}
           </View>
         )}
 
-        {activeTab === "sentiment" && (
-          <View>
-            <Card variant="elevated" className="mb-4" icon="pulse">
-              <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Market Sentiment Analysis
-              </Text>
-
-              <View className="items-center mb-6">
-                <View className="w-24 h-24 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full items-center justify-center mb-4">
-                  <Ionicons
-                    name={getSentimentIcon(sentiment.trend)}
-                    size={32}
-                    color="white"
-                  />
-                </View>
-                <Text
-                  className={`text-2xl font-bold ${getSentimentColor(
-                    sentiment.score
-                  )}`}
-                >
-                  {sentiment.label}
+        {activeTab === "sentiment" && sentiment && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Market Sentiment Analysis</Text>
+            
+            <View style={styles.sentimentContainer}>
+              <View style={styles.sentimentCircle}>
+                <Text style={styles.sentimentScore}>
+                  {(sentiment.score * 100).toFixed(0)}
                 </Text>
-                <Text className="text-gray-500 dark:text-gray-400 text-center mt-2">
-                  Sentiment Score: {(sentiment.score * 100).toFixed(0)}/100
-                </Text>
+                <Ionicons 
+                  name={sentiment.score > 0 ? "trending-up" : sentiment.score < 0 ? "trending-down" : "remove"} 
+                  size={24} 
+                  color="#888888" 
+                />
               </View>
-
-              <View className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-                <Text className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                  {sentiment.description}
-                </Text>
-              </View>
-            </Card>
-
-            <Card variant="elevated" className="mb-4" icon="bar-chart">
-              <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                Sentiment Breakdown
+              
+              <Text style={[styles.sentimentLabel, { 
+                color: sentiment.score > 0.3 ? "#00D4AA" : 
+                       sentiment.score < -0.3 ? "#FF5722" : "#FFB020" 
+              }]}>
+                {sentiment.label}
               </Text>
+              
+              <Text style={styles.sentimentDescription}>
+                {sentiment.summary}
+              </Text>
+            </View>
 
-              <View className="space-y-3">
-                {[
-                  {
-                    label: "Fear & Greed Index",
-                    value: 62,
-                    color: "bg-green-500",
-                  },
-                  {
-                    label: "News Sentiment",
-                    value: sentiment.score * 100,
-                    color: "bg-blue-500",
-                  },
-                  {
-                    label: "Social Media Buzz",
-                    value: 45,
-                    color: "bg-purple-500",
-                  },
-                  {
-                    label: "Institutional Flow",
-                    value: 78,
-                    color: "bg-orange-500",
-                  },
-                ].map((item, index) => (
-                  <View key={index}>
-                    <View className="flex-row justify-between mb-1">
-                      <Text className="text-sm text-gray-700 dark:text-gray-300">
-                        {item.label}
-                      </Text>
-                      <Text className="text-sm font-medium text-gray-900 dark:text-white">
-                        {item.value.toFixed(0)}%
-                      </Text>
-                    </View>
-                    <View className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <View
-                        className={`h-2 rounded-full ${item.color}`}
-                        style={{ width: `${item.value}%` }}
-                      />
-                    </View>
+            <View style={{ marginTop: 24 }}>
+              <Text style={{ color: "#ffffff", fontSize: 16, fontWeight: "600", marginBottom: 12 }}>
+                Key Factors
+              </Text>
+              
+              {sentiment.keywords.positive.length > 0 && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={{ color: "#00D4AA", fontSize: 14, fontWeight: "500", marginBottom: 4 }}>
+                    Positive Indicators
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
+                    {sentiment.keywords.positive.slice(0, 6).map((keyword, i) => (
+                      <View key={i} style={[styles.targetChip, { backgroundColor: "#00D4AA20" }]}>
+                        <Text style={[styles.targetText, { color: "#00D4AA" }]}>{keyword}</Text>
+                      </View>
+                    ))}
                   </View>
-                ))}
-              </View>
-            </Card>
-          </View>
-        )}
+                </View>
+              )}
 
-        {activeTab === "recommendations" && (
-          <View>
-            <View className="flex-row items-center justify-between mb-4">
-              <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                AI Stock Picks
-              </Text>
-              <Button
-                title="Refresh"
-                size="sm"
-                icon="refresh"
-                onPress={() =>
-                  Alert.alert("AI Picks", "Updating recommendations...")
-                }
-              />
+              {sentiment.keywords.negative.length > 0 && (
+                <View>
+                  <Text style={{ color: "#FF5722", fontSize: 14, fontWeight: "500", marginBottom: 4 }}>
+                    Risk Factors
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
+                    {sentiment.keywords.negative.slice(0, 6).map((keyword, i) => (
+                      <View key={i} style={[styles.targetChip, { backgroundColor: "#FF572220" }]}>
+                        <Text style={[styles.targetText, { color: "#FF5722" }]}>{keyword}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
             </View>
-
-            <Card variant="elevated" className="mb-4">
-              <Text className="text-center text-sm text-gray-500 dark:text-gray-400 mb-2">
-                ⚠️ Disclaimer
-              </Text>
-              <Text className="text-center text-xs text-gray-400 dark:text-gray-500">
-                These are AI-generated suggestions for educational purposes
-                only. Not financial advice. Always do your own research.
-              </Text>
-            </Card>
-
-            {recommendations.map(renderRecommendation)}
           </View>
         )}
 
-        <View className="h-8" />
+        {activeTab === "signals" && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Top AI Trading Signals</Text>
+            {topSignals.length === 0 ? (
+              <View style={{ alignItems: "center", padding: 32 }}>
+                <Ionicons name="radio-outline" size={48} color="#888888" />
+                <Text style={{ color: "#888888", textAlign: "center", marginTop: 12 }}>
+                  No high-confidence signals available.
+                  Check back later for new opportunities.
+                </Text>
+              </View>
+            ) : (
+              topSignals.map(renderSignal)
+            )}
+            
+            <View style={{
+              backgroundColor: "#2a2a2a",
+              borderRadius: 8,
+              padding: 12,
+              marginTop: 16,
+              borderLeftWidth: 4,
+              borderLeftColor: "#FFB020"
+            }}>
+              <Text style={{ color: "#FFB020", fontSize: 12, fontWeight: "600", marginBottom: 4 }}>
+                ⚠️ Risk Disclaimer
+              </Text>
+              <Text style={{ color: "#888888", fontSize: 11 }}>
+                These are AI-generated signals for educational purposes only. 
+                Not financial advice. Always conduct your own research and risk management.
+              </Text>
+            </View>
+          </View>
+        )}
+
+        <View style={{ height: 32 }} />
       </ScrollView>
     </View>
   );

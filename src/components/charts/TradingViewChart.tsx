@@ -1,5 +1,7 @@
 import React from "react";
-import { View, useColorScheme } from "react-native";
+import { View, useColorScheme, Pressable } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import { WebView } from "react-native-webview";
 
 type Props = {
@@ -7,6 +9,7 @@ type Props = {
   height?: number;
   interval?: "1" | "5" | "15" | "30" | "60" | "120" | "240" | "D" | "W" | "M";
   theme?: "light" | "dark";
+  showExpand?: boolean;
 };
 
 export default function TradingViewChart({
@@ -14,9 +17,11 @@ export default function TradingViewChart({
   height = 560,
   interval = "D",
   theme,
+  showExpand = true,
 }: Props) {
   const scheme = useColorScheme();
   const resolvedTheme = theme || (scheme === "dark" ? "dark" : "light");
+  const navigation = useNavigation<any>();
 
   // Ensure the symbol has an exchange prefix; default to NASDAQ
   const normalizedSymbol = symbol.includes(":") ? symbol : `NASDAQ:${symbol}`;
@@ -77,9 +82,7 @@ export default function TradingViewChart({
   </body></html>`;
 
   return (
-    <View
-      style={{ height, width: "100%", borderRadius: 12, overflow: "hidden" }}
-    >
+    <View style={{ height, width: "100%" }}>
       <WebView
         originWhitelist={["*"]}
         source={{ html }}
@@ -102,6 +105,24 @@ export default function TradingViewChart({
           console.warn("TradingViewChart WebView error:", e.nativeEvent);
         }}
       />
+      {showExpand && (
+        <Pressable
+          onPress={() =>
+            navigation.navigate("ChartFullScreen", { symbol: normalizedSymbol })
+          }
+          style={{
+            position: "absolute",
+            right: 12,
+            top: 20,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            borderRadius: 20,
+            padding: 8,
+          }}
+          hitSlop={10}
+        >
+          <Ionicons name="expand" size={18} color="#fff" />
+        </Pressable>
+      )}
     </View>
   );
 }

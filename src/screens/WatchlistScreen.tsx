@@ -9,12 +9,13 @@ import {
   RefreshControl,
   Modal,
   Dimensions,
+  StyleSheet,
+  ActivityIndicator,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import Card from "../components/common/Card";
-import Button from "../components/common/Button";
-import Input from "../components/common/Input";
+import { MarketScanner, ScanResult, ScanFilter } from "../services/marketScanner";
+import { fetchCandles } from "../services/marketProviders";
+import { performComprehensiveAnalysis } from "../services/aiAnalytics";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -24,540 +25,658 @@ interface WatchlistItem {
   price: number;
   change: number;
   changePercent: number;
-  marketCap?: string;
-  volume?: number;
-  alertPrice?: number;
-  notes?: string;
+  rsi?: number;
+  volumeRatio?: number;
+  signals?: number;
+  alerts?: string[];
+  score?: number;
 }
 
-interface Portfolio {
-  symbol: string;
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-}
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#0a0a0a",
+  },
+  header: {
+    backgroundColor: "#1a1a1a",
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 16,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 4,
+  },
+  headerSubtitle: {
+    color: "#888888",
+    fontSize: 14,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "#1a1a1a",
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  tabActive: {
+    backgroundColor: "#00D4AA",
+  },
+  tabInactive: {
+    backgroundColor: "transparent",
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  tabTextActive: {
+    color: "#000000",
+  },
+  tabTextInactive: {
+    color: "#888888",
+  },
+  section: {
+    backgroundColor: "#1a1a1a",
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 12,
+    padding: 16,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    color: "#888888",
+    marginTop: 2,
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+    flexWrap: "wrap",
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#333333",
+    backgroundColor: "transparent",
+  },
+  filterChipActive: {
+    backgroundColor: "#00D4AA",
+    borderColor: "#00D4AA",
+  },
+  filterChipText: {
+    fontSize: 12,
+    color: "#ffffff",
+    fontWeight: "500",
+  },
+  filterChipTextActive: {
+    color: "#000000",
+  },
+  stockCard: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  stockHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  stockSymbol: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  stockName: {
+    fontSize: 12,
+    color: "#888888",
+    marginTop: 2,
+  },
+  stockPrice: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  stockChange: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginTop: 2,
+  },
+  positiveChange: {
+    color: "#00D4AA",
+  },
+  negativeChange: {
+    color: "#FF5722",
+  },
+  stockMetrics: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "#333333",
+  },
+  metricItem: {
+    alignItems: "center",
+  },
+  metricLabel: {
+    fontSize: 10,
+    color: "#888888",
+    marginBottom: 2,
+  },
+  metricValue: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  alertsContainer: {
+    marginTop: 8,
+  },
+  alertItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FF5722",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  alertText: {
+    fontSize: 10,
+    color: "#ffffff",
+    marginLeft: 4,
+    flex: 1,
+  },
+  scoreContainer: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "#00D4AA",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  scoreText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#000000",
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    padding: 32,
+  },
+  loadingText: {
+    color: "#888888",
+    marginTop: 12,
+  },
+  modal: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#1a1a1a",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  input: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 8,
+    padding: 12,
+    color: "#ffffff",
+    fontSize: 16,
+    marginBottom: 16,
+  },
+  addButton: {
+    backgroundColor: "#00D4AA",
+    borderRadius: 8,
+    padding: 16,
+    alignItems: "center",
+  },
+  addButtonText: {
+    color: "#000000",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  emptyState: {
+    alignItems: "center",
+    padding: 32,
+  },
+  emptyStateText: {
+    color: "#888888",
+    fontSize: 16,
+    textAlign: "center",
+    marginTop: 12,
+  },
+});
 
-const popularStocks = [
-  { symbol: "AAPL", name: "Apple Inc." },
-  { symbol: "GOOGL", name: "Alphabet Inc." },
-  { symbol: "MSFT", name: "Microsoft Corporation" },
-  { symbol: "TSLA", name: "Tesla, Inc." },
-  { symbol: "AMZN", name: "Amazon.com Inc." },
-  { symbol: "NVDA", name: "NVIDIA Corporation" },
-  { symbol: "META", name: "Meta Platforms Inc." },
-  { symbol: "NFLX", name: "Netflix Inc." },
-  { symbol: "AMD", name: "Advanced Micro Devices" },
-  { symbol: "CRM", name: "Salesforce Inc." },
+const filterPresets = [
+  { id: "all", label: "All Stocks", filter: {} },
+  { id: "oversold", label: "Oversold", filter: { rsiMax: 30, volumeRatioMin: 1.2 } },
+  { id: "momentum", label: "Momentum", filter: { rsiMin: 60, volumeRatioMin: 1.5 } },
+  { id: "breakout", label: "Breakouts", filter: { volumeRatioMin: 2.0, minConfidence: 70 } },
+  { id: "signals", label: "High Signals", filter: { minConfidence: 75 } },
 ];
 
-// Generate mock data for demonstration
-const generateMockPrice = (symbol: string): WatchlistItem => {
-  const basePrice = Math.random() * 300 + 50;
-  const change = (Math.random() - 0.5) * 20;
-  const changePercent = (change / basePrice) * 100;
-
-  return {
-    symbol,
-    name:
-      popularStocks.find((s) => s.symbol === symbol)?.name || `${symbol} Corp.`,
-    price: basePrice,
-    change,
-    changePercent,
-    marketCap: `${(Math.random() * 2000 + 100).toFixed(0)}B`,
-    volume: Math.floor(Math.random() * 50000000) + 1000000,
-  };
-};
-
 export default function WatchlistScreen() {
-  const [activeTab, setActiveTab] = useState<"watchlist" | "portfolio">(
-    "watchlist"
-  );
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([
-    generateMockPrice("AAPL"),
-    generateMockPrice("GOOGL"),
-    generateMockPrice("MSFT"),
-    generateMockPrice("TSLA"),
-  ]);
-  const [portfolio, setPortfolio] = useState<Portfolio[]>([
-    {
-      symbol: "AAPL",
-      shares: 10,
-      avgPrice: 150,
-      currentPrice: generateMockPrice("AAPL").price,
-    },
-    {
-      symbol: "GOOGL",
-      shares: 5,
-      avgPrice: 2800,
-      currentPrice: generateMockPrice("GOOGL").price,
-    },
-  ]);
+  const [activeTab, setActiveTab] = useState<"watchlist" | "scanner">("watchlist");
+  const [watchlist, setWatchlist] = useState<string[]>(["AAPL", "GOOGL", "MSFT", "TSLA", "NVDA"]);
+  const [watchlistData, setWatchlistData] = useState<ScanResult[]>([]);
+  const [scannerData, setScannerData] = useState<ScanResult[]>([]);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedFilter, setSelectedFilter] = useState("all");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showPortfolioModal, setShowPortfolioModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const [newSymbol, setNewSymbol] = useState("");
-  const [newShares, setNewShares] = useState("");
-  const [newAvgPrice, setNewAvgPrice] = useState("");
-
-  const filteredStocks = popularStocks.filter(
-    (stock) =>
-      stock.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      stock.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const totalPortfolioValue = portfolio.reduce(
-    (sum, item) => sum + item.shares * item.currentPrice,
-    0
-  );
-  const totalPortfolioCost = portfolio.reduce(
-    (sum, item) => sum + item.shares * item.avgPrice,
-    0
-  );
-  const totalGainLoss = totalPortfolioValue - totalPortfolioCost;
-  const totalGainLossPercent =
-    totalPortfolioCost > 0 ? (totalGainLoss / totalPortfolioCost) * 100 : 0;
 
   useEffect(() => {
-    // Update portfolio current prices
-    const updatedPortfolio = portfolio.map((item) => ({
-      ...item,
-      currentPrice: generateMockPrice(item.symbol).price,
-    }));
-    setPortfolio(updatedPortfolio);
+    loadData();
   }, []);
 
-  const onRefresh = async () => {
+  useEffect(() => {
+    if (activeTab === "scanner") {
+      loadScannerData();
+    }
+  }, [activeTab, selectedFilter]);
+
+  async function loadData() {
+    try {
+      setLoading(true);
+      await loadWatchlistData();
+    } catch (error) {
+      console.error("Error loading data:", error);
+      Alert.alert("Error", "Failed to load watchlist data");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadWatchlistData() {
+    const results: ScanResult[] = [];
+    
+    for (const symbol of watchlist) {
+      try {
+        const result = await MarketScanner.scanMarket({ minConfidence: 0 });
+        const symbolResult = result.find(r => r.symbol === symbol);
+        
+        if (symbolResult) {
+          results.push(symbolResult);
+        } else {
+          // Create basic data if not found in scanner
+          const candles = await fetchCandles(symbol, { resolution: "D" });
+          if (candles.length > 0) {
+            const analysis = await performComprehensiveAnalysis(symbol, { "1d": candles });
+            results.push({
+              symbol,
+              analysis,
+              alerts: [],
+              score: analysis.overallRating.score
+            });
+          }
+        }
+      } catch (error) {
+        console.warn(`Failed to load data for ${symbol}:`, error);
+      }
+    }
+    
+    setWatchlistData(results.sort((a, b) => b.score - a.score));
+  }
+
+  async function loadScannerData() {
+    try {
+      setLoading(true);
+      const filter = filterPresets.find(f => f.id === selectedFilter)?.filter || {};
+      const results = await MarketScanner.scanMarket(filter);
+      setScannerData(results);
+    } catch (error) {
+      console.error("Error loading scanner data:", error);
+      Alert.alert("Error", "Failed to load market scanner data");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onRefresh() {
     setRefreshing(true);
-    // Simulate data refresh
-    setTimeout(() => {
-      setWatchlist((prev) =>
-        prev.map((item) => generateMockPrice(item.symbol))
-      );
-      setRefreshing(false);
-    }, 1000);
-  };
-
-  const addToWatchlist = (symbol: string) => {
-    if (watchlist.find((item) => item.symbol === symbol)) {
-      Alert.alert("Already Added", `${symbol} is already in your watchlist.`);
-      return;
+    if (activeTab === "watchlist") {
+      await loadWatchlistData();
+    } else {
+      await loadScannerData();
     }
-    const newItem = generateMockPrice(symbol);
-    setWatchlist((prev) => [...prev, newItem]);
-    setShowAddModal(false);
-    setSearchQuery("");
-  };
+    setRefreshing(false);
+  }
 
-  const removeFromWatchlist = (symbol: string) => {
-    Alert.alert("Remove Stock", `Remove ${symbol} from your watchlist?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: () =>
-          setWatchlist((prev) => prev.filter((item) => item.symbol !== symbol)),
-      },
-    ]);
-  };
-
-  const addToPortfolio = () => {
-    if (!newSymbol || !newShares || !newAvgPrice) {
-      Alert.alert("Error", "Please fill in all fields.");
+  function addToWatchlist() {
+    if (!newSymbol.trim()) {
+      Alert.alert("Error", "Please enter a symbol");
       return;
     }
 
-    const shares = parseFloat(newShares);
-    const avgPrice = parseFloat(newAvgPrice);
-
-    if (shares <= 0 || avgPrice <= 0) {
-      Alert.alert(
-        "Error",
-        "Shares and average price must be positive numbers."
-      );
+    const symbol = newSymbol.toUpperCase().trim();
+    if (watchlist.includes(symbol)) {
+      Alert.alert("Already Added", `${symbol} is already in your watchlist`);
       return;
     }
 
-    const newItem: Portfolio = {
-      symbol: newSymbol.toUpperCase(),
-      shares,
-      avgPrice,
-      currentPrice: generateMockPrice(newSymbol.toUpperCase()).price,
-    };
-
-    setPortfolio((prev) => [...prev, newItem]);
-    setShowPortfolioModal(false);
+    setWatchlist(prev => [...prev, symbol]);
     setNewSymbol("");
-    setNewShares("");
-    setNewAvgPrice("");
-  };
+    setShowAddModal(false);
+    
+    // Reload watchlist data
+    loadWatchlistData();
+  }
 
-  const removeFromPortfolio = (symbol: string) => {
-    Alert.alert("Remove Position", `Remove ${symbol} from your portfolio?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Remove",
-        style: "destructive",
-        onPress: () =>
-          setPortfolio((prev) => prev.filter((item) => item.symbol !== symbol)),
-      },
-    ]);
-  };
+  function removeFromWatchlist(symbol: string) {
+    Alert.alert(
+      "Remove Stock",
+      `Remove ${symbol} from your watchlist?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: () => {
+            setWatchlist(prev => prev.filter(s => s !== symbol));
+            setWatchlistData(prev => prev.filter(s => s.symbol !== symbol));
+          }
+        }
+      ]
+    );
+  }
 
-  const renderWatchlistItem = (item: WatchlistItem) => {
-    const isPositive = item.change >= 0;
+  function addToWatchlistFromScanner(symbol: string) {
+    if (!watchlist.includes(symbol)) {
+      setWatchlist(prev => [...prev, symbol]);
+      Alert.alert("Added", `${symbol} added to your watchlist`);
+    } else {
+      Alert.alert("Already Added", `${symbol} is already in your watchlist`);
+    }
+  }
+
+  function renderStockCard(result: ScanResult, showAddButton = false) {
+    const { symbol, analysis, alerts, score } = result;
+    const currentPrice = analysis.currentPrice;
+    const change = currentPrice * 0.02 * (Math.random() - 0.5); // Mock change
+    const changePercent = (change / currentPrice) * 100;
+    const isPositive = change >= 0;
 
     return (
-      <Card key={item.symbol} variant="elevated" className="mb-3">
-        <View className="flex-row justify-between items-center">
-          <View className="flex-1">
-            <View className="flex-row items-center">
-              <Text className="text-lg font-bold text-gray-900 dark:text-white">
-                {item.symbol}
-              </Text>
-              <View
-                className={`ml-2 px-2 py-1 rounded-full ${
-                  isPositive
-                    ? "bg-green-100 dark:bg-green-900/30"
-                    : "bg-red-100 dark:bg-red-900/30"
-                }`}
-              >
-                <Text
-                  className={`text-xs font-medium ${
-                    isPositive
-                      ? "text-green-700 dark:text-green-400"
-                      : "text-red-700 dark:text-red-400"
-                  }`}
-                >
-                  {isPositive ? "+" : ""}
-                  {item.changePercent.toFixed(2)}%
-                </Text>
+      <View key={symbol} style={styles.stockCard}>
+        {score > 75 && (
+          <View style={styles.scoreContainer}>
+            <Text style={styles.scoreText}>{score.toFixed(0)}</Text>
+          </View>
+        )}
+        
+        <View style={styles.stockHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.stockSymbol}>{symbol}</Text>
+            <Text style={styles.stockName}>
+              {symbol} • {analysis.marketStructure.trend.toUpperCase()}
+            </Text>
+          </View>
+          
+          <View style={{ alignItems: "flex-end" }}>
+            <Text style={styles.stockPrice}>${currentPrice.toFixed(2)}</Text>
+            <Text style={[styles.stockChange, isPositive ? styles.positiveChange : styles.negativeChange]}>
+              {isPositive ? "+" : ""}{changePercent.toFixed(2)}%
+            </Text>
+          </View>
+
+          {showAddButton ? (
+            <Pressable
+              onPress={() => addToWatchlistFromScanner(symbol)}
+              style={{ marginLeft: 12, padding: 8, backgroundColor: "#00D4AA", borderRadius: 6 }}
+            >
+              <Ionicons name="add" size={16} color="#000000" />
+            </Pressable>
+          ) : (
+            <Pressable
+              onPress={() => removeFromWatchlist(symbol)}
+              style={{ marginLeft: 12, padding: 8 }}
+            >
+              <Ionicons name="close" size={16} color="#FF5722" />
+            </Pressable>
+          )}
+        </View>
+
+        <View style={styles.stockMetrics}>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>RSI</Text>
+            <Text style={[styles.metricValue, { 
+              color: analysis.indicators.rsi > 70 ? "#FF5722" : analysis.indicators.rsi < 30 ? "#00D4AA" : "#ffffff" 
+            }]}>
+              {analysis.indicators.rsi.toFixed(0)}
+            </Text>
+          </View>
+          
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Volume</Text>
+            <Text style={[styles.metricValue, { 
+              color: analysis.indicators.volume.ratio > 1.5 ? "#00D4AA" : "#ffffff" 
+            }]}>
+              {analysis.indicators.volume.ratio.toFixed(1)}x
+            </Text>
+          </View>
+          
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Signals</Text>
+            <Text style={[styles.metricValue, { 
+              color: analysis.signals.length > 0 ? "#00D4AA" : "#888888" 
+            }]}>
+              {analysis.signals.length}
+            </Text>
+          </View>
+          
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Rating</Text>
+            <Text style={[styles.metricValue, { 
+              color: analysis.overallRating.score > 70 ? "#00D4AA" : 
+                     analysis.overallRating.score > 30 ? "#ffffff" : "#FF5722" 
+            }]}>
+              {analysis.overallRating.score.toFixed(0)}
+            </Text>
+          </View>
+        </View>
+
+        {alerts.length > 0 && (
+          <View style={styles.alertsContainer}>
+            {alerts.slice(0, 2).map((alert, index) => (
+              <View key={index} style={styles.alertItem}>
+                <Ionicons name="warning" size={12} color="#ffffff" />
+                <Text style={styles.alertText}>{alert}</Text>
               </View>
-            </View>
-            <Text className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {item.name}
-            </Text>
-            <Text className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-              Vol:{" "}
-              {item.volume ? (item.volume / 1000000).toFixed(1) + "M" : "N/A"} •
-              Cap: {item.marketCap}
-            </Text>
+            ))}
           </View>
-          <View className="items-end">
-            <Text className="text-xl font-bold text-gray-900 dark:text-white">
-              ${item.price.toFixed(2)}
-            </Text>
-            <Text
-              className={`text-sm font-medium ${
-                isPositive
-                  ? "text-green-600 dark:text-green-400"
-                  : "text-red-600 dark:text-red-400"
-              }`}
-            >
-              {isPositive ? "+" : ""}${item.change.toFixed(2)}
-            </Text>
-            <Pressable
-              onPress={() => removeFromWatchlist(item.symbol)}
-              className="mt-2 p-1"
-            >
-              <Ionicons name="close-circle" size={20} color="#ef4444" />
-            </Pressable>
-          </View>
-        </View>
-      </Card>
+        )}
+      </View>
     );
-  };
+  }
 
-  const renderPortfolioItem = (item: Portfolio) => {
-    const currentValue = item.shares * item.currentPrice;
-    const costBasis = item.shares * item.avgPrice;
-    const gainLoss = currentValue - costBasis;
-    const gainLossPercent = (gainLoss / costBasis) * 100;
-    const isPositive = gainLoss >= 0;
-
-    return (
-      <Card key={item.symbol} variant="elevated" className="mb-3">
-        <View className="flex-row justify-between items-center">
-          <View className="flex-1">
-            <Text className="text-lg font-bold text-gray-900 dark:text-white">
-              {item.symbol}
-            </Text>
-            <Text className="text-sm text-gray-500 dark:text-gray-400">
-              {item.shares} shares @ ${item.avgPrice.toFixed(2)}
-            </Text>
-            <Text className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-              Cost basis: ${costBasis.toFixed(2)}
-            </Text>
-          </View>
-          <View className="items-end">
-            <Text className="text-lg font-bold text-gray-900 dark:text-white">
-              ${currentValue.toFixed(2)}
-            </Text>
-            <Text
-              className={`text-sm font-medium ${
-                isPositive
-                  ? "text-green-600 dark:text-green-400"
-                  : "text-red-600 dark:text-red-400"
-              }`}
-            >
-              {isPositive ? "+" : ""}${gainLoss.toFixed(2)}
-            </Text>
-            <Text
-              className={`text-xs ${
-                isPositive
-                  ? "text-green-600 dark:text-green-400"
-                  : "text-red-600 dark:text-red-400"
-              }`}
-            >
-              ({isPositive ? "+" : ""}
-              {gainLossPercent.toFixed(2)}%)
-            </Text>
-            <Pressable
-              onPress={() => removeFromPortfolio(item.symbol)}
-              className="mt-1 p-1"
-            >
-              <Ionicons name="close-circle" size={18} color="#ef4444" />
-            </Pressable>
-          </View>
-        </View>
-      </Card>
-    );
-  };
+  const currentData = activeTab === "watchlist" ? watchlistData : scannerData;
 
   return (
-    <View className="flex-1 bg-gray-50 dark:bg-gray-900">
+    <View style={styles.container}>
       {/* Header */}
-      <LinearGradient
-        colors={["#667eea", "#764ba2"]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        className="px-4 pt-12 pb-6"
-      >
-        <Text className="text-2xl font-bold text-white mb-2">
-          My Investments
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Market Watchlist</Text>
+        <Text style={styles.headerSubtitle}>
+          {activeTab === "watchlist" 
+            ? `${watchlist.length} symbols tracked`
+            : "AI-powered market scanner"
+          }
         </Text>
-        <Text className="text-white/80">
-          Track your portfolio and watchlist
-        </Text>
-      </LinearGradient>
-
-      {/* Tab Navigation */}
-      <View className="px-4 -mt-4">
-        <Card variant="elevated">
-          <View className="flex-row bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-            <Pressable
-              onPress={() => setActiveTab("watchlist")}
-              className={`flex-1 py-2 rounded-md ${
-                activeTab === "watchlist" ? "bg-white dark:bg-gray-600" : ""
-              }`}
-            >
-              <Text
-                className={`text-center font-medium ${
-                  activeTab === "watchlist"
-                    ? "text-gray-900 dark:text-white"
-                    : "text-gray-500 dark:text-gray-400"
-                }`}
-              >
-                Watchlist ({watchlist.length})
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setActiveTab("portfolio")}
-              className={`flex-1 py-2 rounded-md ${
-                activeTab === "portfolio" ? "bg-white dark:bg-gray-600" : ""
-              }`}
-            >
-              <Text
-                className={`text-center font-medium ${
-                  activeTab === "portfolio"
-                    ? "text-gray-900 dark:text-white"
-                    : "text-gray-500 dark:text-gray-400"
-                }`}
-              >
-                Portfolio ({portfolio.length})
-              </Text>
-            </Pressable>
-          </View>
-        </Card>
       </View>
 
-      {/* Portfolio Summary */}
-      {activeTab === "portfolio" && (
-        <View className="px-4 mt-4">
-          <Card variant="elevated" icon="trending-up">
-            <View className="flex-row justify-between items-center">
-              <View>
-                <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Total Portfolio Value
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
+        <Pressable
+          style={[styles.tab, activeTab === "watchlist" ? styles.tabActive : styles.tabInactive]}
+          onPress={() => setActiveTab("watchlist")}
+        >
+          <Text style={[styles.tabText, activeTab === "watchlist" ? styles.tabTextActive : styles.tabTextInactive]}>
+            My Watchlist ({watchlist.length})
+          </Text>
+        </Pressable>
+        
+        <Pressable
+          style={[styles.tab, activeTab === "scanner" ? styles.tabActive : styles.tabInactive]}
+          onPress={() => setActiveTab("scanner")}
+        >
+          <Text style={[styles.tabText, activeTab === "scanner" ? styles.tabTextActive : styles.tabTextInactive]}>
+            Market Scanner
+          </Text>
+        </Pressable>
+      </View>
+
+      {/* Scanner Filters */}
+      {activeTab === "scanner" && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Scan Filters</Text>
+          <View style={styles.filterRow}>
+            {filterPresets.map(preset => (
+              <Pressable
+                key={preset.id}
+                style={[
+                  styles.filterChip,
+                  selectedFilter === preset.id && styles.filterChipActive
+                ]}
+                onPress={() => setSelectedFilter(preset.id)}
+              >
+                <Text style={[
+                  styles.filterChipText,
+                  selectedFilter === preset.id && styles.filterChipTextActive
+                ]}>
+                  {preset.label}
                 </Text>
-                <Text className="text-3xl font-bold text-gray-900 dark:text-white mt-1">
-                  ${totalPortfolioValue.toFixed(2)}
-                </Text>
-              </View>
-              <View className="items-end">
-                <Text
-                  className={`text-lg font-bold ${
-                    totalGainLoss >= 0
-                      ? "text-green-600 dark:text-green-400"
-                      : "text-red-600 dark:text-red-400"
-                  }`}
-                >
-                  {totalGainLoss >= 0 ? "+" : ""}${totalGainLoss.toFixed(2)}
-                </Text>
-                <Text
-                  className={`text-sm ${
-                    totalGainLoss >= 0
-                      ? "text-green-600 dark:text-green-400"
-                      : "text-red-600 dark:text-red-400"
-                  }`}
-                >
-                  ({totalGainLoss >= 0 ? "+" : ""}
-                  {totalGainLossPercent.toFixed(2)}%)
-                </Text>
-              </View>
-            </View>
-          </Card>
+              </Pressable>
+            ))}
+          </View>
         </View>
       )}
 
       {/* Content */}
       <ScrollView
-        className="flex-1 px-4 mt-4"
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00D4AA" />
         }
-        showsVerticalScrollIndicator={false}
       >
-        {activeTab === "watchlist" ? (
-          <View>
-            <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                Your Watchlist
-              </Text>
-              <Button
-                title="Add Stock"
-                size="sm"
-                icon="add"
-                onPress={() => setShowAddModal(true)}
-              />
-            </View>
-            {watchlist.map(renderWatchlistItem)}
+        {/* Add Stock Button for Watchlist */}
+        {activeTab === "watchlist" && (
+          <Pressable
+            style={{
+              backgroundColor: "#00D4AA",
+              borderRadius: 12,
+              padding: 16,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              marginBottom: 16,
+            }}
+            onPress={() => setShowAddModal(true)}
+          >
+            <Ionicons name="add" size={20} color="#000000" />
+            <Text style={{ color: "#000000", fontWeight: "600", marginLeft: 8 }}>
+              Add Stock to Watchlist
+            </Text>
+          </Pressable>
+        )}
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#00D4AA" />
+            <Text style={styles.loadingText}>
+              {activeTab === "watchlist" ? "Loading watchlist..." : "Scanning market..."}
+            </Text>
+          </View>
+        ) : currentData.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="search" size={48} color="#888888" />
+            <Text style={styles.emptyStateText}>
+              {activeTab === "watchlist" 
+                ? "Your watchlist is empty.\nAdd some stocks to get started!"
+                : "No stocks match your current filters.\nTry adjusting the filter settings."
+              }
+            </Text>
           </View>
         ) : (
-          <View>
-            <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-lg font-semibold text-gray-900 dark:text-white">
-                Your Holdings
-              </Text>
-              <Button
-                title="Add Position"
-                size="sm"
-                icon="add"
-                onPress={() => setShowPortfolioModal(true)}
-              />
-            </View>
-            {portfolio.map(renderPortfolioItem)}
-          </View>
+          currentData.map(result => renderStockCard(result, activeTab === "scanner"))
         )}
-        <View className="h-8" />
       </ScrollView>
 
-      {/* Add to Watchlist Modal */}
+      {/* Add Stock Modal */}
       <Modal
         visible={showAddModal}
         transparent
         animationType="slide"
         onRequestClose={() => setShowAddModal(false)}
       >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-gray-800 rounded-t-3xl p-6 max-h-[80%]">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-900 dark:text-white">
-                Add to Watchlist
-              </Text>
+        <View style={styles.modal}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Add Stock</Text>
               <Pressable onPress={() => setShowAddModal(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons name="close" size={24} color="#888888" />
               </Pressable>
             </View>
 
-            <Input
-              placeholder="Search stocks..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              leftIcon="search"
-              className="mb-4"
-            />
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {filteredStocks.map((stock) => (
-                <Pressable
-                  key={stock.symbol}
-                  onPress={() => addToWatchlist(stock.symbol)}
-                  className="py-3 border-b border-gray-200 dark:border-gray-700"
-                >
-                  <Text className="text-lg font-medium text-gray-900 dark:text-white">
-                    {stock.symbol}
-                  </Text>
-                  <Text className="text-sm text-gray-500 dark:text-gray-400">
-                    {stock.name}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Add to Portfolio Modal */}
-      <Modal
-        visible={showPortfolioModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowPortfolioModal(false)}
-      >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-gray-800 rounded-t-3xl p-6">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-900 dark:text-white">
-                Add Position
-              </Text>
-              <Pressable onPress={() => setShowPortfolioModal(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </Pressable>
-            </View>
-
-            <Input
-              label="Stock Symbol"
-              placeholder="e.g., AAPL"
+            <TextInput
+              style={styles.input}
+              placeholder="Enter stock symbol (e.g., AAPL)"
+              placeholderTextColor="#888888"
               value={newSymbol}
               onChangeText={setNewSymbol}
               autoCapitalize="characters"
-              className="mb-4"
+              autoCorrect={false}
             />
 
-            <Input
-              label="Number of Shares"
-              placeholder="e.g., 10"
-              value={newShares}
-              onChangeText={setNewShares}
-              keyboardType="numeric"
-              className="mb-4"
-            />
-
-            <Input
-              label="Average Price per Share"
-              placeholder="e.g., 150.00"
-              value={newAvgPrice}
-              onChangeText={setNewAvgPrice}
-              keyboardType="numeric"
-              className="mb-6"
-            />
-
-            <Button
-              title="Add to Portfolio"
-              onPress={addToPortfolio}
-              className="mb-4"
-            />
+            <Pressable style={styles.addButton} onPress={addToWatchlist}>
+              <Text style={styles.addButtonText}>Add to Watchlist</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>

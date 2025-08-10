@@ -14,12 +14,14 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import DashboardScreen from "../screens/DashboardScreen";
+import ChartFullScreen from "../screens/ChartFullScreen";
 import WatchlistScreen from "../screens/WatchlistScreen";
 import AIInsightsScreen from "../screens/AIInsightsScreen";
 import JourneyScreen from "../screens/JourneyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
+import MarketScreenerScreen from "../screens/MarketScreenerScreen";
 import { useAuth } from "../providers/AuthProvider";
 
 const Tab = createBottomTabNavigator();
@@ -52,11 +54,11 @@ function Tabs() {
             case "Watchlist":
               iconName = focused ? "list" : "list-outline";
               break;
+            case "Scanner":
+              iconName = focused ? "search" : "search-outline";
+              break;
             case "AI Insights":
               iconName = focused ? "sparkles" : "sparkles-outline";
-              break;
-            case "Journey":
-              iconName = focused ? "school" : "school-outline";
               break;
             case "Profile":
               iconName = focused ? "person" : "person-outline";
@@ -78,8 +80,8 @@ function Tabs() {
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Watchlist" component={WatchlistScreen} />
+      <Tab.Screen name="Scanner" component={MarketScreenerScreen} />
       <Tab.Screen name="AI Insights" component={AIInsightsScreen} />
-      <Tab.Screen name="Journey" component={JourneyScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
@@ -126,6 +128,10 @@ export default function RootNavigation() {
       {user ? (
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           <RootStack.Screen name="Root" component={Tabs} />
+          <RootStack.Screen
+            name="ChartFullScreen"
+            component={ChartFullScreen}
+          />
         </RootStack.Navigator>
       ) : (
         <AuthRoutes />
