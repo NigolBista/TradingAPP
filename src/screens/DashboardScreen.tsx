@@ -12,18 +12,21 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import TradingViewChart from "../components/charts/TradingViewChart";
-import { fetchCandles, fetchNews } from "../services/marketProviders";
+import { fetchCandles } from "../services/marketProviders";
+import { fetchNews } from "../services/newsProviders";
 import NewsList from "../components/insights/NewsList";
 import {
   performComprehensiveAnalysis,
   MarketAnalysis,
 } from "../services/aiAnalytics";
-import { MarketScanner } from "../services/marketScanner";
+// import { MarketScanner } from "../services/marketScanner";
 import {
   analyzeNewsWithEnhancedSentiment,
   getNewsAlerts,
   SentimentAnalysis,
 } from "../services/sentiment";
+import { generateSignalSummary, SignalSummary } from "../services/signalEngine";
+import { useUserStore } from "../store/userStore";
 
 const { width } = Dimensions.get("window");
 
@@ -379,7 +382,9 @@ export default function DashboardScreen() {
   const [newsAnalysis, setNewsAnalysis] = useState<SentimentAnalysis | null>(
     null
   );
-  const [marketOverview, setMarketOverview] = useState<any>(null);
+  // const [marketOverview, setMarketOverview] = useState<any>(null);
+  const [focusSignals, setFocusSignals] = useState<SignalSummary[]>([]);
+  const { profile } = useUserStore();
 
   const stockSymbols = [
     "AAPL",
@@ -410,9 +415,14 @@ export default function DashboardScreen() {
     loadData();
   }, [symbol]);
 
+  // Avoid heavy market-wide scans on dashboard mount
+  // useEffect(() => {
+  //   loadMarketOverview();
+  // }, []);
+
   useEffect(() => {
-    loadMarketOverview();
-  }, []);
+    loadFocusSignals();
+  }, [profile.watchlist?.join(",")]);
 
   async function loadData() {
     try {
@@ -465,19 +475,48 @@ export default function DashboardScreen() {
       }
     } catch (error) {
       console.error("Error loading data:", error);
-      Alert.alert("Error", "Failed to load market data. Please try again.");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load market data. Please try again.";
+      Alert.alert("Market Data Error", message);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }
 
-  async function loadMarketOverview() {
+  // async function loadMarketOverview() {
+  //   try {
+  //     const screenerData = await MarketScanner.getMarketScreenerData();
+  //     setMarketOverview(screenerData);
+  //   } catch (error) {
+  //     console.warn("Failed to load market overview:", error);
+  //   }
+  // }
+
+  async function loadFocusSignals() {
     try {
-      const screenerData = await MarketScanner.getMarketScreenerData();
-      setMarketOverview(screenerData);
-    } catch (error) {
-      console.warn("Failed to load market overview:", error);
+      const symbols = (
+        profile.watchlist?.length
+          ? profile.watchlist
+          : ["AAPL", "MSFT", "NVDA", "TSLA", "AMZN"]
+      ).slice(0, 6);
+      const summaries = await Promise.all(
+        symbols.map((s) =>
+          generateSignalSummary(s, profile.accountSize, profile.riskPerTradePct)
+        )
+      );
+      const filtered = summaries
+        .filter((s): s is SignalSummary => !!s && !!s.topSignal)
+        .sort(
+          (a, b) =>
+            (b.topSignal?.confidence || 0) - (a.topSignal?.confidence || 0)
+        )
+        .slice(0, 3);
+      setFocusSignals(filtered);
+    } catch (e) {
+      // ignore
     }
   }
 
@@ -641,6 +680,40 @@ export default function DashboardScreen() {
           )}
         </View>
 
+        {/* Today's Focus (Watchlist Signals) */}
+        {focusSignals.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Today's Focus</Text>
+              <Text style={styles.sectionSubtitle}>
+                Top signals from your watchlist
+              </Text>
+            </View>
+            {focusSignals.map((s, idx) => (
+              <View key={idx} style={styles.signalCard}>
+                <View style={styles.signalHeader}>
+                  <View>
+                    <Text style={styles.signalType}>{s.symbol}</Text>
+                    <Text style={styles.signalAction}>
+                      {s.topSignal?.action.toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text style={styles.signalConfidence}>
+                    {s.topSignal?.confidence.toFixed(0)}% Confidence
+                  </Text>
+                </View>
+                <Text
+                  style={{ color: "#888888", fontSize: 12, marginBottom: 8 }}
+                >
+                  Entry: ${s.topSignal?.entry.toFixed(2)} • Stop: $
+                  {s.topSignal?.stopLoss.toFixed(2)} • Size:{" "}
+                  {s.topSignal?.tradePlan.positionSize}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         {/* News Alerts */}
         {newsAlerts.length > 0 && (
           <View style={styles.section}>
@@ -659,7 +732,7 @@ export default function DashboardScreen() {
         {/* TradingView Chart */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Price Chart</Text>
+            <Text style={styles.sectionTitle}>Price & Signals</Text>
           </View>
 
           {/* Timeframe Selector */}
@@ -687,10 +760,33 @@ export default function DashboardScreen() {
 
           <TradingViewChart
             symbol={symbol}
-            height={400}
+            height={360}
             interval={timeframe}
             theme="dark"
           />
+
+          {focusSignals.length > 0 && (
+            <View style={{ marginTop: 12 }}>
+              {focusSignals
+                .filter((s) => s.symbol === symbol)
+                .slice(0, 1)
+                .map((s, i) => (
+                  <View key={i} style={styles.signalCard}>
+                    <View style={styles.signalHeader}>
+                      <Text style={styles.signalType}>Signal</Text>
+                      <Text style={styles.signalConfidence}>
+                        {s.topSignal?.confidence.toFixed(0)}% Confidence
+                      </Text>
+                    </View>
+                    <Text style={{ color: "#cccccc", fontSize: 12 }}>
+                      Entry ${s.topSignal?.entry.toFixed(2)} • Stop $
+                      {s.topSignal?.stopLoss.toFixed(2)} • Targets{" "}
+                      {s.topSignal?.targets.map((t) => t.toFixed(2)).join(", ")}
+                    </Text>
+                  </View>
+                ))}
+            </View>
+          )}
         </View>
 
         {/* Multi-Timeframe Momentum Analysis */}

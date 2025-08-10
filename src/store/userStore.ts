@@ -11,6 +11,10 @@ export interface UserProfile {
   traderType: TraderType;
   subscriptionTier: SubscriptionTier;
   watchlist: string[];
+  accountSize?: number; // USD
+  riskPerTradePct?: number; // % of account per trade
+  signalConfidenceThreshold?: number; // 0-100
+  notificationsEnabled?: boolean;
 }
 
 interface UserState {
@@ -24,6 +28,10 @@ const defaultProfile: UserProfile = {
   traderType: "Long-term holder",
   subscriptionTier: "Free",
   watchlist: [],
+  accountSize: 10000,
+  riskPerTradePct: 1,
+  signalConfidenceThreshold: 70,
+  notificationsEnabled: true,
 };
 
 export const useUserStore = create<UserState>((set) => ({

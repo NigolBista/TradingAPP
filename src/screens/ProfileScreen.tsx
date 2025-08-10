@@ -27,11 +27,22 @@ export default function ProfileScreen() {
   const [showSubscription, setShowSubscription] = useState(false);
 
   // Settings state
-  const [pushNotifications, setPushNotifications] = useState(true);
+  const [pushNotifications, setPushNotifications] = useState<boolean>(
+    profile?.notificationsEnabled ?? true
+  );
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
   const [marketOpen, setMarketOpen] = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+  const [accountSize, setAccountSize] = useState<string>(
+    String(profile?.accountSize ?? 10000)
+  );
+  const [riskPct, setRiskPct] = useState<string>(
+    String(profile?.riskPerTradePct ?? 1)
+  );
+  const [confThreshold, setConfThreshold] = useState<string>(
+    String(profile?.signalConfidenceThreshold ?? 70)
+  );
 
   // Edit profile state
   const [editEmail, setEditEmail] = useState(profile?.email || "");
@@ -427,7 +438,10 @@ export default function ProfileScreen() {
                   </View>
                   <Switch
                     value={pushNotifications}
-                    onValueChange={setPushNotifications}
+                    onValueChange={(v) => {
+                      setPushNotifications(v);
+                      setProfile({ notificationsEnabled: v });
+                    }}
                   />
                 </View>
 
@@ -480,6 +494,45 @@ export default function ProfileScreen() {
                     </Text>
                   </View>
                   <Switch value={darkMode} onValueChange={setDarkMode} />
+                </View>
+
+                <View>
+                  <Text className="font-medium text-gray-900 dark:text-white mb-2">
+                    Trading Preferences
+                  </Text>
+                  <Input
+                    label="Account Size (USD)"
+                    value={accountSize}
+                    keyboardType="numeric"
+                    onChangeText={(t) => {
+                      setAccountSize(t);
+                      const n = parseFloat(t);
+                      if (!Number.isNaN(n)) setProfile({ accountSize: n });
+                    }}
+                    className="mb-3"
+                  />
+                  <Input
+                    label="Risk per trade (%)"
+                    value={riskPct}
+                    keyboardType="numeric"
+                    onChangeText={(t) => {
+                      setRiskPct(t);
+                      const n = parseFloat(t);
+                      if (!Number.isNaN(n)) setProfile({ riskPerTradePct: n });
+                    }}
+                    className="mb-3"
+                  />
+                  <Input
+                    label="Signal confidence threshold (%)"
+                    value={confThreshold}
+                    keyboardType="numeric"
+                    onChangeText={(t) => {
+                      setConfThreshold(t);
+                      const n = parseFloat(t);
+                      if (!Number.isNaN(n))
+                        setProfile({ signalConfidenceThreshold: n });
+                    }}
+                  />
                 </View>
               </View>
             </ScrollView>

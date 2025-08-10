@@ -54,6 +54,70 @@ export async function fetchYahooCandles(
   );
 }
 
+function mapResolutionToYahoo(resolution?: MarketDataResolution): {
+  interval: string;
+  range: string;
+} {
+  switch (resolution) {
+    case "1":
+      return { interval: "1m", range: "5d" };
+    case "5":
+      return { interval: "5m", range: "1mo" };
+    case "15":
+      return { interval: "15m", range: "1mo" };
+    case "30":
+      return { interval: "30m", range: "1mo" };
+    case "1H":
+      return { interval: "60m", range: "3mo" };
+    case "W":
+      return { interval: "1wk", range: "3y" };
+    case "M":
+      return { interval: "1mo", range: "10y" };
+    case "D":
+    default:
+      return { interval: "1d", range: "1y" };
+  }
+}
+
+function mapResolutionToAlphaVantage(
+  resolution?: MarketDataResolution
+): AlphaVantageInterval {
+  switch (resolution) {
+    case "1":
+      return "1min";
+    case "5":
+      return "5min";
+    case "15":
+      return "15min";
+    case "30":
+      return "30min";
+    case "1H":
+      return "60min";
+    case "D":
+    default:
+      return "daily";
+  }
+}
+
+function mapResolutionToPolygonTimespan(
+  resolution?: MarketDataResolution
+): string {
+  switch (resolution) {
+    case "1":
+    case "5":
+    case "15":
+    case "30":
+      return "minute";
+    case "1H":
+      return "hour";
+    case "D":
+    case "W":
+    case "M":
+    default:
+      return "day";
+  }
+}
+
 // Polygon.io (requires API key). If not present, falls back to Yahoo.
 export async function fetchPolygonCandles(
   symbol: string,
@@ -306,6 +370,22 @@ export interface FetchCandlesOptions {
   providerOverride?: "polygon" | "alphaVantage" | "yahoo" | "marketData";
 }
 
+// Simple in-memory cache to avoid redundant API calls
+type CacheKey = string;
+const candleCache: Map<CacheKey, { ts: number; candles: Candle[] }> = new Map();
+const inflight: Map<CacheKey, Promise<Candle[]>> = new Map();
+const DEFAULT_TTL_MS = 60_000; // 1 minute, suitable for intraday pulls
+
+function cacheKey(
+  symbol: string,
+  provider: string,
+  options: FetchCandlesOptions
+): string {
+  return `${provider}|${symbol}|${
+    options.resolution || options.interval || "D"
+  }|${options.outputSize || "compact"}`;
+}
+
 export async function fetchCandles(
   symbol: string,
   options: FetchCandlesOptions = {}
@@ -315,17 +395,60 @@ export async function fetchCandles(
     (Constants.expoConfig?.extra as any)?.marketProvider ||
     "marketData"; // Default to MarketData.app
 
-  if (provider === "marketData") {
-    return fetchMarketDataCandles(symbol, options.resolution || "D");
+  const key = cacheKey(symbol, provider, options);
+  const ttl = DEFAULT_TTL_MS;
+
+  // Serve from cache if fresh
+  const cached = candleCache.get(key);
+  if (cached && Date.now() - cached.ts < ttl) {
+    return cached.candles;
   }
-  if (provider === "polygon") return fetchPolygonCandles(symbol);
-  if (provider === "alphaVantage")
-    return fetchAlphaVantageCandles(
-      symbol,
-      options.interval || "daily",
-      options.outputSize || "compact"
-    );
-  return fetchYahooCandles(symbol);
+
+  // De-duplicate concurrent requests
+  const existing = inflight.get(key);
+  if (existing) return existing;
+
+  const fetchPromise = (async () => {
+    try {
+      let candles: Candle[] = [];
+      if (provider === "marketData") {
+        candles = await fetchMarketDataCandles(
+          symbol,
+          options.resolution || "D"
+        );
+      } else if (provider === "polygon") {
+        const ts = mapResolutionToPolygonTimespan(options.resolution);
+        candles = await fetchPolygonCandles(symbol, ts);
+      } else if (provider === "alphaVantage") {
+        const interval =
+          options.interval || mapResolutionToAlphaVantage(options.resolution);
+        candles = await fetchAlphaVantageCandles(
+          symbol,
+          interval,
+          options.outputSize || "compact"
+        );
+      } else {
+        const { interval, range } = mapResolutionToYahoo(
+          options.resolution as any
+        );
+        candles = await fetchYahooCandles(symbol, range, interval);
+      }
+
+      // Validate response
+      if (!candles || candles.length === 0) {
+        throw new Error(
+          `No candles returned for ${symbol} from provider ${provider}`
+        );
+      }
+      candleCache.set(key, { ts: Date.now(), candles });
+      return candles;
+    } finally {
+      inflight.delete(key);
+    }
+  })();
+
+  inflight.set(key, fetchPromise);
+  return fetchPromise;
 }
 
 export type NewsItem = {
