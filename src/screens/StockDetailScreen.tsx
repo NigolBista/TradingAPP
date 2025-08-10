@@ -51,8 +51,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 48,
     paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
   },
   headerRow: {
     flexDirection: "row",
@@ -118,10 +116,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#1a1a1a",
   },
   chartSection: {
-    backgroundColor: "#1a1a1a",
-    marginHorizontal: 16,
-    marginVertical: 6,
-    borderRadius: 12,
+    backgroundColor: "#0a0a0a",
+    marginHorizontal: 0,
+    marginVertical: 0,
     overflow: "hidden",
   },
   chartContainer: {
@@ -318,7 +315,7 @@ export default function StockDetailScreen() {
       {/* Robinhood-Style Header */}
       <View style={styles.header}>
         <View style={styles.headerRow}>
-          {/* Back Button and Stock Info */}
+          {/* Back Button and Search Bar */}
           <View style={styles.headerLeft}>
             <Pressable
               onPress={() => navigation.goBack()}
@@ -328,9 +325,7 @@ export default function StockDetailScreen() {
             </Pressable>
             <View style={styles.stockInfo}>
               <Text style={styles.tickerSymbol}>{symbol}</Text>
-              <Text style={styles.stockName} numberOfLines={1}>
-                {stockName || "Loading..."}
-              </Text>
+              <Text style={styles.stockName}>{stockName || "Loading..."}</Text>
             </View>
           </View>
 
@@ -366,7 +361,7 @@ export default function StockDetailScreen() {
         {/* Chart Section */}
         <View style={styles.chartSection}>
           {/* Chart */}
-          <View style={styles.chartContainer}>
+          <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
             {chartType === "candlestick" ? (
               <CompactCandlestickChart
                 data={dailySeries.map((d) => ({

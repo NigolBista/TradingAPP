@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Pressable,
@@ -11,6 +11,8 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import TradingViewChart from "../components/charts/TradingViewChart";
 import AdvancedTradingChart from "../components/charts/AdvancedTradingChart";
+import StockSearchBar from "../components/common/StockSearchBar";
+import { searchStocksAutocomplete } from "../services/stockData";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -20,8 +22,24 @@ export default function ChartFullScreen() {
   const symbol: string = route.params?.symbol || "AAPL";
   const chartType: string = route.params?.chartType || "line";
   const timeframe: string = route.params?.timeframe || "1D";
+  const [stockName, setStockName] = useState<string>("");
 
   const chartHeight = Math.max(0, height - insets.top - insets.bottom - 60); // Account for header
+
+  useEffect(() => {
+    loadStockName();
+  }, [symbol]);
+
+  async function loadStockName() {
+    try {
+      const results = await searchStocksAutocomplete(symbol, 1);
+      if (results.length > 0) {
+        setStockName(results[0].name);
+      }
+    } catch (error) {
+      console.error("Failed to load stock name:", error);
+    }
+  }
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -33,9 +51,12 @@ export default function ChartFullScreen() {
         >
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </Pressable>
-        <Text style={styles.headerTitle}>
-          {symbol} • {timeframe}
-        </Text>
+        <View style={styles.headerCenter}>
+          <StockSearchBar
+            currentSymbol={symbol}
+            currentStockName={stockName || "Loading..."}
+          />
+        </View>
         <View style={{ width: 40 }} />
       </View>
 
@@ -65,9 +86,16 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fff",
+  headerCenter: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  timeframeText: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#888",
   },
 });

@@ -13,6 +13,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../providers/AuthProvider";
 import { useUserStore } from "../store/userStore";
+import { useTheme, type ThemeMode } from "../providers/ThemeProvider";
 import Card from "../components/common/Card";
 import Button from "../components/common/Button";
 import Input from "../components/common/Input";
@@ -27,6 +28,7 @@ export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const profile = useUserStore((state) => state.profile);
   const setProfile = useUserStore((state) => state.setProfile);
+  const { theme, themeMode, setThemeMode } = useTheme();
 
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
@@ -39,7 +41,7 @@ export default function ProfileScreen() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [priceAlerts, setPriceAlerts] = useState(true);
   const [marketOpen, setMarketOpen] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+
   const [accountSize, setAccountSize] = useState<string>(
     String(profile?.accountSize ?? 10000)
   );
@@ -554,16 +556,46 @@ export default function ProfileScreen() {
                   />
                 </View>
 
-                <View className="flex-row justify-between items-center">
-                  <View>
-                    <Text className="font-medium text-gray-900 dark:text-white">
-                      Dark Mode
-                    </Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-400">
-                      Use dark theme for the app
-                    </Text>
+                <View>
+                  <Text className="font-medium text-gray-900 dark:text-white mb-3">
+                    Theme
+                  </Text>
+                  <View className="flex-row space-x-2">
+                    {(["system", "light", "dark"] as ThemeMode[]).map(
+                      (mode) => (
+                        <Pressable
+                          key={mode}
+                          onPress={() => setThemeMode(mode)}
+                          style={{
+                            flex: 1,
+                            paddingVertical: 8,
+                            paddingHorizontal: 12,
+                            borderRadius: 8,
+                            borderWidth: 1,
+                            borderColor:
+                              themeMode === mode ? "#00D4AA" : "#333333",
+                            backgroundColor:
+                              themeMode === mode ? "#00D4AA20" : "transparent",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              textAlign: "center",
+                              fontSize: 14,
+                              fontWeight: "500",
+                              color: themeMode === mode ? "#00D4AA" : "#ffffff",
+                              textTransform: "capitalize",
+                            }}
+                          >
+                            {mode}
+                          </Text>
+                        </Pressable>
+                      )
+                    )}
                   </View>
-                  <Switch value={darkMode} onValueChange={setDarkMode} />
+                  <Text className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                    Choose your app's appearance
+                  </Text>
                 </View>
 
                 <View>
