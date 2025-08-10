@@ -15,6 +15,14 @@ import { Ionicons } from "@expo/vector-icons";
 import AdvancedTradingChart, {
   type LWCDatum,
 } from "../components/charts/AdvancedTradingChart";
+import SimpleLineChart from "../components/charts/SimpleLineChart";
+import CompactCandlestickChart from "../components/charts/CompactCandlestickChart";
+import ChartSettingsModal, {
+  type ChartType,
+} from "../components/charts/ChartSettingsModal";
+import ChartControls, {
+  type Timeframe,
+} from "../components/charts/ChartControls";
 import { fetchCandles, type Candle } from "../services/marketProviders";
 import {
   performComprehensiveAnalysis,
@@ -30,6 +38,7 @@ import {
 } from "../services/signalEngine";
 import NewsList from "../components/insights/NewsList";
 import { sendLocalNotification } from "../services/notifications";
+import { searchStocksAutocomplete } from "../services/stockData";
 
 type RootStackParamList = {
   StockDetail: { symbol: string };
@@ -38,17 +47,90 @@ type RootStackParamList = {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
   header: {
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#0a0a0a",
     paddingHorizontal: 16,
     paddingTop: 48,
     paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2a2a2a",
   },
-  headerTitle: { fontSize: 24, fontWeight: "bold", color: "#fff" },
-  headerSubtitle: { color: "#888", marginTop: 4 },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 12,
+  },
+  stockInfo: {
+    flex: 1,
+  },
+  tickerSymbol: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#fff",
+    letterSpacing: 0.5,
+  },
+  stockName: {
+    fontSize: 13,
+    color: "#888",
+    marginTop: 2,
+    lineHeight: 16,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  headerIconButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#1a1a1a",
+  },
+  priceRow: {
+    alignItems: "flex-start",
+  },
+  mainPrice: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: "#fff",
+    marginBottom: 4,
+  },
+  todayChange: {
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 2,
+  },
+  afterHours: {
+    fontSize: 13,
+    color: "#888",
+  },
+  iconButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: "#1a1a1a",
+  },
+  chartSection: {
+    backgroundColor: "#1a1a1a",
+    marginHorizontal: 16,
+    marginVertical: 6,
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  chartContainer: {
+    backgroundColor: "transparent",
+  },
   section: {
     backgroundColor: "#1a1a1a",
     marginHorizontal: 16,
-    marginVertical: 8,
+    marginVertical: 6,
     borderRadius: 12,
     padding: 16,
   },
@@ -56,9 +138,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  sectionTitle: { color: "#fff", fontSize: 18, fontWeight: "600" },
+  sectionTitle: { color: "#fff", fontSize: 16, fontWeight: "600" },
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -82,16 +164,7 @@ const styles = StyleSheet.create({
   },
   levelLabel: { fontSize: 12, color: "#888" },
   levelValue: { fontSize: 12, color: "#fff", fontWeight: "600" },
-  actionsRow: { flexDirection: "row", gap: 8 },
-  actionBtn: {
-    backgroundColor: "#00D4AA",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  actionText: { color: "#000", fontWeight: "600", marginLeft: 6 },
+  actionsRow: { flexDirection: "row", gap: 12 },
   input: {
     backgroundColor: "#2a2a2a",
     borderRadius: 8,
@@ -99,6 +172,21 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     fontSize: 16,
     marginBottom: 12,
+  },
+  saveButton: {
+    backgroundColor: "#00D4AA",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  saveButtonText: {
+    color: "#000",
+    fontWeight: "600",
+    marginLeft: 8,
+    fontSize: 16,
   },
 });
 
@@ -114,10 +202,26 @@ export default function StockDetailScreen() {
   const [summary, setSummary] = useState<SignalSummary | null>(null);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState("");
+  const [stockName, setStockName] = useState<string>("");
+  const [chartType, setChartType] = useState<ChartType>("line");
+  const [showChartSettings, setShowChartSettings] = useState(false);
+  const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1D");
 
   useEffect(() => {
     load();
+    loadStockName();
   }, [symbol]);
+
+  async function loadStockName() {
+    try {
+      const results = await searchStocksAutocomplete(symbol, 1);
+      if (results.length > 0) {
+        setStockName(results[0].name);
+      }
+    } catch (error) {
+      console.error("Failed to load stock name:", error);
+    }
+  }
 
   async function load() {
     try {
@@ -185,8 +289,20 @@ export default function StockDetailScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Loading {symbol}…</Text>
-          <Text style={styles.headerSubtitle}>Fetching analysis and news</Text>
+          <View style={styles.headerRow}>
+            <View style={styles.headerLeft}>
+              <Pressable
+                onPress={() => navigation.goBack()}
+                style={styles.backButton}
+              >
+                <Ionicons name="arrow-back" size={24} color="#fff" />
+              </Pressable>
+              <View style={styles.stockInfo}>
+                <Text style={styles.tickerSymbol}>{symbol}</Text>
+                <Text style={styles.stockName}>Loading...</Text>
+              </View>
+            </View>
+          </View>
         </View>
         <View
           style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
@@ -199,76 +315,94 @@ export default function StockDetailScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Robinhood-Style Header */}
       <View style={styles.header}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
+        <View style={styles.headerRow}>
+          {/* Back Button and Stock Info */}
+          <View style={styles.headerLeft}>
             <Pressable
               onPress={() => navigation.goBack()}
-              style={{ padding: 8, marginRight: 8 }}
+              style={styles.backButton}
             >
               <Ionicons name="arrow-back" size={24} color="#fff" />
             </Pressable>
-            <View>
-              <Text style={styles.headerTitle}>{symbol}</Text>
-              <Text style={styles.headerSubtitle}>
-                ${currentPrice.toFixed(2)}
+            <View style={styles.stockInfo}>
+              <Text style={styles.tickerSymbol}>{symbol}</Text>
+              <Text style={styles.stockName} numberOfLines={1}>
+                {stockName || "Loading..."}
               </Text>
             </View>
           </View>
-          <Pressable
-            onPress={() =>
-              (navigation as any).navigate("ChartFullScreen", { symbol })
-            }
-            style={{ padding: 8 }}
+
+          {/* Action Buttons */}
+          <View style={styles.headerActions}>
+            <Pressable onPress={onSetAlert} style={styles.headerIconButton}>
+              <Ionicons name="notifications-outline" size={20} color="#fff" />
+            </Pressable>
+            <Pressable style={styles.headerIconButton}>
+              <Ionicons name="add-outline" size={20} color="#fff" />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Price Information */}
+        <View style={styles.priceRow}>
+          <Text style={styles.mainPrice}>${currentPrice.toFixed(2)}</Text>
+          <Text
+            style={[
+              styles.todayChange,
+              { color: priceChange >= 0 ? "#00D4AA" : "#FF6B6B" },
+            ]}
           >
-            <Ionicons name="expand" size={24} color="#00D4AA" />
-          </Pressable>
+            {priceChange >= 0 ? "+" : ""}${priceChange.toFixed(2)} (
+            {priceChangePercent.toFixed(2)}%) Today
+          </Text>
+          {/* After Hours - Mock data for now */}
+          <Text style={styles.afterHours}>+$0.06 (0.02%) After hours</Text>
         </View>
       </View>
 
       <ScrollView style={{ flex: 1 }}>
-        {/* Chart */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Price & Indicators</Text>
-            <View style={styles.actionsRow}>
-              <Pressable
-                style={[styles.actionBtn, { backgroundColor: "#00D4AA" }]}
-                onPress={() =>
-                  (navigation as any).navigate("ChartFullScreen", { symbol })
-                }
-              >
-                <Ionicons name="expand" size={16} color="#000" />
-                <Text style={styles.actionText}>Expand Chart</Text>
-              </Pressable>
-              <Pressable style={styles.actionBtn} onPress={onSetAlert}>
-                <Ionicons name="notifications" size={16} color="#000" />
-                <Text style={styles.actionText}>Set Alert</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.actionBtn, { backgroundColor: "#FFB020" }]}
-                onPress={() => setShowNoteModal(true)}
-              >
-                <Ionicons name="create" size={16} color="#000" />
-                <Text style={styles.actionText}>Add Note</Text>
-              </Pressable>
-            </View>
+        {/* Chart Section */}
+        <View style={styles.chartSection}>
+          {/* Chart */}
+          <View style={styles.chartContainer}>
+            {chartType === "candlestick" ? (
+              <CompactCandlestickChart
+                data={dailySeries.map((d) => ({
+                  time: d.time,
+                  open: d.open || d.close,
+                  high: d.high || d.close,
+                  low: d.low || d.close,
+                  close: d.close,
+                }))}
+                height={200}
+                greenColor="#00D4AA"
+                redColor="#FF6B6B"
+              />
+            ) : (
+              // Default to simple line chart for all other types on main screen
+              <SimpleLineChart
+                data={dailySeries}
+                height={200}
+                color={priceChange >= 0 ? "#00D4AA" : "#FF6B6B"}
+                strokeWidth={chartType === "area" ? 1.5 : 2}
+              />
+            )}
           </View>
 
-          <AdvancedTradingChart
-            data={dailySeries}
-            symbol={symbol}
-            currentPrice={currentPrice}
-            priceChange={priceChange}
-            priceChangePercent={priceChangePercent}
-            height={380}
+          {/* Chart Controls Row */}
+          <ChartControls
+            selectedTimeframe={selectedTimeframe}
+            onTimeframeChange={setSelectedTimeframe}
+            onSettingsPress={() => setShowChartSettings(true)}
+            onExpandPress={() =>
+              (navigation as any).navigate("ChartFullScreen", {
+                symbol,
+                chartType,
+                timeframe: selectedTimeframe,
+              })
+            }
           />
         </View>
 
@@ -380,13 +514,21 @@ export default function StockDetailScreen() {
               onChangeText={setNoteText}
               multiline
             />
-            <Pressable style={styles.actionBtn} onPress={onSaveNote}>
+            <Pressable style={styles.saveButton} onPress={onSaveNote}>
               <Ionicons name="save" size={16} color="#000" />
-              <Text style={styles.actionText}>Save Note</Text>
+              <Text style={styles.saveButtonText}>Save Note</Text>
             </Pressable>
           </View>
         </View>
       </Modal>
+
+      {/* Chart Settings Modal */}
+      <ChartSettingsModal
+        visible={showChartSettings}
+        onClose={() => setShowChartSettings(false)}
+        currentChartType={chartType}
+        onChartTypeChange={setChartType}
+      />
     </View>
   );
 }
