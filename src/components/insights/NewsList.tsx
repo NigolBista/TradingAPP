@@ -1,32 +1,51 @@
 import React from "react";
-import { Linking, Pressable, Text, View } from "react-native";
-import type { NewsItem } from "../../services/marketProviders";
+import { Linking, Pressable, Text, View, StyleSheet } from "react-native";
+import type { NewsItem } from "../../services/newsProviders";
 
 interface Props {
   items: NewsItem[];
 }
 
+const styles = StyleSheet.create({
+  container: { paddingHorizontal: 16 },
+  card: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+  title: { color: "#ffffff", fontWeight: "600", fontSize: 15, lineHeight: 20 },
+  meta: { color: "#aaaaaa", fontSize: 12, marginTop: 6 },
+  summary: { color: "#cccccc", fontSize: 13, lineHeight: 18, marginTop: 6 },
+});
+
 export default function NewsList({ items }: Props) {
   if (!items?.length) return null;
   return (
-    <View className="px-4 space-y-3">
+    <View style={styles.container}>
       {items.map((n) => (
         <Pressable
           key={n.id}
-          onPress={() => Linking.openURL(n.url)}
-          className="bg-gray-100 dark:bg-gray-900 rounded-xl p-3"
+          onPress={() => n.url && Linking.openURL(n.url)}
+          style={styles.card}
         >
-          <Text className="text-black dark:text-white font-medium">
-            {n.title}
-          </Text>
-          {n.source ? (
-            <Text className="text-xs text-gray-500 mt-1">
-              {n.source}{" "}
-              {n.publishedAt
-                ? `• ${new Date(n.publishedAt).toLocaleString()}`
-                : ""}
+          {!!n.title && (
+            <Text style={styles.title} numberOfLines={3}>
+              {n.title}
             </Text>
-          ) : null}
+          )}
+          {(n.source || n.publishedAt) && (
+            <Text style={styles.meta}>
+              {n.source || ""}
+              {n.source && n.publishedAt ? " • " : ""}
+              {n.publishedAt ? new Date(n.publishedAt).toLocaleString() : ""}
+            </Text>
+          )}
+          {!!n.summary && (
+            <Text style={styles.summary} numberOfLines={4}>
+              {n.summary}
+            </Text>
+          )}
         </Pressable>
       ))}
     </View>

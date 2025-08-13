@@ -203,6 +203,7 @@ export default function StockDetailScreen() {
   const [chartType, setChartType] = useState<ChartType>("line");
   const [showChartSettings, setShowChartSettings] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1D");
+  const [activeTab, setActiveTab] = useState<"signals" | "news">("signals");
 
   useEffect(() => {
     load();
@@ -357,6 +358,57 @@ export default function StockDetailScreen() {
         </View>
       </View>
 
+      {/* Tab Switcher */}
+      <View style={[styles.section, { paddingVertical: 8, marginBottom: 0 }]}>
+        <View
+          style={{
+            flexDirection: "row",
+            backgroundColor: "#0f0f0f",
+            borderRadius: 10,
+          }}
+        >
+          <Pressable
+            onPress={() => setActiveTab("signals")}
+            style={{
+              flex: 1,
+              paddingVertical: 10,
+              alignItems: "center",
+              borderRadius: 10,
+              backgroundColor:
+                activeTab === "signals" ? "#00D4AA" : "transparent",
+            }}
+          >
+            <Text
+              style={{
+                color: activeTab === "signals" ? "#000" : "#aaa",
+                fontWeight: "700",
+              }}
+            >
+              Signals
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setActiveTab("news")}
+            style={{
+              flex: 1,
+              paddingVertical: 10,
+              alignItems: "center",
+              borderRadius: 10,
+              backgroundColor: activeTab === "news" ? "#00D4AA" : "transparent",
+            }}
+          >
+            <Text
+              style={{
+                color: activeTab === "news" ? "#000" : "#aaa",
+                fontWeight: "700",
+              }}
+            >
+              News
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
       <ScrollView style={{ flex: 1 }}>
         {/* Chart Section */}
         <View style={styles.chartSection}>
@@ -402,7 +454,7 @@ export default function StockDetailScreen() {
         </View>
 
         {/* Signals */}
-        {summary?.topSignal && (
+        {activeTab === "signals" && summary?.topSignal && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>AI Trade Signal</Text>
@@ -431,7 +483,7 @@ export default function StockDetailScreen() {
         )}
 
         {/* Key Levels */}
-        {analysis && (
+        {activeTab === "signals" && analysis && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Key Levels</Text>
@@ -451,13 +503,84 @@ export default function StockDetailScreen() {
           </View>
         )}
 
+        {/* Confluence Zones */}
+        {activeTab === "signals" && analysis?.zones && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Confluence Zones</Text>
+            </View>
+
+            {analysis.zones.buy.length > 0 && (
+              <View style={{ marginBottom: 8 }}>
+                <Text
+                  style={{
+                    color: "#00D4AA",
+                    fontWeight: "700",
+                    marginBottom: 6,
+                  }}
+                >
+                  Buy Zones
+                </Text>
+                {analysis.zones.buy.map((z, i) => (
+                  <View key={`bz-${i}`} style={styles.signalCard}>
+                    <Text style={{ color: "#fff", fontWeight: "600" }}>
+                      {`$${z.range.low.toFixed(2)} - $${z.range.high.toFixed(
+                        2
+                      )}`}
+                    </Text>
+                    <Text style={{ color: "#ccc", fontSize: 12, marginTop: 4 }}>
+                      {`Mid $${z.midpoint.toFixed(
+                        2
+                      )} • Conf ${z.confidence.toFixed(0)}%`}
+                    </Text>
+                    <Text style={{ color: "#888", fontSize: 12, marginTop: 4 }}>
+                      {z.confluenceFactors.slice(0, 4).join(" • ")}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {analysis.zones.sell.length > 0 && (
+              <View>
+                <Text
+                  style={{
+                    color: "#FF6B6B",
+                    fontWeight: "700",
+                    marginBottom: 6,
+                  }}
+                >
+                  Sell Zones
+                </Text>
+                {analysis.zones.sell.map((z, i) => (
+                  <View key={`sz-${i}`} style={styles.signalCard}>
+                    <Text style={{ color: "#fff", fontWeight: "600" }}>
+                      {`$${z.range.low.toFixed(2)} - $${z.range.high.toFixed(
+                        2
+                      )}`}
+                    </Text>
+                    <Text style={{ color: "#ccc", fontSize: 12, marginTop: 4 }}>
+                      {`Mid $${z.midpoint.toFixed(
+                        2
+                      )} • Conf ${z.confidence.toFixed(0)}%`}
+                    </Text>
+                    <Text style={{ color: "#888", fontSize: 12, marginTop: 4 }}>
+                      {z.confluenceFactors.slice(0, 4).join(" • ")}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         {/* News */}
-        {news.length > 0 && (
+        {activeTab === "news" && news.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Latest News</Text>
             </View>
-            <NewsList items={news.slice(0, 10)} />
+            <NewsList items={news.slice(0, 20)} />
           </View>
         )}
 
