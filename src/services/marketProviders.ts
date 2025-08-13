@@ -367,7 +367,13 @@ export interface FetchCandlesOptions {
   interval?: AlphaVantageInterval;
   resolution?: MarketDataResolution;
   outputSize?: "compact" | "full";
-  providerOverride?: "polygon" | "alphaVantage" | "yahoo" | "marketData";
+  providerOverride?:
+    | "polygon"
+    | "alphaVantage"
+    | "yahoo"
+    | "marketData"
+    | "robinhood"
+    | "webull";
 }
 
 // Simple in-memory cache to avoid redundant API calls
@@ -427,6 +433,26 @@ export async function fetchCandles(
           interval,
           options.outputSize || "compact"
         );
+      } else if (provider === "robinhood" || provider === "webull") {
+        // Import here to avoid circular dependencies
+        const { brokerageApiService } = await import("./brokerageApiService");
+        const timeframe =
+          options.resolution === "1"
+            ? "5minute"
+            : options.resolution === "5"
+            ? "5minute"
+            : options.resolution === "15"
+            ? "hour"
+            : options.resolution === "30"
+            ? "hour"
+            : options.resolution === "1H"
+            ? "hour"
+            : "day";
+        candles = await brokerageApiService.getCandles(
+          symbol,
+          provider,
+          timeframe
+        );
       } else {
         const { interval, range } = mapResolutionToYahoo(
           options.resolution as any
@@ -461,7 +487,28 @@ export type NewsItem = {
 };
 
 // Fast public news for testing: Yahoo Finance RSS → JSON via yarr (no key)
-export async function fetchNews(symbol: string): Promise<NewsItem[]> {
+export async function fetchNews(
+  symbol: string,
+  provider?: string
+): Promise<NewsItem[]> {
+  // Try brokerage providers first if available
+  if (provider === "robinhood" || provider === "webull") {
+    try {
+      const { brokerageApiService } = await import("./brokerageApiService");
+      const { brokerageAuthService } = await import("./brokerageAuth");
+
+      // Check if we have an active session
+      if (brokerageAuthService.getSession(provider as any)) {
+        return await brokerageApiService.getNews(symbol, provider as any);
+      }
+    } catch (error) {
+      console.warn(
+        `Failed to fetch news from ${provider}, falling back to public sources:`,
+        error
+      );
+    }
+  }
+
   const newsApiKey = (Constants.expoConfig?.extra as any)?.newsApiKey;
   if (newsApiKey) {
     // Example: GNews API (fast and simple for testing)
