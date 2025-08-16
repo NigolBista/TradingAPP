@@ -19,7 +19,6 @@ const DEFAULT_PINNED: ExtendedTimeframe[] = [
   "1h",
   "1D",
   "1W",
-  "1M",
 ];
 
 export const useTimeframeStore = create<TimeframeState>((set, get) => ({
@@ -33,7 +32,8 @@ export const useTimeframeStore = create<TimeframeState>((set, get) => ({
         const arr = JSON.parse(raw) as ExtendedTimeframe[];
         set({ pinned: arr, isHydrated: true });
       } else {
-        set({ isHydrated: true });
+        set({ pinned: DEFAULT_PINNED, isHydrated: true });
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_PINNED));
       }
     } catch {
       set({ isHydrated: true });

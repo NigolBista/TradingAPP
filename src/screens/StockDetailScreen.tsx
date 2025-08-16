@@ -518,10 +518,23 @@ export default function StockDetailScreen() {
           </View>
 
           {/* Chart Controls Row */}
-          {/* Single controls row: keep ChartControls for settings/expand only (no duplicate timeframe pills) */}
+          {/* Single compact bar: timeframes + chart type + settings + expand */}
           <ChartControls
             selectedTimeframe={selectedTimeframe}
-            onTimeframeChange={setSelectedTimeframe}
+            onTimeframeChange={(tf) => {
+              setSelectedTimeframe(tf);
+              // For broad pills, keep using the daily series; intraday is handled by extended picker
+              if (
+                tf === "1D" ||
+                tf === "1W" ||
+                tf === "1M" ||
+                tf === "3M" ||
+                tf === "1Y" ||
+                tf === "ALL"
+              ) {
+                // Optionally refetch larger window if needed later
+              }
+            }}
             onSettingsPress={() => setShowChartSettings(true)}
             onTimeframePickerPress={() => setTfModalVisible(true)}
             onExpandPress={() =>
@@ -531,51 +544,42 @@ export default function StockDetailScreen() {
                 timeframe: selectedTimeframe,
               })
             }
+            renderLeft={
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ alignItems: "center" }}
+              >
+                {(pinned as ExtendedTimeframe[]).map((tf) => (
+                  <Pressable
+                    key={`pin-${tf}`}
+                    onPress={() => applyExtendedTimeframe(tf)}
+                    style={{
+                      paddingHorizontal: 10,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      backgroundColor:
+                        extendedTf === tf ? "#00D4AA" : "#1a1a1a",
+                      marginRight: 6,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: extendedTf === tf ? "#000" : "#ccc",
+                        fontWeight: "600",
+                        fontSize: 12,
+                      }}
+                    >
+                      {tf}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            }
           />
 
           {/* Webull-style quick timeframe row */}
-          <View
-            style={{
-              flexDirection: "row",
-              paddingHorizontal: 12,
-              paddingTop: 4,
-              gap: 6,
-            }}
-          >
-            {(pinned as ExtendedTimeframe[]).map((tf) => (
-              <Pressable
-                key={tf}
-                onPress={() => applyExtendedTimeframe(tf)}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 8,
-                  backgroundColor: extendedTf === tf ? "#00D4AA" : "#1a1a1a",
-                }}
-              >
-                <Text
-                  style={{
-                    color: extendedTf === tf ? "#000" : "#ccc",
-                    fontWeight: "600",
-                    fontSize: 12,
-                  }}
-                >
-                  {tf}
-                </Text>
-              </Pressable>
-            ))}
-            <Pressable
-              onPress={() => setTfModalVisible(true)}
-              style={{
-                paddingHorizontal: 10,
-                paddingVertical: 6,
-                borderRadius: 8,
-                backgroundColor: "#1a1a1a",
-              }}
-            >
-              <Ionicons name="ellipsis-horizontal" size={16} color="#ccc" />
-            </Pressable>
-          </View>
+          {/* Remove the second row to avoid duplicate UI. The clock icon opens full timeframe picker. */}
         </View>
 
         {/* Signals */}

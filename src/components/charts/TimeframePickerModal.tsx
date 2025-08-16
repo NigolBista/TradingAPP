@@ -7,6 +7,8 @@ import {
   StyleSheet,
   ScrollView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useTimeframeStore } from "../../store/timeframeStore";
 
 export type ExtendedTimeframe =
   | "1m"
@@ -56,7 +58,7 @@ export default function TimeframePickerModal({
   selected,
   onSelect,
 }: Props) {
-  const [custom, setCustom] = React.useState<ExtendedTimeframe | null>(null);
+  const { pinned, toggle } = useTimeframeStore();
   return (
     <Modal
       visible={visible}
@@ -67,7 +69,12 @@ export default function TimeframePickerModal({
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={styles.modal}>
-          <Text style={styles.title}>Select Timeframe</Text>
+          <View style={styles.header}>
+            <Text style={styles.title}>Select Timeframe</Text>
+            <Pressable onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={20} color="#888" />
+            </Pressable>
+          </View>
           <ScrollView contentContainerStyle={{ paddingBottom: 8 }}>
             {groups.map((g) => (
               <View key={g.title} style={styles.group}>
@@ -75,6 +82,7 @@ export default function TimeframePickerModal({
                 <View style={styles.grid}>
                   {g.items.map((tf) => {
                     const isSel = selected === tf;
+                    const isPinned = pinned.includes(tf);
                     return (
                       <Pressable
                         key={tf}
@@ -82,16 +90,25 @@ export default function TimeframePickerModal({
                           onSelect(tf);
                           onClose();
                         }}
-                        style={[styles.cell, isSel && styles.cellSelected]}
+                        onLongPress={() => toggle(tf)}
+                        style={[
+                          styles.cell,
+                          isSel && styles.cellSelected,
+                          isPinned && styles.cellPinned,
+                        ]}
                       >
-                        <Text
-                          style={[
-                            styles.cellText,
-                            isSel && styles.cellTextSelected,
-                          ]}
-                        >
-                          {tf}
-                        </Text>
+                        <View style={styles.cellContent}>
+                          <Text
+                            style={[
+                              styles.cellText,
+                              isSel && styles.cellTextSelected,
+                              isPinned && styles.cellTextPinned,
+                            ]}
+                          >
+                            {tf}
+                          </Text>
+                          {/* favorited indicated via styles only */}
+                        </View>
                       </Pressable>
                     );
                   })}
@@ -99,34 +116,11 @@ export default function TimeframePickerModal({
               </View>
             ))}
 
-            {/* Custom add/remove row */}
-            <View style={[styles.group, { marginTop: 4 }]}>
-              <Text style={styles.groupTitle}>Customize</Text>
-              <View style={styles.grid}>
-                {(
-                  [
-                    "2m",
-                    "3m",
-                    "4m",
-                    "10m",
-                    "45m",
-                    "2h",
-                    "4h",
-                  ] as ExtendedTimeframe[]
-                ).map((tf) => (
-                  <Pressable
-                    key={`custom-${tf}`}
-                    onPress={() => {
-                      setCustom(tf);
-                      onSelect(tf);
-                      onClose();
-                    }}
-                    style={[styles.cell]}
-                  >
-                    <Text style={styles.cellText}>Add {tf}</Text>
-                  </Pressable>
-                ))}
-              </View>
+            {/* Instructions */}
+            <View style={styles.instructions}>
+              <Text style={styles.instructionText}>
+                Tap to select • Long press to add/remove from favorites
+              </Text>
             </View>
           </ScrollView>
         </View>
@@ -150,7 +144,14 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     padding: 16,
   },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   title: { color: "#fff", fontSize: 16, fontWeight: "700", marginBottom: 8 },
+  closeButton: { padding: 4 },
   group: { marginVertical: 8 },
   groupTitle: { color: "#999", fontSize: 12, marginBottom: 8 },
   grid: { flexDirection: "row", flexWrap: "wrap" },
@@ -165,6 +166,19 @@ const styles = StyleSheet.create({
     backgroundColor: "#111",
   },
   cellSelected: { backgroundColor: "#00D4AA", borderColor: "#00D4AA" },
+  cellPinned: {
+    borderColor: "#00D4AA",
+    borderWidth: 2,
+    backgroundColor: "#002921",
+  },
+  cellContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   cellText: { color: "#ccc", fontWeight: "600" },
   cellTextSelected: { color: "#000" },
+  cellTextPinned: { color: "#00D4AA" },
+  instructions: { padding: 16, alignItems: "center" },
+  instructionText: { color: "#888", fontSize: 12, textAlign: "center" },
 });
