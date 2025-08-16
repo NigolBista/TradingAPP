@@ -23,7 +23,14 @@ import ChartSettingsModal, {
 import ChartControls, {
   type Timeframe,
 } from "../components/charts/ChartControls";
-import { fetchCandles, type Candle } from "../services/marketProviders";
+import TimeframePickerModal, {
+  type ExtendedTimeframe,
+} from "../components/charts/TimeframePickerModal";
+import {
+  fetchCandles,
+  type Candle,
+  fetchCandlesForTimeframe,
+} from "../services/marketProviders";
 import {
   performComprehensiveAnalysis,
   type MarketAnalysis,
@@ -39,6 +46,7 @@ import {
 import NewsList from "../components/insights/NewsList";
 import { sendLocalNotification } from "../services/notifications";
 import { searchStocksAutocomplete } from "../services/stockData";
+import { useTimeframeStore } from "../store/timeframeStore";
 
 type RootStackParamList = {
   StockDetail: { symbol: string };
@@ -203,11 +211,15 @@ export default function StockDetailScreen() {
   const [chartType, setChartType] = useState<ChartType>("line");
   const [showChartSettings, setShowChartSettings] = useState(false);
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1D");
+  const [tfModalVisible, setTfModalVisible] = useState(false);
+  const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>("1D");
+  const { pinned, hydrate, toggle } = useTimeframeStore();
   const [activeTab, setActiveTab] = useState<"signals" | "news">("signals");
 
   useEffect(() => {
     load();
     loadStockName();
+    hydrate();
   }, [symbol]);
 
   async function loadStockName() {
@@ -224,23 +236,46 @@ export default function StockDetailScreen() {
   async function load() {
     try {
       setLoading(true);
-      const [d, h1, m15, m5] = await Promise.all([
-        fetchCandles(symbol, { resolution: "D" }),
-        fetchCandles(symbol, { resolution: "1H" }),
-        fetchCandles(symbol, { resolution: "15" }),
-        fetchCandles(symbol, { resolution: "5" }),
-      ]);
-      const candleData = { "1d": d, "1h": h1, "15m": m15, "5m": m5 } as const;
-      const a = await performComprehensiveAnalysis(symbol, candleData as any);
-      setAnalysis(a);
+      // Fetch only default timeframe first (daily) for fast initial render
+      const d = await fetchCandles(symbol, { resolution: "D" });
       setDailySeries(toLWC(d));
-      setSummary(await generateSignalSummary(symbol));
-      try {
-        const items = await fetchSymbolNews(symbol);
-        setNews(items);
-      } catch {
-        setNews([]);
-      }
+      // Defer secondary data (analysis, news, summary) to not block UI
+      Promise.allSettled([
+        (async () => {
+          try {
+            const [h1, m15, m5] = await Promise.all([
+              fetchCandles(symbol, { resolution: "1H" }),
+              fetchCandles(symbol, { resolution: "15" }),
+              fetchCandles(symbol, { resolution: "5" }),
+            ]);
+            const candleData = {
+              "1d": d,
+              "1h": h1,
+              "15m": m15,
+              "5m": m5,
+            } as const;
+            const a = await performComprehensiveAnalysis(
+              symbol,
+              candleData as any
+            );
+            setAnalysis(a);
+          } catch {}
+        })(),
+        (async () => {
+          try {
+            const items = await fetchSymbolNews(symbol);
+            setNews(items);
+          } catch {
+            setNews([]);
+          }
+        })(),
+        (async () => {
+          try {
+            const s = await generateSignalSummary(symbol);
+            setSummary(s);
+          } catch {}
+        })(),
+      ]);
     } catch (e) {
       Alert.alert(
         "Error",
@@ -248,6 +283,50 @@ export default function StockDetailScreen() {
       );
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function applyExtendedTimeframe(tf: ExtendedTimeframe) {
+    setExtendedTf(tf);
+    // Map extended to simple header pills if applicable
+    const map: Record<string, Timeframe> = {
+      "1m": "1D",
+      "2m": "1D",
+      "3m": "1D",
+      "4m": "1D",
+      "5m": "1D",
+      "10m": "1D",
+      "15m": "1D",
+      "30m": "1D",
+      "45m": "1D",
+      "1h": "1W",
+      "2h": "1W",
+      "4h": "1M",
+      "1D": "1D",
+      "1W": "1W",
+      "1M": "1M",
+      "3M": "3M",
+      "6M": "1Y",
+      "1Y": "1Y",
+      "2Y": "ALL",
+      "5Y": "ALL",
+      ALL: "ALL",
+    };
+    setSelectedTimeframe(map[tf]);
+    try {
+      const candles = await fetchCandlesForTimeframe(symbol, tf);
+      setDailySeries(
+        candles.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }))
+      );
+    } catch (e) {
+      console.warn("Failed to load timeframe candles:", e);
     }
   }
 
@@ -439,10 +518,12 @@ export default function StockDetailScreen() {
           </View>
 
           {/* Chart Controls Row */}
+          {/* Single controls row: keep ChartControls for settings/expand only (no duplicate timeframe pills) */}
           <ChartControls
             selectedTimeframe={selectedTimeframe}
             onTimeframeChange={setSelectedTimeframe}
             onSettingsPress={() => setShowChartSettings(true)}
+            onTimeframePickerPress={() => setTfModalVisible(true)}
             onExpandPress={() =>
               (navigation as any).navigate("ChartFullScreen", {
                 symbol,
@@ -451,6 +532,50 @@ export default function StockDetailScreen() {
               })
             }
           />
+
+          {/* Webull-style quick timeframe row */}
+          <View
+            style={{
+              flexDirection: "row",
+              paddingHorizontal: 12,
+              paddingTop: 4,
+              gap: 6,
+            }}
+          >
+            {(pinned as ExtendedTimeframe[]).map((tf) => (
+              <Pressable
+                key={tf}
+                onPress={() => applyExtendedTimeframe(tf)}
+                style={{
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: 8,
+                  backgroundColor: extendedTf === tf ? "#00D4AA" : "#1a1a1a",
+                }}
+              >
+                <Text
+                  style={{
+                    color: extendedTf === tf ? "#000" : "#ccc",
+                    fontWeight: "600",
+                    fontSize: 12,
+                  }}
+                >
+                  {tf}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => setTfModalVisible(true)}
+              style={{
+                paddingHorizontal: 10,
+                paddingVertical: 6,
+                borderRadius: 8,
+                backgroundColor: "#1a1a1a",
+              }}
+            >
+              <Ionicons name="ellipsis-horizontal" size={16} color="#ccc" />
+            </Pressable>
+          </View>
         </View>
 
         {/* Signals */}
@@ -573,6 +698,14 @@ export default function StockDetailScreen() {
             )}
           </View>
         )}
+
+        {/* Timeframe modal */}
+        <TimeframePickerModal
+          visible={tfModalVisible}
+          onClose={() => setTfModalVisible(false)}
+          selected={extendedTf}
+          onSelect={(tf) => applyExtendedTimeframe(tf)}
+        />
 
         {/* News */}
         {activeTab === "news" && news.length > 0 && (

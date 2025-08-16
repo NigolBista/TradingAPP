@@ -9,6 +9,30 @@ export type Candle = {
   volume?: number;
 };
 
+// Extended timeframe options for Webull-like selection
+export type ExtendedTimeframe =
+  | "1m"
+  | "2m"
+  | "3m"
+  | "4m"
+  | "5m"
+  | "10m"
+  | "15m"
+  | "30m"
+  | "45m"
+  | "1h"
+  | "2h"
+  | "4h"
+  | "1D"
+  | "1W"
+  | "1M"
+  | "3M"
+  | "6M"
+  | "1Y"
+  | "2Y"
+  | "5Y"
+  | "ALL";
+
 async function fetchJson(url: string, headers: Record<string, string> = {}) {
   const res = await fetch(url, { headers });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -61,6 +85,7 @@ function mapResolutionToYahoo(resolution?: MarketDataResolution): {
   switch (resolution) {
     case "1":
       return { interval: "1m", range: "5d" };
+    // Note: Yahoo supports 2m; for base we still use 1m and aggregate as needed
     case "5":
       return { interval: "5m", range: "1mo" };
     case "15":
@@ -157,6 +182,90 @@ export type MarketDataResolution =
   | "D" // 1 day
   | "W" // 1 week
   | "M"; // 1 month
+
+function mapExtendedTimeframe(tf: ExtendedTimeframe): {
+  base: MarketDataResolution;
+  group: number;
+} {
+  switch (tf) {
+    case "1m":
+      return { base: "1", group: 1 };
+    case "2m":
+      return { base: "1", group: 2 };
+    case "3m":
+      return { base: "1", group: 3 };
+    case "4m":
+      return { base: "1", group: 4 };
+    case "5m":
+      return { base: "5", group: 1 };
+    case "10m":
+      return { base: "5", group: 2 };
+    case "15m":
+      return { base: "15", group: 1 };
+    case "30m":
+      return { base: "30", group: 1 };
+    case "45m":
+      return { base: "15", group: 3 };
+    case "1h":
+      return { base: "1H", group: 1 };
+    case "2h":
+      return { base: "1H", group: 2 };
+    case "4h":
+      return { base: "1H", group: 4 };
+    case "1D":
+      return { base: "D", group: 1 };
+    case "1W":
+      return { base: "W", group: 1 };
+    case "1M":
+      return { base: "M", group: 1 };
+    case "3M":
+      return { base: "D", group: 1 };
+    case "6M":
+      return { base: "D", group: 1 };
+    case "1Y":
+      return { base: "D", group: 1 };
+    case "2Y":
+      return { base: "W", group: 1 };
+    case "5Y":
+      return { base: "W", group: 1 };
+    case "ALL":
+    default:
+      return { base: "M", group: 1 };
+  }
+}
+
+export function aggregateCandles(candles: Candle[], group: number): Candle[] {
+  if (group <= 1) return candles;
+  const out: Candle[] = [];
+  for (let i = 0; i < candles.length; i += group) {
+    const slice = candles.slice(i, i + group);
+    if (slice.length === 0) continue;
+    const open = slice[0].open;
+    const close = slice[slice.length - 1].close;
+    const high = Math.max(...slice.map((c) => c.high));
+    const low = Math.min(...slice.map((c) => c.low));
+    const volume = slice.reduce((s, c) => s + (c.volume || 0), 0);
+    const time = slice[0].time; // start time of the bucket
+    out.push({ time, open, high, low, close, volume });
+  }
+  return out;
+}
+
+export async function fetchCandlesForTimeframe(
+  symbol: string,
+  timeframe: ExtendedTimeframe
+): Promise<Candle[]> {
+  const { base, group } = mapExtendedTimeframe(timeframe);
+  try {
+    const baseCandles = await fetchCandles(symbol, { resolution: base });
+    return aggregateCandles(baseCandles, group);
+  } catch (e) {
+    // Fallback to Yahoo for base, then aggregate
+    const { interval, range } = mapResolutionToYahoo(base);
+    const y = await fetchYahooCandles(symbol, range, interval);
+    return aggregateCandles(y, group);
+  }
+}
 
 // MarketData.app candles (requires API token)
 export async function fetchMarketDataCandles(

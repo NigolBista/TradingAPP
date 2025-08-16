@@ -10,6 +10,7 @@ interface ChartControlsProps {
   onTimeframeChange: (timeframe: Timeframe) => void;
   onSettingsPress: () => void;
   onExpandPress: () => void;
+  onTimeframePickerPress?: () => void;
 }
 
 const timeframes: Timeframe[] = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
@@ -19,29 +20,37 @@ export default function ChartControls({
   onTimeframeChange,
   onSettingsPress,
   onExpandPress,
+  onTimeframePickerPress,
 }: ChartControlsProps) {
   return (
     <View style={styles.container}>
-      {/* Timeframe Buttons */}
-      {timeframes.map((timeframe) => (
-        <Pressable
-          key={timeframe}
-          style={[
-            styles.button,
-            selectedTimeframe === timeframe && styles.selectedButton,
-          ]}
-          onPress={() => onTimeframeChange(timeframe)}
-        >
-          <Text
+      {/* Timeframe Buttons (compact) */}
+      <View style={{ flexDirection: "row" }}>
+        {timeframes.map((timeframe) => (
+          <Pressable
+            key={timeframe}
             style={[
-              styles.buttonText,
-              selectedTimeframe === timeframe && styles.selectedText,
+              styles.button,
+              selectedTimeframe === timeframe && styles.selectedButton,
             ]}
+            onPress={() => onTimeframeChange(timeframe)}
           >
-            {timeframe}
-          </Text>
-        </Pressable>
-      ))}
+            <Text
+              style={[
+                styles.buttonText,
+                selectedTimeframe === timeframe && styles.selectedText,
+              ]}
+            >
+              {timeframe}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Timeframe Picker (Webull-style) */}
+      <Pressable style={styles.iconButton} onPress={onTimeframePickerPress}>
+        <Ionicons name="time-outline" size={16} color="#888" />
+      </Pressable>
 
       {/* Settings Button */}
       <Pressable style={styles.iconButton} onPress={onSettingsPress}>

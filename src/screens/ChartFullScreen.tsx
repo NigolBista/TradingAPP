@@ -10,9 +10,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import TradingViewChart from "../components/charts/TradingViewChart";
+import TimeframePickerModal, {
+  ExtendedTimeframe,
+} from "../components/charts/TimeframePickerModal";
 import AdvancedTradingChart from "../components/charts/AdvancedTradingChart";
 import StockSearchBar from "../components/common/StockSearchBar";
 import { searchStocksAutocomplete } from "../services/stockData";
+import { useTimeframeStore } from "../store/timeframeStore";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -22,13 +26,59 @@ export default function ChartFullScreen() {
   const symbol: string = route.params?.symbol || "AAPL";
   const chartType: string = route.params?.chartType || "line";
   const timeframe: string = route.params?.timeframe || "1D";
+  const [tfModalVisible, setTfModalVisible] = useState(false);
+  const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>("1D");
   const [stockName, setStockName] = useState<string>("");
+  const { pinned, hydrate } = useTimeframeStore();
 
   const chartHeight = Math.max(0, height - insets.top - insets.bottom - 60); // Account for header
 
   useEffect(() => {
     loadStockName();
+    hydrate();
   }, [symbol]);
+
+  function mapExtendedToTradingView(
+    tf: ExtendedTimeframe
+  ): "1" | "5" | "15" | "30" | "60" | "120" | "240" | "D" | "W" | "M" {
+    switch (tf) {
+      case "1m":
+        return "1";
+      case "2m":
+      case "3m":
+      case "4m":
+        return "1"; // Nearest supported
+      case "5m":
+      case "10m":
+        return "5";
+      case "15m":
+        return "15";
+      case "30m":
+      case "45m":
+        return "30";
+      case "1h":
+        return "60";
+      case "2h":
+        return "120";
+      case "4h":
+        return "240";
+      case "1D":
+        return "D";
+      case "1W":
+        return "W";
+      case "1M":
+      case "3M":
+      case "6M":
+        return "M";
+      case "1Y":
+      case "2Y":
+      case "5Y":
+      case "ALL":
+        return "W";
+      default:
+        return "D";
+    }
+  }
 
   async function loadStockName() {
     try {
@@ -62,8 +112,35 @@ export default function ChartFullScreen() {
 
       {/* Chart */}
       <View style={{ flex: 1 }}>
-        <TradingViewChart symbol={symbol} height={chartHeight} />
+        <TradingViewChart
+          symbol={symbol}
+          height={chartHeight}
+          interval={mapExtendedToTradingView(extendedTf)}
+        />
+        <View style={{ position: "absolute", right: 12, top: 72 }}>
+          <Pressable
+            onPress={() => setTfModalVisible(true)}
+            style={{
+              backgroundColor: "rgba(0,0,0,0.6)",
+              borderRadius: 20,
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600" }}>
+              {extendedTf}
+            </Text>
+          </Pressable>
+        </View>
+        {/* Removed left quick row to avoid duplicate controls; modal picker handles timeframe switching */}
       </View>
+
+      <TimeframePickerModal
+        visible={tfModalVisible}
+        onClose={() => setTfModalVisible(false)}
+        selected={extendedTf}
+        onSelect={(tf) => setExtendedTf(tf)}
+      />
     </View>
   );
 }
