@@ -21,6 +21,7 @@ import {
 } from "../services/brokerageApiService";
 import { brokerageAuthService } from "../services/brokerageAuth";
 import { useNavigation } from "@react-navigation/native";
+import SimpleLineChart from "../components/charts/SimpleLineChart";
 
 const { width } = Dimensions.get("window");
 
@@ -39,6 +40,68 @@ export default function DashboardScreen() {
     loading: true,
     refreshing: false,
   });
+
+  const [dummySeries, setDummySeries] = useState<
+    { time: number; close: number }[]
+  >([]);
+  const [benchmarkSeries, setBenchmarkSeries] = useState<
+    { time: number; close: number }[]
+  >([]);
+
+  function generateDummySeries(
+    points: number = 240,
+    base: number = 1_200_000
+  ): { time: number; close: number }[] {
+    const now = Date.now();
+    const series: { time: number; close: number }[] = [];
+    let price = base;
+    // GBM-style params
+    let mu = 0.00015; // drift per step
+    let vol = 0.004; // volatility per step
+    const clamp = (n: number, min: number, max: number) =>
+      Math.max(min, Math.min(max, n));
+    const gauss = () => {
+      // Box-Muller transform
+      let u = 0,
+        v = 0;
+      while (u === 0) u = Math.random();
+      while (v === 0) v = Math.random();
+      return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+    };
+    for (let i = points - 1; i >= 0; i--) {
+      const t = now - i * 60_000; // 1-minute steps
+      // occasional regime changes in drift/vol
+      if (Math.random() < 0.03) mu += (Math.random() - 0.5) * 0.001;
+      if (Math.random() < 0.06)
+        vol = clamp(vol + (Math.random() - 0.5) * 0.003, 0.0015, 0.012);
+      // GBM increment
+      const z = gauss();
+      const ret = mu + vol * z; // simple additive log-return per step
+      price = Math.max(500, price * (1 + ret));
+      // occasional jump up/down
+      if (Math.random() < 0.02) {
+        const jump =
+          (Math.random() * 0.05 + 0.01) * (Math.random() < 0.5 ? -1 : 1);
+        price = Math.max(500, price * (1 + jump));
+      }
+      // small mean reversion to base to avoid runaway
+      const mr = (base - price) * 0.0000015;
+      price = price + mr;
+      series.push({ time: t, close: Math.round(price * 100) / 100 });
+    }
+    // Ensure uptrend for demo so header and chart are consistent visually
+    const first = series[0]?.close ?? 0;
+    const last = series[series.length - 1]?.close ?? 0;
+    if (last <= first && first > 0) {
+      const tilt = (first - last) * 1.15 + first * 0.005;
+      const n = series.length - 1;
+      return series.map((d, i) => ({
+        time: d.time,
+        close: Math.round((d.close + (tilt * i) / Math.max(1, n)) * 100) / 100,
+      }));
+    }
+    return series;
+  }
 
   const loadData = async (isRefresh = false) => {
     if (isRefresh) {
@@ -72,6 +135,13 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     loadData();
+    const main = generateDummySeries();
+    setDummySeries(main);
+    const bench = main.map((d, i) => ({
+      time: d.time,
+      close: d.close * (0.985 + 0.00025 * i),
+    }));
+    setBenchmarkSeries(bench);
   }, []);
 
   const handleAddToWatchlist = async (symbol: string) => {
@@ -102,9 +172,22 @@ export default function DashboardScreen() {
   };
 
   const renderPortfolioHeader = () => {
-    if (!state.portfolio) return null;
+    const hasReal = !!state.portfolio && (state.portfolio!.totalValue || 0) > 0;
+    // Derive fallback values from dummy series so direction matches the chart
+    const first = dummySeries[0]?.close ?? 0;
+    const last = dummySeries[dummySeries.length - 1]?.close ?? 0;
+    const fallbackValue = last || 1205340.12;
+    const fallbackChange = first > 0 ? last - first : 0;
+    const fallbackPct = first > 0 ? (fallbackChange / first) * 100 : 0;
 
-    const { totalValue, totalGainLoss, totalGainLossPercent } = state.portfolio;
+    const totalValue = hasReal ? state.portfolio!.totalValue : fallbackValue;
+    const totalGainLoss = hasReal
+      ? state.portfolio!.totalGainLoss
+      : fallbackChange;
+    const totalGainLossPercent = hasReal
+      ? state.portfolio!.totalGainLossPercent
+      : fallbackPct;
+    const accounts = hasReal ? state.portfolio!.providersConnected.length : 0;
     const isPositive = totalGainLoss >= 0;
 
     return (
@@ -122,19 +205,17 @@ export default function DashboardScreen() {
           </Text>
         </View>
         <Text style={styles.portfolioSubtext}>
-          {state.portfolio.providersConnected.length} account(s) connected
+          {accounts} account(s) connected
         </Text>
-      </View>
-    );
-  };
-
-  const renderPortfolioChart = () => {
-    return (
-      <View style={styles.chartContainer}>
-        <View style={styles.chartPlaceholder}>
-          <Ionicons name="trending-up" size={40} color="#00D4AA" />
-          <Text style={styles.chartText}>Portfolio Chart</Text>
-          <Text style={styles.chartSubtext}>Coming Soon</Text>
+        {/* Inline chart like Robinhood (no separation) */}
+        <View style={{ width: "100%", marginTop: 12 }}>
+          <SimpleLineChart
+            data={dummySeries}
+            height={220}
+            color={isPositive ? "#00D4AA" : "#FF6B6B"}
+            strokeWidth={2}
+            showFill={false}
+          />
         </View>
       </View>
     );
@@ -246,7 +327,6 @@ export default function DashboardScreen() {
         }
       >
         {renderPortfolioHeader()}
-        {renderPortfolioChart()}
         {renderMarketBrief()}
         {renderWatchlist()}
       </ScrollView>

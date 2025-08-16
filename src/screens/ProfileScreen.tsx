@@ -253,7 +253,7 @@ export default function ProfileScreen({ navigation }: any) {
                 <View>
                   <Text style={styles.actionTitle}>Brokerage Accounts</Text>
                   <Text style={styles.actionSubtitle}>
-                    Connect Robinhood & Webull for real-time data
+                    Connect your brokerage accounts
                   </Text>
                 </View>
               </View>
@@ -332,11 +332,16 @@ export default function ProfileScreen({ navigation }: any) {
       <Modal
         visible={showEditProfile}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowEditProfile(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
+        <View
+          style={[
+            styles.modalContainer,
+            { justifyContent: "center", alignItems: "center" },
+          ]}
+        >
+          <View style={[styles.modalContent, styles.centerModalCard]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Profile</Text>
               <Pressable onPress={() => setShowEditProfile(false)}>
@@ -344,76 +349,76 @@ export default function ProfileScreen({ navigation }: any) {
               </Pressable>
             </View>
 
-            <Input
-              label="Email"
-              value={editEmail}
-              onChangeText={setEditEmail}
-              keyboardType="email-address"
+            <View style={styles.formGroup}>
+              <Input
+                label="Email"
+                value={editEmail}
+                onChangeText={setEditEmail}
+                keyboardType="email-address"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.groupLabel}>Skill Level</Text>
+              <View style={styles.segmentList}>
+                {skillLevels.map((level) => {
+                  const active = editSkillLevel === level;
+                  return (
+                    <Pressable
+                      key={level}
+                      onPress={() => setEditSkillLevel(level)}
+                      style={[
+                        styles.segmentItem,
+                        active && styles.segmentItemActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          active && styles.segmentTextActive,
+                        ]}
+                      >
+                        {level}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.groupLabel}>Trader Type</Text>
+              <View style={styles.segmentList}>
+                {traderTypes.map((type) => {
+                  const active = editTraderType === type;
+                  return (
+                    <Pressable
+                      key={type}
+                      onPress={() => setEditTraderType(type)}
+                      style={[
+                        styles.segmentItem,
+                        active && styles.segmentItemActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          active && styles.segmentTextActive,
+                        ]}
+                      >
+                        {type}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <Button
+              title="Save Changes"
+              onPress={saveProfile}
+              style={{ marginTop: 8 }}
             />
-
-            <View>
-              <Text>Skill Level</Text>
-              <View>
-                {skillLevels.map((level) => (
-                  <Pressable
-                    key={level}
-                    onPress={() => setEditSkillLevel(level)}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      backgroundColor:
-                        editSkillLevel === level ? "#4f46e5" : "#ffffff",
-                      borderColor:
-                        editSkillLevel === level ? "#4f46e5" : "#d1d5db",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        color: editSkillLevel === level ? "#ffffff" : "#374151",
-                      }}
-                    >
-                      {level}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <View>
-              <Text>Trader Type</Text>
-              <View>
-                {traderTypes.map((type) => (
-                  <Pressable
-                    key={type}
-                    onPress={() => setEditTraderType(type)}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 8,
-                      borderRadius: 8,
-                      borderWidth: 1,
-                      backgroundColor:
-                        editTraderType === type ? "#4f46e5" : "#ffffff",
-                      borderColor:
-                        editTraderType === type ? "#4f46e5" : "#d1d5db",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 14,
-                        color: editTraderType === type ? "#ffffff" : "#374151",
-                      }}
-                    >
-                      {type}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <Button title="Save Changes" onPress={saveProfile} />
           </View>
         </View>
       </Modal>
@@ -422,11 +427,22 @@ export default function ProfileScreen({ navigation }: any) {
       <Modal
         visible={showPreferences}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowPreferences(false)}
       >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, styles.modalScrollView]}>
+        <View
+          style={[
+            styles.modalContainer,
+            { justifyContent: "center", alignItems: "center" },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              styles.centerModalCard,
+              styles.modalScrollView,
+            ]}
+          >
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Preferences</Text>
               <Pressable onPress={() => setShowPreferences(false)}>
@@ -435,146 +451,153 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.preferencesContainer}>
-                <View style={styles.preferenceItem}>
-                  <View style={styles.preferenceLeft}>
-                    <Text style={styles.preferenceTitle}>
-                      Push Notifications
-                    </Text>
-                    <Text style={styles.preferenceSubtitle}>
-                      Receive notifications on your device
-                    </Text>
-                  </View>
-                  <Switch
-                    value={pushNotifications}
-                    onValueChange={async (v) => {
-                      setPushNotifications(v);
-                      setProfile({ notificationsEnabled: v });
-                      if (v) {
-                        // Schedule notifications when enabled
-                        if (dailyBriefTime) {
-                          const [hour, minute] = dailyBriefTime.split(":");
-                          await scheduleDailyBriefing(
-                            parseInt(hour),
-                            parseInt(minute)
-                          );
+              <View style={{ gap: 16 }}>
+                {/* Notifications Group */}
+                <View style={styles.settingsCard}>
+                  <Text style={styles.groupLabel}>Notifications</Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>
+                        Push Notifications
+                      </Text>
+                      <Text style={styles.settingSubtitle}>
+                        Receive notifications on your device
+                      </Text>
+                    </View>
+                    <Switch
+                      value={pushNotifications}
+                      onValueChange={async (v) => {
+                        setPushNotifications(v);
+                        setProfile({ notificationsEnabled: v });
+                        if (v) {
+                          if (dailyBriefTime) {
+                            const [hour, minute] = dailyBriefTime.split(":");
+                            await scheduleDailyBriefing(
+                              parseInt(hour),
+                              parseInt(minute)
+                            );
+                          }
+                          if (weeklyDigest) await scheduleWeeklyDigest();
+                          if (educationalTips) await scheduleEducationalTip();
+                        } else {
+                          await cancelAllScheduledNotifications();
                         }
-                        if (weeklyDigest) {
-                          await scheduleWeeklyDigest();
-                        }
-                        if (educationalTips) {
-                          await scheduleEducationalTip();
-                        }
-                      } else {
-                        await cancelAllScheduledNotifications();
-                      }
-                    }}
-                  />
-                </View>
-
-                <View style={styles.preferenceItem}>
-                  <View style={styles.preferenceLeft}>
-                    <Text style={styles.preferenceTitle}>
-                      Email Notifications
-                    </Text>
-                    <Text style={styles.preferenceSubtitle}>
-                      Receive updates via email
-                    </Text>
+                      }}
+                    />
                   </View>
-                  <Switch
-                    value={emailNotifications}
-                    onValueChange={setEmailNotifications}
-                  />
-                </View>
-
-                <View>
-                  <View>
-                    <Text>Price Alerts</Text>
-                    <Text>Get notified when prices hit your targets</Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>
+                        Email Notifications
+                      </Text>
+                      <Text style={styles.settingSubtitle}>
+                        Receive updates via email
+                      </Text>
+                    </View>
+                    <Switch
+                      value={emailNotifications}
+                      onValueChange={setEmailNotifications}
+                    />
                   </View>
-                  <Switch value={priceAlerts} onValueChange={setPriceAlerts} />
-                </View>
-
-                <View>
-                  <View>
-                    <Text>Market Open Alerts</Text>
-                    <Text>Daily market opening notifications</Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>Price Alerts</Text>
+                      <Text style={styles.settingSubtitle}>
+                        Notify when prices hit your targets
+                      </Text>
+                    </View>
+                    <Switch
+                      value={priceAlerts}
+                      onValueChange={setPriceAlerts}
+                    />
                   </View>
-                  <Switch value={marketOpen} onValueChange={setMarketOpen} />
-                </View>
-
-                <View>
-                  <View>
-                    <Text>Weekly Market Digest</Text>
-                    <Text>Weekly outlook every Monday morning</Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>
+                        Market Open Alerts
+                      </Text>
+                      <Text style={styles.settingSubtitle}>
+                        Daily market opening notifications
+                      </Text>
+                    </View>
+                    <Switch value={marketOpen} onValueChange={setMarketOpen} />
                   </View>
-                  <Switch
-                    value={weeklyDigest}
-                    onValueChange={setWeeklyDigest}
-                  />
-                </View>
-
-                <View>
-                  <View>
-                    <Text>Educational Tips</Text>
-                    <Text>Daily trading tips and insights</Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>
+                        Weekly Market Digest
+                      </Text>
+                      <Text style={styles.settingSubtitle}>
+                        Weekly outlook every Monday morning
+                      </Text>
+                    </View>
+                    <Switch
+                      value={weeklyDigest}
+                      onValueChange={setWeeklyDigest}
+                    />
                   </View>
-                  <Switch
-                    value={educationalTips}
-                    onValueChange={setEducationalTips}
-                  />
+                  <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>Educational Tips</Text>
+                      <Text style={styles.settingSubtitle}>
+                        Daily trading tips and insights
+                      </Text>
+                    </View>
+                    <Switch
+                      value={educationalTips}
+                      onValueChange={setEducationalTips}
+                    />
+                  </View>
                 </View>
 
-                <View>
-                  <Text>Daily Brief Time</Text>
+                {/* Schedule Group */}
+                <View style={styles.settingsCard}>
+                  <Text style={styles.groupLabel}>Schedule</Text>
                   <Input
-                    label="Time (HH:MM)"
+                    label="Daily Brief Time (HH:MM)"
                     value={dailyBriefTime}
                     onChangeText={setDailyBriefTime}
                     placeholder="8:00"
                   />
                 </View>
 
-                <View>
-                  <Text>Theme</Text>
-                  <View>
+                {/* Appearance Group */}
+                <View style={styles.settingsCard}>
+                  <Text style={styles.groupLabel}>Appearance</Text>
+                  <View style={styles.segmentList}>
                     {(["system", "light", "dark"] as ThemeMode[]).map(
-                      (mode) => (
-                        <Pressable
-                          key={mode}
-                          onPress={() => setThemeMode(mode)}
-                          style={{
-                            flex: 1,
-                            paddingVertical: 8,
-                            paddingHorizontal: 12,
-                            borderRadius: 8,
-                            borderWidth: 1,
-                            borderColor:
-                              themeMode === mode ? "#00D4AA" : "#333333",
-                            backgroundColor:
-                              themeMode === mode ? "#00D4AA20" : "transparent",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              textAlign: "center",
-                              fontSize: 14,
-                              fontWeight: "500",
-                              color: themeMode === mode ? "#00D4AA" : "#ffffff",
-                              textTransform: "capitalize",
-                            }}
+                      (mode) => {
+                        const active = themeMode === mode;
+                        return (
+                          <Pressable
+                            key={mode}
+                            onPress={() => setThemeMode(mode)}
+                            style={[
+                              styles.segmentItem,
+                              active && styles.segmentItemActive,
+                            ]}
                           >
-                            {mode}
-                          </Text>
-                        </Pressable>
-                      )
+                            <Text
+                              style={[
+                                styles.segmentText,
+                                active && styles.segmentTextActive,
+                              ]}
+                            >
+                              {mode}
+                            </Text>
+                          </Pressable>
+                        );
+                      }
                     )}
                   </View>
-                  <Text>Choose your app's appearance</Text>
+                  <Text style={styles.settingSubtitle}>
+                    Choose your app's appearance
+                  </Text>
                 </View>
 
-                <View>
-                  <Text>Trading Preferences</Text>
+                {/* Trading Preferences */}
+                <View style={styles.settingsCard}>
+                  <Text style={styles.groupLabel}>Trading Preferences</Text>
                   <Input
                     label="Account Size (USD)"
                     value={accountSize}
@@ -824,6 +847,24 @@ const styles = StyleSheet.create({
   modalScrollView: {
     maxHeight: "80%",
   },
+  settingsCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+  },
+  settingRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  settingLeft: { flex: 1, paddingRight: 12 },
+  settingTitle: { fontSize: 15, fontWeight: "500", color: "#111827" },
+  settingSubtitle: { fontSize: 13, color: "#6b7280", marginTop: 2 },
   preferencesContainer: {
     gap: 16,
   },
@@ -913,9 +954,12 @@ const styles = StyleSheet.create({
   },
   modalContent: {
     backgroundColor: "#ffffff",
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    padding: 24,
+    borderRadius: 20,
+    padding: 20,
+  },
+  centerModalCard: {
+    width: "90%",
+    maxWidth: 420,
   },
   modalHeader: {
     flexDirection: "row",
@@ -928,4 +972,21 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#111827",
   },
+  formGroup: { marginBottom: 12 },
+  groupLabel: { fontSize: 14, color: "#374151", marginBottom: 8 },
+  segmentList: { gap: 8 },
+  segmentItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    backgroundColor: "#ffffff",
+  },
+  segmentItemActive: {
+    backgroundColor: "#4f46e5",
+    borderColor: "#4f46e5",
+  },
+  segmentText: { fontSize: 14, color: "#374151" },
+  segmentTextActive: { color: "#ffffff", fontWeight: "600" },
 });

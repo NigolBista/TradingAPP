@@ -87,10 +87,9 @@ export default function TimeframePickerModal({
                       <Pressable
                         key={tf}
                         onPress={() => {
-                          onSelect(tf);
-                          onClose();
+                          // Tap toggles favorite; do not close modal
+                          toggle(tf);
                         }}
-                        onLongPress={() => toggle(tf)}
                         style={[
                           styles.cell,
                           isSel && styles.cellSelected,
@@ -119,7 +118,7 @@ export default function TimeframePickerModal({
             {/* Instructions */}
             <View style={styles.instructions}>
               <Text style={styles.instructionText}>
-                Tap to select • Long press to add/remove from favorites
+                Tap to add/remove favorites • Close with X or tap outside
               </Text>
             </View>
           </ScrollView>
