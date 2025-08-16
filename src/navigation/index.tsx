@@ -19,6 +19,8 @@ import WatchlistScreen from "../screens/WatchlistScreen";
 import AIInsightsScreen from "../screens/AIInsightsScreen";
 import JourneyScreen from "../screens/JourneyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+// Portfolio functionality moved to Dashboard
+import BrokerageAccountsScreen from "../screens/BrokerageAccountsScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
 import MarketScreenerScreen from "../screens/MarketScreenerScreen";
@@ -52,7 +54,7 @@ function Tabs() {
 
           switch (route.name) {
             case "Dashboard":
-              iconName = focused ? "analytics" : "analytics-outline";
+              iconName = focused ? "wallet" : "wallet-outline";
               break;
             case "Watchlist":
               iconName = focused ? "list" : "list-outline";
@@ -145,6 +147,10 @@ export default function RootNavigation() {
           <RootStack.Screen name="Scanner" component={MarketScreenerScreen} />
           <RootStack.Screen name="Journey" component={JourneyScreen} />
           <RootStack.Screen name="AIInsights" component={AIInsightsScreen} />
+          <RootStack.Screen
+            name="BrokerageAccounts"
+            component={BrokerageAccountsScreen}
+          />
         </RootStack.Navigator>
       ) : (
         <AuthRoutes />

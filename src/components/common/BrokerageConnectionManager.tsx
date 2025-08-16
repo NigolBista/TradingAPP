@@ -74,14 +74,61 @@ export default function BrokerageConnectionManager({
 
     if (result.success && result.session) {
       await loadActiveSessions();
+
+      // Automatically test the connection and try to fetch initial data
+      setTimeout(async () => {
+        console.log(
+          `Testing connection for ${result.session.provider} after auth success`
+        );
+        await testConnectionAndFetchData(result.session.provider);
+      }, 2000);
+
       Alert.alert(
         "Success!",
         `Successfully connected to ${
           result.session.provider.charAt(0).toUpperCase() +
           result.session.provider.slice(1)
-        }`,
+        }. Fetching your data...`,
         [{ text: "OK" }]
       );
+    }
+  };
+
+  const testConnectionAndFetchData = async (provider: BrokerageProvider) => {
+    try {
+      console.log(`Testing connection and fetching data for ${provider}`);
+
+      // Test basic connection
+      const isConnected = await brokerageApiService.checkConnection(provider);
+      setConnectionStatus((prev) => ({ ...prev, [provider]: isConnected }));
+
+      if (isConnected) {
+        console.log(`Connection successful for ${provider}, fetching data...`);
+
+        // Try to fetch some data to verify the session is working
+        try {
+          // Test fetching positions
+          const positions = await brokerageApiService.getPositions(provider);
+          console.log(`Fetched ${positions.length} positions from ${provider}`);
+
+          // Test fetching watchlist
+          const watchlist = await brokerageApiService.getWatchlist(provider);
+          console.log(
+            `Fetched ${watchlist.length} watchlist items from ${provider}`
+          );
+
+          console.log(`Data fetching successful for ${provider}!`);
+        } catch (dataError) {
+          console.warn(`Data fetching failed for ${provider}:`, dataError);
+          // Connection works but data fetching failed - might need re-authentication
+          setConnectionStatus((prev) => ({ ...prev, [provider]: false }));
+        }
+      } else {
+        console.warn(`Connection test failed for ${provider}`);
+      }
+    } catch (error) {
+      console.error(`Failed to test connection for ${provider}:`, error);
+      setConnectionStatus((prev) => ({ ...prev, [provider]: false }));
     }
   };
 
@@ -240,42 +287,39 @@ export default function BrokerageConnectionManager({
   };
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Brokerage Connections</Text>
-        <Text style={styles.subtitle}>
-          Connect your brokerage accounts to get real-time data and personalized
-          insights
-        </Text>
-      </View>
+    <View style={styles.container}>
+      <ScrollView
+        style={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.providersContainer}>
+          {(["robinhood", "webull"] as BrokerageProvider[]).map(
+            renderProviderCard
+          )}
+        </View>
 
-      <View style={styles.providersContainer}>
-        {(["robinhood", "webull"] as BrokerageProvider[]).map(
-          renderProviderCard
-        )}
-      </View>
-
-      <View style={styles.infoSection}>
-        <View style={styles.infoCard}>
-          <Ionicons name="shield-checkmark" size={20} color="#00C851" />
-          <Text style={styles.infoText}>
-            Your credentials are encrypted and stored securely on your device
-          </Text>
+        <View style={styles.infoSection}>
+          <View style={styles.infoCard}>
+            <Ionicons name="shield-checkmark" size={20} color="#00C851" />
+            <Text style={styles.infoText}>
+              Your credentials are encrypted and stored securely on your device
+            </Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Ionicons name="time" size={20} color="#007AFF" />
+            <Text style={styles.infoText}>
+              Data is refreshed every 10-15 minutes to stay within rate limits
+            </Text>
+          </View>
+          <View style={styles.infoCard}>
+            <Ionicons name="warning" size={20} color="#FF9500" />
+            <Text style={styles.infoText}>
+              This feature is for personal use only. Respect platform terms of
+              service
+            </Text>
+          </View>
         </View>
-        <View style={styles.infoCard}>
-          <Ionicons name="time" size={20} color="#007AFF" />
-          <Text style={styles.infoText}>
-            Data is refreshed every 10-15 minutes to stay within rate limits
-          </Text>
-        </View>
-        <View style={styles.infoCard}>
-          <Ionicons name="warning" size={20} color="#FF9500" />
-          <Text style={styles.infoText}>
-            This feature is for personal use only. Respect platform terms of
-            service
-          </Text>
-        </View>
-      </View>
+      </ScrollView>
 
       {showAuthModal && (
         <BrokerageAuthWebView
@@ -284,7 +328,7 @@ export default function BrokerageConnectionManager({
           onCancel={() => setShowAuthModal(null)}
         />
       )}
-    </ScrollView>
+    </View>
   );
 }
 
@@ -292,6 +336,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f8f9fa",
+  },
+  scrollContainer: {
+    flex: 1,
   },
   header: {
     padding: 20,
@@ -312,6 +359,7 @@ const styles = StyleSheet.create({
   },
   providersContainer: {
     padding: 20,
+    paddingTop: 10,
   },
   providerCard: {
     backgroundColor: "#fff",

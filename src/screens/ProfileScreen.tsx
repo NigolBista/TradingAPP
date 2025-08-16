@@ -24,9 +24,8 @@ import {
   scheduleEducationalTip,
   cancelAllScheduledNotifications,
 } from "../services/notifications";
-import BrokerageConnectionManager from "../components/common/BrokerageConnectionManager";
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuth();
   const profile = useUserStore((state) => state.profile);
   const setProfile = useUserStore((state) => state.setProfile);
@@ -35,7 +34,6 @@ export default function ProfileScreen() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
   const [showSubscription, setShowSubscription] = useState(false);
-  const [showBrokerageSettings, setShowBrokerageSettings] = useState(false);
 
   // Settings state
   const [pushNotifications, setPushNotifications] = useState<boolean>(
@@ -206,34 +204,44 @@ export default function ProfileScreen() {
         <Card variant="elevated" style={styles.card}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
           <View style={styles.actionsContainer}>
-            <Pressable onPress={() => setShowSubscription(true)}>
-              <View>
-                <View>
+            <Pressable
+              onPress={() => setShowSubscription(true)}
+              style={styles.actionItem}
+            >
+              <View style={styles.actionLeft}>
+                <View style={[styles.actionIcon, styles.subscriptionIcon]}>
                   <Ionicons name="star" size={20} color="#8b5cf6" />
                 </View>
                 <View>
-                  <Text>Subscription</Text>
-                  <Text>Manage your plan and billing</Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
-            </Pressable>
-
-            <Pressable onPress={() => setShowPreferences(true)}>
-              <View>
-                <View>
-                  <Ionicons name="settings" size={20} color="#3b82f6" />
-                </View>
-                <View>
-                  <Text>Preferences</Text>
-                  <Text>Notifications and app settings</Text>
+                  <Text style={styles.actionTitle}>Subscription</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Manage your plan and billing
+                  </Text>
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#6b7280" />
             </Pressable>
 
             <Pressable
-              onPress={() => setShowBrokerageSettings(true)}
+              onPress={() => setShowPreferences(true)}
+              style={styles.actionItem}
+            >
+              <View style={styles.actionLeft}>
+                <View style={[styles.actionIcon, styles.preferencesIcon]}>
+                  <Ionicons name="settings" size={20} color="#3b82f6" />
+                </View>
+                <View>
+                  <Text style={styles.actionTitle}>Preferences</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Notifications and app settings
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+            </Pressable>
+
+            <Pressable
+              onPress={() => navigation.navigate("BrokerageAccounts")}
               style={styles.actionItem}
             >
               <View style={styles.actionLeft}>
@@ -256,14 +264,17 @@ export default function ProfileScreen() {
               onPress={() =>
                 Alert.alert("Help", "Contact support at support@tradegpt.com")
               }
+              style={styles.actionItem}
             >
-              <View>
-                <View>
+              <View style={styles.actionLeft}>
+                <View style={[styles.actionIcon, styles.helpIcon]}>
                   <Ionicons name="help-circle" size={20} color="#16a34a" />
                 </View>
                 <View>
-                  <Text>Help & Support</Text>
-                  <Text>Get help and contact support</Text>
+                  <Text style={styles.actionTitle}>Help & Support</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Get help and contact support
+                  </Text>
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#6b7280" />
@@ -276,14 +287,17 @@ export default function ProfileScreen() {
                   "View our privacy policy at tradegpt.com/privacy"
                 )
               }
+              style={[styles.actionItem, { borderBottomWidth: 0 }]}
             >
-              <View>
-                <View>
+              <View style={styles.actionLeft}>
+                <View style={[styles.actionIcon, styles.privacyIcon]}>
                   <Ionicons name="shield-checkmark" size={20} color="#ea580c" />
                 </View>
                 <View>
-                  <Text>Privacy & Security</Text>
-                  <Text>Privacy policy and data settings</Text>
+                  <Text style={styles.actionTitle}>Privacy & Security</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Privacy policy and data settings
+                  </Text>
                 </View>
               </View>
               <Ionicons name="chevron-forward" size={20} color="#6b7280" />
@@ -292,13 +306,13 @@ export default function ProfileScreen() {
         </Card>
 
         {/* Current Plan Features */}
-        <Card variant="elevated">
-          <Text>Your Plan Features</Text>
-          <View>
+        <Card variant="elevated" style={styles.card}>
+          <Text style={styles.sectionTitle}>Your Plan Features</Text>
+          <View style={styles.planContainer}>
             {getCurrentSubscriptionFeatures().map((feature, index) => (
-              <View key={index}>
+              <View key={index} style={styles.planItem}>
                 <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
-                <Text>{feature}</Text>
+                <Text style={styles.planText}>{feature}</Text>
               </View>
             ))}
           </View>
@@ -321,10 +335,10 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowEditProfile(false)}
       >
-        <View>
-          <View>
-            <View>
-              <Text>Edit Profile</Text>
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Profile</Text>
               <Pressable onPress={() => setShowEditProfile(false)}>
                 <Ionicons name="close" size={24} color="#6b7280" />
               </Pressable>
@@ -411,21 +425,25 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowPreferences(false)}
       >
-        <View>
-          <View>
-            <View>
-              <Text>Preferences</Text>
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, styles.modalScrollView]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Preferences</Text>
               <Pressable onPress={() => setShowPreferences(false)}>
                 <Ionicons name="close" size={24} color="#6b7280" />
               </Pressable>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View>
-                <View>
-                  <View>
-                    <Text>Push Notifications</Text>
-                    <Text>Receive notifications on your device</Text>
+              <View style={styles.preferencesContainer}>
+                <View style={styles.preferenceItem}>
+                  <View style={styles.preferenceLeft}>
+                    <Text style={styles.preferenceTitle}>
+                      Push Notifications
+                    </Text>
+                    <Text style={styles.preferenceSubtitle}>
+                      Receive notifications on your device
+                    </Text>
                   </View>
                   <Switch
                     value={pushNotifications}
@@ -454,10 +472,14 @@ export default function ProfileScreen() {
                   />
                 </View>
 
-                <View>
-                  <View>
-                    <Text>Email Notifications</Text>
-                    <Text>Receive updates via email</Text>
+                <View style={styles.preferenceItem}>
+                  <View style={styles.preferenceLeft}>
+                    <Text style={styles.preferenceTitle}>
+                      Email Notifications
+                    </Text>
+                    <Text style={styles.preferenceSubtitle}>
+                      Receive updates via email
+                    </Text>
                   </View>
                   <Switch
                     value={emailNotifications}
@@ -591,39 +613,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Brokerage Settings Modal */}
-      <Modal
-        visible={showBrokerageSettings}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowBrokerageSettings(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={[styles.modalContent, { maxHeight: "90%" }]}>
-            <View
-              style={[
-                styles.modalHeader,
-                {
-                  borderBottomWidth: 1,
-                  borderBottomColor: "#e5e7eb",
-                  paddingBottom: 16,
-                },
-              ]}
-            >
-              <Text style={styles.modalTitle}>Brokerage Accounts</Text>
-              <Pressable onPress={() => setShowBrokerageSettings(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
-              </Pressable>
-            </View>
-            <BrokerageConnectionManager
-              onConnectionChange={(providers) => {
-                console.log("Connected providers:", providers);
-              }}
-            />
-          </View>
-        </View>
-      </Modal>
-
       {/* Subscription Modal */}
       <Modal
         visible={showSubscription}
@@ -631,10 +620,10 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowSubscription(false)}
       >
-        <View>
-          <View>
-            <View>
-              <Text>Subscription Plans</Text>
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { maxHeight: "90%" }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Subscription Plans</Text>
               <Pressable onPress={() => setShowSubscription(false)}>
                 <Ionicons name="close" size={24} color="#6b7280" />
               </Pressable>
@@ -653,36 +642,35 @@ export default function ProfileScreen() {
                 return (
                   <View
                     key={plan}
-                    style={{
-                      borderWidth: 1,
-                      borderRadius: 12,
-                      padding: 16,
-                      marginBottom: 16,
-                      borderColor: isCurrentPlan ? "#6366f1" : "#e5e7eb",
-                      backgroundColor: isCurrentPlan ? "#eef2ff" : "#ffffff",
-                    }}
+                    style={[
+                      styles.subscriptionCard,
+                      {
+                        borderColor: isCurrentPlan ? "#6366f1" : "#e5e7eb",
+                        backgroundColor: isCurrentPlan ? "#eef2ff" : "#ffffff",
+                      },
+                    ]}
                   >
-                    <View>
+                    <View style={styles.subscriptionHeader}>
                       <View>
-                        <Text>{plan}</Text>
-                        <Text>{price}</Text>
+                        <Text style={styles.subscriptionTitle}>{plan}</Text>
+                        <Text style={styles.subscriptionPrice}>{price}</Text>
                       </View>
                       {isCurrentPlan && (
-                        <View>
-                          <Text>Current</Text>
+                        <View style={styles.currentBadge}>
+                          <Text style={styles.currentBadgeText}>Current</Text>
                         </View>
                       )}
                     </View>
 
-                    <View>
+                    <View style={styles.featuresList}>
                       {features.map((feature, index) => (
-                        <View key={index}>
+                        <View key={index} style={styles.featureItem}>
                           <Ionicons
                             name="checkmark"
                             size={16}
                             color="#16a34a"
                           />
-                          <Text>{feature}</Text>
+                          <Text style={styles.featureText}>{feature}</Text>
                         </View>
                       ))}
                     </View>
@@ -809,6 +797,105 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
+  },
+  subscriptionIcon: {
+    backgroundColor: "#f3e8ff",
+  },
+  preferencesIcon: {
+    backgroundColor: "#dbeafe",
+  },
+  helpIcon: {
+    backgroundColor: "#dcfce7",
+  },
+  privacyIcon: {
+    backgroundColor: "#fed7aa",
+  },
+  planContainer: {
+    gap: 8,
+  },
+  planItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  planText: {
+    marginLeft: 8,
+    color: "#374151",
+  },
+  modalScrollView: {
+    maxHeight: "80%",
+  },
+  preferencesContainer: {
+    gap: 16,
+  },
+  preferenceItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  preferenceLeft: {
+    flex: 1,
+  },
+  preferenceTitle: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#111827",
+  },
+  preferenceSubtitle: {
+    fontSize: 14,
+    color: "#6b7280",
+  },
+  inputContainer: {
+    marginBottom: 12,
+  },
+  themeContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  subscriptionCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  subscriptionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  subscriptionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#111827",
+  },
+  subscriptionPrice: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#6366f1",
+  },
+  currentBadge: {
+    backgroundColor: "#6366f1",
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
+  },
+  currentBadgeText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  featuresList: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  featureItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  featureText: {
+    marginLeft: 8,
+    fontSize: 14,
+    color: "#374151",
   },
   actionTitle: {
     fontSize: 16,

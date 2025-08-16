@@ -6,9 +6,10 @@ import {
   ActivityIndicator,
   Text,
   TouchableOpacity,
+  Modal,
 } from "react-native";
 import { WebView } from "react-native-webview";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import {
   brokerageAuthService,
@@ -27,10 +28,12 @@ export default function BrokerageAuthWebView({
   onAuthSuccess,
   onCancel,
 }: Props) {
+  const insets = useSafeAreaInsets();
   const webViewRef = useRef<WebView>(null);
   const [loading, setLoading] = useState(true);
   const [currentUrl, setCurrentUrl] = useState("");
   const [authAttempted, setAuthAttempted] = useState(false);
+  const [canGoBack, setCanGoBack] = useState(false);
 
   const loginUrl = brokerageAuthService.getLoginUrl(provider);
   const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
@@ -100,6 +103,7 @@ export default function BrokerageAuthWebView({
   const handleNavigationStateChange = (navState: any) => {
     setCurrentUrl(navState.url);
     setLoading(navState.loading);
+    setCanGoBack(!!navState.canGoBack);
   };
 
   const handleLoadEnd = () => {
@@ -116,6 +120,40 @@ export default function BrokerageAuthWebView({
         { text: "Cancel", onPress: onCancel },
       ]
     );
+  };
+
+  const attemptExtractNow = async () => {
+    try {
+      setLoading(true);
+      const result = await brokerageAuthService.extractSessionFromWebView(
+        provider,
+        webViewRef,
+        currentUrl || loginUrl,
+        true
+      );
+      if (result.success) {
+        onAuthSuccess(result);
+      } else {
+        Alert.alert(
+          "Not Connected",
+          result.error ||
+            "Couldn't confirm the session yet. Stay on the broker page after logging in, then tap Done again.",
+          [{ text: "OK" }]
+        );
+      }
+    } catch (e) {
+      Alert.alert("Error", "Failed to capture the session.", [{ text: "OK" }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBackPress = () => {
+    if (canGoBack && webViewRef.current) {
+      webViewRef.current.goBack();
+    } else {
+      onCancel();
+    }
   };
 
   const injectedJavaScript = `
@@ -212,8 +250,52 @@ export default function BrokerageAuthWebView({
           break;
         case "pageLoaded":
           console.log("Page loaded with auth data:", data.authData);
+          // Update session with the extracted auth data
+          if (data.authData) {
+            brokerageAuthService.updateSessionFromMessage(
+              provider,
+              data.authData
+            );
+          }
           // Trigger auth extraction when page is fully loaded
           checkForAuthSuccess();
+          break;
+        case "sessionExtracted":
+          console.log("Session extracted for", data.provider, ":", data.data);
+          // Update session with extracted data
+          if (data.provider === provider && data.data) {
+            brokerageAuthService.updateSessionFromMessage(provider, data.data);
+          }
+          break;
+        case "sessionError":
+          console.error(
+            "Session extraction error for",
+            data.provider,
+            ":",
+            data.error
+          );
+          break;
+        case "cookiesExtracted":
+          console.log("Cookies extracted:", data.cookies);
+          // Update session with cookies
+          if (data.cookies) {
+            brokerageAuthService.updateSessionFromMessage(provider, {
+              cookies: data.cookies,
+              tokens: {},
+            });
+          }
+          break;
+        case "scriptResult":
+          console.log("Script execution result:", data.result);
+          break;
+        case "scriptError":
+          console.error("Script execution error:", data.error);
+          break;
+        case "authDataExtracted":
+          console.log("Auth data extracted:", data.data);
+          if (data.data) {
+            brokerageAuthService.updateSessionFromMessage(provider, data.data);
+          }
           break;
       }
     } catch (error) {
@@ -222,61 +304,71 @@ export default function BrokerageAuthWebView({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onCancel} style={styles.closeButton}>
-          <Ionicons name="close" size={24} color="#000" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Connect to {providerName}</Text>
-        <View style={styles.placeholder} />
-      </View>
-
-      {/* Loading indicator */}
-      {loading && (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00C851" />
-          <Text style={styles.loadingText}>
-            {authAttempted
-              ? "Processing authentication..."
-              : "Loading login page..."}
+    <Modal
+      visible={true}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onCancel}
+    >
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#000" />
+          </TouchableOpacity>
+          <Text
+            style={styles.headerTitle}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            Connect to {providerName}
           </Text>
+          <TouchableOpacity
+            onPress={attemptExtractNow}
+            style={styles.closeButton}
+          >
+            <Text style={{ fontSize: 16, fontWeight: "600", color: "#111" }}>
+              Done
+            </Text>
+          </TouchableOpacity>
         </View>
-      )}
 
-      {/* WebView */}
-      <WebView
-        ref={webViewRef}
-        source={{ uri: loginUrl }}
-        style={styles.webview}
-        onNavigationStateChange={handleNavigationStateChange}
-        onLoadEnd={handleLoadEnd}
-        onError={handleError}
-        onMessage={handleMessage}
-        injectedJavaScript={injectedJavaScript}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        thirdPartyCookiesEnabled={true}
-        sharedCookiesEnabled={true}
-        startInLoadingState={true}
-        allowsInlineMediaPlayback={true}
-        mediaPlaybackRequiresUserAction={false}
-        userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
-      />
+        {/* WebView Container */}
+        <View style={styles.webviewContainer}>
+          {/* Loading indicator */}
+          {loading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#00C851" />
+              <Text style={styles.loadingText}>
+                {authAttempted
+                  ? "Processing authentication..."
+                  : "Loading login page..."}
+              </Text>
+            </View>
+          )}
 
-      {/* Instructions */}
-      <View style={styles.instructions}>
-        <Text style={styles.instructionText}>
-          1. Log in to your {providerName} account
-        </Text>
-        <Text style={styles.instructionText}>
-          2. Complete any 2FA verification if prompted
-        </Text>
-        <Text style={styles.instructionText}>
-          3. Wait for automatic detection once logged in
-        </Text>
+          {/* WebView */}
+          <WebView
+            ref={webViewRef}
+            source={{ uri: loginUrl }}
+            style={styles.webview}
+            onNavigationStateChange={handleNavigationStateChange}
+            onLoadEnd={handleLoadEnd}
+            onError={handleError}
+            onMessage={handleMessage}
+            injectedJavaScript={injectedJavaScript}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            thirdPartyCookiesEnabled={true}
+            sharedCookiesEnabled={true}
+            startInLoadingState={true}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            userAgent="Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1"
+          />
+        </View>
       </View>
-    </SafeAreaView>
+    </Modal>
   );
 }
 
@@ -289,32 +381,40 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#e0e0e0",
+    backgroundColor: "#fff",
+    minHeight: 52,
+    zIndex: 1000,
+  },
+  backButton: {
+    padding: 8,
+    marginRight: 8,
   },
   closeButton: {
-    padding: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginLeft: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#000",
-  },
-  placeholder: {
-    width: 40,
+    flex: 1,
+    textAlign: "center",
   },
   loadingContainer: {
     position: "absolute",
-    top: "50%",
+    top: 0,
     left: 0,
     right: 0,
+    bottom: 0,
     alignItems: "center",
+    justifyContent: "center",
     zIndex: 1000,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-    padding: 20,
-    marginHorizontal: 20,
-    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
   },
   loadingText: {
     marginTop: 10,
@@ -322,18 +422,12 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
   },
+  webviewContainer: {
+    flex: 1,
+    position: "relative",
+  },
   webview: {
     flex: 1,
-  },
-  instructions: {
-    padding: 16,
-    backgroundColor: "#f5f5f5",
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-  },
-  instructionText: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 4,
+    backgroundColor: "#fff",
   },
 });

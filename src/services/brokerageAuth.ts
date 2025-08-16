@@ -90,62 +90,165 @@ class BrokerageAuthService {
   async extractSessionFromWebView(
     provider: BrokerageProvider,
     webViewRef: React.RefObject<WebView> | React.RefObject<WebView | null>,
-    url: string
+    url: string,
+    force: boolean = false
   ): Promise<AuthResult> {
     try {
       // Check if we're on a success page (dashboard, account, etc.)
       const isLoginSuccess = this.isLoginSuccessUrl(provider, url);
 
-      if (!isLoginSuccess) {
+      if (!isLoginSuccess && !force) {
         return { success: false, error: "Not on success page yet" };
       }
 
-      // Extract cookies and tokens
-      const cookiesScript = `
+      console.log(`Extracting session data for ${provider} from URL: ${url}`);
+
+      // Use injectJavaScript directly for more reliable execution
+      const extractionScript = `
         (function() {
-          return document.cookie;
+          try {
+            const authData = {
+              cookies: document.cookie || '',
+              localStorage: {},
+              sessionStorage: {},
+              tokens: {},
+              url: window.location.href
+            };
+            
+            // Extract localStorage
+            for (let i = 0; i < localStorage.length; i++) {
+              const key = localStorage.key(i);
+              if (key) {
+                authData.localStorage[key] = localStorage.getItem(key);
+                // Check for common token patterns
+                if (key.toLowerCase().includes('token') || 
+                    key.toLowerCase().includes('auth') ||
+                    key.toLowerCase().includes('session')) {
+                  authData.tokens[key] = localStorage.getItem(key);
+                }
+              }
+            }
+            
+            // Extract sessionStorage
+            for (let i = 0; i < sessionStorage.length; i++) {
+              const key = sessionStorage.key(i);
+              if (key) {
+                authData.sessionStorage[key] = sessionStorage.getItem(key);
+                // Check for common token patterns
+                if (key.toLowerCase().includes('token') || 
+                    key.toLowerCase().includes('auth') ||
+                    key.toLowerCase().includes('session')) {
+                  authData.tokens[key] = sessionStorage.getItem(key);
+                }
+              }
+            }
+            
+            // Extract tokens from cookies (especially for Robinhood)
+            if (document.cookie) {
+              const cookies = document.cookie.split(';');
+              cookies.forEach(cookie => {
+                const [name, value] = cookie.trim().split('=');
+                if (name && value && (
+                    name.includes('Access-Token') || 
+                    name.includes('access_token') ||
+                    name.includes('Auth-Token') ||
+                    name.includes('session_id') ||
+                    name.includes('device_id')
+                )) {
+                  authData.tokens[name] = value;
+                }
+              });
+            }
+            
+            // Provider-specific extraction
+            ${this.getProviderSpecificExtractionScript(provider)}
+            
+            window.ReactNativeWebView?.postMessage(JSON.stringify({
+              type: 'sessionExtracted',
+              provider: '${provider}',
+              data: authData
+            }));
+            
+            return authData;
+          } catch (error) {
+            window.ReactNativeWebView?.postMessage(JSON.stringify({
+              type: 'sessionError',
+              provider: '${provider}',
+              error: error.message
+            }));
+            throw error;
+          }
         })();
       `;
 
-      const cookies = await this.executeScript(webViewRef, cookiesScript);
+      // Inject the script
+      webViewRef.current?.injectJavaScript(extractionScript);
 
-      // Extract auth tokens from localStorage/sessionStorage
-      const tokensScript = `
-        (function() {
-          const tokens = {};
-          
-          // Try to get common auth tokens
-          ['authToken', 'accessToken', 'sessionToken', 'jwt', 'bearerToken'].forEach(key => {
-            const value = localStorage.getItem(key) || sessionStorage.getItem(key);
-            if (value) tokens[key] = value;
-          });
-          
-          // Provider-specific token extraction
-          ${this.getProviderSpecificTokenScript(provider)}
-          
-          return JSON.stringify(tokens);
-        })();
-      `;
+      // Wait a bit for the script to execute and messages to be posted
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      const tokensJson = await this.executeScript(webViewRef, tokensScript);
-      const tokens = JSON.parse(tokensJson || "{}");
+      // For now, create a basic session with what we can extract
+      // The actual session data will be captured via message handling in the WebView component
 
-      // Create session
+      // Try to get cookies directly
+      const cookiesScript = `document.cookie || ''`;
+      let cookies = "";
+      try {
+        webViewRef.current?.injectJavaScript(`
+          window.ReactNativeWebView?.postMessage(JSON.stringify({
+            type: 'cookiesExtracted',
+            cookies: document.cookie || ''
+          }));
+        `);
+      } catch (e) {
+        console.log("Failed to extract cookies directly");
+      }
+
+      // Check if we already have a session with extracted data from WebView messages
+      const existingSession = this.sessions.get(provider);
+      if (existingSession && Object.keys(existingSession.tokens).length > 0) {
+        console.log(
+          `Using existing session with ${
+            Object.keys(existingSession.tokens).length
+          } tokens for ${provider}`
+        );
+        return { success: true, session: existingSession };
+      }
+
+      // Only create a basic session if we don't have a properly extracted one
       const session: BrokerageSession = {
         provider,
-        cookies,
-        tokens,
+        cookies: cookies,
+        tokens: {},
         expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours default
       };
 
-      // Store session
-      this.sessions.set(provider, session);
-      await this.saveSessions();
+      console.log(
+        `Created basic session for ${provider} (tokens will be updated via WebView messages):`,
+        {
+          provider: session.provider,
+          hasCookies: !!session.cookies,
+          tokenCount: Object.keys(session.tokens).length,
+          expiresAt: new Date(session.expiresAt).toISOString(),
+        }
+      );
+
+      // Store session only if we don't already have a better one
+      if (
+        !existingSession ||
+        Object.keys(existingSession.tokens).length === 0
+      ) {
+        this.sessions.set(provider, session);
+        await this.saveSessions();
+      }
 
       return { success: true, session };
     } catch (error) {
       console.error("Failed to extract session:", error);
-      return { success: false, error: error.message };
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 
@@ -157,21 +260,84 @@ class BrokerageAuthService {
           url.includes("robinhood.com") &&
           (url.includes("/dashboard") ||
             url.includes("/account") ||
-            url.includes("/positions"))
+            url.includes("/positions") ||
+            url.includes("/investing") ||
+            url.includes("/home"))
         );
       case "webull":
         return (
           url.includes("webull.com") &&
           (url.includes("/trading") ||
             url.includes("/account") ||
-            url.includes("/portfolio"))
+            url.includes("/portfolio") ||
+            url.includes("/quote") ||
+            url.includes("/overview"))
         );
       default:
         return false;
     }
   }
 
-  // Provider-specific token extraction scripts
+  // Provider-specific extraction scripts for use in session extraction
+  private getProviderSpecificExtractionScript(
+    provider: BrokerageProvider
+  ): string {
+    switch (provider) {
+      case "robinhood":
+        return `
+          // Robinhood-specific token extraction
+          try {
+            if (window.RH && window.RH.auth) {
+              authData.tokens.rhAuth = JSON.stringify(window.RH.auth);
+            }
+            
+            // Look for Robinhood-specific localStorage keys
+            ['rh_access_token', 'access_token', 'rh_refresh_token', 'user_id'].forEach(key => {
+              const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+              if (value) authData.tokens[key] = value;
+            });
+            
+            // Check if we can access any global auth state
+            if (typeof window.getState === 'function') {
+              try {
+                const state = window.getState();
+                if (state && state.auth) {
+                  authData.tokens.stateAuth = JSON.stringify(state.auth);
+                }
+              } catch (e) {}
+            }
+          } catch (e) {
+            console.log('Robinhood extraction error:', e);
+          }
+        `;
+      case "webull":
+        return `
+          // Webull-specific token extraction
+          try {
+            if (window.webull && window.webull.user) {
+              authData.tokens.webullUser = JSON.stringify(window.webull.user);
+            }
+            
+            // Look for common Webull tokens
+            ['wbAccessToken', 'refreshToken', 'deviceId', 'wb_access_token', 'wb_refresh_token'].forEach(key => {
+              const value = localStorage.getItem(key) || sessionStorage.getItem(key);
+              if (value) authData.tokens[key] = value;
+            });
+            
+            // Check for user authentication data
+            if (window.wb && window.wb.auth) {
+              authData.tokens.wbAuth = JSON.stringify(window.wb.auth);
+            }
+          } catch (e) {
+            console.log('Webull extraction error:', e);
+          }
+        `;
+      default:
+        return "// No provider-specific extraction";
+    }
+  }
+
+  // Provider-specific token extraction scripts (legacy method, keeping for compatibility)
   private getProviderSpecificTokenScript(provider: BrokerageProvider): string {
     switch (provider) {
       case "robinhood":
@@ -227,24 +393,59 @@ class BrokerageAuthService {
         reject(new Error("Script execution timeout"));
       }, 10000);
 
-      webViewRef.current.postMessage(
-        JSON.stringify({ type: "execute", script })
-      );
+      // Store the resolve/reject functions for this specific execution
+      const executionId = Math.random().toString(36).substr(2, 9);
 
-      const messageHandler = (event: any) => {
-        clearTimeout(timeout);
-        try {
-          const data = JSON.parse(event.nativeEvent.data);
-          if (data.type === "scriptResult") {
-            resolve(data.result);
+      // Inject script with execution ID
+      const wrappedScript = `
+        (function() {
+          try {
+            const result = ${script};
+            window.ReactNativeWebView?.postMessage(JSON.stringify({
+              type: 'scriptResult',
+              executionId: '${executionId}',
+              result: result || ''
+            }));
+          } catch (error) {
+            window.ReactNativeWebView?.postMessage(JSON.stringify({
+              type: 'scriptError',
+              executionId: '${executionId}',
+              error: error.message
+            }));
           }
-        } catch (error) {
-          reject(error);
-        }
+        })();
+      `;
+
+      // Execute the script
+      webViewRef.current?.injectJavaScript(wrappedScript);
+
+      // Set up a temporary listener (this is a simplified approach)
+      // In practice, you'd want a more robust message handling system
+      const cleanup = () => {
+        clearTimeout(timeout);
       };
 
-      // Note: This is a simplified version. In practice, you'd need to set up proper message handling
-      resolve(""); // Placeholder for actual implementation
+      // For now, we'll use a simple approach - extract data directly
+      setTimeout(() => {
+        cleanup();
+        // Fallback: try to extract data using the injected functions
+        webViewRef.current?.injectJavaScript(`
+          (function() {
+            try {
+              if (window.extractAuthData) {
+                const authData = window.extractAuthData();
+                window.ReactNativeWebView?.postMessage(JSON.stringify({
+                  type: 'authDataExtracted',
+                  data: authData
+                }));
+              }
+            } catch (e) {
+              console.log('Failed to extract auth data:', e);
+            }
+          })();
+        `);
+        resolve(""); // Resolve with empty string for now, actual data will come via messages
+      }, 2000);
     });
   }
 
@@ -333,6 +534,53 @@ class BrokerageAuthService {
     await AsyncStorage.removeItem(STORAGE_KEY);
   }
 
+  // Update session with extracted data from WebView message
+  async updateSessionFromMessage(
+    provider: BrokerageProvider,
+    extractedData: any
+  ): Promise<void> {
+    try {
+      const existingSession = this.sessions.get(provider);
+      if (!existingSession) {
+        console.warn(
+          `No existing session found for ${provider}, creating new one`
+        );
+      }
+
+      // Update session with extracted data
+      const updatedSession: BrokerageSession = {
+        provider,
+        cookies: extractedData.cookies || existingSession?.cookies || "",
+        tokens: {
+          ...existingSession?.tokens,
+          ...extractedData.tokens,
+        },
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+        userId:
+          extractedData.tokens?.user_id ||
+          extractedData.tokens?.userId ||
+          existingSession?.userId,
+        refreshToken:
+          extractedData.tokens?.refresh_token ||
+          extractedData.tokens?.refreshToken ||
+          existingSession?.refreshToken,
+      };
+
+      console.log(`Updated session for ${provider}:`, {
+        provider: updatedSession.provider,
+        hasCookies: !!updatedSession.cookies,
+        tokenCount: Object.keys(updatedSession.tokens).length,
+        hasUserId: !!updatedSession.userId,
+        hasRefreshToken: !!updatedSession.refreshToken,
+      });
+
+      this.sessions.set(provider, updatedSession);
+      await this.saveSessions();
+    } catch (error) {
+      console.error(`Failed to update session for ${provider}:`, error);
+    }
+  }
+
   // Get all active sessions
   getActiveSessions(): BrokerageProvider[] {
     const active: BrokerageProvider[] = [];
@@ -345,6 +593,41 @@ class BrokerageAuthService {
     });
 
     return active;
+  }
+
+  // Debug method to get session details
+  getSessionDebugInfo(provider: BrokerageProvider): any {
+    const session = this.sessions.get(provider);
+    if (!session) {
+      return { error: `No session found for ${provider}` };
+    }
+
+    return {
+      provider: session.provider,
+      hasCookies: !!session.cookies,
+      cookiesLength: session.cookies?.length || 0,
+      tokenCount: Object.keys(session.tokens).length,
+      tokenKeys: Object.keys(session.tokens),
+      hasUserId: !!session.userId,
+      hasRefreshToken: !!session.refreshToken,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+      isExpired: session.expiresAt <= Date.now(),
+      timeUntilExpiry: Math.max(0, session.expiresAt - Date.now()),
+    };
+  }
+
+  // Debug method to log all session info
+  logAllSessionsDebugInfo(): void {
+    console.log("=== BROKERAGE SESSIONS DEBUG INFO ===");
+    const providers: BrokerageProvider[] = ["robinhood", "webull"];
+
+    providers.forEach((provider) => {
+      const info = this.getSessionDebugInfo(provider);
+      console.log(`${provider.toUpperCase()}:`, info);
+    });
+
+    console.log("Active sessions:", this.getActiveSessions());
+    console.log("=== END DEBUG INFO ===");
   }
 }
 
