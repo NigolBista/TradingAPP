@@ -17,11 +17,11 @@ import {
   type NewsItem,
   type TrendingStock,
 } from "../services/newsProviders";
-import {
-  analyzeNewsWithEnhancedSentiment,
-  type SentimentAnalysis,
-} from "../services/sentiment";
+// Removed sentiment analysis - we get sentiment from Stock News API directly
 import { useUserStore } from "../store/userStore";
+import { useNavigation } from "@react-navigation/native";
+import { useMarketData } from "../hooks/useMarketData";
+import { getAllCachedData } from "../services/marketDataCache";
 import NewsList from "../components/insights/NewsList";
 
 const styles = StyleSheet.create({
@@ -32,8 +32,29 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     paddingBottom: 16,
   },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   headerTitle: { fontSize: 24, fontWeight: "bold", color: "#ffffff" },
   headerSubtitle: { color: "#888888", fontSize: 14, marginTop: 4 },
+  marketOverviewButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1F2937",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#4F46E5",
+  },
+  marketOverviewText: {
+    color: "#4F46E5",
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
   tabContainer: {
     flexDirection: "row",
     backgroundColor: "#1a1a1a",
@@ -81,30 +102,7 @@ const styles = StyleSheet.create({
   },
   newsSource: { fontSize: 12, color: "#888888", marginBottom: 8 },
   newsSummary: { fontSize: 14, color: "#cccccc", lineHeight: 20 },
-  sentimentBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-    marginTop: 8,
-  },
-  sentimentText: { fontSize: 12, fontWeight: "600" },
-  sentimentOverview: {
-    alignItems: "center",
-    padding: 20,
-  },
-  sentimentCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#2a2a2a",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 16,
-  },
-  sentimentScore: { fontSize: 28, fontWeight: "bold", color: "#ffffff" },
-  sentimentLabel: { fontSize: 16, fontWeight: "600", marginBottom: 8 },
-  sentimentDesc: { fontSize: 14, color: "#888888", textAlign: "center" },
+
   economicEvent: {
     flexDirection: "row",
     alignItems: "center",
@@ -153,16 +151,6 @@ const styles = StyleSheet.create({
     color: "#aaaaaa",
     marginBottom: 8,
   },
-  trendingSentiment: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  trendingSentimentText: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
 });
 
 const ECONOMIC_EVENTS = [
@@ -175,15 +163,21 @@ const ECONOMIC_EVENTS = [
 
 export default function NewsInsightsScreen() {
   const { profile } = useUserStore();
-  const [activeTab, setActiveTab] = useState<"news" | "sentiment" | "calendar">(
-    "news"
-  );
+  const navigation = useNavigation();
+  const {
+    news: cachedNews,
+    trendingStocks: cachedTrending,
+    isValid: cacheValid,
+    refreshData,
+  } = useMarketData();
+
+  const [activeTab, setActiveTab] = useState<"news" | "calendar">("news");
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [marketNews, setMarketNews] = useState<NewsItem[]>([]);
   const [watchlistNews, setWatchlistNews] = useState<NewsItem[]>([]);
   const [trendingStocks, setTrendingStocks] = useState<TrendingStock[]>([]);
-  const [sentiment, setSentiment] = useState<SentimentAnalysis | null>(null);
+  // Removed sentiment state - using Stock News API sentiment directly
 
   useEffect(() => {
     loadData();
@@ -193,19 +187,33 @@ export default function NewsInsightsScreen() {
     try {
       setLoading(true);
 
-      // Load general market news with enhanced Stock News API
+      // Check if we have valid cached data from global cache
       let generalNews: NewsItem[] = [];
-      try {
-        generalNews = await fetchGeneralMarketNews(30);
-      } catch (stockNewsError) {
-        console.log(
-          "Stock News API failed for market news, falling back:",
-          stockNewsError
-        );
-        // Fallback to default provider
-        generalNews = await fetchNews("market");
+      const globalCacheData = getAllCachedData();
+
+      if (globalCacheData.isValid && globalCacheData.news.length > 0) {
+        console.log("📦 NewsInsights using global cached data", {
+          newsCount: globalCacheData.news.length,
+          cacheAge:
+            Math.round((Date.now() - globalCacheData.lastUpdate) / 1000) + "s",
+        });
+        generalNews = globalCacheData.news;
+        setMarketNews(generalNews);
+      } else {
+        console.log("🔄 NewsInsights fetching fresh data - no valid cache");
+        // Load general market news with enhanced Stock News API
+        try {
+          generalNews = await fetchGeneralMarketNews(30);
+        } catch (stockNewsError) {
+          console.log(
+            "Stock News API failed for market news, falling back:",
+            stockNewsError
+          );
+          // Fallback to default provider
+          generalNews = await fetchNews("market");
+        }
+        setMarketNews(generalNews);
       }
-      setMarketNews(generalNews);
 
       // Load watchlist-specific news with enhanced features
       const watchlistSymbols = profile.watchlist || ["AAPL", "MSFT", "GOOGL"];
@@ -224,23 +232,26 @@ export default function NewsInsightsScreen() {
       const flatWatchlistNews = allWatchlistNews.flat().slice(0, 20);
       setWatchlistNews(flatWatchlistNews);
 
-      // Load trending stocks
-      try {
-        const trending = await fetchTrendingStocks(7);
-        setTrendingStocks(trending.slice(0, 10));
-      } catch (trendingError) {
-        console.log("Failed to fetch trending stocks:", trendingError);
-        setTrendingStocks([]);
+      // Use cached trending stocks if available
+      if (
+        globalCacheData.isValid &&
+        globalCacheData.trendingStocks.length > 0
+      ) {
+        console.log("📦 NewsInsights using cached trending stocks");
+        setTrendingStocks(globalCacheData.trendingStocks.slice(0, 10));
+      } else {
+        console.log("🔄 NewsInsights fetching fresh trending stocks");
+        // Load trending stocks
+        try {
+          const trending = await fetchTrendingStocks(7);
+          setTrendingStocks(trending.slice(0, 10));
+        } catch (trendingError) {
+          console.log("Failed to fetch trending stocks:", trendingError);
+          setTrendingStocks([]);
+        }
       }
 
-      // Analyze overall sentiment
-      const allNews = [...generalNews, ...flatWatchlistNews];
-      if (allNews.length > 0) {
-        const sentimentAnalysis = await analyzeNewsWithEnhancedSentiment(
-          allNews
-        );
-        setSentiment(sentimentAnalysis);
-      }
+      // Sentiment analysis removed - using Stock News API sentiment directly from news items
     } catch (error) {
       console.error("Error loading news:", error);
     } finally {
@@ -251,13 +262,13 @@ export default function NewsInsightsScreen() {
 
   async function onRefresh() {
     setRefreshing(true);
+    try {
+      // Force refresh the cache first to get fresh data
+      await refreshData(30, true, true);
+    } catch (error) {
+      console.log("Cache refresh failed, continuing with regular load:", error);
+    }
     await loadData();
-  }
-
-  function getSentimentColor(score: number) {
-    if (score > 0.3) return "#00D4AA";
-    if (score < -0.3) return "#FF5722";
-    return "#FFB020";
   }
 
   function getEventImpactColor(impact: string) {
@@ -286,24 +297,7 @@ export default function NewsInsightsScreen() {
             : "Recent"}
         </Text>
         {item.summary && <Text style={styles.newsSummary}>{item.summary}</Text>}
-        {/* Mock sentiment for individual articles */}
-        <View
-          style={[
-            styles.sentimentBadge,
-            {
-              backgroundColor: Math.random() > 0.5 ? "#00D4AA20" : "#FF572220",
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.sentimentText,
-              { color: Math.random() > 0.5 ? "#00D4AA" : "#FF5722" },
-            ]}
-          >
-            {Math.random() > 0.5 ? "Positive" : "Negative"}
-          </Text>
-        </View>
+        {/* Sentiment display removed - using Stock News API sentiment directly in NewsList component */}
       </Pressable>
     );
   }
@@ -312,10 +306,21 @@ export default function NewsInsightsScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>News & Insights</Text>
-        <Text style={styles.headerSubtitle}>
-          Market news with AI sentiment analysis
-        </Text>
+        <View style={styles.headerContent}>
+          <View>
+            <Text style={styles.headerTitle}>News & Insights</Text>
+            <Text style={styles.headerSubtitle}>
+              Market news with AI sentiment analysis
+            </Text>
+          </View>
+          <Pressable
+            style={styles.marketOverviewButton}
+            onPress={() => navigation.navigate("MarketOverview" as never)}
+          >
+            <Ionicons name="analytics" size={20} color="#4F46E5" />
+            <Text style={styles.marketOverviewText}>Market Overview</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Tab Navigation */}
@@ -336,25 +341,6 @@ export default function NewsInsightsScreen() {
             ]}
           >
             Market News
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[
-            styles.tab,
-            activeTab === "sentiment" ? styles.tabActive : styles.tabInactive,
-          ]}
-          onPress={() => setActiveTab("sentiment")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "sentiment"
-                ? styles.tabTextActive
-                : styles.tabTextInactive,
-            ]}
-          >
-            Sentiment
           </Text>
         </Pressable>
 
@@ -413,24 +399,7 @@ export default function NewsInsightsScreen() {
                         <Text style={styles.trendingMentions}>
                           {stock.mentions} mentions
                         </Text>
-                        <View
-                          style={[
-                            styles.trendingSentiment,
-                            {
-                              backgroundColor: getSentimentColor(
-                                stock.sentiment === "Positive"
-                                  ? 0.5
-                                  : stock.sentiment === "Negative"
-                                  ? -0.5
-                                  : 0
-                              ),
-                            },
-                          ]}
-                        >
-                          <Text style={styles.trendingSentimentText}>
-                            {stock.sentiment}
-                          </Text>
-                        </View>
+                        {/* Sentiment display removed - using Stock News API sentiment directly */}
                       </View>
                     ))}
                   </View>
@@ -448,104 +417,6 @@ export default function NewsInsightsScreen() {
               </>
             )}
           </>
-        )}
-
-        {activeTab === "sentiment" && sentiment && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Market Sentiment Analysis</Text>
-
-            <View style={styles.sentimentOverview}>
-              <View style={styles.sentimentCircle}>
-                <Text style={styles.sentimentScore}>
-                  {Math.abs(sentiment.score * 100).toFixed(0)}
-                </Text>
-                <Ionicons
-                  name={
-                    sentiment.score > 0
-                      ? "trending-up"
-                      : sentiment.score < 0
-                      ? "trending-down"
-                      : "remove"
-                  }
-                  size={20}
-                  color="#888888"
-                />
-              </View>
-
-              <Text
-                style={[
-                  styles.sentimentLabel,
-                  { color: getSentimentColor(sentiment.score) },
-                ]}
-              >
-                {sentiment.label}
-              </Text>
-
-              <Text style={styles.sentimentDesc}>{sentiment.summary}</Text>
-            </View>
-
-            {/* Positive Keywords */}
-            {sentiment.keywords.positive.length > 0 && (
-              <View style={{ marginTop: 24 }}>
-                <Text
-                  style={{
-                    color: "#00D4AA",
-                    fontSize: 16,
-                    fontWeight: "600",
-                    marginBottom: 12,
-                  }}
-                >
-                  Positive Indicators
-                </Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                  {sentiment.keywords.positive.slice(0, 8).map((keyword, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.keywordChip,
-                        { backgroundColor: "#00D4AA20" },
-                      ]}
-                    >
-                      <Text style={[styles.keywordText, { color: "#00D4AA" }]}>
-                        {keyword}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Negative Keywords */}
-            {sentiment.keywords.negative.length > 0 && (
-              <View style={{ marginTop: 16 }}>
-                <Text
-                  style={{
-                    color: "#FF5722",
-                    fontSize: 16,
-                    fontWeight: "600",
-                    marginBottom: 12,
-                  }}
-                >
-                  Risk Factors
-                </Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                  {sentiment.keywords.negative.slice(0, 8).map((keyword, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.keywordChip,
-                        { backgroundColor: "#FF572220" },
-                      ]}
-                    >
-                      <Text style={[styles.keywordText, { color: "#FF5722" }]}>
-                        {keyword}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-          </View>
         )}
 
         {activeTab === "calendar" && (

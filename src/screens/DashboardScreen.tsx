@@ -22,6 +22,8 @@ import {
 import { brokerageAuthService } from "../services/brokerageAuth";
 import { useNavigation } from "@react-navigation/native";
 import SimpleLineChart from "../components/charts/SimpleLineChart";
+import MarketOverview from "../components/insights/MarketOverview";
+import type { NewsItem } from "../services/newsProviders";
 
 const { width } = Dimensions.get("window");
 
@@ -32,6 +34,10 @@ interface DashboardState {
   refreshing: boolean;
 }
 
+interface DashboardData {
+  cachedNews: NewsItem[];
+}
+
 export default function DashboardScreen() {
   const navigation = useNavigation();
   const [state, setState] = useState<DashboardState>({
@@ -40,6 +46,20 @@ export default function DashboardScreen() {
     loading: true,
     refreshing: false,
   });
+
+  const [dashboardData, setDashboardData] = useState<DashboardData>({
+    cachedNews: [],
+  });
+
+  // Callback to receive news data from MarketOverview component
+  const handleNewsDataFetched = (news: NewsItem[]) => {
+    console.log(
+      "📰 Dashboard received cached news data:",
+      news.length,
+      "items"
+    );
+    setDashboardData((prev) => ({ ...prev, cachedNews: news }));
+  };
 
   const [dummySeries, setDummySeries] = useState<
     { time: number; close: number }[]
@@ -225,26 +245,20 @@ export default function DashboardScreen() {
     return (
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Market Brief</Text>
+          <Text style={styles.sectionTitle}>Market Overview</Text>
+          <Pressable
+            onPress={() => navigation.navigate("MarketOverview" as never)}
+            style={styles.viewAllButton}
+          >
+            <Text style={styles.viewAllText}>View Full</Text>
+            <Ionicons name="chevron-forward" size={16} color="#00D4AA" />
+          </Pressable>
         </View>
-        <Text style={styles.briefText}>
-          Markets are showing mixed signals today. Stay informed with your
-          portfolio performance above.
-        </Text>
-        <View style={styles.marketStats}>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>S&P 500</Text>
-            <Text style={[styles.statValue, styles.positive]}>+0.45%</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>NASDAQ</Text>
-            <Text style={[styles.statValue, styles.positive]}>+0.82%</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={styles.statLabel}>DOW</Text>
-            <Text style={[styles.statValue, styles.negative]}>-0.23%</Text>
-          </View>
-        </View>
+        <MarketOverview
+          compact={true}
+          onNewsPress={() => navigation.navigate("News" as never)}
+          onNewsDataFetched={handleNewsDataFetched}
+        />
       </View>
     );
   };
@@ -409,6 +423,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: { fontSize: 20, fontWeight: "600", color: "#ffffff" },
+  viewAllButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  viewAllText: {
+    color: "#00D4AA",
+    fontSize: 14,
+    fontWeight: "600",
+    marginRight: 4,
+  },
 
   // Market Brief
   briefText: {

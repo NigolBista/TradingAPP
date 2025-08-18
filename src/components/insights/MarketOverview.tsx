@@ -1,0 +1,484 @@
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  RefreshControl,
+  Pressable,
+  ActivityIndicator,
+  Alert,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  generateMarketOverview,
+  generateMarketOverviewWithData,
+  type MarketOverview,
+} from "../../services/marketOverview";
+import { refreshGlobalCache } from "../../services/marketDataCache";
+import type { NewsItem } from "../../services/newsProviders";
+import NewsList from "./NewsList";
+
+interface Props {
+  onNewsPress?: () => void;
+  compact?: boolean;
+  onNewsDataFetched?: (news: NewsItem[]) => void; // Callback to share news data with parent
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#0A0F1C",
+  },
+  compactContainer: {
+    backgroundColor: "#0A0F1C",
+    marginBottom: 16,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1F2937",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    marginTop: 2,
+  },
+  refreshButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "#1F2937",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+  },
+  loadingText: {
+    color: "#9CA3AF",
+    marginTop: 12,
+    fontSize: 14,
+  },
+  errorContainer: {
+    padding: 16,
+    alignItems: "center",
+  },
+  errorText: {
+    color: "#EF4444",
+    textAlign: "center",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  retryButton: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: "#4F46E5",
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+  content: {
+    padding: 16,
+  },
+  compactContent: {
+    padding: 12,
+  },
+
+  summaryContainer: {
+    marginBottom: 20,
+    padding: 16,
+    backgroundColor: "#1F2937",
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#4F46E5",
+  },
+  summaryTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginBottom: 8,
+  },
+  summaryText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#D1D5DB",
+  },
+  highlightsContainer: {
+    marginBottom: 20,
+  },
+  highlightsTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginBottom: 12,
+  },
+  highlightItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#1F2937",
+    borderRadius: 8,
+  },
+  highlightBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#4F46E5",
+    marginTop: 7,
+    marginRight: 10,
+  },
+  highlightText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: "#D1D5DB",
+  },
+  sectionContainer: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sectionIcon: {
+    marginRight: 8,
+  },
+  trendingContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  trendingStock: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#1F2937",
+    borderRadius: 16,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  trendingTicker: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginRight: 4,
+  },
+  trendingMentions: {
+    fontSize: 10,
+    color: "#9CA3AF",
+  },
+  eventsContainer: {
+    gap: 8,
+  },
+  eventItem: {
+    padding: 12,
+    backgroundColor: "#1F2937",
+    borderRadius: 8,
+    borderLeftWidth: 3,
+  },
+  eventHigh: {
+    borderLeftColor: "#EF4444",
+  },
+  eventMedium: {
+    borderLeftColor: "#F59E0B",
+  },
+  eventLow: {
+    borderLeftColor: "#10B981",
+  },
+  eventTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginBottom: 4,
+  },
+  eventDescription: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    lineHeight: 16,
+  },
+  newsSection: {
+    marginTop: 8,
+  },
+  newsSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  viewAllButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: "#4F46E5",
+    borderRadius: 6,
+  },
+  viewAllText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  lastUpdated: {
+    textAlign: "center",
+    fontSize: 11,
+    color: "#6B7280",
+    marginTop: 16,
+    fontStyle: "italic",
+  },
+});
+
+export default function MarketOverview({
+  onNewsPress,
+  compact = false,
+  onNewsDataFetched,
+}: Props) {
+  const [overview, setOverview] = useState<MarketOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadMarketOverview = async (isRefresh = false) => {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      setError(null);
+
+      // Use the optimized function that returns both overview and raw data
+      const { overview: data, rawData } = await generateMarketOverviewWithData({
+        newsCount: compact ? 15 : 30,
+        analysisDepth: compact ? "brief" : "detailed",
+        includeTrending: !compact,
+        includeEvents: !compact,
+      });
+
+      setOverview(data);
+
+      // Share the news data with parent component to avoid duplicate API calls
+      if (onNewsDataFetched && rawData.news.length > 0) {
+        onNewsDataFetched(rawData.news);
+      }
+    } catch (err) {
+      console.error("Market Overview Error:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to load market overview"
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMarketOverview();
+  }, []);
+
+  const handleRefresh = async () => {
+    try {
+      setRefreshing(true);
+      // Force refresh the global cache first
+      await refreshGlobalCache(compact ? 15 : 30, !compact, !compact);
+      // Then reload the overview with fresh data
+      await loadMarketOverview(true);
+    } catch (err) {
+      console.error("Refresh Error:", err);
+      // Fallback to regular load
+      loadMarketOverview(true);
+    }
+  };
+
+  const handleRetry = () => {
+    setError(null);
+    loadMarketOverview();
+  };
+
+  if (loading && !overview) {
+    return (
+      <View style={compact ? styles.compactContainer : styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#4F46E5" />
+          <Text style={styles.loadingText}>Analyzing market conditions...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error && !overview) {
+    return (
+      <View style={compact ? styles.compactContainer : styles.container}>
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={48} color="#EF4444" />
+          <Text style={styles.errorText}>{error}</Text>
+          <Pressable style={styles.retryButton} onPress={handleRetry}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  if (!overview) return null;
+
+  const ContentComponent = compact ? View : ScrollView;
+  const contentProps = compact
+    ? {}
+    : {
+        refreshControl: (
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#4F46E5"
+            colors={["#4F46E5"]}
+          />
+        ),
+      };
+
+  return (
+    <View style={compact ? styles.compactContainer : styles.container}>
+      {!compact && (
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>Market Overview</Text>
+            <Text style={styles.headerSubtitle}>
+              AI-powered market analysis
+            </Text>
+          </View>
+          <Pressable style={styles.refreshButton} onPress={handleRefresh}>
+            <Ionicons
+              name={refreshing ? "hourglass" : "refresh"}
+              size={20}
+              color="#9CA3AF"
+            />
+          </Pressable>
+        </View>
+      )}
+
+      <ContentComponent {...contentProps}>
+        <View style={compact ? styles.compactContent : styles.content}>
+          {/* AI Summary */}
+          <View style={styles.summaryContainer}>
+            <Text style={styles.summaryTitle}>Today's Market Brief</Text>
+            <Text style={styles.summaryText}>{overview.summary}</Text>
+          </View>
+
+          {/* Key Highlights */}
+          <View style={styles.highlightsContainer}>
+            <Text style={styles.highlightsTitle}>Key Highlights</Text>
+            {overview.keyHighlights.map((highlight, index) => (
+              <View key={index} style={styles.highlightItem}>
+                <View style={styles.highlightBullet} />
+                <Text style={styles.highlightText}>{highlight}</Text>
+              </View>
+            ))}
+          </View>
+
+          {/* Trending Stocks */}
+          {!compact && overview.trendingStocks.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>
+                <Ionicons
+                  name="flame"
+                  size={16}
+                  color="#F59E0B"
+                  style={styles.sectionIcon}
+                />
+                Trending Stocks
+              </Text>
+              <View style={styles.trendingContainer}>
+                {overview.trendingStocks.slice(0, 8).map((stock, index) => (
+                  <View key={index} style={styles.trendingStock}>
+                    <Text style={styles.trendingTicker}>{stock.ticker}</Text>
+                    <Text style={styles.trendingMentions}>
+                      {stock.mentions} mentions
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Upcoming Events */}
+          {!compact && overview.upcomingEvents.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <Text style={styles.sectionTitle}>
+                <Ionicons
+                  name="calendar"
+                  size={16}
+                  color="#4F46E5"
+                  style={styles.sectionIcon}
+                />
+                Upcoming Events
+              </Text>
+              <View style={styles.eventsContainer}>
+                {overview.upcomingEvents.slice(0, 3).map((event, index) => (
+                  <View
+                    key={index}
+                    style={[
+                      styles.eventItem,
+                      event.impact === "High"
+                        ? styles.eventHigh
+                        : event.impact === "Medium"
+                        ? styles.eventMedium
+                        : styles.eventLow,
+                    ]}
+                  >
+                    <Text style={styles.eventTitle}>{event.title}</Text>
+                    <Text style={styles.eventDescription}>
+                      {event.description}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
+
+          {/* Top Stories - Only show in full mode, not compact */}
+          {!compact && (
+            <View style={styles.newsSection}>
+              <View style={styles.newsSectionHeader}>
+                <Text style={styles.sectionTitle}>
+                  <Ionicons
+                    name="newspaper"
+                    size={16}
+                    color="#10B981"
+                    style={styles.sectionIcon}
+                  />
+                  Top Market Stories
+                </Text>
+                {onNewsPress && (
+                  <Pressable style={styles.viewAllButton} onPress={onNewsPress}>
+                    <Text style={styles.viewAllText}>View All</Text>
+                  </Pressable>
+                )}
+              </View>
+              <NewsList items={overview.topStories} fullScreen={false} />
+            </View>
+          )}
+
+          {/* Last Updated */}
+          <Text style={styles.lastUpdated}>
+            Last updated: {new Date(overview.lastUpdated).toLocaleString()}
+          </Text>
+        </View>
+      </ContentComponent>
+    </View>
+  );
+}
