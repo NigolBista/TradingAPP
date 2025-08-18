@@ -9,12 +9,20 @@ import {
   Linking,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { fetchNews, type NewsItem } from "../services/newsProviders";
+import {
+  fetchNews,
+  fetchGeneralMarketNews,
+  fetchStockNewsApi,
+  fetchTrendingStocks,
+  type NewsItem,
+  type TrendingStock,
+} from "../services/newsProviders";
 import {
   analyzeNewsWithEnhancedSentiment,
   type SentimentAnalysis,
 } from "../services/sentiment";
 import { useUserStore } from "../store/userStore";
+import NewsList from "../components/insights/NewsList";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
@@ -122,6 +130,39 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   keywordText: { fontSize: 12, color: "#ffffff" },
+  trendingContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+  trendingCard: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 12,
+    padding: 12,
+    minWidth: 120,
+    alignItems: "center",
+  },
+  trendingTicker: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 4,
+  },
+  trendingMentions: {
+    fontSize: 12,
+    color: "#aaaaaa",
+    marginBottom: 8,
+  },
+  trendingSentiment: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  trendingSentimentText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
 });
 
 const ECONOMIC_EVENTS = [
@@ -141,6 +182,7 @@ export default function NewsInsightsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [marketNews, setMarketNews] = useState<NewsItem[]>([]);
   const [watchlistNews, setWatchlistNews] = useState<NewsItem[]>([]);
+  const [trendingStocks, setTrendingStocks] = useState<TrendingStock[]>([]);
   const [sentiment, setSentiment] = useState<SentimentAnalysis | null>(null);
 
   useEffect(() => {
@@ -151,18 +193,45 @@ export default function NewsInsightsScreen() {
     try {
       setLoading(true);
 
-      // Load general market news
-      const generalNews = await fetchNews("market");
+      // Load general market news with enhanced Stock News API
+      let generalNews: NewsItem[] = [];
+      try {
+        generalNews = await fetchGeneralMarketNews(30);
+      } catch (stockNewsError) {
+        console.log(
+          "Stock News API failed for market news, falling back:",
+          stockNewsError
+        );
+        // Fallback to default provider
+        generalNews = await fetchNews("market");
+      }
       setMarketNews(generalNews);
 
-      // Load watchlist-specific news
+      // Load watchlist-specific news with enhanced features
       const watchlistSymbols = profile.watchlist || ["AAPL", "MSFT", "GOOGL"];
       const watchlistNewsPromises = watchlistSymbols
         .slice(0, 5)
-        .map((symbol) => fetchNews(symbol).catch(() => []));
+        .map(async (symbol) => {
+          try {
+            // Try Stock News API first for enhanced features
+            return await fetchStockNewsApi(symbol, 5);
+          } catch {
+            // Fallback to default provider
+            return await fetchNews(symbol).catch(() => []);
+          }
+        });
       const allWatchlistNews = await Promise.all(watchlistNewsPromises);
       const flatWatchlistNews = allWatchlistNews.flat().slice(0, 20);
       setWatchlistNews(flatWatchlistNews);
+
+      // Load trending stocks
+      try {
+        const trending = await fetchTrendingStocks(7);
+        setTrendingStocks(trending.slice(0, 10));
+      } catch (trendingError) {
+        console.log("Failed to fetch trending stocks:", trendingError);
+        setTrendingStocks([]);
+      }
 
       // Analyze overall sentiment
       const allNews = [...generalNews, ...flatWatchlistNews];
@@ -325,15 +394,58 @@ export default function NewsInsightsScreen() {
             {/* Market News */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Top Market News</Text>
-              {marketNews.slice(0, 10).map(renderNewsItem)}
             </View>
+            <NewsList items={marketNews.slice(0, 10)} fullScreen={true} />
+
+            {/* Trending Stocks */}
+            {trendingStocks.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>
+                  📈 Trending Stocks (7 days)
+                </Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.trendingContainer}>
+                    {trendingStocks.map((stock, index) => (
+                      <View key={index} style={styles.trendingCard}>
+                        <Text style={styles.trendingTicker}>
+                          {stock.ticker}
+                        </Text>
+                        <Text style={styles.trendingMentions}>
+                          {stock.mentions} mentions
+                        </Text>
+                        <View
+                          style={[
+                            styles.trendingSentiment,
+                            {
+                              backgroundColor: getSentimentColor(
+                                stock.sentiment === "Positive"
+                                  ? 0.5
+                                  : stock.sentiment === "Negative"
+                                  ? -0.5
+                                  : 0
+                              ),
+                            },
+                          ]}
+                        >
+                          <Text style={styles.trendingSentimentText}>
+                            {stock.sentiment}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              </View>
+            )}
 
             {/* Watchlist News */}
             {watchlistNews.length > 0 && (
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Your Watchlist News</Text>
-                {watchlistNews.slice(0, 8).map(renderNewsItem)}
-              </View>
+              <>
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Your Watchlist News</Text>
+                </View>
+                <NewsList items={watchlistNews.slice(0, 8)} fullScreen={true} />
+              </>
             )}
           </>
         )}

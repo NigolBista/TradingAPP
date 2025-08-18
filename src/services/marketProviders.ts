@@ -618,9 +618,41 @@ export async function fetchNews(
     }
   }
 
+  // Prefer StockNewsAPI if key is provided
+  const stockNewsApiKey = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+  if (stockNewsApiKey) {
+    const isMarket = symbol.toLowerCase() === "market";
+    const url = isMarket
+      ? `https://stocknewsapi.com/api/v1/category?section=general&items=15&token=${stockNewsApiKey}`
+      : `https://stocknewsapi.com/api/v1?tickers=${encodeURIComponent(
+          symbol
+        )}&items=15&token=${stockNewsApiKey}`;
+
+    console.log(
+      `Fetching StockNewsAPI data from: ${url.replace(
+        stockNewsApiKey,
+        "API_KEY_HIDDEN"
+      )}`
+    );
+    try {
+      const json = await fetchJson(url);
+      const data = json?.data || [];
+      return (data as any[]).map((n: any, idx: number) => ({
+        id: n.news_url || `${symbol}-${idx}`,
+        title: n.title,
+        url: n.news_url,
+        source: n.source_name,
+        publishedAt: n.date,
+        summary: n.text,
+      }));
+    } catch (e) {
+      // fall through to alternative sources
+    }
+  }
+
+  // Fallback: if generic newsApiKey is set, try GNews for basic coverage
   const newsApiKey = (Constants.expoConfig?.extra as any)?.newsApiKey;
   if (newsApiKey) {
-    // Example: GNews API (fast and simple for testing)
     const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(
       symbol
     )}&lang=en&country=us&max=15&token=${newsApiKey}`;

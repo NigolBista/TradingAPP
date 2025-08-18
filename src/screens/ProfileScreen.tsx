@@ -281,6 +281,26 @@ export default function ProfileScreen({ navigation }: any) {
             </Pressable>
 
             <Pressable
+              onPress={() => navigation.navigate("StockNewsApiDemo")}
+              style={styles.actionItem}
+            >
+              <View style={styles.actionLeft}>
+                <View
+                  style={[styles.actionIcon, { backgroundColor: "#fef3c7" }]}
+                >
+                  <Ionicons name="newspaper" size={20} color="#f59e0b" />
+                </View>
+                <View>
+                  <Text style={styles.actionTitle}>Stock News API Demo</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Explore Stock News API features
+                  </Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+            </Pressable>
+
+            <Pressable
               onPress={() =>
                 Alert.alert(
                   "Privacy",

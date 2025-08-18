@@ -37,6 +37,7 @@ import {
 } from "../services/aiAnalytics";
 import {
   fetchNews as fetchSymbolNews,
+  fetchStockNewsApi,
   type NewsItem,
 } from "../services/newsProviders";
 import {
@@ -139,6 +140,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
   },
+  newsSection: {
+    backgroundColor: "#0a0a0a",
+    marginVertical: 6,
+  },
+  newsSectionHeader: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: "#1a1a1a",
+    marginHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  newsSectionTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+  },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -205,6 +224,7 @@ export default function StockDetailScreen() {
   const [dailySeries, setDailySeries] = useState<LWCDatum[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [summary, setSummary] = useState<SignalSummary | null>(null);
+  const [newsLoading, setNewsLoading] = useState<boolean>(true);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [stockName, setStockName] = useState<string>("");
@@ -262,11 +282,26 @@ export default function StockDetailScreen() {
           } catch {}
         })(),
         (async () => {
+          setNewsLoading(true);
           try {
-            const items = await fetchSymbolNews(symbol);
+            // Try Stock News API first for enhanced features (sentiment, images, etc.)
+            let items: NewsItem[] = [];
+            try {
+              items = await fetchStockNewsApi(symbol, 25);
+            } catch (stockNewsError) {
+              console.log(
+                "Stock News API failed, falling back to default provider:",
+                stockNewsError
+              );
+              // Fallback to default news provider
+              items = await fetchSymbolNews(symbol);
+            }
             setNews(items);
-          } catch {
+          } catch (error) {
+            console.error("All news providers failed:", error);
             setNews([]);
+          } finally {
+            setNewsLoading(false);
           }
         })(),
         (async () => {
@@ -713,11 +748,28 @@ export default function StockDetailScreen() {
 
         {/* News */}
         {activeTab === "news" && news.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Latest News</Text>
+          <View style={styles.newsSection}>
+            <View style={styles.newsSectionHeader}>
+              <Text style={styles.newsSectionTitle}>Latest News</Text>
             </View>
-            <NewsList items={news.slice(0, 20)} />
+            <NewsList items={news.slice(0, 20)} fullScreen={true} />
+          </View>
+        )}
+        {activeTab === "news" && news.length === 0 && (
+          <View style={styles.newsSection}>
+            <View style={styles.newsSectionHeader}>
+              <Text style={styles.newsSectionTitle}>Latest News</Text>
+            </View>
+            <Text
+              style={{
+                color: "#888",
+                textAlign: "center",
+                paddingHorizontal: 16,
+              }}
+            >
+              No recent news found for {symbol}. Pull to refresh or try again
+              shortly.
+            </Text>
           </View>
         )}
 

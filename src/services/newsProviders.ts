@@ -8,6 +8,11 @@ export type NewsItem = {
   publishedAt?: string;
   summary?: string;
   symbol?: string;
+  sentiment?: "Positive" | "Negative" | "Neutral";
+  type?: "Article" | "Video" | "PressRelease";
+  imageUrl?: string;
+  topics?: string[];
+  tickers?: string[];
 };
 
 // caching to avoid repeated calls
@@ -47,6 +52,220 @@ async function fetchGNews(symbol: string): Promise<NewsItem[]> {
     publishedAt: a.publishedAt,
     summary: a.description,
     symbol,
+  }));
+}
+
+// StockNewsAPI.com provider
+// Docs: https://stocknewsapi.com/documentation
+// Enhanced with multiple endpoint support and advanced features
+
+export interface StockNewsApiItem {
+  news_url: string;
+  image_url?: string;
+  title: string;
+  text: string;
+  source_name: string;
+  date: string;
+  topics?: string[];
+  sentiment?: "Positive" | "Negative" | "Neutral";
+  type?: "Article" | "Video" | "PressRelease";
+  tickers?: string[];
+}
+
+export interface StockNewsApiResponse {
+  data: StockNewsApiItem[];
+  total_pages?: number;
+  total_items?: number;
+}
+
+export interface TrendingStock {
+  ticker: string;
+  company_name?: string;
+  mentions: number;
+  sentiment: "Positive" | "Negative" | "Neutral";
+  sentiment_score?: number;
+}
+
+export interface MarketEvent {
+  event_id: string;
+  title: string;
+  description: string;
+  date: string;
+  impact: "High" | "Medium" | "Low";
+  tickers?: string[];
+}
+
+// Basic news fetching for single or multiple tickers
+async function fetchStockNewsApi(
+  symbol: string,
+  items: number = 20,
+  options: {
+    sentiment?: "Positive" | "Negative" | "Neutral";
+    type?: "Article" | "Video" | "PressRelease";
+    excludeSources?: string[];
+    dateFrom?: string;
+    dateTo?: string;
+  } = {}
+): Promise<NewsItem[]> {
+  const apiKey = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+
+  console.log(
+    "🔑 Stock News API Key:",
+    apiKey ? `${apiKey.substring(0, 8)}...` : "NOT SET"
+  );
+
+  if (!apiKey)
+    throw new Error("STOCK_NEWS_API_KEY missing for StockNewsAPI provider");
+
+  const isMarket = symbol.toLowerCase() === "market";
+  let endpoint: string;
+
+  if (isMarket) {
+    // General market news
+    endpoint = `https://stocknewsapi.com/api/v1/category?section=general&items=${items}&token=${apiKey}`;
+  } else {
+    // Specific ticker news
+    endpoint = `https://stocknewsapi.com/api/v1?tickers=${encodeURIComponent(
+      symbol
+    )}&items=${items}&token=${apiKey}`;
+  }
+
+  // Add optional filters
+  const params = new URLSearchParams();
+  if (options.sentiment) params.append("sentiment", options.sentiment);
+  if (options.type) params.append("type", options.type);
+  if (options.excludeSources)
+    params.append("exclude_sources", options.excludeSources.join(","));
+  if (options.dateFrom) params.append("date_from", options.dateFrom);
+  if (options.dateTo) params.append("date_to", options.dateTo);
+
+  const queryString = params.toString();
+  if (queryString) {
+    endpoint += `&${queryString}`;
+  }
+
+  console.log("📡 Stock News API URL:", endpoint.replace(apiKey, "***"));
+
+  try {
+    const json: StockNewsApiResponse = await fetchJson(endpoint);
+    console.log(
+      "✅ Stock News API Response:",
+      json?.data?.length || 0,
+      "items"
+    );
+    const data = json?.data || [];
+
+    return data.map((n: StockNewsApiItem, idx: number) => ({
+      id: n.news_url || `${symbol}-${idx}`,
+      title: n.title,
+      url: n.news_url,
+      source: n.source_name,
+      publishedAt: n.date,
+      summary: n.text,
+      symbol: isMarket ? "market" : symbol,
+      sentiment: n.sentiment,
+      type: n.type,
+      imageUrl: n.image_url,
+      topics: n.topics,
+      tickers: n.tickers,
+    }));
+  } catch (error) {
+    console.error("❌ Stock News API Error:", error);
+    console.error("📡 Failed URL:", endpoint.replace(apiKey, "***"));
+    throw error;
+  }
+}
+
+// Fetch news for multiple tickers
+async function fetchMultipleTickersNews(
+  tickers: string[],
+  items: number = 20,
+  requireAll: boolean = false
+): Promise<NewsItem[]> {
+  const apiKey = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+  if (!apiKey)
+    throw new Error("STOCK_NEWS_API_KEY missing for StockNewsAPI provider");
+
+  const tickersParam = tickers.join(",");
+  const endpoint = requireAll
+    ? `https://stocknewsapi.com/api/v1?tickers=${encodeURIComponent(
+        tickersParam
+      )}&items=${items}&token=${apiKey}&must_have_all=true`
+    : `https://stocknewsapi.com/api/v1?tickers=${encodeURIComponent(
+        tickersParam
+      )}&items=${items}&token=${apiKey}`;
+
+  const json: StockNewsApiResponse = await fetchJson(endpoint);
+  const data = json?.data || [];
+
+  return data.map((n: StockNewsApiItem, idx: number) => ({
+    id: n.news_url || `multi-${idx}`,
+    title: n.title,
+    url: n.news_url,
+    source: n.source_name,
+    publishedAt: n.date,
+    summary: n.text,
+    symbol: n.tickers?.join(", ") || "multiple",
+    sentiment: n.sentiment,
+    type: n.type,
+    imageUrl: n.image_url,
+    topics: n.topics,
+    tickers: n.tickers,
+  }));
+}
+
+// Fetch trending stocks (most mentioned)
+async function fetchTrendingStocks(days: number = 7): Promise<TrendingStock[]> {
+  const apiKey = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+  if (!apiKey)
+    throw new Error("STOCK_NEWS_API_KEY missing for StockNewsAPI provider");
+
+  const endpoint = `https://stocknewsapi.com/api/v1/most_mentioned?days=${days}&token=${apiKey}`;
+  const json = await fetchJson(endpoint);
+
+  return json?.data || [];
+}
+
+// Fetch market events
+async function fetchMarketEvents(): Promise<MarketEvent[]> {
+  const apiKey = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+  if (!apiKey)
+    throw new Error("STOCK_NEWS_API_KEY missing for StockNewsAPI provider");
+
+  const endpoint = `https://stocknewsapi.com/api/v1/events?token=${apiKey}`;
+  const json = await fetchJson(endpoint);
+
+  return json?.data || [];
+}
+
+// Fetch sector-specific news
+async function fetchSectorNews(
+  sector: string,
+  items: number = 20
+): Promise<NewsItem[]> {
+  const apiKey = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+  if (!apiKey)
+    throw new Error("STOCK_NEWS_API_KEY missing for StockNewsAPI provider");
+
+  const endpoint = `https://stocknewsapi.com/api/v1/category?section=alltickers&items=${items}&sector=${encodeURIComponent(
+    sector
+  )}&token=${apiKey}`;
+  const json: StockNewsApiResponse = await fetchJson(endpoint);
+  const data = json?.data || [];
+
+  return data.map((n: StockNewsApiItem, idx: number) => ({
+    id: n.news_url || `${sector}-${idx}`,
+    title: n.title,
+    url: n.news_url,
+    source: n.source_name,
+    publishedAt: n.date,
+    summary: n.text,
+    symbol: sector,
+    sentiment: n.sentiment,
+    type: n.type,
+    imageUrl: n.image_url,
+    topics: n.topics,
+    tickers: n.tickers,
   }));
 }
 
@@ -137,7 +356,7 @@ export async function fetchNewsWithDateFilter(
   hoursBack: number = 24
 ): Promise<NewsItem[]> {
   const provider =
-    (Constants.expoConfig?.extra as any)?.newsProvider || "yahoo";
+    (Constants.expoConfig?.extra as any)?.newsProvider || "stocknewsapi";
   const cacheK = key(`${provider}-${hoursBack}h`, symbol);
   const cached = newsCache.get(cacheK);
   if (cached && Date.now() - cached.ts < TTL_MS) return cached.items;
@@ -164,6 +383,38 @@ export async function fetchNewsWithDateFilter(
           symbol === "market"
             ? await fetchNewsApiTopHeadlines(hoursBack)
             : await fetchGNews(symbol);
+      } else if (provider === "stocknewsapi") {
+        // Prefer StockNewsAPI for both market and symbol news.
+        // If it fails or returns empty (rate limits, key issues, or no coverage),
+        // gracefully fall back to other public sources so the UI is never blank.
+        const extra = (Constants.expoConfig?.extra as any) || {};
+        try {
+          items = await fetchStockNewsApi(symbol);
+        } catch (err) {
+          items = [];
+        }
+        if (!items || items.length === 0) {
+          if (symbol === "market") {
+            // Market-wide fallback: NewsAPI top headlines if available
+            if (extra.newsApiKey) {
+              try {
+                items = await fetchNewsApiTopHeadlines(hoursBack);
+              } catch {}
+            }
+          } else {
+            // Symbol fallback chain: GNews (if key) → Yahoo RSS
+            if ((!items || items.length === 0) && extra.newsApiKey) {
+              try {
+                items = await fetchGNews(symbol);
+              } catch {}
+            }
+            if (!items || items.length === 0) {
+              try {
+                items = await fetchYahooRss(symbol);
+              } catch {}
+            }
+          }
+        }
       } else if (provider === "yahoo") {
         items = await fetchYahooRss(symbol);
       } else {
@@ -225,4 +476,87 @@ async function fetchMarketDataNewsLatest(symbol: string): Promise<NewsItem[]> {
 export async function fetchNews(symbol: string): Promise<NewsItem[]> {
   // Default to 24-hour news filtering
   return fetchNewsWithDateFilter(symbol, 24);
+}
+
+// Export advanced Stock News API functions
+export {
+  fetchStockNewsApi,
+  fetchMultipleTickersNews,
+  fetchTrendingStocks,
+  fetchMarketEvents,
+  fetchSectorNews,
+};
+
+// Convenience functions for common use cases based on examples
+export async function fetchTeslaNews(items: number = 3): Promise<NewsItem[]> {
+  return fetchStockNewsApi("TSLA", items);
+}
+
+export async function fetchMultipleTechStocks(
+  items: number = 20
+): Promise<NewsItem[]> {
+  return fetchMultipleTickersNews(["META", "AMZN", "NFLX"], items);
+}
+
+export async function fetchTechStocksRequireAll(
+  items: number = 20
+): Promise<NewsItem[]> {
+  return fetchMultipleTickersNews(["META", "AMZN", "NFLX"], items, true);
+}
+
+export async function fetchOnlyAmazonNews(
+  items: number = 20
+): Promise<NewsItem[]> {
+  return fetchStockNewsApi("AMZN", items);
+}
+
+export async function fetchTechnologySectorNews(
+  items: number = 20
+): Promise<NewsItem[]> {
+  return fetchSectorNews("Technology", items);
+}
+
+export async function fetchGeneralMarketNews(
+  items: number = 20
+): Promise<NewsItem[]> {
+  console.log("🌍 Fetching general market news with", items, "items");
+  return fetchStockNewsApi("market", items);
+}
+
+export async function fetchNegativeAmazonNews(
+  items: number = 20
+): Promise<NewsItem[]> {
+  return fetchStockNewsApi("AMZN", items, { sentiment: "Negative" });
+}
+
+export async function fetchVideoNewsOnTesla(
+  items: number = 20
+): Promise<NewsItem[]> {
+  return fetchStockNewsApi("TSLA", items, { type: "Video" });
+}
+
+export async function fetchPressReleasesOnly(
+  items: number = 20
+): Promise<NewsItem[]> {
+  const apiKey = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+  if (!apiKey) throw new Error("STOCK_NEWS_API_KEY missing");
+
+  const endpoint = `https://stocknewsapi.com/api/v1/category?section=alltickers&items=${items}&type=PressRelease&token=${apiKey}`;
+  const json: StockNewsApiResponse = await fetchJson(endpoint);
+  const data = json?.data || [];
+
+  return data.map((n: StockNewsApiItem, idx: number) => ({
+    id: n.news_url || `press-${idx}`,
+    title: n.title,
+    url: n.news_url,
+    source: n.source_name,
+    publishedAt: n.date,
+    summary: n.text,
+    symbol: n.tickers?.join(", ") || "press-release",
+    sentiment: n.sentiment,
+    type: n.type,
+    imageUrl: n.image_url,
+    topics: n.topics,
+    tickers: n.tickers,
+  }));
 }

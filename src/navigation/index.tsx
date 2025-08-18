@@ -27,6 +27,7 @@ import MarketScreenerScreen from "../screens/MarketScreenerScreen";
 import StockDetailScreen from "../screens/StockDetailScreen";
 import SignalsFeedScreen from "../screens/SignalsFeedScreen";
 import NewsInsightsScreen from "../screens/NewsInsightsScreen";
+import StockNewsApiDemoScreen from "../screens/StockNewsApiDemoScreen";
 import { useAuth } from "../providers/AuthProvider";
 
 const Tab = createBottomTabNavigator();
@@ -150,6 +151,11 @@ export default function RootNavigation() {
           <RootStack.Screen
             name="BrokerageAccounts"
             component={BrokerageAccountsScreen}
+          />
+          <RootStack.Screen
+            name="StockNewsApiDemo"
+            component={StockNewsApiDemoScreen}
+            options={{ headerShown: true, title: "Stock News API Demo" }}
           />
         </RootStack.Navigator>
       ) : (

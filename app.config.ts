@@ -63,9 +63,10 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       polygonApiKey: process.env.POLYGON_API_KEY,
       yahooApiKey: process.env.YAHOO_FINANCE_API_KEY,
       newsApiKey: process.env.NEWS_API_KEY,
+      stockNewsApiKey: process.env.STOCK_NEWS_API_KEY,
       alphaVantageApiKey: process.env.ALPHA_VANTAGE_API_KEY,
       marketDataApiToken: process.env.MARKET_DATA_API_TOKEN,
-      newsProvider: process.env.NEWS_PROVIDER || "marketData",
+      newsProvider: process.env.NEWS_PROVIDER || "stocknewsapi",
       marketDataNewsBaseUrl: process.env.MARKETDATA_NEWS_BASE_URL,
       expoPublic: {
         // values readable on the client
