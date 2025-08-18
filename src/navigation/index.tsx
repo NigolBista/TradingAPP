@@ -28,6 +28,7 @@ import StockDetailScreen from "../screens/StockDetailScreen";
 import SignalsFeedScreen from "../screens/SignalsFeedScreen";
 import NewsInsightsScreen from "../screens/NewsInsightsScreen";
 import MarketOverviewScreen from "../screens/MarketOverviewScreen";
+import FederalReserveScreen from "../screens/FederalReserveScreen";
 import StockNewsApiDemoScreen from "../screens/StockNewsApiDemoScreen";
 import { useAuth } from "../providers/AuthProvider";
 
@@ -157,6 +158,11 @@ export default function RootNavigation() {
             name="MarketOverview"
             component={MarketOverviewScreen}
             options={{ headerShown: true, title: "Market Overview" }}
+          />
+          <RootStack.Screen
+            name="FederalReserve"
+            component={FederalReserveScreen}
+            options={{ headerShown: false }}
           />
           <RootStack.Screen
             name="StockNewsApiDemo"

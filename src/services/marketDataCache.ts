@@ -6,12 +6,21 @@ import {
   type TrendingStock,
   type MarketEvent,
 } from "./newsProviders";
+import {
+  getFederalReserveData,
+  type FedEvent,
+  type EconomicIndicator,
+  type FedRelease,
+} from "./federalReserve";
 
 // Global cache interface
 interface GlobalMarketCache {
   news: NewsItem[];
   trendingStocks: TrendingStock[];
   marketEvents: MarketEvent[];
+  fedEvents: FedEvent[];
+  economicIndicators: EconomicIndicator[];
+  fedReleases: FedRelease[];
   timestamp: number;
   isLoading: boolean;
 }
@@ -60,6 +69,9 @@ async function fetchAndUpdateCache(
       news: [],
       trendingStocks: [],
       marketEvents: [],
+      fedEvents: [],
+      economicIndicators: [],
+      fedReleases: [],
       timestamp: 0,
       isLoading: true,
     };
@@ -67,12 +79,17 @@ async function fetchAndUpdateCache(
 
   try {
     // Fetch all data in parallel
-    const [news, trendingStocks, marketEvents] = await Promise.all([
+    const [news, trendingStocks, marketEvents, fedData] = await Promise.all([
       fetchGeneralMarketNews(newsCount),
       includeTrending
         ? fetchTrendingStocks(7).catch(() => [])
         : Promise.resolve([]),
       includeEvents ? fetchMarketEvents().catch(() => []) : Promise.resolve([]),
+      getFederalReserveData().catch(() => ({
+        events: [],
+        indicators: [],
+        releases: [],
+      })),
     ]);
 
     // Update global cache
@@ -80,6 +97,9 @@ async function fetchAndUpdateCache(
       news,
       trendingStocks,
       marketEvents,
+      fedEvents: fedData.events,
+      economicIndicators: fedData.indicators,
+      fedReleases: fedData.releases,
       timestamp: Date.now(),
       isLoading: false,
     };
@@ -88,6 +108,9 @@ async function fetchAndUpdateCache(
       newsCount: news.length,
       trendingCount: trendingStocks.length,
       eventsCount: marketEvents.length,
+      fedEventsCount: fedData.events.length,
+      economicIndicatorsCount: fedData.indicators.length,
+      fedReleasesCount: fedData.releases.length,
     });
 
     return globalCache;

@@ -20,7 +20,7 @@ export default function MarketOverviewScreen() {
 
   return (
     <View style={styles.container}>
-      <MarketOverview onNewsPress={handleNewsPress} />
+      <MarketOverview onNewsPress={handleNewsPress} navigation={navigation} />
     </View>
   );
 }

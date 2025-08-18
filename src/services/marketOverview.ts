@@ -53,6 +53,8 @@ export interface MarketOverview {
   topStories: NewsItem[];
   trendingStocks: TrendingStock[];
   upcomingEvents: MarketEvent[];
+  fedEvents: any[]; // Federal Reserve events
+  economicIndicators: any[]; // Key economic indicators
   lastUpdated: string;
 }
 
@@ -61,6 +63,7 @@ export interface MarketOverviewRequest {
   includeTrending?: boolean;
   newsCount?: number;
   analysisDepth?: "brief" | "detailed";
+  timeframe?: "1D" | "1W" | "1M";
 }
 
 /**
@@ -74,6 +77,7 @@ export async function generateMarketOverview(
     includeTrending = true,
     newsCount = 30,
     analysisDepth = "detailed",
+    timeframe = "1D",
   } = options;
 
   try {
@@ -83,14 +87,23 @@ export async function generateMarketOverview(
       includeTrending,
       includeEvents
     );
-    const { news: marketNews, trendingStocks, marketEvents } = marketData;
+    const {
+      news: marketNews,
+      trendingStocks,
+      marketEvents,
+      fedEvents,
+      economicIndicators,
+    } = marketData;
 
     // Generate AI summary
     const aiSummary = await generateAIMarketSummary(
       marketNews,
       trendingStocks,
       marketEvents,
-      analysisDepth
+      fedEvents,
+      economicIndicators,
+      analysisDepth,
+      timeframe
     );
 
     // Extract key highlights from AI response
@@ -102,6 +115,10 @@ export async function generateMarketOverview(
       topStories: marketNews.slice(0, 10), // Top 10 stories for display
       trendingStocks,
       upcomingEvents: marketEvents,
+      fedEvents: fedEvents
+        .filter((fe) => fe.impact === "high" || fe.impact === "medium")
+        .slice(0, 5), // High and medium impact Fed events
+      economicIndicators: economicIndicators.slice(0, 5), // Top 5 economic indicators
       lastUpdated: new Date().toISOString(),
     };
   } catch (error) {
@@ -121,6 +138,8 @@ export async function generateMarketOverview(
         topStories: basicNews,
         trendingStocks: [],
         upcomingEvents: [],
+        fedEvents: [],
+        economicIndicators: [],
         lastUpdated: new Date().toISOString(),
       };
     } catch (fallbackError) {
@@ -137,7 +156,10 @@ async function generateAIMarketSummary(
   news: NewsItem[],
   trending: TrendingStock[],
   events: MarketEvent[],
-  depth: "brief" | "detailed"
+  fedEvents: any[],
+  economicIndicators: any[],
+  depth: "brief" | "detailed",
+  timeframe: "1D" | "1W" | "1M" = "1D"
 ): Promise<string> {
   const { openaiApiKey } = (Constants.expoConfig?.extra || {}) as any;
 
@@ -178,13 +200,41 @@ async function generateAIMarketSummary(
     date: e.date,
   }));
 
+  const fedEventsContext = fedEvents.slice(0, 5).map((fe) => ({
+    title: fe.title,
+    description: fe.description?.substring(0, 150) || "",
+    type: fe.type,
+    impact: fe.impact,
+    date: fe.date,
+    category: fe.category,
+  }));
+
+  const economicContext = economicIndicators.slice(0, 8).map((ei) => ({
+    title: ei.title,
+    value: ei.value,
+    unit: ei.unit,
+    change: ei.change,
+    changePercent: ei.changePercent,
+    date: ei.date,
+  }));
+
   const prompt =
     depth === "brief"
-      ? createBriefAnalysisPrompt(newsContext, trendingContext, eventsContext)
+      ? createBriefAnalysisPrompt(
+          newsContext,
+          trendingContext,
+          eventsContext,
+          fedEventsContext,
+          economicContext,
+          timeframe
+        )
       : createDetailedAnalysisPrompt(
           newsContext,
           trendingContext,
-          eventsContext
+          eventsContext,
+          fedEventsContext,
+          economicContext,
+          timeframe
         );
 
   try {
@@ -225,9 +275,39 @@ async function generateAIMarketSummary(
 function createBriefAnalysisPrompt(
   news: any[],
   trending: any[],
-  events: any[]
+  events: any[],
+  fedEvents: any[],
+  economicIndicators: any[],
+  timeframe: "1D" | "1W" | "1M" = "1D"
 ): string {
-  return `Analyze today's market conditions and provide a brief overview.
+  const timeframeContext = {
+    "1D": {
+      title: "today's market conditions",
+      focus: "what investors should know today",
+      summary: "2-3 sentence overview of today's market conditions",
+      highlights: "4-5 bullet points of today's most important developments",
+    },
+    "1W": {
+      title: "this week's market outlook",
+      focus: "what to watch for in the upcoming week",
+      summary:
+        "2-3 sentence overview of this week's market outlook and key events",
+      highlights:
+        "4-5 bullet points of upcoming developments and opportunities this week",
+    },
+    "1M": {
+      title: "monthly market trends",
+      focus: "key trends and events to monitor this month",
+      summary:
+        "2-3 sentence overview of monthly market trends and major themes",
+      highlights:
+        "4-5 bullet points of significant trends and upcoming events this month",
+    },
+  };
+
+  const context = timeframeContext[timeframe];
+
+  return `Analyze ${context.title} and provide a brief overview.
 
 NEWS HEADLINES (${news.length} items):
 ${news
@@ -247,20 +327,53 @@ ${events
   .map((e) => `• ${e.title} [${e.impact} impact] - ${e.description}`)
   .join("\n")}
 
-Provide a structured response with:
-1. SUMMARY: 2-3 sentence overview of today's market conditions
-2. KEY_HIGHLIGHTS: 4-5 bullet points of the most important developments
-3. Focus on what investors should know today
+FEDERAL RESERVE EVENTS (${fedEvents.length} items):
+${fedEvents
+  .map(
+    (fe) =>
+      `• ${fe.title} [${fe.type}, ${fe.impact} impact] - ${fe.description}`
+  )
+  .join("\n")}
 
-Keep it concise and actionable.`;
+ECONOMIC INDICATORS (${economicIndicators.length} items):
+${economicIndicators
+  .map(
+    (ei) =>
+      `• ${ei.title}: ${ei.value}${ei.unit} ${
+        ei.changePercent
+          ? `(${ei.changePercent > 0 ? "+" : ""}${ei.changePercent.toFixed(
+              1
+            )}%)`
+          : ""
+      }`
+  )
+  .join("\n")}
+
+Provide a structured response with:
+1. SUMMARY: ${context.summary} (do NOT include bullet points here)
+2. KEY_HIGHLIGHTS: ${context.highlights} (use bullet points starting with •)
+3. Focus on ${context.focus}
+
+IMPORTANT: Keep the SUMMARY as a paragraph without bullet points. Put all bullet points only in KEY_HIGHLIGHTS section.`;
 }
 
 function createDetailedAnalysisPrompt(
   news: any[],
   trending: any[],
-  events: any[]
+  events: any[],
+  fedEvents: any[],
+  economicIndicators: any[],
+  timeframe: "1D" | "1W" | "1M" = "1D"
 ): string {
-  return `Provide a comprehensive market analysis based on today's developments.
+  const timeframeContext = {
+    "1D": "today's developments",
+    "1W": "this week's market outlook and upcoming developments",
+    "1M": "monthly market trends and significant developments",
+  };
+
+  return `Provide a comprehensive market analysis based on ${
+    timeframeContext[timeframe]
+  }.
 
 MARKET NEWS ANALYSIS (${news.length} headlines):
 ${news
@@ -288,14 +401,37 @@ ${events
   )
   .join("\n")}
 
+FEDERAL RESERVE & MONETARY POLICY (${fedEvents.length} events):
+${fedEvents
+  .map(
+    (fe) =>
+      `• ${fe.title} [${fe.type}, ${fe.impact} impact] - ${fe.description} (${fe.category})`
+  )
+  .join("\n")}
+
+ECONOMIC INDICATORS & DATA (${economicIndicators.length} key metrics):
+${economicIndicators
+  .map(
+    (ei) =>
+      `• ${ei.title}: ${ei.value}${ei.unit} ${
+        ei.changePercent
+          ? `(${ei.changePercent > 0 ? "+" : ""}${ei.changePercent.toFixed(
+              1
+            )}% change)`
+          : ""
+      } [${ei.date}]`
+  )
+  .join("\n")}
+
 Provide a comprehensive analysis with:
 
 1. EXECUTIVE_SUMMARY: 3-4 sentences capturing the overall market narrative and key themes
 
 2. KEY_HIGHLIGHTS: 6-8 critical points covering:
    - Major market movers and catalysts
+   - Federal Reserve meetings, policy decisions, and economic data
    - Sector rotation or themes
-   - Economic indicators or policy impacts
+   - Economic indicators (CPI, PPI, employment, etc.) and policy impacts
    - Notable earnings or corporate developments
    - Technical levels or market structure
    - Risk factors to monitor

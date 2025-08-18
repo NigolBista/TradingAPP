@@ -258,6 +258,7 @@ export default function DashboardScreen() {
           compact={true}
           onNewsPress={() => navigation.navigate("News" as never)}
           onNewsDataFetched={handleNewsDataFetched}
+          navigation={navigation}
         />
       </View>
     );

@@ -23,7 +23,10 @@ interface Props {
   onNewsPress?: () => void;
   compact?: boolean;
   onNewsDataFetched?: (news: NewsItem[]) => void; // Callback to share news data with parent
+  navigation?: any; // Navigation prop for routing
 }
+
+type TimeframeType = "1D" | "1W" | "1M";
 
 const styles = StyleSheet.create({
   container: {
@@ -241,17 +244,155 @@ const styles = StyleSheet.create({
     marginTop: 16,
     fontStyle: "italic",
   },
+
+  // Timeframe selector styles
+  timeframeContainer: {
+    flexDirection: "row",
+    backgroundColor: "#1F2937",
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 16,
+  },
+  timeframeButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  timeframeButtonActive: {
+    backgroundColor: "#4F46E5",
+  },
+  timeframeButtonInactive: {
+    backgroundColor: "transparent",
+  },
+  timeframeText: {
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  timeframeTextActive: {
+    color: "#ffffff",
+  },
+  timeframeTextInactive: {
+    color: "#9CA3AF",
+  },
+
+  // Full width container
+  fullWidthContainer: {
+    marginHorizontal: -16, // Negative margin to span full width
+  },
+
+  // Federal Reserve styles
+  fedEventsContainer: {
+    marginTop: 12,
+  },
+  fedSubtitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginBottom: 8,
+  },
+  fedEventItem: {
+    backgroundColor: "#1F2937",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#DC2626",
+  },
+  fedEventHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 6,
+  },
+  fedEventTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#ffffff",
+    flex: 1,
+    marginRight: 8,
+  },
+  fedEventBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  fedEventHighImpact: {
+    backgroundColor: "#DC2626",
+  },
+  fedEventMediumImpact: {
+    backgroundColor: "#F59E0B",
+  },
+  fedEventBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  fedEventDescription: {
+    fontSize: 12,
+    color: "#9CA3AF",
+    lineHeight: 16,
+    marginBottom: 4,
+  },
+  fedEventDate: {
+    fontSize: 11,
+    color: "#6B7280",
+    fontStyle: "italic",
+  },
+  economicIndicatorsContainer: {
+    marginTop: 16,
+  },
+  indicatorsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  indicatorItem: {
+    backgroundColor: "#1F2937",
+    borderRadius: 8,
+    padding: 10,
+    minWidth: "48%",
+    flex: 1,
+  },
+  indicatorTitle: {
+    fontSize: 11,
+    color: "#9CA3AF",
+    marginBottom: 4,
+  },
+  indicatorValueRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  indicatorValue: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#ffffff",
+  },
+  indicatorChange: {
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  indicatorPositive: {
+    color: "#10B981",
+  },
+  indicatorNegative: {
+    color: "#EF4444",
+  },
 });
 
 export default function MarketOverview({
   onNewsPress,
   compact = false,
   onNewsDataFetched,
+  navigation,
 }: Props) {
   const [overview, setOverview] = useState<MarketOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [timeframe, setTimeframe] = useState<TimeframeType>("1D");
 
   const loadMarketOverview = async (isRefresh = false) => {
     try {
@@ -268,6 +409,7 @@ export default function MarketOverview({
         analysisDepth: compact ? "brief" : "detailed",
         includeTrending: !compact,
         includeEvents: !compact,
+        timeframe: timeframe,
       });
 
       setOverview(data);
@@ -289,7 +431,7 @@ export default function MarketOverview({
 
   useEffect(() => {
     loadMarketOverview();
-  }, []);
+  }, [timeframe]); // Reload when timeframe changes
 
   const handleRefresh = async () => {
     try {
@@ -372,10 +514,50 @@ export default function MarketOverview({
       )}
 
       <ContentComponent {...contentProps}>
+        <View
+          style={[
+            compact ? styles.compactContent : styles.content,
+            styles.fullWidthContainer,
+          ]}
+        >
+          {/* Timeframe Selector */}
+          <View style={styles.timeframeContainer}>
+            {(["1D", "1W", "1M"] as TimeframeType[]).map((tf) => (
+              <Pressable
+                key={tf}
+                style={[
+                  styles.timeframeButton,
+                  timeframe === tf
+                    ? styles.timeframeButtonActive
+                    : styles.timeframeButtonInactive,
+                ]}
+                onPress={() => setTimeframe(tf)}
+              >
+                <Text
+                  style={[
+                    styles.timeframeText,
+                    timeframe === tf
+                      ? styles.timeframeTextActive
+                      : styles.timeframeTextInactive,
+                  ]}
+                >
+                  {tf}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
         <View style={compact ? styles.compactContent : styles.content}>
           {/* AI Summary */}
           <View style={styles.summaryContainer}>
-            <Text style={styles.summaryTitle}>Today's Market Brief</Text>
+            <Text style={styles.summaryTitle}>
+              {timeframe === "1D"
+                ? "Today's Market Brief"
+                : timeframe === "1W"
+                ? "This Week's Market Outlook"
+                : "Monthly Market Trends"}
+            </Text>
             <Text style={styles.summaryText}>{overview.summary}</Text>
           </View>
 
@@ -389,6 +571,117 @@ export default function MarketOverview({
               </View>
             ))}
           </View>
+
+          {/* Federal Reserve Section */}
+          {(overview.fedEvents.length > 0 ||
+            overview.economicIndicators.length > 0) && (
+            <View style={styles.sectionContainer}>
+              <View style={styles.newsSectionHeader}>
+                <Text style={styles.sectionTitle}>
+                  <Ionicons
+                    name="business"
+                    size={16}
+                    color="#DC2626"
+                    style={styles.sectionIcon}
+                  />
+                  Federal Reserve
+                </Text>
+                {!compact && (
+                  <Pressable
+                    style={styles.viewAllButton}
+                    onPress={() => {
+                      if (navigation) {
+                        navigation.navigate("FederalReserve");
+                      } else {
+                        console.log(
+                          "Navigation not available for Federal Reserve page"
+                        );
+                      }
+                    }}
+                  >
+                    <Text style={styles.viewAllText}>View All</Text>
+                  </Pressable>
+                )}
+              </View>
+
+              {/* Fed Events */}
+              {overview.fedEvents.length > 0 && (
+                <View style={styles.fedEventsContainer}>
+                  <Text style={styles.fedSubtitle}>
+                    {compact ? "Key Events" : "Upcoming Events"}
+                  </Text>
+                  {overview.fedEvents
+                    .slice(0, compact ? 2 : 3)
+                    .map((event, index) => (
+                      <View key={index} style={styles.fedEventItem}>
+                        <View style={styles.fedEventHeader}>
+                          <Text style={styles.fedEventTitle}>
+                            {event.title}
+                          </Text>
+                          <View
+                            style={[
+                              styles.fedEventBadge,
+                              event.impact === "high"
+                                ? styles.fedEventHighImpact
+                                : styles.fedEventMediumImpact,
+                            ]}
+                          >
+                            <Text style={styles.fedEventBadgeText}>
+                              {event.impact.toUpperCase()}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={styles.fedEventDescription}>
+                          {event.description}
+                        </Text>
+                        <Text style={styles.fedEventDate}>
+                          {new Date(event.date).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </Text>
+                      </View>
+                    ))}
+                </View>
+              )}
+
+              {/* Economic Indicators */}
+              {!compact && overview.economicIndicators.length > 0 && (
+                <View style={styles.economicIndicatorsContainer}>
+                  <Text style={styles.fedSubtitle}>Key Economic Data</Text>
+                  <View style={styles.indicatorsGrid}>
+                    {overview.economicIndicators.map((indicator, index) => (
+                      <View key={index} style={styles.indicatorItem}>
+                        <Text style={styles.indicatorTitle}>
+                          {indicator.title}
+                        </Text>
+                        <View style={styles.indicatorValueRow}>
+                          <Text style={styles.indicatorValue}>
+                            {indicator.value}
+                            {indicator.unit}
+                          </Text>
+                          {indicator.changePercent && (
+                            <Text
+                              style={[
+                                styles.indicatorChange,
+                                indicator.changePercent > 0
+                                  ? styles.indicatorPositive
+                                  : styles.indicatorNegative,
+                              ]}
+                            >
+                              {indicator.changePercent > 0 ? "+" : ""}
+                              {indicator.changePercent.toFixed(1)}%
+                            </Text>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Trending Stocks */}
           {!compact && overview.trendingStocks.length > 0 && (
