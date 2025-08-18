@@ -24,6 +24,7 @@ interface Props {
   compact?: boolean;
   onNewsDataFetched?: (news: NewsItem[]) => void; // Callback to share news data with parent
   navigation?: any; // Navigation prop for routing
+  fullWidth?: boolean; // New prop for full width display
 }
 
 type TimeframeType = "1D" | "1W" | "1M";
@@ -380,6 +381,194 @@ const styles = StyleSheet.create({
   indicatorNegative: {
     color: "#EF4444",
   },
+
+  // Enhanced Market Overview Styles
+  enhancedContainer: {
+    flex: 1,
+    backgroundColor: "#0A0F1C",
+    paddingHorizontal: 0, // Full width
+  },
+  marketSentimentCard: {
+    backgroundColor: "#1F2937",
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#374151",
+  },
+  sentimentHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  sentimentTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#ffffff",
+  },
+  sentimentBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  sentimentBadgeBullish: {
+    backgroundColor: "rgba(16, 185, 129, 0.2)",
+    borderColor: "#10B981",
+    borderWidth: 1,
+  },
+  sentimentBadgeBearish: {
+    backgroundColor: "rgba(239, 68, 68, 0.2)",
+    borderColor: "#EF4444",
+    borderWidth: 1,
+  },
+  sentimentBadgeNeutral: {
+    backgroundColor: "rgba(156, 163, 175, 0.2)",
+    borderColor: "#9CA3AF",
+    borderWidth: 1,
+  },
+  sentimentBadgeText: {
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  sentimentBadgeTextBullish: {
+    color: "#10B981",
+  },
+  sentimentBadgeTextBearish: {
+    color: "#EF4444",
+  },
+  sentimentBadgeTextNeutral: {
+    color: "#9CA3AF",
+  },
+  confidenceBar: {
+    height: 4,
+    backgroundColor: "#374151",
+    borderRadius: 2,
+    marginBottom: 12,
+  },
+  confidenceFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  confidenceFillBullish: {
+    backgroundColor: "#10B981",
+  },
+  confidenceFillBearish: {
+    backgroundColor: "#EF4444",
+  },
+  confidenceFillNeutral: {
+    backgroundColor: "#9CA3AF",
+  },
+  sentimentFactors: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  sentimentFactor: {
+    backgroundColor: "#374151",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  sentimentFactorText: {
+    fontSize: 11,
+    color: "#D1D5DB",
+  },
+  newsHighlightsCard: {
+    backgroundColor: "#1F2937",
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: "#F59E0B",
+  },
+  newsHighlightsTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#ffffff",
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  newsHighlightItem: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+    paddingVertical: 8,
+  },
+  newsHighlightBullet: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#F59E0B",
+    marginTop: 6,
+    marginRight: 12,
+  },
+  newsHighlightText: {
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#E5E7EB",
+  },
+  dayAheadCard: {
+    backgroundColor: "#1F2937",
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: "#6366F1",
+  },
+  dayAheadTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#ffffff",
+    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  timeframeBriefing: {
+    backgroundColor: "#374151",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  timeframeBriefingTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ffffff",
+    marginBottom: 8,
+  },
+  timeframeBriefingText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: "#D1D5DB",
+  },
+  enhancedSummaryContainer: {
+    marginHorizontal: 16,
+    marginBottom: 20,
+    padding: 20,
+    backgroundColor: "#1F2937",
+    borderRadius: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "#4F46E5",
+  },
+  enhancedSummaryTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#ffffff",
+    marginBottom: 12,
+  },
+  enhancedSummaryText: {
+    fontSize: 16,
+    lineHeight: 24,
+    color: "#E5E7EB",
+  },
 });
 
 export default function MarketOverview({
@@ -387,12 +576,19 @@ export default function MarketOverview({
   compact = false,
   onNewsDataFetched,
   navigation,
+  fullWidth = false,
 }: Props) {
   const [overview, setOverview] = useState<MarketOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [timeframe, setTimeframe] = useState<TimeframeType>("1D");
+  const [newsHighlights, setNewsHighlights] = useState<string[]>([]);
+  const [marketSentiment, setMarketSentiment] = useState<{
+    overall: "bullish" | "bearish" | "neutral";
+    confidence: number;
+    factors: string[];
+  } | null>(null);
 
   const loadMarketOverview = async (isRefresh = false) => {
     try {
@@ -418,6 +614,10 @@ export default function MarketOverview({
       if (onNewsDataFetched && rawData.news.length > 0) {
         onNewsDataFetched(rawData.news);
       }
+
+      // Extract news highlights and market sentiment
+      await extractNewsHighlights(rawData.news);
+      await calculateMarketSentiment(rawData.news, data.trendingStocks);
     } catch (err) {
       console.error("Market Overview Error:", err);
       setError(
@@ -450,6 +650,80 @@ export default function MarketOverview({
   const handleRetry = () => {
     setError(null);
     loadMarketOverview();
+  };
+
+  // Extract key highlights from news using AI
+  const extractNewsHighlights = async (newsItems: NewsItem[]) => {
+    try {
+      if (newsItems.length === 0) return;
+
+      // Take top 10 most recent news items
+      const topNews = newsItems.slice(0, 10);
+      const newsText = topNews
+        .map((item) => `${item.title}: ${item.summary || ""}`)
+        .join("\n");
+
+      // For now, extract highlights from existing key highlights
+      // In a full implementation, this would use AI to extract key points
+      const highlights = topNews
+        .filter((item) => item.title && item.title.length > 20)
+        .slice(0, 5)
+        .map((item) => item.title);
+
+      setNewsHighlights(highlights);
+    } catch (error) {
+      console.error("Error extracting news highlights:", error);
+    }
+  };
+
+  // Calculate overall market sentiment
+  const calculateMarketSentiment = async (
+    newsItems: NewsItem[],
+    trendingStocks: any[]
+  ) => {
+    try {
+      const sentiments = newsItems
+        .map((item) => item.sentiment)
+        .filter((sentiment) => sentiment);
+
+      if (sentiments.length === 0) return;
+
+      const positiveCount = sentiments.filter(
+        (s) => s && s.toLowerCase() === "positive"
+      ).length;
+      const negativeCount = sentiments.filter(
+        (s) => s && s.toLowerCase() === "negative"
+      ).length;
+      const neutralCount = sentiments.length - positiveCount - negativeCount;
+
+      const totalCount = sentiments.length;
+      const positiveRatio = positiveCount / totalCount;
+      const negativeRatio = negativeCount / totalCount;
+
+      let overall: "bullish" | "bearish" | "neutral";
+      let confidence: number;
+
+      if (positiveRatio > 0.6) {
+        overall = "bullish";
+        confidence = Math.min(positiveRatio * 100, 95);
+      } else if (negativeRatio > 0.6) {
+        overall = "bearish";
+        confidence = Math.min(negativeRatio * 100, 95);
+      } else {
+        overall = "neutral";
+        confidence = Math.max(60, Math.max(positiveRatio, negativeRatio) * 100);
+      }
+
+      const factors = [
+        `${positiveCount} positive signals`,
+        `${negativeCount} negative signals`,
+        `${trendingStocks.length} trending stocks`,
+      ];
+
+      setMarketSentiment({ overall, confidence, factors });
+    } catch (error) {
+      console.error("Error calculating market sentiment:", error);
+    }
   };
 
   if (loading && !overview) {
@@ -494,7 +768,15 @@ export default function MarketOverview({
       };
 
   return (
-    <View style={compact ? styles.compactContainer : styles.container}>
+    <View
+      style={
+        compact
+          ? styles.compactContainer
+          : fullWidth
+          ? styles.enhancedContainer
+          : styles.container
+      }
+    >
       {!compact && (
         <View style={styles.header}>
           <View>
@@ -514,14 +796,119 @@ export default function MarketOverview({
       )}
 
       <ContentComponent {...contentProps}>
+        {/* Enhanced Market Overview Content */}
+        {fullWidth && (
+          <>
+            {/* Market Sentiment Dashboard */}
+            {marketSentiment && (
+              <View style={styles.marketSentimentCard}>
+                <View style={styles.sentimentHeader}>
+                  <Text style={styles.sentimentTitle}>Market Sentiment</Text>
+                  <View
+                    style={[
+                      styles.sentimentBadge,
+                      marketSentiment.overall === "bullish"
+                        ? styles.sentimentBadgeBullish
+                        : marketSentiment.overall === "bearish"
+                        ? styles.sentimentBadgeBearish
+                        : styles.sentimentBadgeNeutral,
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        marketSentiment.overall === "bullish"
+                          ? "trending-up"
+                          : marketSentiment.overall === "bearish"
+                          ? "trending-down"
+                          : "remove"
+                      }
+                      size={14}
+                      color={
+                        marketSentiment.overall === "bullish"
+                          ? "#10B981"
+                          : marketSentiment.overall === "bearish"
+                          ? "#EF4444"
+                          : "#9CA3AF"
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.sentimentBadgeText,
+                        marketSentiment.overall === "bullish"
+                          ? styles.sentimentBadgeTextBullish
+                          : marketSentiment.overall === "bearish"
+                          ? styles.sentimentBadgeTextBearish
+                          : styles.sentimentBadgeTextNeutral,
+                      ]}
+                    >
+                      {marketSentiment.overall.toUpperCase()}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.confidenceBar}>
+                  <View
+                    style={[
+                      styles.confidenceFill,
+                      marketSentiment.overall === "bullish"
+                        ? styles.confidenceFillBullish
+                        : marketSentiment.overall === "bearish"
+                        ? styles.confidenceFillBearish
+                        : styles.confidenceFillNeutral,
+                      { width: `${marketSentiment.confidence}%` },
+                    ]}
+                  />
+                </View>
+                <Text
+                  style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 12 }}
+                >
+                  Confidence: {Math.round(marketSentiment.confidence)}%
+                </Text>
+                <View style={styles.sentimentFactors}>
+                  {marketSentiment.factors.map((factor, index) => (
+                    <View key={index} style={styles.sentimentFactor}>
+                      <Text style={styles.sentimentFactorText}>{factor}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* News Highlights */}
+            {newsHighlights.length > 0 && (
+              <View style={styles.newsHighlightsCard}>
+                <Text style={styles.newsHighlightsTitle}>
+                  <Ionicons
+                    name="flash"
+                    size={18}
+                    color="#F59E0B"
+                    style={{ marginRight: 8 }}
+                  />
+                  Breaking News Highlights
+                </Text>
+                {newsHighlights.map((highlight, index) => (
+                  <View key={index} style={styles.newsHighlightItem}>
+                    <View style={styles.newsHighlightBullet} />
+                    <Text style={styles.newsHighlightText}>{highlight}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+
         <View
           style={[
             compact ? styles.compactContent : styles.content,
-            styles.fullWidthContainer,
+            fullWidth ? { paddingHorizontal: 0 } : styles.fullWidthContainer,
           ]}
         >
           {/* Timeframe Selector */}
-          <View style={styles.timeframeContainer}>
+          <View
+            style={[
+              styles.timeframeContainer,
+              fullWidth && { marginHorizontal: 16 },
+            ]}
+          >
             {(["1D", "1W", "1M"] as TimeframeType[]).map((tf) => (
               <Pressable
                 key={tf}
@@ -548,22 +935,114 @@ export default function MarketOverview({
           </View>
         </View>
 
-        <View style={compact ? styles.compactContent : styles.content}>
-          {/* AI Summary */}
-          <View style={styles.summaryContainer}>
-            <Text style={styles.summaryTitle}>
+        <View
+          style={
+            compact
+              ? styles.compactContent
+              : fullWidth
+              ? { paddingHorizontal: 0 }
+              : styles.content
+          }
+        >
+          {/* Enhanced AI Summary */}
+          <View
+            style={
+              fullWidth
+                ? styles.enhancedSummaryContainer
+                : styles.summaryContainer
+            }
+          >
+            <Text
+              style={
+                fullWidth ? styles.enhancedSummaryTitle : styles.summaryTitle
+              }
+            >
               {timeframe === "1D"
-                ? "Today's Market Brief"
+                ? "📊 Today's Market Brief"
                 : timeframe === "1W"
-                ? "This Week's Market Outlook"
-                : "Monthly Market Trends"}
+                ? "📈 This Week's Market Outlook"
+                : "📅 Monthly Market Trends"}
             </Text>
-            <Text style={styles.summaryText}>{overview.summary}</Text>
+            <Text
+              style={
+                fullWidth ? styles.enhancedSummaryText : styles.summaryText
+              }
+            >
+              {overview.summary}
+            </Text>
           </View>
 
+          {/* Day Ahead Briefing - Enhanced for full width */}
+          {fullWidth && (
+            <View style={styles.dayAheadCard}>
+              <Text style={styles.dayAheadTitle}>
+                <Ionicons
+                  name="calendar-outline"
+                  size={18}
+                  color="#6366F1"
+                  style={{ marginRight: 8 }}
+                />
+                Day Ahead Briefing
+              </Text>
+
+              {/* Timeframe-specific briefings */}
+              <View style={styles.timeframeBriefing}>
+                <Text style={styles.timeframeBriefingTitle}>
+                  {timeframe === "1D"
+                    ? "🌅 Today's Focus"
+                    : timeframe === "1W"
+                    ? "📅 This Week's Key Events"
+                    : "🗓️ Monthly Outlook"}
+                </Text>
+                <Text style={styles.timeframeBriefingText}>
+                  {timeframe === "1D"
+                    ? "Key market movers, earnings releases, and economic data to watch today. Stay alert for Fed communications and sector rotation signals."
+                    : timeframe === "1W"
+                    ? "Major earnings reports, FOMC meetings, economic indicators, and technical levels to monitor this week. Watch for trend confirmations."
+                    : "Long-term market themes, policy changes, and seasonal patterns. Focus on major economic cycles and structural market shifts."}
+                </Text>
+              </View>
+
+              {overview.upcomingEvents.length > 0 && (
+                <View>
+                  <Text style={styles.timeframeBriefingTitle}>
+                    ⚡ Key Events Coming Up
+                  </Text>
+                  {overview.upcomingEvents.slice(0, 3).map((event, index) => (
+                    <View key={index} style={{ marginBottom: 8 }}>
+                      <Text
+                        style={{
+                          color: "#E5E7EB",
+                          fontSize: 13,
+                          fontWeight: "600",
+                        }}
+                      >
+                        • {event.title}
+                      </Text>
+                      <Text
+                        style={{
+                          color: "#9CA3AF",
+                          fontSize: 12,
+                          marginLeft: 12,
+                        }}
+                      >
+                        {event.description}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
+
           {/* Key Highlights */}
-          <View style={styles.highlightsContainer}>
-            <Text style={styles.highlightsTitle}>Key Highlights</Text>
+          <View
+            style={[
+              styles.highlightsContainer,
+              fullWidth && { marginHorizontal: 16 },
+            ]}
+          >
+            <Text style={styles.highlightsTitle}>🎯 Key Market Highlights</Text>
             {overview.keyHighlights.map((highlight, index) => (
               <View key={index} style={styles.highlightItem}>
                 <View style={styles.highlightBullet} />
@@ -575,7 +1054,12 @@ export default function MarketOverview({
           {/* Federal Reserve Section */}
           {(overview.fedEvents.length > 0 ||
             overview.economicIndicators.length > 0) && (
-            <View style={styles.sectionContainer}>
+            <View
+              style={[
+                styles.sectionContainer,
+                fullWidth && { marginHorizontal: 16 },
+              ]}
+            >
               <View style={styles.newsSectionHeader}>
                 <Text style={styles.sectionTitle}>
                   <Ionicons
@@ -685,7 +1169,12 @@ export default function MarketOverview({
 
           {/* Trending Stocks */}
           {!compact && overview.trendingStocks.length > 0 && (
-            <View style={styles.sectionContainer}>
+            <View
+              style={[
+                styles.sectionContainer,
+                fullWidth && { marginHorizontal: 16 },
+              ]}
+            >
               <Text style={styles.sectionTitle}>
                 <Ionicons
                   name="flame"
@@ -709,8 +1198,13 @@ export default function MarketOverview({
           )}
 
           {/* Upcoming Events */}
-          {!compact && overview.upcomingEvents.length > 0 && (
-            <View style={styles.sectionContainer}>
+          {!compact && overview.upcomingEvents.length > 0 && !fullWidth && (
+            <View
+              style={[
+                styles.sectionContainer,
+                fullWidth && { marginHorizontal: 16 },
+              ]}
+            >
               <Text style={styles.sectionTitle}>
                 <Ionicons
                   name="calendar"
@@ -745,7 +1239,12 @@ export default function MarketOverview({
 
           {/* Top Stories - Only show in full mode, not compact */}
           {!compact && (
-            <View style={styles.newsSection}>
+            <View
+              style={[
+                styles.newsSection,
+                fullWidth && { marginHorizontal: 16 },
+              ]}
+            >
               <View style={styles.newsSectionHeader}>
                 <Text style={styles.sectionTitle}>
                   <Ionicons
@@ -767,8 +1266,10 @@ export default function MarketOverview({
           )}
 
           {/* Last Updated */}
-          <Text style={styles.lastUpdated}>
-            Last updated: {new Date(overview.lastUpdated).toLocaleString()}
+          <Text
+            style={[styles.lastUpdated, fullWidth && { marginHorizontal: 16 }]}
+          >
+            🔄 Last updated: {new Date(overview.lastUpdated).toLocaleString()}
           </Text>
         </View>
       </ContentComponent>

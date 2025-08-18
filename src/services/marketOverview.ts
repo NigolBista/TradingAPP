@@ -56,6 +56,22 @@ export interface MarketOverview {
   fedEvents: any[]; // Federal Reserve events
   economicIndicators: any[]; // Key economic indicators
   lastUpdated: string;
+  marketSentiment?: {
+    overall: 'bullish' | 'bearish' | 'neutral';
+    confidence: number;
+    factors: string[];
+  };
+  dayAheadInsights?: {
+    keyEvents: string[];
+    watchList: string[];
+    riskFactors: string[];
+    opportunities: string[];
+  };
+  timeframeSpecificInsights?: {
+    shortTerm: string; // 1D insights
+    mediumTerm: string; // 1W insights  
+    longTerm: string; // 1M insights
+  };
 }
 
 export interface MarketOverviewRequest {
@@ -107,7 +123,13 @@ export async function generateMarketOverview(
     );
 
     // Extract key highlights from AI response
-    const { summary, keyHighlights } = parseAIResponse(aiSummary);
+    const { 
+      summary, 
+      keyHighlights, 
+      marketSentiment, 
+      dayAheadInsights, 
+      timeframeSpecificInsights 
+    } = parseAIResponse(aiSummary);
 
     return {
       summary,
@@ -120,6 +142,15 @@ export async function generateMarketOverview(
         .slice(0, 5), // High and medium impact Fed events
       economicIndicators: economicIndicators.slice(0, 5), // Top 5 economic indicators
       lastUpdated: new Date().toISOString(),
+      ...(marketSentiment && { marketSentiment }),
+      ...(dayAheadInsights && { dayAheadInsights }),
+      ...(timeframeSpecificInsights && {
+        timeframeSpecificInsights: {
+          shortTerm: timeframe === '1D' ? timeframeSpecificInsights : '',
+          mediumTerm: timeframe === '1W' ? timeframeSpecificInsights : '',
+          longTerm: timeframe === '1M' ? timeframeSpecificInsights : ''
+        }
+      }),
     };
   } catch (error) {
     console.error("❌ Market Overview Error:", error);
@@ -280,7 +311,7 @@ function createBriefAnalysisPrompt(
   economicIndicators: any[],
   timeframe: "1D" | "1W" | "1M" = "1D"
 ): string {
-  const timeframeContext = {
+  const briefTimeframeContext = {
     "1D": {
       title: "today's market conditions",
       focus: "what investors should know today",
@@ -305,7 +336,7 @@ function createBriefAnalysisPrompt(
     },
   };
 
-  const context = timeframeContext[timeframe];
+  const context = briefTimeframeContext[timeframe];
 
   return `Analyze ${context.title} and provide a brief overview.
 
@@ -365,6 +396,25 @@ function createDetailedAnalysisPrompt(
   economicIndicators: any[],
   timeframe: "1D" | "1W" | "1M" = "1D"
 ): string {
+  const detailedTimeframeContext = {
+    "1D": {
+      focus: "today's trading session, intraday opportunities, and immediate market reactions",
+      horizon: "next 24 hours",
+      actionItems: "key levels to watch, earnings reactions, economic data releases"
+    },
+    "1W": {
+      focus: "this week's major events, earnings season impact, and short-term trends",
+      horizon: "next 5-7 trading days", 
+      actionItems: "weekly technical levels, FOMC meetings, major earnings, economic calendar"
+    },
+    "1M": {
+      focus: "monthly trends, sector rotation, and longer-term market themes",
+      horizon: "next 30 days",
+      actionItems: "monthly support/resistance, policy changes, seasonal patterns"
+    }
+  };
+  
+  const context = detailedTimeframeContext[timeframe];
   const timeframeContext = {
     "1D": "today's developments",
     "1W": "this week's market outlook and upcoming developments",
@@ -425,20 +475,31 @@ ${economicIndicators
 
 Provide a comprehensive analysis with:
 
-1. EXECUTIVE_SUMMARY: 3-4 sentences capturing the overall market narrative and key themes
+1. EXECUTIVE_SUMMARY: 3-4 sentences capturing the overall market narrative and key themes for ${context.horizon}
 
-2. KEY_HIGHLIGHTS: 6-8 critical points covering:
+2. KEY_HIGHLIGHTS: 8-10 critical points covering:
    - Major market movers and catalysts
    - Federal Reserve meetings, policy decisions, and economic data
-   - Sector rotation or themes
+   - Sector rotation or themes  
    - Economic indicators (CPI, PPI, employment, etc.) and policy impacts
    - Notable earnings or corporate developments
    - Technical levels or market structure
    - Risk factors to monitor
+   - ${context.actionItems}
 
-3. TRENDING_FOCUS: Brief analysis of why certain stocks are trending
+3. MARKET_SENTIMENT: Overall market sentiment (BULLISH/BEARISH/NEUTRAL) with confidence level
 
-4. OUTLOOK: What to watch for in the near term
+4. DAY_AHEAD_INSIGHTS: Specific actionable insights for ${context.focus}:
+   - KEY_EVENTS: Top 3-5 events to watch
+   - WATCH_LIST: Stocks/sectors to monitor closely
+   - RISK_FACTORS: Key risks that could impact markets
+   - OPPORTUNITIES: Potential trading/investment opportunities
+
+5. TIMEFRAME_INSIGHTS: Specific insights for ${timeframe} timeframe focusing on ${context.focus}
+
+6. TRENDING_FOCUS: Brief analysis of why certain stocks are trending
+
+7. OUTLOOK: What to watch for in ${context.horizon}
 
 Structure your response clearly and focus on actionable insights for traders and investors.`;
 }
@@ -449,6 +510,18 @@ Structure your response clearly and focus on actionable insights for traders and
 function parseAIResponse(aiResponse: string): {
   summary: string;
   keyHighlights: string[];
+  marketSentiment?: {
+    overall: 'bullish' | 'bearish' | 'neutral';
+    confidence: number;
+    factors: string[];
+  };
+  dayAheadInsights?: {
+    keyEvents: string[];
+    watchList: string[];
+    riskFactors: string[];
+    opportunities: string[];
+  };
+  timeframeSpecificInsights?: string;
 } {
   const lines = aiResponse.split("\n").filter((line) => line.trim());
 
@@ -504,6 +577,54 @@ function parseAIResponse(aiResponse: string): {
     }
   }
 
+  // Extract market sentiment
+  let marketSentiment: any = undefined;
+  const sentimentMatch = aiResponse.match(/MARKET_SENTIMENT:\s*([^]*?)(?=\n\d+\.|DAY_AHEAD_INSIGHTS|$)/i);
+  if (sentimentMatch) {
+    const sentimentText = sentimentMatch[1];
+    const bullishMatch = sentimentText.match(/BULLISH/i);
+    const bearishMatch = sentimentText.match(/BEARISH/i);
+    const neutralMatch = sentimentText.match(/NEUTRAL/i);
+    
+    if (bullishMatch || bearishMatch || neutralMatch) {
+      const overall = bullishMatch ? 'bullish' : bearishMatch ? 'bearish' : 'neutral';
+      const confidenceMatch = sentimentText.match(/(\d+)%/);
+      const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 75;
+      
+      marketSentiment = {
+        overall,
+        confidence,
+        factors: ['AI analysis', 'News sentiment', 'Market indicators']
+      };
+    }
+  }
+
+  // Extract day ahead insights
+  let dayAheadInsights: any = undefined;
+  const dayAheadMatch = aiResponse.match(/DAY_AHEAD_INSIGHTS:\s*([^]*?)(?=\n\d+\.|TIMEFRAME_INSIGHTS|$)/i);
+  if (dayAheadMatch) {
+    const dayAheadText = dayAheadMatch[1];
+    
+    const keyEventsMatch = dayAheadText.match(/KEY_EVENTS:\s*([^]*?)(?=WATCH_LIST|$)/i);
+    const watchListMatch = dayAheadText.match(/WATCH_LIST:\s*([^]*?)(?=RISK_FACTORS|$)/i);
+    const riskFactorsMatch = dayAheadText.match(/RISK_FACTORS:\s*([^]*?)(?=OPPORTUNITIES|$)/i);
+    const opportunitiesMatch = dayAheadText.match(/OPPORTUNITIES:\s*([^]*?)(?=\n\d+\.|$)/i);
+    
+    dayAheadInsights = {
+      keyEvents: extractBulletPoints(keyEventsMatch?.[1] || ''),
+      watchList: extractBulletPoints(watchListMatch?.[1] || ''),
+      riskFactors: extractBulletPoints(riskFactorsMatch?.[1] || ''),
+      opportunities: extractBulletPoints(opportunitiesMatch?.[1] || '')
+    };
+  }
+
+  // Extract timeframe specific insights
+  let timeframeSpecificInsights: string | undefined;
+  const timeframeMatch = aiResponse.match(/TIMEFRAME_INSIGHTS:\s*([^]*?)(?=\n\d+\.|TRENDING_FOCUS|$)/i);
+  if (timeframeMatch) {
+    timeframeSpecificInsights = timeframeMatch[1].trim();
+  }
+
   return {
     summary:
       summary ||
@@ -517,5 +638,25 @@ function parseAIResponse(aiResponse: string): {
             "Check trending stocks for momentum plays",
             "Monitor upcoming events for volatility",
           ],
+    marketSentiment,
+    dayAheadInsights,
+    timeframeSpecificInsights,
   };
+}
+
+/**
+ * Helper function to extract bullet points from text
+ */
+function extractBulletPoints(text: string): string[] {
+  if (!text) return [];
+  
+  return text
+    .split('\n')
+    .map(line => line.trim())
+    .filter(line => 
+      line.startsWith('•') || line.startsWith('-') || /^\d+\./.test(line)
+    )
+    .map(line => line.replace(/^[•\-\d\.\s]*/, '').trim())
+    .filter(line => line.length > 5)
+    .slice(0, 5);
 }
