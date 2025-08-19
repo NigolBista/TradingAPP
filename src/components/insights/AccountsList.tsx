@@ -67,10 +67,45 @@ export default function AccountsList({
     }
   };
 
+  const isInvestmentAccount = (accountType: string) => {
+    const investmentTypes = [
+      "brokerage",
+      "investment",
+      "ira",
+      "roth ira",
+      "roth",
+      "401k",
+      "401(k)",
+      "403b",
+      "403(b)",
+      "trading",
+      "margin",
+      "cash management",
+      "retirement",
+      "pension",
+      "annuity",
+      "mutual fund",
+      "etf",
+      "stock",
+      "bond",
+      "securities",
+    ];
+
+    const accountTypeLower = accountType.toLowerCase();
+    const isInvestment = investmentTypes.some((type) =>
+      accountTypeLower.includes(type)
+    );
+
+    // Debug log to see what account types we're getting
+    console.log(
+      `Account type: "${accountType}" -> Investment: ${isInvestment}`
+    );
+
+    return isInvestment;
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Investment Accounts</Text>
-
       {accounts.map((account) => (
         <Pressable
           key={account.id}
@@ -110,16 +145,18 @@ export default function AccountsList({
               <Text style={styles.balance}>
                 {formatCurrency(account.balance)}
               </Text>
-              <Text
-                style={[
-                  styles.dayChange,
-                  account.dayChangePercent >= 0 ? styles.up : styles.down,
-                ]}
-              >
-                {account.dayChangePercent >= 0 ? "▲" : "▼"}{" "}
-                {formatCurrency(Math.abs(account.dayChange))} (
-                {Math.abs(account.dayChangePercent).toFixed(2)}%)
-              </Text>
+              {isInvestmentAccount(account.accountType) && (
+                <Text
+                  style={[
+                    styles.dayChange,
+                    account.dayChangePercent >= 0 ? styles.up : styles.down,
+                  ]}
+                >
+                  {account.dayChangePercent >= 0 ? "▲" : "▼"}{" "}
+                  {formatCurrency(Math.abs(account.dayChange))} (
+                  {Math.abs(account.dayChangePercent).toFixed(2)}%)
+                </Text>
+              )}
             </View>
             <Text style={styles.accountType}>{account.accountType}</Text>
           </View>
@@ -146,21 +183,18 @@ export default function AccountsList({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 16,
+    gap: 8,
   },
   title: {
     color: "#ffffff",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   accountCard: {
     backgroundColor: "#111827",
     borderRadius: 8,
     padding: 12,
-    marginBottom: 8,
   },
   accountHeader: {
     flexDirection: "row",

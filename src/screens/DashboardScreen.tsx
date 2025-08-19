@@ -10,12 +10,14 @@ import {
   Dimensions,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import {
   portfolioAggregationService,
   type PortfolioSummary,
 } from "../services/portfolioAggregationService";
 import { plaidPortfolioService } from "../services/portfolioAggregationService_NEW";
+import { plaidIntegrationService } from "../services/plaidIntegration";
 // Removed old brokerage services - now using Plaid integration
 // import { brokerageApiService, type BrokerageWatchlistItem } from "../services/legacy/brokerageApiService";
 // import { brokerageAuthService } from "../services/legacy/brokerageAuth";
@@ -96,6 +98,8 @@ export default function DashboardScreen() {
   >("1M");
   const [portfolioHistory, setPortfolioHistory] = useState<any>(null);
   const [portfolioPositions, setPortfolioPositions] = useState<any[]>([]);
+  const [plaidAccounts, setPlaidAccounts] = useState<any[]>([]);
+  const [selectedAccountTab, setSelectedAccountTab] = useState<string>("All");
 
   // Callback to receive news data from MarketOverview component
   const handleNewsDataFetched = (news: NewsItem[]) => {
@@ -169,7 +173,179 @@ export default function DashboardScreen() {
     return series;
   }
 
+  const getAccountCategory = (type: string, subtype?: string) => {
+    const accountType = (subtype || type).toLowerCase();
+
+    // Investment accounts
+    if (
+      [
+        "investment",
+        "brokerage",
+        "ira",
+        "401k",
+        "403b",
+        "457b",
+        "529",
+        "roth",
+        "rollover",
+        "sep",
+        "simple",
+        "sarsep",
+        "profit sharing plan",
+        "stock plan",
+        "pension",
+        "defined benefit",
+        "defined contribution",
+      ].includes(accountType)
+    ) {
+      return "Investment";
+    }
+
+    // Banking accounts
+    if (
+      [
+        "depository",
+        "checking",
+        "savings",
+        "money market",
+        "cd",
+        "treasury",
+        "sweep",
+      ].includes(accountType)
+    ) {
+      return "Banking";
+    }
+
+    // Credit accounts
+    if (["credit", "credit card", "paypal"].includes(accountType)) {
+      return "Credit";
+    }
+
+    // Loan accounts
+    if (
+      [
+        "loan",
+        "mortgage",
+        "home equity",
+        "line of credit",
+        "auto",
+        "business",
+        "commercial",
+        "construction",
+        "consumer",
+        "home equity line of credit",
+        "overdraft",
+        "student",
+      ].includes(accountType)
+    ) {
+      return "Loans";
+    }
+
+    return "Other";
+  };
+
+  const formatAccountType = (type: string, subtype?: string) => {
+    // Map Plaid account types to user-friendly names
+    const typeMap: { [key: string]: string } = {
+      // Investment accounts
+      investment: "Investment Account",
+      brokerage: "Brokerage Account",
+      ira: "IRA",
+      "401k": "401(k)",
+      "403b": "403(b)",
+      "457b": "457(b)",
+      "529": "529 Education",
+      roth: "Roth IRA",
+      rollover: "Rollover IRA",
+      sep: "SEP IRA",
+      simple: "SIMPLE IRA",
+      sarsep: "SARSEP",
+      "profit sharing plan": "Profit Sharing",
+      "stock plan": "Stock Plan",
+      pension: "Pension",
+      "defined benefit": "Defined Benefit",
+      "defined contribution": "Defined Contribution",
+
+      // Banking accounts
+      depository: "Bank Account",
+      checking: "Checking Account",
+      savings: "Savings Account",
+      "money market": "Money Market",
+      cd: "Certificate of Deposit",
+      treasury: "Treasury Account",
+      sweep: "Sweep Account",
+
+      // Credit accounts
+      credit: "Credit Card",
+      "credit card": "Credit Card",
+      paypal: "PayPal",
+
+      // Loan accounts
+      loan: "Loan",
+      mortgage: "Mortgage",
+      "home equity": "Home Equity",
+      "line of credit": "Line of Credit",
+      auto: "Auto Loan",
+      business: "Business Loan",
+      commercial: "Commercial Loan",
+      construction: "Construction Loan",
+      consumer: "Consumer Loan",
+      "home equity line of credit": "HELOC",
+      overdraft: "Overdraft",
+      student: "Student Loan",
+    };
+
+    // First try subtype, then type, then fallback
+    const accountType = subtype || type;
+    return (
+      typeMap[accountType.toLowerCase()] ||
+      typeMap[type.toLowerCase()] ||
+      accountType.charAt(0).toUpperCase() + accountType.slice(1)
+    );
+  };
+
+  const getAccountTabs = () => {
+    const categories = ["All"];
+    const accountCategories = plaidAccounts.map((account) => account.category);
+    const uniqueCategories = [...new Set(accountCategories)];
+    return [...categories, ...uniqueCategories.sort()];
+  };
+
+  const getFilteredAccounts = () => {
+    if (selectedAccountTab === "All") {
+      return plaidAccounts;
+    }
+    return plaidAccounts.filter(
+      (account) => account.category === selectedAccountTab
+    );
+  };
+
   const loadData = async (isRefresh = false) => {
+    const fetchPlaidAccounts = async () => {
+      try {
+        const tokens = plaidIntegrationService.getStoredTokens();
+        const accountsPromises = tokens.map(async (token) => {
+          const accounts = await plaidIntegrationService.getAccounts(token);
+          return accounts.map((account) => ({
+            id: account.account_id,
+            provider: "Plaid",
+            accountName: account.name,
+            accountType: formatAccountType(account.type, account.subtype),
+            category: getAccountCategory(account.type, account.subtype),
+            balance: account.balances.current || 0,
+            dayChange: 0, // Plaid doesn't provide daily change directly
+            dayChangePercent: 0,
+            lastSync: new Date(),
+            isConnected: true,
+          }));
+        });
+        const allAccounts = await Promise.all(accountsPromises);
+        return allAccounts.flat();
+      } catch (error) {
+        console.error("Failed to fetch Plaid accounts:", error);
+        return [];
+      }
+    };
     if (isRefresh) {
       setState((prev) => ({ ...prev, refreshing: true }));
     } else {
@@ -179,23 +355,31 @@ export default function DashboardScreen() {
     try {
       // Prime market overview store early so navigating to View Full reuses data
       ensureOverview("1D").catch(() => {});
-      const [portfolioData, watchlistData, history, positions] =
+      const [portfolioData, watchlistData, history, positions, accounts] =
         await Promise.all([
           plaidPortfolioService.getPortfolioSummary(),
           Promise.resolve([]), // Watchlist will be implemented with Plaid later
           plaidPortfolioService.getPortfolioHistory(perfPeriod),
           plaidPortfolioService.getAllPositions(),
+          fetchPlaidAccounts(),
         ]);
 
       setState((prev) => ({
         ...prev,
-        portfolio: portfolioData,
+        portfolio: {
+          ...portfolioData,
+          positionsCount: portfolioData.positionCount || 0,
+          providersConnected: Array(portfolioData.connectedAccounts || 0).fill(
+            "Plaid"
+          ),
+        } as any,
         watchlist: watchlistData,
         loading: false,
         refreshing: false,
       }));
       setPortfolioHistory(history);
       setPortfolioPositions(positions);
+      setPlaidAccounts(accounts);
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
       setState((prev) => ({
@@ -282,16 +466,6 @@ export default function DashboardScreen() {
         <Text style={styles.portfolioSubtext}>
           {accounts} account(s) connected
         </Text>
-        {/* Inline chart like Robinhood (no separation) */}
-        <View style={{ width: "100%", marginTop: 12 }}>
-          <SimpleLineChart
-            data={dummySeries}
-            height={220}
-            color={isPositive ? "#00D4AA" : "#FF6B6B"}
-            strokeWidth={2}
-            showFill={false}
-          />
-        </View>
       </View>
     );
   };
@@ -418,7 +592,7 @@ export default function DashboardScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView
         style={styles.content}
         refreshControl={
@@ -429,7 +603,6 @@ export default function DashboardScreen() {
           />
         }
       >
-        {renderPortfolioHeader()}
         <View style={{ marginHorizontal: 16, marginTop: 12 }}>
           <PerformanceCard
             history={portfolioHistory}
@@ -464,30 +637,40 @@ export default function DashboardScreen() {
           </View>
         )}
 
-        {/* Investment Accounts */}
-        <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+        {/* Accounts */}
+        <View style={styles.accountsSection}>
+          <Text style={styles.sectionTitle}>Accounts</Text>
+
+          {/* Account Tabs */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.accountTabsContainer}
+            contentContainerStyle={styles.accountTabsContent}
+          >
+            {getAccountTabs().map((tab) => (
+              <Pressable
+                key={tab}
+                style={[
+                  styles.accountTab,
+                  selectedAccountTab === tab && styles.accountTabActive,
+                ]}
+                onPress={() => setSelectedAccountTab(tab)}
+              >
+                <Text
+                  style={[
+                    styles.accountTabText,
+                    selectedAccountTab === tab && styles.accountTabTextActive,
+                  ]}
+                >
+                  {tab}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
           <AccountsList
-            accounts={
-              state.portfolio?.providersConnected?.map(
-                (provider: string, index: number) => ({
-                  id: `${provider}-${index}`,
-                  provider: provider,
-                  accountName: `${provider} Account`,
-                  accountType: "Investment Account",
-                  balance: state.portfolio?.totalValue
-                    ? state.portfolio.totalValue /
-                      (state.portfolio.providersConnected?.length || 1)
-                    : 0,
-                  dayChange: state.portfolio?.dayChange
-                    ? state.portfolio.dayChange /
-                      (state.portfolio.providersConnected?.length || 1)
-                    : 0,
-                  dayChangePercent: state.portfolio?.dayChangePercent || 0,
-                  lastSync: new Date(),
-                  isConnected: true,
-                })
-              ) || []
-            }
+            accounts={getFilteredAccounts()}
             onAccountPress={(account) => {
               (navigation as any).navigate("BrokerageAccounts");
             }}
@@ -517,7 +700,7 @@ export default function DashboardScreen() {
         </View>
         {renderWatchlist()}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -611,7 +794,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 16,
   },
-  sectionTitle: { fontSize: 20, fontWeight: "600", color: "#ffffff" },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#ffffff",
+    marginBottom: 12,
+  },
   viewAllButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -711,5 +899,43 @@ const styles = StyleSheet.create({
     color: "#9ca3af",
     fontSize: 12,
     marginTop: 2,
+  },
+
+  // Account Tabs
+  accountsSection: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  accountTabsContainer: {
+    marginBottom: 16,
+    backgroundColor: "#0a0a0a",
+    borderRadius: 8,
+    padding: 4,
+  },
+  accountTabsContent: {
+    paddingHorizontal: 0,
+  },
+  accountTab: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+    alignItems: "center",
+    marginRight: 8,
+    minWidth: 100,
+  },
+  accountTabActive: {
+    backgroundColor: "#60a5fa",
+  },
+  accountTabText: {
+    color: "#9ca3af",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  accountTabTextActive: {
+    color: "#ffffff",
+    fontWeight: "600",
   },
 });
