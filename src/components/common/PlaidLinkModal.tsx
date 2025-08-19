@@ -9,10 +9,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import {
-  create as plaidCreate,
-  open as plaidOpen,
-  destroy as plaidDestroy,
-  LinkIOSPresentationStyle,
+  create,
+  open,
+  destroy,
+  LinkSuccess,
+  LinkExit,
 } from "react-native-plaid-link-sdk";
 import { plaidIntegrationService } from "../../services/plaidIntegration";
 
@@ -55,53 +56,29 @@ export default function PlaidLinkModal({
 
   const openPlaidLink = async () => {
     if (!linkToken) return;
-    if (typeof plaidCreate !== "function" || typeof plaidOpen !== "function") {
-      console.warn("Plaid native module not available (Expo Go?)");
-      alert(
-        "Plaid SDK is not available. Build and run an Expo Dev Client (npx expo run:ios / run:android) or a native build."
-      );
-      return;
-    }
-    setOpening(true);
-    try {
-      // Ensure any previous session is cleared
-      await plaidDestroy().catch(() => {});
 
-      // Initialize with link token then open
-      console.log("Creating Plaid Link session...");
-      plaidCreate({ token: linkToken });
-      console.log("Opening Plaid Link...");
-      plaidOpen({
-        onSuccess: (success: any) => {
+    try {
+      // Clear any previous session
+      await destroy().catch(() => {});
+
+      // Create and open Plaid Link
+      create({ token: linkToken });
+      open({
+        onSuccess: (success: LinkSuccess) => {
           onSuccess(success.publicToken, success.metadata);
         },
-        onExit: (exit: any) => {
-          if (exit?.error?.displayMessage) {
+        onExit: (exit: LinkExit) => {
+          if (exit.error) {
             console.error("Plaid exit error:", exit.error);
-            alert(exit.error.displayMessage);
+            alert(exit.error.displayMessage || "Connection cancelled");
           }
           onCancel();
         },
-        iOSPresentationStyle: LinkIOSPresentationStyle.FULL_SCREEN,
       });
-    } catch (err) {
-      console.error("Failed to open Plaid:", err);
+    } catch (error) {
+      console.error("Failed to open Plaid:", error);
       alert("Unable to launch Plaid. Please try again.");
-    } finally {
-      setOpening(false);
     }
-  };
-
-  const handlePlaidSuccess = (success: any) => {
-    onSuccess(success.publicToken, success.metadata);
-  };
-
-  const handlePlaidExit = (exit: any) => {
-    if (exit.error) {
-      console.error("Plaid exit error:", exit.error);
-      alert(exit.error.displayMessage || "Connection cancelled");
-    }
-    onCancel();
   };
 
   const renderConsentStep = () => (
@@ -157,7 +134,7 @@ export default function PlaidLinkModal({
             style={[styles.connectButton, { backgroundColor: "#00D4AA" }]}
             onPress={openPlaidLink}
           >
-            {loading || opening ? (
+            {loading ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Text style={styles.connectText}>Continue with Plaid</Text>

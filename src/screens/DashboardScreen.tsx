@@ -260,7 +260,9 @@ export default function DashboardScreen() {
     const totalGainLossPercent = hasReal
       ? state.portfolio!.totalGainLossPercent
       : fallbackPct;
-    const accounts = hasReal ? state.portfolio!.providersConnected.length : 0;
+    const accounts = hasReal
+      ? state.portfolio!.providersConnected?.length || 0
+      : 0;
     const isPositive = totalGainLoss >= 0;
 
     return (

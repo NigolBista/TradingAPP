@@ -104,11 +104,12 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
   // Sort by day change percent (top gainers first)
   const sortedPositions = useMemo(() => {
     return [...positionsWithDayChange].sort(
-      (a, b) => b.dayChangePercent - a.dayChangePercent
+      (a, b) => (b.dayChangePercent || 0) - (a.dayChangePercent || 0)
     );
   }, [positionsWithDayChange]);
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | undefined | null) => {
+    if (!value || !Number.isFinite(value)) return "$0.00";
     if (Math.abs(value) >= 1e6) {
       return `$${(value / 1e6).toFixed(1)}M`;
     } else if (Math.abs(value) >= 1e3) {
@@ -157,11 +158,13 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
               <Text
                 style={[
                   styles.dayChangePercent,
-                  position.dayChangePercent >= 0 ? styles.up : styles.down,
+                  (position.dayChangePercent || 0) >= 0
+                    ? styles.up
+                    : styles.down,
                 ]}
               >
-                {position.dayChangePercent >= 0 ? "▲" : "▼"}{" "}
-                {Math.abs(position.dayChangePercent).toFixed(2)}%
+                {(position.dayChangePercent || 0) >= 0 ? "▲" : "▼"}{" "}
+                {Math.abs(position.dayChangePercent || 0).toFixed(2)}%
               </Text>
             </View>
 
@@ -171,15 +174,17 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
 
             <View style={styles.positionFooter}>
               <Text style={styles.quantity}>
-                {position.quantity.toFixed(0)} shares
+                {(position.quantity || 0).toFixed(0)} shares
               </Text>
               <Text
                 style={[
                   styles.dayChange,
-                  position.dayChange >= 0 ? styles.up : styles.down,
+                  (position.dayChange || 0) >= 0 ? styles.up : styles.down,
                 ]}
               >
-                {formatCurrency(position.dayChange * position.quantity)}
+                {formatCurrency(
+                  (position.dayChange || 0) * (position.quantity || 0)
+                )}
               </Text>
             </View>
 

@@ -275,7 +275,7 @@ export default function BrokerageAccountsScreen({ navigation }: any) {
         {positions.length > 0 && (
           <View style={styles.holdingsSection}>
             <Text style={styles.sectionTitle}>Your Holdings</Text>
-            <HoldingsList positions={positions} />
+            <HoldingsList positions={positions} scrollEnabled={false} />
           </View>
         )}
       </ScrollView>

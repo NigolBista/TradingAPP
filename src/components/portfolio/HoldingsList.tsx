@@ -5,24 +5,30 @@ import type { AggregatedPosition } from "../../services/portfolioAggregationServ
 interface Props {
   positions: AggregatedPosition[];
   limit?: number;
+  scrollEnabled?: boolean;
 }
 
-export default function HoldingsList({ positions, limit = 100 }: Props) {
+export default function HoldingsList({
+  positions,
+  limit = 100,
+  scrollEnabled = true,
+}: Props) {
   const items = useMemo(() => {
     const sorted = [...positions].sort(
-      (a, b) => b.totalMarketValue - a.totalMarketValue
+      (a, b) => (b.totalMarketValue || 0) - (a.totalMarketValue || 0)
     );
     return sorted.slice(0, limit);
   }, [positions, limit]);
 
-  const formatCurrency = (value: number) => {
+  const formatCurrency = (value: number | undefined | null) => {
+    if (!value || !Number.isFinite(value)) return "$0.00";
     if (Math.abs(value) >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
     if (Math.abs(value) >= 1e3) return `$${(value / 1e3).toFixed(1)}K`;
     return `$${value.toFixed(2)}`;
   };
 
   const renderItem = ({ item }: { item: AggregatedPosition }) => {
-    const isUp = item.unrealizedPnL >= 0;
+    const isUp = (item.unrealizedPnL || 0) >= 0;
     return (
       <View style={styles.row}>
         <View style={styles.left}>
@@ -59,9 +65,10 @@ export default function HoldingsList({ positions, limit = 100 }: Props) {
   return (
     <FlatList
       data={items}
-      keyExtractor={(item) => item.symbol}
+      keyExtractor={(item, index) => `${item.symbol || "unknown"}-${index}`}
       renderItem={renderItem}
       ItemSeparatorComponent={() => <View style={styles.sep} />}
+      scrollEnabled={scrollEnabled}
     />
   );
 }

@@ -128,7 +128,7 @@ class PlaidIntegrationService {
   // Exchange public token for access token
   async exchangePublicToken(publicToken: string): Promise<string> {
     const response = await fetch(
-      `https://${plaidEnvironment}.plaid.com/link/token/exchange`,
+      `https://${plaidEnvironment}.plaid.com/item/public_token/exchange`,
       {
         method: "POST",
         headers: {
