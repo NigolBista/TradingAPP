@@ -69,6 +69,9 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       marketDataApiToken: process.env.MARKET_DATA_API_TOKEN,
       newsProvider: process.env.NEWS_PROVIDER || "stocknewsapi",
       marketDataNewsBaseUrl: process.env.MARKETDATA_NEWS_BASE_URL,
+      plaidClientId: process.env.PLAID_CLIENT_ID,
+      plaidSecret: process.env.PLAID_SECRET,
+      plaidEnvironment: process.env.PLAID_ENVIRONMENT || "sandbox",
       expoPublic: {
         // values readable on the client
         sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,

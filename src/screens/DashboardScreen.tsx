@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -15,21 +15,25 @@ import {
   portfolioAggregationService,
   type PortfolioSummary,
 } from "../services/portfolioAggregationService";
-import {
-  brokerageApiService,
-  type BrokerageWatchlistItem,
-} from "../services/brokerageApiService";
-import { brokerageAuthService } from "../services/brokerageAuth";
+import { plaidPortfolioService } from "../services/portfolioAggregationService_NEW";
+// Removed old brokerage services - now using Plaid integration
+// import { brokerageApiService, type BrokerageWatchlistItem } from "../services/legacy/brokerageApiService";
+// import { brokerageAuthService } from "../services/legacy/brokerageAuth";
 import { useNavigation } from "@react-navigation/native";
 import SimpleLineChart from "../components/charts/SimpleLineChart";
 import MarketOverview from "../components/insights/MarketOverview";
 import type { NewsItem } from "../services/newsProviders";
+import { useMarketOverviewStore } from "../store/marketOverviewStore";
+import DecalpXMini from "../components/insights/DecalpXMini";
+import PerformanceCard from "../components/insights/PerformanceCard";
+import TopGainersCard from "../components/insights/TopGainersCard";
+import AccountsList from "../components/insights/AccountsList";
 
 const { width } = Dimensions.get("window");
 
 interface DashboardState {
   portfolio: PortfolioSummary | null;
-  watchlist: BrokerageWatchlistItem[];
+  watchlist: any[]; // Using any for now - will be replaced with Plaid watchlist
   loading: boolean;
   refreshing: boolean;
 }
@@ -40,6 +44,42 @@ interface DashboardData {
 
 export default function DashboardScreen() {
   const navigation = useNavigation();
+  const ensureOverview = useMarketOverviewStore((s) => s.ensureOverview);
+  const overviewByTf = useMarketOverviewStore((s) => s.overviewByTf);
+  const rawNews = useMarketOverviewStore((s) => s.rawNews);
+
+  const sentimentSummary = useMemo(() => {
+    const ov = overviewByTf["1D"] || overviewByTf["1W"] || overviewByTf["1M"];
+    if (!ov && !rawNews?.length) return null;
+    if ((ov as any)?.marketSentiment) return (ov as any).marketSentiment;
+    const news = rawNews || [];
+    let positive = 0,
+      negative = 0,
+      neutral = 0;
+    for (const n of news) {
+      const snt = (n.sentiment || "").toLowerCase();
+      if (snt === "positive") positive++;
+      else if (snt === "negative") negative++;
+      else neutral++;
+    }
+    const total = positive + negative + neutral;
+    if (total === 0) return null;
+    const pos = positive / total;
+    const neg = negative / total;
+    let overall: "bullish" | "bearish" | "neutral";
+    let confidence: number;
+    if (pos > 0.6) {
+      overall = "bullish";
+      confidence = Math.round(pos * 100);
+    } else if (neg > 0.6) {
+      overall = "bearish";
+      confidence = Math.round(neg * 100);
+    } else {
+      overall = "neutral";
+      confidence = Math.round(Math.max(pos, neg) * 100);
+    }
+    return { overall, confidence };
+  }, [overviewByTf, rawNews]);
   const [state, setState] = useState<DashboardState>({
     portfolio: null,
     watchlist: [],
@@ -50,6 +90,12 @@ export default function DashboardScreen() {
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     cachedNews: [],
   });
+
+  const [perfPeriod, setPerfPeriod] = useState<
+    "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL"
+  >("1M");
+  const [portfolioHistory, setPortfolioHistory] = useState<any>(null);
+  const [portfolioPositions, setPortfolioPositions] = useState<any[]>([]);
 
   // Callback to receive news data from MarketOverview component
   const handleNewsDataFetched = (news: NewsItem[]) => {
@@ -131,10 +177,15 @@ export default function DashboardScreen() {
     }
 
     try {
-      const [portfolioData, watchlistData] = await Promise.all([
-        portfolioAggregationService.getPortfolioSummary(),
-        portfolioAggregationService.getConsolidatedWatchlist(),
-      ]);
+      // Prime market overview store early so navigating to View Full reuses data
+      ensureOverview("1D").catch(() => {});
+      const [portfolioData, watchlistData, history, positions] =
+        await Promise.all([
+          plaidPortfolioService.getPortfolioSummary(),
+          Promise.resolve([]), // Watchlist will be implemented with Plaid later
+          plaidPortfolioService.getPortfolioHistory(perfPeriod),
+          plaidPortfolioService.getAllPositions(),
+        ]);
 
       setState((prev) => ({
         ...prev,
@@ -143,6 +194,8 @@ export default function DashboardScreen() {
         loading: false,
         refreshing: false,
       }));
+      setPortfolioHistory(history);
+      setPortfolioPositions(positions);
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
       setState((prev) => ({
@@ -162,7 +215,7 @@ export default function DashboardScreen() {
       close: d.close * (0.985 + 0.00025 * i),
     }));
     setBenchmarkSeries(bench);
-  }, []);
+  }, [perfPeriod]);
 
   const handleAddToWatchlist = async (symbol: string) => {
     try {
@@ -254,11 +307,44 @@ export default function DashboardScreen() {
             <Ionicons name="chevron-forward" size={16} color="#00D4AA" />
           </Pressable>
         </View>
+        {/* Sentiment strip (bullish/bearish/neutral) below portfolio */}
+        <View style={styles.sentimentStrip}>
+          <View
+            style={[
+              styles.sentimentPill,
+              sentimentSummary?.overall === "bullish"
+                ? styles.pillBull
+                : sentimentSummary?.overall === "bearish"
+                ? styles.pillBear
+                : styles.pillNeutral,
+            ]}
+          >
+            <Ionicons
+              name={
+                sentimentSummary?.overall === "bullish"
+                  ? "trending-up"
+                  : sentimentSummary?.overall === "bearish"
+                  ? "trending-down"
+                  : "remove"
+              }
+              size={14}
+              color="#fff"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.pillText}>
+              {(sentimentSummary?.overall || "neutral").toUpperCase()} •{" "}
+              {sentimentSummary
+                ? `${Math.round(sentimentSummary.confidence)}%`
+                : "--%"}
+            </Text>
+          </View>
+        </View>
         <MarketOverview
           compact={true}
           onNewsPress={() => navigation.navigate("News" as never)}
           onNewsDataFetched={handleNewsDataFetched}
           navigation={navigation}
+          fullWidth={false}
         />
       </View>
     );
@@ -342,7 +428,91 @@ export default function DashboardScreen() {
         }
       >
         {renderPortfolioHeader()}
-        {renderMarketBrief()}
+        <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+          <PerformanceCard
+            history={portfolioHistory}
+            totalNetWorth={state.portfolio?.totalValue || 0}
+            netWorthChange={state.portfolio?.dayChange || 0}
+            netWorthChangePercent={state.portfolio?.dayChangePercent || 0}
+            selected={perfPeriod}
+            onChange={(p) => setPerfPeriod(p)}
+          />
+        </View>
+        {/* Top Gainers from Portfolio */}
+        {portfolioPositions && portfolioPositions.length > 0 && (
+          <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+            <TopGainersCard
+              positions={portfolioPositions.map((pos) => ({
+                symbol: pos.symbol,
+                name: pos.symbol,
+                quantity: pos.totalQuantity,
+                currentPrice: pos.averagePrice,
+                costBasis: pos.totalCost,
+                marketValue: pos.totalMarketValue,
+                unrealizedPnL: pos.unrealizedPnL,
+                unrealizedPnLPercent: pos.unrealizedPnLPercent,
+                provider: pos.providers?.[0]?.provider || "Unknown",
+              }))}
+              onPositionPress={(position) => {
+                (navigation as any).navigate("StockDetail", {
+                  symbol: position.symbol,
+                });
+              }}
+            />
+          </View>
+        )}
+
+        {/* Investment Accounts */}
+        <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+          <AccountsList
+            accounts={
+              state.portfolio?.providersConnected?.map(
+                (provider: string, index: number) => ({
+                  id: `${provider}-${index}`,
+                  provider: provider,
+                  accountName: `${provider} Account`,
+                  accountType: "Investment Account",
+                  balance: state.portfolio?.totalValue
+                    ? state.portfolio.totalValue /
+                      (state.portfolio.providersConnected?.length || 1)
+                    : 0,
+                  dayChange: state.portfolio?.dayChange
+                    ? state.portfolio.dayChange /
+                      (state.portfolio.providersConnected?.length || 1)
+                    : 0,
+                  dayChangePercent: state.portfolio?.dayChangePercent || 0,
+                  lastSync: new Date(),
+                  isConnected: true,
+                })
+              ) || []
+            }
+            onAccountPress={(account) => {
+              (navigation as any).navigate("BrokerageAccounts");
+            }}
+            onAddAccountPress={() => {
+              (navigation as any).navigate("BrokerageAccounts");
+            }}
+          />
+        </View>
+
+        {/* Market Overview Button */}
+        <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+          <Pressable
+            style={styles.marketOverviewButton}
+            onPress={() => navigation.navigate("MarketOverviewPage" as never)}
+          >
+            <View style={styles.marketOverviewContent}>
+              <Ionicons name="trending-up" size={24} color="#60a5fa" />
+              <View style={{ marginLeft: 12 }}>
+                <Text style={styles.marketOverviewTitle}>Market Overview</Text>
+                <Text style={styles.marketOverviewSubtitle}>
+                  View market insights & DecalpX analysis
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </Pressable>
+        </View>
         {renderWatchlist()}
       </ScrollView>
     </View>
@@ -417,6 +587,22 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
   },
+  sentimentStrip: {
+    marginBottom: 12,
+    width: "100%",
+    alignItems: "flex-start",
+  },
+  sentimentPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  pillBull: { backgroundColor: "#16a34a" },
+  pillBear: { backgroundColor: "#dc2626" },
+  pillNeutral: { backgroundColor: "#6b7280" },
+  pillText: { color: "#ffffff", fontWeight: "700", letterSpacing: 0.3 },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -500,6 +686,28 @@ const styles = StyleSheet.create({
   watchlistChange: {
     fontSize: 14,
     fontWeight: "500",
+    marginTop: 2,
+  },
+  marketOverviewButton: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  marketOverviewContent: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  marketOverviewTitle: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  marketOverviewSubtitle: {
+    color: "#9ca3af",
+    fontSize: 12,
     marginTop: 2,
   },
 });

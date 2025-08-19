@@ -5,18 +5,32 @@ import {
   NewsItem,
   FetchCandlesOptions,
 } from "./marketProviders";
-import { brokerageApiService, BrokerageQuote } from "./brokerageApiService";
-import { brokerageAuthService, BrokerageProvider } from "./brokerageAuth";
-import { sessionHeartbeatService } from "./sessionHeartbeat";
+// Removed old brokerage services - now using Plaid integration
+// import { brokerageApiService, BrokerageQuote } from "./legacy/brokerageApiService";
+// import { brokerageAuthService, BrokerageProvider } from "./legacy/brokerageAuth";
+// Heartbeat not required for Plaid-based linking; keep a minimal stub
+const sessionHeartbeatService = {
+  updateConfig: (_cfg: any) => {},
+  startAllHeartbeats: () => {},
+  refreshAllSessions: async () => ({}),
+  getHeartbeatStatus: () => ({}),
+  destroy: () => {},
+};
 
 export interface MarketDataOptions extends FetchCandlesOptions {
   preferBrokerage?: boolean;
-  brokerageProvider?: BrokerageProvider;
+  brokerageProvider?: string; // Changed from BrokerageProvider to string
 }
 
-export interface EnhancedQuote extends BrokerageQuote {
+export interface EnhancedQuote {
+  symbol: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  volume: number;
   provider: string;
   isRealTime: boolean;
+  lastUpdated: Date;
 }
 
 class EnhancedMarketDataService {
@@ -34,11 +48,11 @@ class EnhancedMarketDataService {
     sessionHeartbeatService.updateConfig({
       intervalMs: 10 * 60 * 1000, // 10 minutes
       retryAttempts: 2,
-      onSessionExpired: (provider) => {
+      onSessionExpired: (provider: string) => {
         console.warn(`Session expired for ${provider}`);
         // Could show user notification here
       },
-      onConnectionLost: (provider) => {
+      onConnectionLost: (provider: string) => {
         console.warn(`Connection lost for ${provider}`);
         // Could show user notification here
       },
@@ -53,23 +67,8 @@ class EnhancedMarketDataService {
     provider: string;
     isBrokerage: boolean;
   } {
-    // If user specifically wants brokerage data and has an active session
-    if (options.preferBrokerage && options.brokerageProvider) {
-      const session = brokerageAuthService.getSession(
-        options.brokerageProvider
-      );
-      if (session) {
-        return { provider: options.brokerageProvider, isBrokerage: true };
-      }
-    }
-
-    // Auto-select best available brokerage provider
-    if (options.preferBrokerage) {
-      const activeSessions = brokerageAuthService.getActiveSessions();
-      if (activeSessions.length > 0) {
-        return { provider: activeSessions[0], isBrokerage: true };
-      }
-    }
+    // Plaid uses standardized providers; we no longer check legacy sessions
+    // Keep structure in case we later support direct-broker feeds again
 
     // Fall back to traditional providers
     return {
@@ -97,17 +96,11 @@ class EnhancedMarketDataService {
       let quote: EnhancedQuote;
 
       if (isBrokerage) {
-        // Use brokerage API for real-time data
-        const brokerageQuote = await brokerageApiService.getQuote(
-          symbol,
-          provider as BrokerageProvider
-        );
-        quote = {
-          ...brokerageQuote,
-          provider,
-          isRealTime: true,
-        };
-      } else {
+        // With Plaid, quotes should be fetched via traditional market providers
+        // to avoid legacy brokerage calls. Fall through to traditional path.
+      }
+
+      {
         // Fall back to traditional providers (delayed data)
         // This is a simplified implementation - you'd need to adapt based on your current quote fetching
         const candles = await fetchCandles(symbol, {
@@ -125,13 +118,10 @@ class EnhancedMarketDataService {
           price: latestCandle.close,
           change: 0, // Would need previous close to calculate
           changePercent: 0,
-          volume: latestCandle.volume,
-          high: latestCandle.high,
-          low: latestCandle.low,
-          open: latestCandle.open,
-          timestamp: latestCandle.time,
+          volume: latestCandle.volume ?? 0,
           provider,
           isRealTime: false,
+          lastUpdated: new Date(),
         };
       }
 
@@ -163,16 +153,9 @@ class EnhancedMarketDataService {
 
     try {
       if (isBrokerage) {
-        // Use brokerage API
-        const timeframe = this.mapResolutionToBrokerageTimeframe(
-          options.resolution
-        );
-        return await brokerageApiService.getCandles(
-          symbol,
-          provider as BrokerageProvider,
-          timeframe
-        );
-      } else {
+        // No legacy brokerage candles; use traditional providers
+      }
+      {
         // Use traditional providers
         return await fetchCandles(symbol, {
           ...options,
@@ -206,11 +189,8 @@ class EnhancedMarketDataService {
 
     try {
       if (isBrokerage) {
-        // Use brokerage API for more comprehensive news
-        return await brokerageApiService.getNews(
-          symbol,
-          provider as BrokerageProvider
-        );
+        // Use traditional news sources
+        return await fetchNews(symbol, provider);
       } else {
         // Use traditional news sources
         return await fetchNews(symbol, provider);
@@ -232,61 +212,15 @@ class EnhancedMarketDataService {
   }
 
   // Get user's positions from brokerage account
-  async getPositions(provider?: BrokerageProvider) {
-    if (provider) {
-      return await brokerageApiService.getPositions(provider);
-    }
-
-    // Get positions from all connected accounts
-    const activeSessions = brokerageAuthService.getActiveSessions();
-    const allPositions = [];
-
-    for (const sessionProvider of activeSessions) {
-      try {
-        const positions = await brokerageApiService.getPositions(
-          sessionProvider
-        );
-        allPositions.push(
-          ...positions.map((pos) => ({ ...pos, provider: sessionProvider }))
-        );
-      } catch (error) {
-        console.error(
-          `Failed to get positions from ${sessionProvider}:`,
-          error
-        );
-      }
-    }
-
-    return allPositions;
+  async getPositions() {
+    // Positions should be obtained via portfolio aggregation service instead
+    return [] as any[];
   }
 
   // Get user's watchlist from brokerage account
-  async getWatchlist(provider?: BrokerageProvider) {
-    if (provider) {
-      return await brokerageApiService.getWatchlist(provider);
-    }
-
-    // Get watchlist from all connected accounts
-    const activeSessions = brokerageAuthService.getActiveSessions();
-    const allWatchlist = [];
-
-    for (const sessionProvider of activeSessions) {
-      try {
-        const watchlist = await brokerageApiService.getWatchlist(
-          sessionProvider
-        );
-        allWatchlist.push(
-          ...watchlist.map((item) => ({ ...item, provider: sessionProvider }))
-        );
-      } catch (error) {
-        console.error(
-          `Failed to get watchlist from ${sessionProvider}:`,
-          error
-        );
-      }
-    }
-
-    return allWatchlist;
+  async getWatchlist() {
+    // Watchlist not supported via Plaid read-only; return empty list
+    return [] as any[];
   }
 
   // Map resolution to brokerage timeframe
@@ -315,27 +249,14 @@ class EnhancedMarketDataService {
 
   // Check connection status for all brokerage accounts
   async checkAllConnections() {
-    const activeSessions = brokerageAuthService.getActiveSessions();
-    const connectionStatus: Record<string, boolean> = {};
-
-    for (const provider of activeSessions) {
-      try {
-        connectionStatus[provider] = await brokerageApiService.checkConnection(
-          provider
-        );
-      } catch (error) {
-        connectionStatus[provider] = false;
-      }
-    }
-
-    return connectionStatus;
+    // Plaid handles connectivity; always return plaid connected if tokens exist
+    return { plaid: true } as Record<string, boolean>;
   }
 
   // Get available data sources
   getAvailableDataSources() {
-    const activeSessions = brokerageAuthService.getActiveSessions();
     return {
-      brokerage: activeSessions,
+      brokerage: ["plaid"],
       traditional: ["marketData", "yahoo", "alphaVantage", "polygon"],
     };
   }

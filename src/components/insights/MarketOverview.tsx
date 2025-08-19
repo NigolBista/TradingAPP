@@ -18,6 +18,7 @@ import {
 import { refreshGlobalCache } from "../../services/marketDataCache";
 import type { NewsItem } from "../../services/newsProviders";
 import NewsList from "./NewsList";
+import { useMarketOverviewStore } from "../../store/marketOverviewStore";
 
 interface Props {
   onNewsPress?: () => void;
@@ -590,6 +591,9 @@ export default function MarketOverview({
     factors: string[];
   } | null>(null);
 
+  const ensureOverview = useMarketOverviewStore((s) => s.ensureOverview);
+  const storeRawNews = useMarketOverviewStore((s) => s.rawNews);
+
   const loadMarketOverview = async (isRefresh = false) => {
     try {
       if (isRefresh) {
@@ -599,25 +603,22 @@ export default function MarketOverview({
       }
       setError(null);
 
-      // Use the optimized function that returns both overview and raw data
-      const { overview: data, rawData } = await generateMarketOverviewWithData({
-        newsCount: compact ? 15 : 30,
+      // Use shared store to avoid duplicate API calls across screens
+      const data = await ensureOverview(timeframe, {
+        force: false,
         analysisDepth: compact ? "brief" : "detailed",
-        includeTrending: !compact,
-        includeEvents: !compact,
-        timeframe: timeframe,
       });
 
       setOverview(data);
 
       // Share the news data with parent component to avoid duplicate API calls
-      if (onNewsDataFetched && rawData.news.length > 0) {
-        onNewsDataFetched(rawData.news);
+      if (onNewsDataFetched && storeRawNews.length > 0) {
+        onNewsDataFetched(storeRawNews);
       }
 
       // Extract news highlights and market sentiment
-      await extractNewsHighlights(rawData.news);
-      await calculateMarketSentiment(rawData.news, data.trendingStocks);
+      await extractNewsHighlights(storeRawNews);
+      await calculateMarketSentiment(storeRawNews, data.trendingStocks);
     } catch (err) {
       console.error("Market Overview Error:", err);
       setError(
@@ -638,7 +639,11 @@ export default function MarketOverview({
       setRefreshing(true);
       // Force refresh the global cache first
       await refreshGlobalCache(compact ? 15 : 30, !compact, !compact);
-      // Then reload the overview with fresh data
+      // Then reload the overview with fresh data (force store to refetch)
+      await ensureOverview(timeframe, {
+        force: true,
+        analysisDepth: compact ? "brief" : "detailed",
+      });
       await loadMarketOverview(true);
     } catch (err) {
       console.error("Refresh Error:", err);

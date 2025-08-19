@@ -544,7 +544,8 @@ export async function fetchCandles(
         );
       } else if (provider === "robinhood" || provider === "webull") {
         // Import here to avoid circular dependencies
-        const { brokerageApiService } = await import("./brokerageApiService");
+        // Legacy brokerage service removed in favor of Plaid
+        const brokerageApiService: any = null;
         const timeframe =
           options.resolution === "1"
             ? "5minute"
@@ -603,8 +604,9 @@ export async function fetchNews(
   // Try brokerage providers first if available
   if (provider === "robinhood" || provider === "webull") {
     try {
-      const { brokerageApiService } = await import("./brokerageApiService");
-      const { brokerageAuthService } = await import("./brokerageAuth");
+      // Legacy brokerage services removed
+      const brokerageApiService: any = null;
+      const brokerageAuthService: any = { getActiveSessions: () => [] };
 
       // Check if we have an active session
       if (brokerageAuthService.getSession(provider as any)) {

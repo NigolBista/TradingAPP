@@ -35,41 +35,73 @@ export default function SimpleLineChart({
 
   // Calculate min/max for scaling across all series
   const prices = [
-    ...data.map((d) => d.close),
-    ...extraSeries.flatMap((s) => s.data.map((d) => d.close)),
+    ...data.map((d) => d.close).filter((price) => Number.isFinite(price)),
+    ...extraSeries.flatMap((s) =>
+      s.data.map((d) => d.close).filter((price) => Number.isFinite(price))
+    ),
   ];
+
+  if (prices.length === 0) {
+    return <View style={[styles.container, { height }]} />;
+  }
+
   const minPrice = Math.min(...prices);
   const maxPrice = Math.max(...prices);
-  const priceRange = maxPrice - minPrice;
+  const priceRange = Math.max(maxPrice - minPrice, 0.01); // Prevent division by zero
 
   // Create path points for primary
-  const points = data.map((point, index) => {
-    const x = (index / (data.length - 1)) * chartWidth;
-    const y =
-      chartHeight - ((point.close - minPrice) / priceRange) * chartHeight;
-    return { x, y };
-  });
+  const points = data
+    .map((point, index) => {
+      const x = (index / Math.max(data.length - 1, 1)) * chartWidth;
+      const normalizedPrice = Number.isFinite(point.close)
+        ? point.close
+        : minPrice;
+      const y =
+        chartHeight - ((normalizedPrice - minPrice) / priceRange) * chartHeight;
+      return {
+        x: Number.isFinite(x) ? x : 0,
+        y: Number.isFinite(y) ? y : chartHeight,
+      };
+    })
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
 
   // Generate SVG path
-  const pathData = points.reduce((path, point, index) => {
-    if (index === 0) {
-      return `M${point.x},${point.y}`;
-    }
-    return `${path} L${point.x},${point.y}`;
-  }, "");
+  const pathData =
+    points.length > 0
+      ? points.reduce((path, point, index) => {
+          if (index === 0) {
+            return `M${point.x},${point.y}`;
+          }
+          return `${path} L${point.x},${point.y}`;
+        }, "")
+      : "";
 
   // Generate gradient fill path
-  const fillPathData = `${pathData} L${chartWidth},${chartHeight} L0,${chartHeight} Z`;
+  const fillPathData = pathData
+    ? `${pathData} L${chartWidth},${chartHeight} L0,${chartHeight} Z`
+    : "";
 
   // Build paths for extra series
   const extraPaths = extraSeries.map((series) => {
     if (!series.data || series.data.length === 0) return "";
-    const pts = series.data.map((point, index) => {
-      const x = (index / (series.data.length - 1)) * chartWidth;
-      const y =
-        chartHeight - ((point.close - minPrice) / priceRange) * chartHeight;
-      return { x, y };
-    });
+    const pts = series.data
+      .map((point, index) => {
+        const x = (index / Math.max(series.data.length - 1, 1)) * chartWidth;
+        const normalizedPrice = Number.isFinite(point.close)
+          ? point.close
+          : minPrice;
+        const y =
+          chartHeight -
+          ((normalizedPrice - minPrice) / priceRange) * chartHeight;
+        return {
+          x: Number.isFinite(x) ? x : 0,
+          y: Number.isFinite(y) ? y : chartHeight,
+        };
+      })
+      .filter((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y));
+
+    if (pts.length === 0) return "";
+
     const p = pts.reduce(
       (path, pt, idx) =>
         idx === 0 ? `M${pt.x},${pt.y}` : `${path} L${pt.x},${pt.y}`,

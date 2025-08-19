@@ -18,7 +18,7 @@ import {
   portfolioAggregationService,
   AggregatedPosition,
 } from "../services/portfolioAggregationService";
-import { brokerageAuthService } from "../services/brokerageAuth";
+// Removed old brokerage auth - now using Plaid integration
 
 export default function PortfolioScreen() {
   const [showPositionModal, setShowPositionModal] = useState(false);
@@ -365,7 +365,7 @@ export default function PortfolioScreen() {
     );
   };
 
-  const activeSessions = brokerageAuthService.getActiveSessions();
+  const activeSessions: string[] = []; // Now using Plaid - no legacy sessions
 
   if (activeSessions.length === 0) {
     return (

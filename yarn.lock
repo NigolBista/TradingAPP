@@ -4454,6 +4454,11 @@ react-native-is-edge-to-edge@1.1.7:
   resolved "https://registry.npmjs.org/react-native-is-edge-to-edge/-/react-native-is-edge-to-edge-1.1.7.tgz"
   integrity sha512-EH6i7E8epJGIcu7KpfXYXiV2JFIYITtq+rVS8uEb+92naMRBdxhTuS8Wn2Q7j9sqyO0B+Xbaaf9VdipIAmGW4w==
 
+react-native-plaid-link-sdk@^12.4.0:
+  version "12.4.0"
+  resolved "https://registry.npmjs.org/react-native-plaid-link-sdk/-/react-native-plaid-link-sdk-12.4.0.tgz"
+  integrity sha512-eK98oskjfJUAoqJ+ym1MbVm4vcxp2P4Nzh7P/KeGitvlqPEI7JzWjEQiroF8ZZcKm0uqYIlwGM0onak1SBPPzA==
+
 react-native-reanimated@~3.17.4:
   version "3.17.5"
   resolved "https://registry.npmjs.org/react-native-reanimated/-/react-native-reanimated-3.17.5.tgz"

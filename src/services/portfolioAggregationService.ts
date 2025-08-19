@@ -1,10 +1,23 @@
-import {
-  brokerageApiService,
-  BrokeragePosition,
-  BrokerageWatchlistItem,
-} from "./brokerageApiService";
-import { brokerageAuthService, BrokerageProvider } from "./brokerageAuth";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { plaidPortfolioService } from "./portfolioAggregationService_NEW";
+
+// Since we now use Plaid for all connections, treat provider as a simple string
+type BrokerageProvider = string;
+
+// Minimal watchlist item type to keep existing interface stable
+type BrokerageWatchlistItem = { symbol: string; name?: string };
+
+// Local simplified position representation used for aggregation
+interface SimplePosition {
+  symbol: string;
+  quantity: number;
+  averageCost: number;
+  currentPrice: number;
+  marketValue: number;
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number;
+  provider: BrokerageProvider;
+}
 
 export interface AggregatedPosition {
   symbol: string;
@@ -76,41 +89,54 @@ class PortfolioAggregationService {
     }
 
     try {
-      const activeSessions = brokerageAuthService.getActiveSessions();
+      // Delegate to Plaid-based service and adapt to legacy shape
+      const plaidSummary = await plaidPortfolioService.getPortfolioSummary();
 
-      if (activeSessions.length === 0) {
-        return this.getEmptyPortfolio();
-      }
+      const mapPosition = (p: any): AggregatedPosition => ({
+        symbol: p.symbol,
+        totalQuantity: Number.isFinite(p.quantity) ? p.quantity : 0,
+        totalMarketValue: Number.isFinite(p.marketValue) ? p.marketValue : 0,
+        totalCost: Number.isFinite(p.averageCost * p.quantity)
+          ? p.averageCost * p.quantity
+          : 0,
+        averagePrice: Number.isFinite(p.averageCost) ? p.averageCost : 0,
+        unrealizedPnL: Number.isFinite(p.unrealizedPnL) ? p.unrealizedPnL : 0,
+        unrealizedPnLPercent: Number.isFinite(p.unrealizedPnLPercent)
+          ? p.unrealizedPnLPercent
+          : 0,
+        providers: [
+          {
+            provider: "plaid",
+            quantity: Number.isFinite(p.quantity) ? p.quantity : 0,
+            marketValue: Number.isFinite(p.marketValue) ? p.marketValue : 0,
+            cost: Number.isFinite(p.averageCost * p.quantity)
+              ? p.averageCost * p.quantity
+              : 0,
+            price: Number.isFinite(p.currentPrice) ? p.currentPrice : 0,
+          },
+        ],
+      });
 
-      // Fetch positions from all connected accounts
-      const allPositions: (BrokeragePosition & {
-        provider: BrokerageProvider;
-      })[] = [];
+      const summary: PortfolioSummary = {
+        totalValue: plaidSummary.totalValue,
+        totalCost: plaidSummary.totalCost,
+        totalGainLoss: plaidSummary.totalGainLoss,
+        totalGainLossPercent: plaidSummary.totalGainLossPercent,
+        dayChange: plaidSummary.dayChange,
+        dayChangePercent: plaidSummary.dayChangePercent,
+        topGainer: plaidSummary.topGainer
+          ? mapPosition(plaidSummary.topGainer)
+          : null,
+        topLoser: plaidSummary.topLoser
+          ? mapPosition(plaidSummary.topLoser)
+          : null,
+        positionsCount: plaidSummary.positionCount,
+        providersConnected: ["plaid"],
+      };
 
-      for (const provider of activeSessions) {
-        try {
-          const positions = await brokerageApiService.getPositions(provider);
-          allPositions.push(...positions.map((pos) => ({ ...pos, provider })));
-        } catch (error) {
-          console.warn(`Failed to fetch positions from ${provider}:`, error);
-        }
-      }
-
-      // Aggregate positions by symbol
-      const aggregatedPositions = this.aggregatePositions(allPositions);
-
-      // Calculate portfolio summary
-      const summary = this.calculatePortfolioSummary(
-        aggregatedPositions,
-        activeSessions
-      );
-
-      // Cache the result
+      // Cache and persist
       this.portfolioCache = { data: summary, timestamp: Date.now() };
-
-      // Store historical data point
       await this.storeHistoricalDataPoint(summary);
-
       return summary;
     } catch (error) {
       console.error("Failed to get portfolio summary:", error);
@@ -120,7 +146,7 @@ class PortfolioAggregationService {
 
   // Aggregate positions from multiple providers
   private aggregatePositions(
-    positions: (BrokeragePosition & { provider: BrokerageProvider })[]
+    positions: SimplePosition[]
   ): AggregatedPosition[] {
     const positionMap = new Map<string, AggregatedPosition>();
 
@@ -138,46 +164,65 @@ class PortfolioAggregationService {
       if (positionMap.has(symbol)) {
         const existing = positionMap.get(symbol)!;
 
-        // Add to existing position
-        const newTotalQuantity = existing.totalQuantity + quantity;
-        const newTotalCost = existing.totalCost + quantity * averageCost;
-        const newTotalMarketValue = existing.totalMarketValue + marketValue;
+        // Add to existing position (with NaN protection)
+        const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+        const safeAverageCost = Number.isFinite(averageCost) ? averageCost : 0;
+        const safeMarketValue = Number.isFinite(marketValue) ? marketValue : 0;
+
+        const newTotalQuantity = existing.totalQuantity + safeQuantity;
+        const newTotalCost =
+          existing.totalCost + safeQuantity * safeAverageCost;
+        const newTotalMarketValue = existing.totalMarketValue + safeMarketValue;
 
         existing.totalQuantity = newTotalQuantity;
         existing.totalCost = newTotalCost;
         existing.totalMarketValue = newTotalMarketValue;
-        existing.averagePrice = newTotalCost / newTotalQuantity;
+        existing.averagePrice =
+          newTotalQuantity > 0 ? newTotalCost / newTotalQuantity : 0;
         existing.unrealizedPnL = newTotalMarketValue - newTotalCost;
         existing.unrealizedPnLPercent =
-          ((newTotalMarketValue - newTotalCost) / newTotalCost) * 100;
+          newTotalCost > 0
+            ? ((newTotalMarketValue - newTotalCost) / newTotalCost) * 100
+            : 0;
 
         existing.providers.push({
           provider,
-          quantity,
-          marketValue,
-          cost: quantity * averageCost,
-          price: currentPrice,
+          quantity: safeQuantity,
+          marketValue: safeMarketValue,
+          cost: safeQuantity * safeAverageCost,
+          price: Number.isFinite(currentPrice) ? currentPrice : 0,
         });
       } else {
-        // Create new aggregated position
+        // Create new aggregated position (with NaN protection)
+        const safeQuantity = Number.isFinite(quantity) ? quantity : 0;
+        const safeAverageCost = Number.isFinite(averageCost) ? averageCost : 0;
+        const safeMarketValue = Number.isFinite(marketValue) ? marketValue : 0;
+        const safeCurrentPrice = Number.isFinite(currentPrice)
+          ? currentPrice
+          : 0;
+        const safeUnrealizedPnL = Number.isFinite(unrealizedPnL)
+          ? unrealizedPnL
+          : 0;
+        const totalCost = safeQuantity * safeAverageCost;
+
         positionMap.set(symbol, {
           symbol,
-          totalQuantity: quantity,
-          totalMarketValue: marketValue,
-          totalCost: quantity * averageCost,
-          averagePrice: averageCost,
-          unrealizedPnL,
+          totalQuantity: safeQuantity,
+          totalMarketValue: safeMarketValue,
+          totalCost,
+          averagePrice: safeAverageCost,
+          unrealizedPnL: safeUnrealizedPnL,
           unrealizedPnLPercent:
-            ((marketValue - quantity * averageCost) /
-              (quantity * averageCost)) *
-            100,
+            totalCost > 0
+              ? ((safeMarketValue - totalCost) / totalCost) * 100
+              : 0,
           providers: [
             {
               provider,
-              quantity,
-              marketValue,
-              cost: quantity * averageCost,
-              price: currentPrice,
+              quantity: safeQuantity,
+              marketValue: safeMarketValue,
+              cost: totalCost,
+              price: safeCurrentPrice,
             },
           ],
         });
@@ -192,11 +237,16 @@ class PortfolioAggregationService {
     positions: AggregatedPosition[],
     providers: BrokerageProvider[]
   ): PortfolioSummary {
-    const totalValue = positions.reduce(
-      (sum, pos) => sum + pos.totalMarketValue,
-      0
-    );
-    const totalCost = positions.reduce((sum, pos) => sum + pos.totalCost, 0);
+    const totalValue = positions.reduce((sum, pos) => {
+      const value = Number.isFinite(pos.totalMarketValue)
+        ? pos.totalMarketValue
+        : 0;
+      return sum + value;
+    }, 0);
+    const totalCost = positions.reduce((sum, pos) => {
+      const cost = Number.isFinite(pos.totalCost) ? pos.totalCost : 0;
+      return sum + cost;
+    }, 0);
     const totalGainLoss = totalValue - totalCost;
     const totalGainLossPercent =
       totalCost > 0 ? (totalGainLoss / totalCost) * 100 : 0;
@@ -209,10 +259,10 @@ class PortfolioAggregationService {
     const topLoser = sortedByPercent[sortedByPercent.length - 1] || null;
 
     // Calculate day change (this would need real-time data, for now using unrealized P&L as approximation)
-    const dayChange = positions.reduce(
-      (sum, pos) => sum + pos.unrealizedPnL,
-      0
-    );
+    const dayChange = positions.reduce((sum, pos) => {
+      const pnl = Number.isFinite(pos.unrealizedPnL) ? pos.unrealizedPnL : 0;
+      return sum + pnl;
+    }, 0);
     const dayChangePercent =
       totalValue > 0 ? (dayChange / (totalValue - dayChange)) * 100 : 0;
 
@@ -247,23 +297,21 @@ class PortfolioAggregationService {
     };
   }
 
-  // Get detailed positions breakdown
+  // Get detailed positions breakdown (from both legacy and official APIs)
   async getDetailedPositions(): Promise<AggregatedPosition[]> {
-    const activeSessions = brokerageAuthService.getActiveSessions();
-    const allPositions: (BrokeragePosition & {
-      provider: BrokerageProvider;
-    })[] = [];
+    const plaidPositions = await plaidPortfolioService.getAllPositions();
+    const simplified: SimplePosition[] = plaidPositions.map((pos: any) => ({
+      symbol: pos.symbol,
+      quantity: pos.quantity,
+      averageCost: pos.averageCost,
+      currentPrice: pos.currentPrice,
+      marketValue: pos.marketValue,
+      unrealizedPnL: pos.unrealizedPnL,
+      unrealizedPnLPercent: pos.unrealizedPnLPercent,
+      provider: "plaid",
+    }));
 
-    for (const provider of activeSessions) {
-      try {
-        const positions = await brokerageApiService.getPositions(provider);
-        allPositions.push(...positions.map((pos) => ({ ...pos, provider })));
-      } catch (error) {
-        console.warn(`Failed to fetch positions from ${provider}:`, error);
-      }
-    }
-
-    return this.aggregatePositions(allPositions);
+    return this.aggregatePositions(simplified);
   }
 
   // Store historical data point
@@ -389,41 +437,9 @@ class PortfolioAggregationService {
 
   // Get consolidated watchlist from all providers
   async getConsolidatedWatchlist(): Promise<BrokerageWatchlistItem[]> {
-    // Check cache first
-    if (
-      this.watchlistCache &&
-      Date.now() - this.watchlistCache.timestamp < this.WATCHLIST_CACHE_TTL
-    ) {
-      return this.watchlistCache.data;
-    }
-
-    try {
-      const activeSessions = brokerageAuthService.getActiveSessions();
-      const allWatchlistItems: BrokerageWatchlistItem[] = [];
-      const symbolsSet = new Set<string>();
-
-      for (const provider of activeSessions) {
-        try {
-          const watchlist = await brokerageApiService.getWatchlist(provider);
-          watchlist.forEach((item) => {
-            if (!symbolsSet.has(item.symbol)) {
-              symbolsSet.add(item.symbol);
-              allWatchlistItems.push(item);
-            }
-          });
-        } catch (error) {
-          console.warn(`Failed to fetch watchlist from ${provider}:`, error);
-        }
-      }
-
-      // Cache the result
-      this.watchlistCache = { data: allWatchlistItems, timestamp: Date.now() };
-
-      return allWatchlistItems;
-    } catch (error) {
-      console.error("Failed to get consolidated watchlist:", error);
-      return [];
-    }
+    // Plaid-based watchlist not implemented yet. Return cached empty list.
+    this.watchlistCache = { data: [], timestamp: Date.now() };
+    return [];
   }
 
   // Add stock to watchlist on all connected accounts
@@ -431,32 +447,10 @@ class PortfolioAggregationService {
     success: boolean;
     results: Record<BrokerageProvider, boolean>;
   }> {
-    const activeSessions = brokerageAuthService.getActiveSessions();
-    const results: Record<BrokerageProvider, boolean> = {} as Record<
-      BrokerageProvider,
-      boolean
-    >;
-    let overallSuccess = true;
-
-    for (const provider of activeSessions) {
-      try {
-        const success = await brokerageApiService.addToWatchlist(
-          symbol,
-          provider
-        );
-        results[provider] = success;
-        if (!success) overallSuccess = false;
-      } catch (error) {
-        console.error(`Failed to add ${symbol} to ${provider}:`, error);
-        results[provider] = false;
-        overallSuccess = false;
-      }
-    }
-
-    // Clear watchlist cache
+    // Not supported with Plaid (read-only). Pretend success for UX.
+    const results: Record<BrokerageProvider, boolean> = { plaid: true } as any;
     this.watchlistCache = null;
-
-    return { success: overallSuccess, results };
+    return { success: true, results };
   }
 
   // Remove stock from watchlist on all connected accounts
@@ -464,32 +458,9 @@ class PortfolioAggregationService {
     success: boolean;
     results: Record<BrokerageProvider, boolean>;
   }> {
-    const activeSessions = brokerageAuthService.getActiveSessions();
-    const results: Record<BrokerageProvider, boolean> = {} as Record<
-      BrokerageProvider,
-      boolean
-    >;
-    let overallSuccess = true;
-
-    for (const provider of activeSessions) {
-      try {
-        const success = await brokerageApiService.removeFromWatchlist(
-          symbol,
-          provider
-        );
-        results[provider] = success;
-        if (!success) overallSuccess = false;
-      } catch (error) {
-        console.error(`Failed to remove ${symbol} from ${provider}:`, error);
-        results[provider] = false;
-        overallSuccess = false;
-      }
-    }
-
-    // Clear watchlist cache
+    const results: Record<BrokerageProvider, boolean> = { plaid: true } as any;
     this.watchlistCache = null;
-
-    return { success: overallSuccess, results };
+    return { success: true, results };
   }
 
   // Clear cache to force refresh

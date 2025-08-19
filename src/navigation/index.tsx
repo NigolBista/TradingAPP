@@ -30,6 +30,8 @@ import NewsInsightsScreen from "../screens/NewsInsightsScreen";
 import MarketOverviewScreen from "../screens/MarketOverviewScreen";
 import FederalReserveScreen from "../screens/FederalReserveScreen";
 import StockNewsApiDemoScreen from "../screens/StockNewsApiDemoScreen";
+import DecalpXScreen from "../screens/DecalpXScreen";
+import MarketOverviewPage from "../screens/MarketOverviewPage";
 import { useAuth } from "../providers/AuthProvider";
 
 const Tab = createBottomTabNavigator();
@@ -168,6 +170,16 @@ export default function RootNavigation() {
             name="StockNewsApiDemo"
             component={StockNewsApiDemoScreen}
             options={{ headerShown: true, title: "Stock News API Demo" }}
+          />
+          <RootStack.Screen
+            name="DecalpX"
+            component={DecalpXScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="MarketOverviewPage"
+            component={MarketOverviewPage}
+            options={{ headerShown: false }}
           />
         </RootStack.Navigator>
       ) : (
