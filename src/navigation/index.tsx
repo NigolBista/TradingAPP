@@ -28,6 +28,7 @@ import StockDetailScreen from "../screens/StockDetailScreen";
 import SignalsFeedScreen from "../screens/SignalsFeedScreen";
 import NewsInsightsScreen from "../screens/NewsInsightsScreen";
 import MarketOverviewScreen from "../screens/MarketOverviewScreen";
+import MarketOverviewTabScreen from "../screens/MarketOverviewTabScreen";
 import FederalReserveScreen from "../screens/FederalReserveScreen";
 import StockNewsApiDemoScreen from "../screens/StockNewsApiDemoScreen";
 import DecalpXScreen from "../screens/DecalpXScreen";
@@ -70,8 +71,8 @@ function Tabs() {
             case "AI Insights":
               iconName = focused ? "sparkles" : "sparkles-outline";
               break;
-            case "Signals":
-              iconName = focused ? "radio" : "radio-outline";
+            case "Market":
+              iconName = focused ? "trending-up" : "trending-up-outline";
               break;
             case "News":
               iconName = focused ? "newspaper" : "newspaper-outline";
@@ -96,7 +97,7 @@ function Tabs() {
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Watchlist" component={WatchlistScreen} />
-      <Tab.Screen name="Signals" component={SignalsFeedScreen} />
+      <Tab.Screen name="Market" component={MarketOverviewTabScreen} />
       <Tab.Screen name="News" component={NewsInsightsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>

@@ -846,7 +846,7 @@ export default function MarketOverview({
                           : styles.sentimentBadgeTextNeutral,
                       ]}
                     >
-                      {marketSentiment.overall.toUpperCase()}
+                      {marketSentiment?.overall?.toUpperCase() || "NEUTRAL"}
                     </Text>
                   </View>
                 </View>
@@ -859,17 +859,17 @@ export default function MarketOverview({
                         : marketSentiment.overall === "bearish"
                         ? styles.confidenceFillBearish
                         : styles.confidenceFillNeutral,
-                      { width: `${marketSentiment.confidence}%` },
+                      { width: `${marketSentiment?.confidence || 0}%` },
                     ]}
                   />
                 </View>
                 <Text
                   style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 12 }}
                 >
-                  Confidence: {Math.round(marketSentiment.confidence)}%
+                  Confidence: {Math.round(marketSentiment?.confidence || 0)}%
                 </Text>
                 <View style={styles.sentimentFactors}>
-                  {marketSentiment.factors.map((factor, index) => (
+                  {(marketSentiment?.factors || []).map((factor, index) => (
                     <View key={index} style={styles.sentimentFactor}>
                       <Text style={styles.sentimentFactorText}>{factor}</Text>
                     </View>

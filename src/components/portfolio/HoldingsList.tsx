@@ -9,7 +9,7 @@ interface Props {
 }
 
 export default function HoldingsList({
-  positions,
+  positions = [],
   limit = 100,
   scrollEnabled = true,
 }: Props) {
@@ -34,7 +34,7 @@ export default function HoldingsList({
         <View style={styles.left}>
           <Text style={styles.symbol}>{item.symbol}</Text>
           <Text style={styles.sub}>
-            {item.totalQuantity.toFixed(2)} shares • Avg{" "}
+            {(item.totalQuantity || 0).toFixed(2)} shares • Avg{" "}
             {formatCurrency(item.averagePrice)}
           </Text>
           <Text style={styles.providers}>

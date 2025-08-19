@@ -1,0 +1,605 @@
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  SafeAreaView,
+  RefreshControl,
+  Modal,
+  ActivityIndicator,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import MarketOverview from "../components/insights/MarketOverview";
+import DecalpXMini from "../components/insights/DecalpXMini";
+import { MarketScanner, type ScanResult } from "../services/marketScanner";
+import {
+  generateSignalSummary,
+  type SignalSummary,
+} from "../services/signalEngine";
+import { useUserStore } from "../store/userStore";
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#0A0F1C",
+  },
+  header: {
+    backgroundColor: "#1a1a1a",
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 0,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#ffffff",
+    marginBottom: 16,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "#0a0a0a",
+    borderRadius: 8,
+    padding: 4,
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    alignItems: "center",
+  },
+  activeTab: {
+    backgroundColor: "#60a5fa",
+  },
+  tabText: {
+    color: "#9ca3af",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  activeTabText: {
+    color: "#ffffff",
+    fontWeight: "600",
+  },
+  content: {
+    flex: 1,
+  },
+  marketContent: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  decalpxContainer: {
+    marginBottom: 16,
+  },
+  // Signals styles
+  section: {
+    backgroundColor: "#1a1a1a",
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 12,
+    padding: 16,
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 16,
+    flexWrap: "wrap",
+  },
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#333333",
+    backgroundColor: "transparent",
+  },
+  filterChipActive: {
+    backgroundColor: "#00D4AA",
+    borderColor: "#00D4AA",
+  },
+  filterChipText: {
+    color: "#888888",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  filterChipTextActive: {
+    color: "#ffffff",
+  },
+  signalCard: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: "#00D4AA",
+  },
+  signalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  signalSymbol: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#ffffff",
+  },
+  confidenceBadge: {
+    backgroundColor: "#00D4AA",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  confidenceText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  signalAction: {
+    fontSize: 14,
+    fontWeight: "bold",
+    textTransform: "uppercase",
+  },
+  buyAction: {
+    color: "#00D4AA",
+  },
+  sellAction: {
+    color: "#FF6B6B",
+  },
+  signalType: {
+    color: "#888888",
+    fontSize: 12,
+  },
+  signalDetails: {
+    color: "#CCCCCC",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  strategyModal: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    padding: 20,
+    width: "90%",
+    maxHeight: "80%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#ffffff" },
+  strategyItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  strategyName: { fontSize: 16, fontWeight: "600", color: "#ffffff" },
+  strategyDesc: { fontSize: 14, color: "#888888", marginTop: 4 },
+});
+
+type TabType = "Market" | "Signals";
+
+const STRATEGY_FILTERS = [
+  { id: "all", label: "All Signals", description: "Show all trading signals" },
+  {
+    id: "intraday",
+    label: "Day Trading",
+    description: "Short-term intraday signals",
+  },
+  {
+    id: "swing",
+    label: "Swing Trading",
+    description: "Multi-day position trades",
+  },
+  {
+    id: "longterm",
+    label: "Long-term",
+    description: "Investment-horizon signals",
+  },
+  {
+    id: "breakout",
+    label: "Breakouts",
+    description: "Momentum breakout patterns",
+  },
+  {
+    id: "dip_buy",
+    label: "Dip Buying",
+    description: "Mean reversion oversold bounces",
+  },
+  {
+    id: "trend_follow",
+    label: "Trend Following",
+    description: "Riding established trends",
+  },
+];
+
+export default function MarketOverviewTabScreen() {
+  const navigation = useNavigation();
+  const { profile } = useUserStore();
+  const [activeTab, setActiveTab] = useState<TabType>("Market");
+
+  // Signals state
+  const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [signals, setSignals] = useState<SignalSummary[]>([]);
+  const [selectedStrategy, setSelectedStrategy] = useState("all");
+  const [showStrategyModal, setShowStrategyModal] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === "Signals") {
+      loadSignals();
+    }
+  }, [selectedStrategy, activeTab]);
+
+  const handleNewsPress = () => {
+    navigation.navigate("NewsInsights" as never);
+  };
+
+  async function loadSignals() {
+    try {
+      setLoading(true);
+
+      // Get all favorite and watchlist symbols
+      const favoriteSymbols = new Set<string>();
+
+      // Add global favorites
+      profile.favorites.forEach((symbol) => favoriteSymbols.add(symbol));
+
+      // Add all watchlist items
+      profile.watchlists.forEach((watchlist) => {
+        watchlist.items.forEach((item) => favoriteSymbols.add(item.symbol));
+      });
+
+      // Convert to array
+      const symbolsToAnalyze = Array.from(favoriteSymbols);
+
+      if (symbolsToAnalyze.length === 0) {
+        setSignals([]);
+        return;
+      }
+
+      // Generate signal summaries for favorite stocks only
+      const summaries = await Promise.all(
+        symbolsToAnalyze.map((symbol) =>
+          generateSignalSummary(
+            symbol,
+            profile.accountSize,
+            profile.riskPerTradePct
+          )
+        )
+      );
+
+      // Filter based on strategy and confidence
+      const filtered = summaries
+        .filter((s): s is SignalSummary => !!s && !!s.topSignal)
+        .filter((s) => {
+          const signal = s.topSignal!;
+
+          // Apply strategy filter
+          const strategyMatch = applyStrategyFilter(signal, selectedStrategy);
+          if (!strategyMatch) return false;
+
+          // Apply confidence threshold
+          return signal.confidence >= (profile.signalConfidenceThreshold || 60);
+        })
+        .sort(
+          (a, b) =>
+            (b.topSignal?.confidence || 0) - (a.topSignal?.confidence || 0)
+        );
+
+      setSignals(filtered);
+    } catch (error) {
+      console.error("Error loading signals:", error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  function applyStrategyFilter(signal: any, strategy: string): boolean {
+    switch (strategy) {
+      case "intraday":
+        return signal.type === "intraday";
+      case "swing":
+        return signal.type === "swing";
+      case "longterm":
+        return signal.type === "longterm";
+      case "breakout":
+        return (
+          signal.type === "breakout" || signal.patterns?.includes("breakout")
+        );
+      case "dip_buy":
+        return (
+          signal.type === "dip_buy" || signal.patterns?.includes("oversold")
+        );
+      case "trend_follow":
+        return (
+          signal.type === "trend_follow" || signal.patterns?.includes("trend")
+        );
+      case "all":
+      default:
+        return true; // Show all signals
+    }
+  }
+
+  function getFilterForStrategy(strategy: string) {
+    switch (strategy) {
+      case "intraday":
+        return { signalTypes: ["intraday" as const], minConfidence: 65 };
+      case "swing":
+        return { signalTypes: ["swing" as const], minConfidence: 60 };
+      case "longterm":
+        return { signalTypes: ["longterm" as const], minConfidence: 55 };
+      case "breakout":
+        return { volumeRatioMin: 1.5, minConfidence: 70 };
+      case "dip_buy":
+        return { rsiMax: 35, volumeRatioMin: 1.2, minConfidence: 60 };
+      case "trend_follow":
+        return { trendDirection: "uptrend" as const, minConfidence: 65 };
+      default:
+        return { minConfidence: 60 };
+    }
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    await loadSignals();
+  }
+
+  function renderSignal(summary: SignalSummary) {
+    const signal = summary.topSignal!;
+
+    return (
+      <Pressable
+        key={summary.symbol}
+        style={styles.signalCard}
+        onPress={() =>
+          (navigation as any).navigate("StockDetail", {
+            symbol: summary.symbol,
+          })
+        }
+      >
+        <View style={styles.signalHeader}>
+          <Text style={styles.signalSymbol}>{summary.symbol}</Text>
+          <View style={styles.confidenceBadge}>
+            <Text style={styles.confidenceText}>
+              {signal.confidence.toFixed(0)}%
+            </Text>
+          </View>
+        </View>
+
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text
+            style={[
+              styles.signalAction,
+              signal.action === "buy" ? styles.buyAction : styles.sellAction,
+            ]}
+          >
+            {signal.action}
+          </Text>
+          <Text style={styles.signalType}>
+            {signal.type.toUpperCase()} • R/R {signal.riskReward}:1
+          </Text>
+        </View>
+
+        <Text style={styles.signalDetails}>
+          Entry ${signal.entry.toFixed(2)} • Stop ${signal.stopLoss.toFixed(2)}{" "}
+          • Targets {signal.targets.map((t) => t.toFixed(2)).join(", ")}
+        </Text>
+
+        <Text style={[styles.signalDetails, { marginTop: 4 }]}>
+          Size {signal.tradePlan.positionSize} • Risk $
+          {(signal.tradePlan as any).maxRiskAmount?.toFixed(0) || "N/A"}
+        </Text>
+      </Pressable>
+    );
+  }
+
+  const renderSignalsContent = () => {
+    if (loading && signals.length === 0) {
+      const favoriteCount = Array.from(
+        new Set([
+          ...profile.favorites,
+          ...profile.watchlists.flatMap((w) => w.items.map((i) => i.symbol)),
+        ])
+      ).length;
+
+      return (
+        <View
+          style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+        >
+          <ActivityIndicator size="large" color="#00D4AA" />
+          <Text style={{ color: "#888888", marginTop: 16 }}>
+            {favoriteCount > 0
+              ? `Analyzing signals for ${favoriteCount} favorite stocks...`
+              : "Loading AI signals..."}
+          </Text>
+        </View>
+      );
+    }
+
+    return (
+      <>
+        {/* Strategy Filters */}
+        <View style={styles.section}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 12,
+            }}
+          >
+            <Text style={{ color: "#ffffff", fontSize: 16, fontWeight: "600" }}>
+              Strategy Filter
+            </Text>
+            <Pressable
+              style={{ padding: 8 }}
+              onPress={() => setShowStrategyModal(true)}
+            >
+              <Ionicons name="options" size={20} color="#00D4AA" />
+            </Pressable>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.filterRow}>
+              {STRATEGY_FILTERS.map((filter) => (
+                <Pressable
+                  key={filter.id}
+                  style={[
+                    styles.filterChip,
+                    selectedStrategy === filter.id && styles.filterChipActive,
+                  ]}
+                  onPress={() => setSelectedStrategy(filter.id)}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      selectedStrategy === filter.id &&
+                        styles.filterChipTextActive,
+                    ]}
+                  >
+                    {filter.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        </View>
+
+        {/* Signals List */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#00D4AA"
+            />
+          }
+        >
+          {signals.length === 0 ? (
+            <View style={{ alignItems: "center", padding: 32 }}>
+              <Ionicons name="radio-outline" size={48} color="#888888" />
+              <Text
+                style={{ color: "#888888", textAlign: "center", marginTop: 12 }}
+              >
+                {Array.from(
+                  new Set([
+                    ...profile.favorites,
+                    ...profile.watchlists.flatMap((w) =>
+                      w.items.map((i) => i.symbol)
+                    ),
+                  ])
+                ).length === 0
+                  ? "Add stocks to your watchlist or favorites to see signals here."
+                  : "No signals found for your favorite stocks with the current filter. Try adjusting the strategy or check back later."}
+              </Text>
+            </View>
+          ) : (
+            signals.map(renderSignal)
+          )}
+        </ScrollView>
+      </>
+    );
+  };
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case "Market":
+        return (
+          <ScrollView
+            style={styles.marketContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* DecalpX Snapshot */}
+            <View style={styles.decalpxContainer}>
+              <DecalpXMini />
+            </View>
+
+            {/* Market Overview */}
+            <MarketOverview
+              onNewsPress={handleNewsPress}
+              navigation={navigation}
+              fullWidth={true}
+              compact={false}
+            />
+          </ScrollView>
+        );
+      case "Signals":
+        return renderSignalsContent();
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Market Overview</Text>
+      </View>
+
+      <View style={styles.tabContainer}>
+        {(["Market", "Signals"] as TabType[]).map((tab) => (
+          <Pressable
+            key={tab}
+            style={[styles.tab, activeTab === tab && styles.activeTab]}
+            onPress={() => setActiveTab(tab)}
+          >
+            <Text
+              style={[
+                styles.tabText,
+                activeTab === tab && styles.activeTabText,
+              ]}
+            >
+              {tab}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      <View style={styles.content}>{renderContent()}</View>
+
+      {/* Strategy Info Modal */}
+      <Modal
+        visible={showStrategyModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStrategyModal(false)}
+      >
+        <View style={styles.strategyModal}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Trading Strategies</Text>
+              <Pressable onPress={() => setShowStrategyModal(false)}>
+                <Ionicons name="close" size={24} color="#888888" />
+              </Pressable>
+            </View>
+
+            <ScrollView>
+              {STRATEGY_FILTERS.map((strategy) => (
+                <View key={strategy.id} style={styles.strategyItem}>
+                  <Text style={styles.strategyName}>{strategy.label}</Text>
+                  <Text style={styles.strategyDesc}>
+                    {strategy.description}
+                  </Text>
+                </View>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
