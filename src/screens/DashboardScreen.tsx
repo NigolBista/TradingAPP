@@ -18,9 +18,6 @@ import {
 } from "../services/portfolioAggregationService";
 import { plaidPortfolioService } from "../services/portfolioAggregationService_NEW";
 import { plaidIntegrationService } from "../services/plaidIntegration";
-// Removed old brokerage services - now using Plaid integration
-// import { brokerageApiService, type BrokerageWatchlistItem } from "../services/legacy/brokerageApiService";
-// import { brokerageAuthService } from "../services/legacy/brokerageAuth";
 import { useNavigation } from "@react-navigation/native";
 import SimpleLineChart from "../components/charts/SimpleLineChart";
 import MarketOverview from "../components/insights/MarketOverview";
@@ -30,6 +27,7 @@ import DecalpXMini from "../components/insights/DecalpXMini";
 import PerformanceCard from "../components/insights/PerformanceCard";
 import TopGainersCard from "../components/insights/TopGainersCard";
 import AccountsList from "../components/insights/AccountsList";
+import { useTheme } from "../providers/ThemeProvider";
 
 const { width } = Dimensions.get("window");
 
@@ -46,6 +44,7 @@ interface DashboardData {
 
 export default function DashboardScreen() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
   const ensureOverview = useMarketOverviewStore((s) => s.ensureOverview);
   const overviewByTf = useMarketOverviewStore((s) => s.overviewByTf);
   const rawNews = useMarketOverviewStore((s) => s.rawNews);
@@ -582,14 +581,9 @@ export default function DashboardScreen() {
     );
   };
 
-  if (state.loading) {
-    return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color="#00D4AA" />
-        <Text style={styles.loadingText}>Loading your portfolio...</Text>
-      </View>
-    );
-  }
+  // Avoid whole-screen loading: show content skeletons/partials instead
+
+  const styles = createStyles(theme);
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
@@ -599,7 +593,7 @@ export default function DashboardScreen() {
           <RefreshControl
             refreshing={state.refreshing}
             onRefresh={() => loadData(true)}
-            tintColor="#00D4AA"
+            tintColor={theme.colors.primary}
           />
         }
       >
@@ -679,263 +673,244 @@ export default function DashboardScreen() {
             }}
           />
         </View>
-
-        {/* Market Overview Button */}
-        <View style={{ marginHorizontal: 16, marginTop: 12 }}>
-          <Pressable
-            style={styles.marketOverviewButton}
-            onPress={() => navigation.navigate("MarketOverviewPage" as never)}
-          >
-            <View style={styles.marketOverviewContent}>
-              <Ionicons name="trending-up" size={24} color="#60a5fa" />
-              <View style={{ marginLeft: 12 }}>
-                <Text style={styles.marketOverviewTitle}>Market Overview</Text>
-                <Text style={styles.marketOverviewSubtitle}>
-                  View market insights & DecalpX analysis
-                </Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
-          </Pressable>
-        </View>
-        {renderWatchlist()}
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0a0a0a" },
-  content: { flex: 1 },
-  centered: { justifyContent: "center", alignItems: "center" },
-  loadingText: { color: "#888888", marginTop: 16, fontSize: 16 },
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.background },
+    content: { flex: 1 },
+    centered: { justifyContent: "center", alignItems: "center" },
+    loadingText: { color: "#888888", marginTop: 16, fontSize: 16 },
 
-  // Portfolio Header
-  portfolioHeader: {
-    backgroundColor: "#1a1a1a",
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 24,
-    alignItems: "center",
-  },
-  portfolioValue: {
-    fontSize: 36,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 8,
-  },
-  portfolioChange: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  changeText: {
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  positive: { color: "#00D4AA" },
-  negative: { color: "#FF5722" },
-  portfolioSubtext: {
-    color: "#888888",
-    fontSize: 14,
-    marginTop: 8,
-  },
+    // Portfolio Header
+    portfolioHeader: {
+      backgroundColor: "#1a1a1a",
+      paddingHorizontal: 20,
+      paddingTop: 60,
+      paddingBottom: 24,
+      alignItems: "center",
+    },
+    portfolioValue: {
+      fontSize: 36,
+      fontWeight: "bold",
+      color: "#ffffff",
+      marginBottom: 8,
+    },
+    portfolioChange: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    changeText: {
+      fontSize: 18,
+      fontWeight: "600",
+    },
+    positive: { color: "#00D4AA" },
+    negative: { color: "#FF5722" },
+    portfolioSubtext: {
+      color: "#888888",
+      fontSize: 14,
+      marginTop: 8,
+    },
 
-  // Chart
-  chartContainer: {
-    backgroundColor: "#1a1a1a",
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    padding: 20,
-  },
-  chartPlaceholder: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  chartText: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 12,
-  },
-  chartSubtext: {
-    color: "#888888",
-    fontSize: 14,
-    marginTop: 4,
-  },
+    // Chart
+    chartContainer: {
+      backgroundColor: "#1a1a1a",
+      marginHorizontal: 16,
+      marginTop: 16,
+      borderRadius: 12,
+      padding: 20,
+    },
+    chartPlaceholder: {
+      alignItems: "center",
+      paddingVertical: 40,
+    },
+    chartText: {
+      color: "#ffffff",
+      fontSize: 18,
+      fontWeight: "600",
+      marginTop: 12,
+    },
+    chartSubtext: {
+      color: "#888888",
+      fontSize: 14,
+      marginTop: 4,
+    },
 
-  // Sections
-  section: {
-    backgroundColor: "#1a1a1a",
-    marginHorizontal: 16,
-    marginTop: 16,
-    borderRadius: 12,
-    padding: 16,
-  },
-  sentimentStrip: {
-    marginBottom: 12,
-    width: "100%",
-    alignItems: "flex-start",
-  },
-  sentimentPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-  },
-  pillBull: { backgroundColor: "#16a34a" },
-  pillBear: { backgroundColor: "#dc2626" },
-  pillNeutral: { backgroundColor: "#6b7280" },
-  pillText: { color: "#ffffff", fontWeight: "700", letterSpacing: 0.3 },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#ffffff",
-    marginBottom: 12,
-  },
-  viewAllButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  viewAllText: {
-    color: "#00D4AA",
-    fontSize: 14,
-    fontWeight: "600",
-    marginRight: 4,
-  },
+    // Sections
+    section: {
+      backgroundColor: "#1a1a1a",
+      marginHorizontal: 16,
+      marginTop: 16,
+      borderRadius: 12,
+      padding: 16,
+    },
+    sentimentStrip: {
+      marginBottom: 12,
+      width: "100%",
+      alignItems: "flex-start",
+    },
+    sentimentPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+    },
+    pillBull: { backgroundColor: "#16a34a" },
+    pillBear: { backgroundColor: "#dc2626" },
+    pillNeutral: { backgroundColor: "#6b7280" },
+    pillText: { color: "#ffffff", fontWeight: "700", letterSpacing: 0.3 },
+    sectionHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: "#ffffff",
+      marginBottom: 12,
+    },
+    viewAllButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    viewAllText: {
+      color: "#00D4AA",
+      fontSize: 14,
+      fontWeight: "600",
+      marginRight: 4,
+    },
 
-  // Market Brief
-  briefText: {
-    color: "#cccccc",
-    fontSize: 16,
-    lineHeight: 22,
-    marginBottom: 16,
-  },
-  marketStats: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-  },
-  statItem: {
-    alignItems: "center",
-  },
-  statLabel: {
-    color: "#888888",
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
+    // Market Brief
+    briefText: {
+      color: "#cccccc",
+      fontSize: 16,
+      lineHeight: 22,
+      marginBottom: 16,
+    },
+    marketStats: {
+      flexDirection: "row",
+      justifyContent: "space-around",
+    },
+    statItem: {
+      alignItems: "center",
+    },
+    statLabel: {
+      color: "#888888",
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    statValue: {
+      fontSize: 16,
+      fontWeight: "600",
+    },
 
-  // Watchlist
-  emptyText: {
-    color: "#888888",
-    fontSize: 16,
-    textAlign: "center",
-    paddingVertical: 20,
-  },
-  watchlistItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
-  },
-  watchlistLeft: {
-    flex: 1,
-  },
-  watchlistSymbol: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  watchlistName: {
-    color: "#888888",
-    fontSize: 14,
-    marginTop: 2,
-  },
-  watchlistRight: {
-    alignItems: "flex-end",
-  },
-  watchlistPrice: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  watchlistChange: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  marketOverviewButton: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  marketOverviewContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  marketOverviewTitle: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  marketOverviewSubtitle: {
-    color: "#9ca3af",
-    fontSize: 12,
-    marginTop: 2,
-  },
+    // Watchlist
+    emptyText: {
+      color: "#888888",
+      fontSize: 16,
+      textAlign: "center",
+      paddingVertical: 20,
+    },
+    watchlistItem: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: "#2a2a2a",
+    },
+    watchlistLeft: {
+      flex: 1,
+    },
+    watchlistSymbol: {
+      color: "#ffffff",
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    watchlistName: {
+      color: "#888888",
+      fontSize: 14,
+      marginTop: 2,
+    },
+    watchlistRight: {
+      alignItems: "flex-end",
+    },
+    watchlistPrice: {
+      color: "#ffffff",
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    watchlistChange: {
+      fontSize: 14,
+      fontWeight: "500",
+      marginTop: 2,
+    },
+    marketOverviewButton: {
+      backgroundColor: "#1a1a1a",
+      borderRadius: 12,
+      padding: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    marketOverviewContent: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    marketOverviewTitle: {
+      color: "#ffffff",
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    marketOverviewSubtitle: {
+      color: "#9ca3af",
+      fontSize: 12,
+      marginTop: 2,
+    },
 
-  // Account Tabs
-  accountsSection: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 16,
-    marginHorizontal: 16,
-    marginTop: 12,
-  },
-  accountTabsContainer: {
-    marginBottom: 16,
-    backgroundColor: "#0a0a0a",
-    borderRadius: 8,
-    padding: 4,
-  },
-  accountTabsContent: {
-    paddingHorizontal: 0,
-  },
-  accountTab: {
-    paddingVertical: 8,
-    paddingHorizontal: 20,
-    borderRadius: 6,
-    alignItems: "center",
-    marginRight: 8,
-    minWidth: 100,
-  },
-  accountTabActive: {
-    backgroundColor: "#60a5fa",
-  },
-  accountTabText: {
-    color: "#9ca3af",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  accountTabTextActive: {
-    color: "#ffffff",
-    fontWeight: "600",
-  },
-});
+    // Account Tabs
+    accountsSection: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginHorizontal: 16,
+      marginTop: 12,
+    },
+    accountTabsContainer: {
+      marginBottom: 16,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+      padding: 4,
+    },
+    accountTabsContent: {
+      paddingHorizontal: 0,
+    },
+    accountTab: {
+      paddingVertical: 8,
+      paddingHorizontal: 20,
+      borderRadius: 6,
+      alignItems: "center",
+      marginRight: 8,
+      minWidth: 100,
+    },
+    accountTabActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    accountTabText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    accountTabTextActive: {
+      color: "#ffffff",
+      fontWeight: "600",
+    },
+  });

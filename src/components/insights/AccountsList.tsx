@@ -1,6 +1,7 @@
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../../providers/ThemeProvider";
 
 interface Account {
   id: string;
@@ -25,6 +26,7 @@ export default function AccountsList({
   onAccountPress,
   onAddAccountPress,
 }: Props) {
+  const { theme } = useTheme();
   const formatCurrency = (value: number) => {
     if (Math.abs(value) >= 1e6) {
       return `$${(value / 1e6).toFixed(1)}M`;
@@ -109,7 +111,13 @@ export default function AccountsList({
       {accounts.map((account) => (
         <Pressable
           key={account.id}
-          style={styles.accountCard}
+          style={[
+            styles.accountCard,
+            {
+              backgroundColor: theme.colors.card,
+              borderColor: theme.colors.border,
+            },
+          ]}
           onPress={() => onAccountPress?.(account)}
         >
           <View style={styles.accountHeader}>
@@ -117,12 +125,23 @@ export default function AccountsList({
               <Ionicons
                 name={getProviderIcon(account.provider) as any}
                 size={20}
-                color="#60a5fa"
+                color={theme.colors.primary}
                 style={styles.providerIcon}
               />
               <View>
-                <Text style={styles.providerName}>{account.provider}</Text>
-                <Text style={styles.accountName}>{account.accountName}</Text>
+                <Text
+                  style={[styles.providerName, { color: theme.colors.text }]}
+                >
+                  {account.provider}
+                </Text>
+                <Text
+                  style={[
+                    styles.accountName,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {account.accountName}
+                </Text>
               </View>
             </View>
             <View style={styles.statusContainer}>
@@ -134,7 +153,9 @@ export default function AccountsList({
                     : styles.statusDisconnected,
                 ]}
               />
-              <Text style={styles.lastSync}>
+              <Text
+                style={[styles.lastSync, { color: theme.colors.textSecondary }]}
+              >
                 {formatLastSync(account.lastSync)}
               </Text>
             </View>
@@ -142,7 +163,7 @@ export default function AccountsList({
 
           <View style={styles.accountBody}>
             <View style={styles.balanceRow}>
-              <Text style={styles.balance}>
+              <Text style={[styles.balance, { color: theme.colors.text }]}>
                 {formatCurrency(account.balance)}
               </Text>
               {isInvestmentAccount(account.accountType) && (
@@ -158,24 +179,58 @@ export default function AccountsList({
                 </Text>
               )}
             </View>
-            <Text style={styles.accountType}>{account.accountType}</Text>
+            <Text
+              style={[
+                styles.accountType,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              {account.accountType}
+            </Text>
           </View>
         </Pressable>
       ))}
 
-      <Pressable style={styles.addAccountCard} onPress={onAddAccountPress}>
+      <Pressable
+        style={[
+          styles.addAccountCard,
+          {
+            backgroundColor: theme.colors.card,
+            borderColor: theme.colors.border,
+          },
+        ]}
+        onPress={onAddAccountPress}
+      >
         <View style={styles.addAccountContent}>
-          <View style={styles.addIconContainer}>
-            <Ionicons name="add" size={24} color="#60a5fa" />
+          <View
+            style={[
+              styles.addIconContainer,
+              { backgroundColor: theme.colors.primary + "20" },
+            ]}
+          >
+            <Ionicons name="add" size={24} color={theme.colors.primary} />
           </View>
           <View>
-            <Text style={styles.addAccountTitle}>Add New Account</Text>
-            <Text style={styles.addAccountSubtitle}>
+            <Text
+              style={[styles.addAccountTitle, { color: theme.colors.text }]}
+            >
+              Add New Account
+            </Text>
+            <Text
+              style={[
+                styles.addAccountSubtitle,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
               Connect your brokerage account
             </Text>
           </View>
         </View>
-        <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+        <Ionicons
+          name="chevron-forward"
+          size={20}
+          color={theme.colors.textSecondary}
+        />
       </Pressable>
     </View>
   );
@@ -248,7 +303,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   balance: {
-    color: "#ffffff",
     fontSize: 18,
     fontWeight: "700",
   },
@@ -257,7 +311,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   accountType: {
-    color: "#9ca3af",
     fontSize: 11,
   },
   up: {
@@ -267,14 +320,12 @@ const styles = StyleSheet.create({
     color: "#EF4444",
   },
   addAccountCard: {
-    backgroundColor: "#111827",
     borderRadius: 8,
     padding: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderWidth: 1,
-    borderColor: "#374151",
     borderStyle: "dashed",
   },
   addAccountContent: {
@@ -285,18 +336,15 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#1e3a8a",
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
   },
   addAccountTitle: {
-    color: "#ffffff",
     fontSize: 14,
     fontWeight: "600",
   },
   addAccountSubtitle: {
-    color: "#9ca3af",
     fontSize: 12,
     marginTop: 2,
   },

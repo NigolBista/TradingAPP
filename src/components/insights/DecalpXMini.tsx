@@ -3,9 +3,11 @@ import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useMarketOverviewStore } from "../../store/marketOverviewStore";
+import { useTheme } from "../../providers/ThemeProvider";
 
 const DecalpXMini = React.memo(function DecalpXMini() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
 
   // Memoize the navigation function to prevent re-renders
   const handlePress = useCallback(() => {
@@ -95,6 +97,8 @@ const DecalpXMini = React.memo(function DecalpXMini() {
     (overview1d?.keyHighlights?.length || 0) * 12 + Math.round(posRatio * 20)
   );
 
+  const styles = createStyles(theme);
+
   return (
     <Pressable style={styles.card} onPress={handlePress}>
       <View style={styles.headerRow}>
@@ -136,12 +140,14 @@ const DecalpXMini = React.memo(function DecalpXMini() {
           value={volScore}
           color="#f59e0b"
           hint={volScore < 35 ? "Calm" : volScore < 65 ? "Moderate" : "High"}
+          styles={styles}
         />
         <Metric
           label="Trend Heat"
           value={trendHeat}
           color="#eab308"
           hint={trendHeat < 35 ? "Cool" : trendHeat < 65 ? "Warm" : "Hot"}
+          styles={styles}
         />
       </View>
       <View style={styles.metricsRow}>
@@ -152,6 +158,7 @@ const DecalpXMini = React.memo(function DecalpXMini() {
           hint={
             posRatio > 0.55 ? "Inflow" : posRatio < 0.45 ? "Outflow" : "Neutral"
           }
+          styles={styles}
         />
         <Metric
           label="Signal Strength"
@@ -164,6 +171,7 @@ const DecalpXMini = React.memo(function DecalpXMini() {
               ? "Medium"
               : "Weak"
           }
+          styles={styles}
         />
       </View>
     </Pressable>
@@ -177,11 +185,13 @@ function Metric({
   value,
   color,
   hint,
+  styles,
 }: {
   label: string;
   value: number;
   color: string;
   hint?: string;
+  styles: any;
 }) {
   return (
     <View style={styles.metric}>
@@ -205,49 +215,54 @@ function Metric({
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 16,
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  title: { color: "#ffffff", fontSize: 16, fontWeight: "700" },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-  },
-  badgeBull: { backgroundColor: "#16a34a" },
-  badgeBear: { backgroundColor: "#dc2626" },
-  badgeNeutral: { backgroundColor: "#6b7280" },
-  badgeText: { color: "#ffffff", fontWeight: "700" },
-  metricsRow: {
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 10,
-  },
-  metric: { flex: 1 },
-  metricHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  metricLabel: { color: "#9ca3af", fontSize: 12 },
-  metricValue: { fontSize: 12, fontWeight: "700" },
-  progressBg: {
-    height: 6,
-    backgroundColor: "#2a2a2a",
-    borderRadius: 999,
-    marginTop: 6,
-  },
-  progressFill: { height: 6, borderRadius: 999 },
-  metricHint: { color: "#9ca3af", fontSize: 11, marginTop: 6 },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    card: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+    },
+    headerRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    title: { color: theme.colors.text, fontSize: 16, fontWeight: "700" },
+    badge: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+    },
+    badgeBull: { backgroundColor: "#16a34a" },
+    badgeBear: { backgroundColor: "#dc2626" },
+    badgeNeutral: { backgroundColor: "#6b7280" },
+    badgeText: { color: "#ffffff", fontWeight: "700" },
+    metricsRow: {
+      flexDirection: "row",
+      gap: 12,
+      marginBottom: 10,
+    },
+    metric: { flex: 1 },
+    metricHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    metricLabel: { color: theme.colors.textSecondary, fontSize: 12 },
+    metricValue: { fontSize: 12, fontWeight: "700" },
+    progressBg: {
+      height: 6,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 999,
+      marginTop: 6,
+    },
+    progressFill: { height: 6, borderRadius: 999 },
+    metricHint: {
+      color: theme.colors.textSecondary,
+      fontSize: 11,
+      marginTop: 6,
+    },
+  });

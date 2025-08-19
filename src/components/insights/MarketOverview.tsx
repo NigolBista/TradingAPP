@@ -19,6 +19,7 @@ import { refreshGlobalCache } from "../../services/marketDataCache";
 import type { NewsItem } from "../../services/newsProviders";
 import NewsList from "./NewsList";
 import { useMarketOverviewStore } from "../../store/marketOverviewStore";
+import { useTheme } from "../../providers/ThemeProvider";
 
 interface Props {
   onNewsPress?: () => void;
@@ -30,547 +31,551 @@ interface Props {
 
 type TimeframeType = "1D" | "1W" | "1M";
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0A0F1C",
-  },
-  compactContainer: {
-    backgroundColor: "#0A0F1C",
-    marginBottom: 16,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1F2937",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    marginTop: 2,
-  },
-  refreshButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "#1F2937",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  loadingText: {
-    color: "#9CA3AF",
-    marginTop: 12,
-    fontSize: 14,
-  },
-  errorContainer: {
-    padding: 16,
-    alignItems: "center",
-  },
-  errorText: {
-    color: "#EF4444",
-    textAlign: "center",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  retryButton: {
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: "#4F46E5",
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#ffffff",
-    fontWeight: "600",
-  },
-  content: {
-    padding: 16,
-  },
-  compactContent: {
-    padding: 12,
-  },
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    compactContainer: {
+      backgroundColor: theme.colors.background,
+      marginBottom: 16,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    headerSubtitle: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    refreshButton: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: theme.colors.surface,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingVertical: 40,
+    },
+    loadingText: {
+      color: theme.colors.textSecondary,
+      marginTop: 12,
+      fontSize: 14,
+    },
+    errorContainer: {
+      padding: 16,
+      alignItems: "center",
+    },
+    errorText: {
+      color: theme.colors.error,
+      textAlign: "center",
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    retryButton: {
+      marginTop: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: theme.colors.primary,
+      borderRadius: 8,
+    },
+    retryButtonText: {
+      color: "#ffffff",
+      fontWeight: "600",
+    },
+    content: {
+      padding: 8,
+    },
+    compactContent: {
+      padding: 8,
+    },
 
-  summaryContainer: {
-    marginBottom: 20,
-    padding: 16,
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: "#4F46E5",
-  },
-  summaryTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 8,
-  },
-  summaryText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#D1D5DB",
-  },
-  highlightsContainer: {
-    marginBottom: 20,
-  },
-  highlightsTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 12,
-  },
-  highlightItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: "#1F2937",
-    borderRadius: 8,
-  },
-  highlightBullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "#4F46E5",
-    marginTop: 7,
-    marginRight: 10,
-  },
-  highlightText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    color: "#D1D5DB",
-  },
-  sectionContainer: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sectionIcon: {
-    marginRight: 8,
-  },
-  trendingContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  trendingStock: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#1F2937",
-    borderRadius: 16,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  trendingTicker: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginRight: 4,
-  },
-  trendingMentions: {
-    fontSize: 10,
-    color: "#9CA3AF",
-  },
-  eventsContainer: {
-    gap: 8,
-  },
-  eventItem: {
-    padding: 12,
-    backgroundColor: "#1F2937",
-    borderRadius: 8,
-    borderLeftWidth: 3,
-  },
-  eventHigh: {
-    borderLeftColor: "#EF4444",
-  },
-  eventMedium: {
-    borderLeftColor: "#F59E0B",
-  },
-  eventLow: {
-    borderLeftColor: "#10B981",
-  },
-  eventTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 4,
-  },
-  eventDescription: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    lineHeight: 16,
-  },
-  newsSection: {
-    marginTop: 8,
-  },
-  newsSectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  viewAllButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#4F46E5",
-    borderRadius: 6,
-  },
-  viewAllText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  lastUpdated: {
-    textAlign: "center",
-    fontSize: 11,
-    color: "#6B7280",
-    marginTop: 16,
-    fontStyle: "italic",
-  },
+    summaryContainer: {
+      marginBottom: 16,
+      marginHorizontal: 8,
+      padding: 12,
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      borderLeftWidth: 4,
+      borderLeftColor: theme.colors.primary,
+    },
+    summaryTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    summaryText: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+    },
+    highlightsContainer: {
+      marginBottom: 20,
+    },
+    highlightsTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 12,
+    },
+    highlightItem: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      marginBottom: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+    },
+    highlightBullet: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: theme.colors.primary,
+      marginTop: 7,
+      marginRight: 10,
+    },
+    highlightText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 18,
+      color: theme.colors.textSecondary,
+    },
+    sectionContainer: {
+      marginBottom: 16,
+      marginHorizontal: 8,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    sectionIcon: {
+      marginRight: 8,
+    },
+    trendingContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    trendingStock: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    trendingTicker: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginRight: 4,
+    },
+    trendingMentions: {
+      fontSize: 10,
+      color: theme.colors.textSecondary,
+    },
+    eventsContainer: {
+      gap: 8,
+    },
+    eventItem: {
+      padding: 12,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+      borderLeftWidth: 3,
+    },
+    eventHigh: {
+      borderLeftColor: "#EF4444",
+    },
+    eventMedium: {
+      borderLeftColor: "#F59E0B",
+    },
+    eventLow: {
+      borderLeftColor: "#10B981",
+    },
+    eventTitle: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 4,
+    },
+    eventDescription: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+    },
+    newsSection: {
+      marginTop: 8,
+    },
+    newsSectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    viewAllButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      backgroundColor: theme.colors.primary,
+      borderRadius: 6,
+    },
+    viewAllText: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    lastUpdated: {
+      textAlign: "center",
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      marginTop: 16,
+      fontStyle: "italic",
+    },
 
-  // Timeframe selector styles
-  timeframeContainer: {
-    flexDirection: "row",
-    backgroundColor: "#1F2937",
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 16,
-  },
-  timeframeButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  timeframeButtonActive: {
-    backgroundColor: "#4F46E5",
-  },
-  timeframeButtonInactive: {
-    backgroundColor: "transparent",
-  },
-  timeframeText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  timeframeTextActive: {
-    color: "#ffffff",
-  },
-  timeframeTextInactive: {
-    color: "#9CA3AF",
-  },
+    // Timeframe selector styles
+    timeframeContainer: {
+      flexDirection: "row",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+      padding: 4,
+      marginBottom: 12,
+      marginHorizontal: 8,
+    },
+    timeframeButton: {
+      flex: 1,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 6,
+      alignItems: "center",
+    },
+    timeframeButtonActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    timeframeButtonInactive: {
+      backgroundColor: "transparent",
+    },
+    timeframeText: {
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    timeframeTextActive: {
+      color: "#ffffff",
+    },
+    timeframeTextInactive: {
+      color: theme.colors.textSecondary,
+    },
 
-  // Full width container
-  fullWidthContainer: {
-    marginHorizontal: -16, // Negative margin to span full width
-  },
+    // Full width container
+    fullWidthContainer: {
+      marginHorizontal: -16, // Negative margin to span full width
+    },
 
-  // Federal Reserve styles
-  fedEventsContainer: {
-    marginTop: 12,
-  },
-  fedSubtitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 8,
-  },
-  fedEventItem: {
-    backgroundColor: "#1F2937",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: "#DC2626",
-  },
-  fedEventHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 6,
-  },
-  fedEventTitle: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#ffffff",
-    flex: 1,
-    marginRight: 8,
-  },
-  fedEventBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  fedEventHighImpact: {
-    backgroundColor: "#DC2626",
-  },
-  fedEventMediumImpact: {
-    backgroundColor: "#F59E0B",
-  },
-  fedEventBadgeText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  fedEventDescription: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    lineHeight: 16,
-    marginBottom: 4,
-  },
-  fedEventDate: {
-    fontSize: 11,
-    color: "#6B7280",
-    fontStyle: "italic",
-  },
-  economicIndicatorsContainer: {
-    marginTop: 16,
-  },
-  indicatorsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  indicatorItem: {
-    backgroundColor: "#1F2937",
-    borderRadius: 8,
-    padding: 10,
-    minWidth: "48%",
-    flex: 1,
-  },
-  indicatorTitle: {
-    fontSize: 11,
-    color: "#9CA3AF",
-    marginBottom: 4,
-  },
-  indicatorValueRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  indicatorValue: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  indicatorChange: {
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  indicatorPositive: {
-    color: "#10B981",
-  },
-  indicatorNegative: {
-    color: "#EF4444",
-  },
+    // Federal Reserve styles
+    fedEventsContainer: {
+      marginTop: 12,
+    },
+    fedSubtitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    fedEventItem: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 8,
+      borderLeftWidth: 3,
+      borderLeftColor: "#DC2626",
+    },
+    fedEventHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 6,
+    },
+    fedEventTitle: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: theme.colors.text,
+      flex: 1,
+      marginRight: 8,
+    },
+    fedEventBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+    },
+    fedEventHighImpact: {
+      backgroundColor: "#DC2626",
+    },
+    fedEventMediumImpact: {
+      backgroundColor: "#F59E0B",
+    },
+    fedEventBadgeText: {
+      fontSize: 10,
+      fontWeight: "700",
+      color: "#ffffff",
+    },
+    fedEventDescription: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+      marginBottom: 4,
+    },
+    fedEventDate: {
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      fontStyle: "italic",
+    },
+    economicIndicatorsContainer: {
+      marginTop: 16,
+    },
+    indicatorsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    indicatorItem: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 8,
+      padding: 10,
+      minWidth: "48%",
+      flex: 1,
+    },
+    indicatorTitle: {
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      marginBottom: 4,
+    },
+    indicatorValueRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    indicatorValue: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    indicatorChange: {
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    indicatorPositive: {
+      color: "#10B981",
+    },
+    indicatorNegative: {
+      color: "#EF4444",
+    },
 
-  // Enhanced Market Overview Styles
-  enhancedContainer: {
-    flex: 1,
-    backgroundColor: "#0A0F1C",
-    paddingHorizontal: 0, // Full width
-  },
-  marketSentimentCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 16,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  sentimentHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  sentimentTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  sentimentBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sentimentBadgeBullish: {
-    backgroundColor: "rgba(16, 185, 129, 0.2)",
-    borderColor: "#10B981",
-    borderWidth: 1,
-  },
-  sentimentBadgeBearish: {
-    backgroundColor: "rgba(239, 68, 68, 0.2)",
-    borderColor: "#EF4444",
-    borderWidth: 1,
-  },
-  sentimentBadgeNeutral: {
-    backgroundColor: "rgba(156, 163, 175, 0.2)",
-    borderColor: "#9CA3AF",
-    borderWidth: 1,
-  },
-  sentimentBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginLeft: 4,
-  },
-  sentimentBadgeTextBullish: {
-    color: "#10B981",
-  },
-  sentimentBadgeTextBearish: {
-    color: "#EF4444",
-  },
-  sentimentBadgeTextNeutral: {
-    color: "#9CA3AF",
-  },
-  confidenceBar: {
-    height: 4,
-    backgroundColor: "#374151",
-    borderRadius: 2,
-    marginBottom: 12,
-  },
-  confidenceFill: {
-    height: "100%",
-    borderRadius: 2,
-  },
-  confidenceFillBullish: {
-    backgroundColor: "#10B981",
-  },
-  confidenceFillBearish: {
-    backgroundColor: "#EF4444",
-  },
-  confidenceFillNeutral: {
-    backgroundColor: "#9CA3AF",
-  },
-  sentimentFactors: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  sentimentFactor: {
-    backgroundColor: "#374151",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  sentimentFactorText: {
-    fontSize: 11,
-    color: "#D1D5DB",
-  },
-  newsHighlightsCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 16,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: "#F59E0B",
-  },
-  newsHighlightsTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#ffffff",
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  newsHighlightItem: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 12,
-    paddingVertical: 8,
-  },
-  newsHighlightBullet: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: "#F59E0B",
-    marginTop: 6,
-    marginRight: 12,
-  },
-  newsHighlightText: {
-    flex: 1,
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#E5E7EB",
-  },
-  dayAheadCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 16,
-    marginBottom: 20,
-    borderLeftWidth: 4,
-    borderLeftColor: "#6366F1",
-  },
-  dayAheadTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#ffffff",
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  timeframeBriefing: {
-    backgroundColor: "#374151",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  timeframeBriefingTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 8,
-  },
-  timeframeBriefingText: {
-    fontSize: 14,
-    lineHeight: 20,
-    color: "#D1D5DB",
-  },
-  enhancedSummaryContainer: {
-    marginHorizontal: 16,
-    marginBottom: 20,
-    padding: 20,
-    backgroundColor: "#1F2937",
-    borderRadius: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: "#4F46E5",
-  },
-  enhancedSummaryTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#ffffff",
-    marginBottom: 12,
-  },
-  enhancedSummaryText: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: "#E5E7EB",
-  },
-});
+    // Enhanced Market Overview Styles
+    enhancedContainer: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+      paddingHorizontal: 0, // Full width
+    },
+    marketSentimentCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginHorizontal: 8,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    sentimentHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 16,
+    },
+    sentimentTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    sentimentBadge: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    sentimentBadgeBullish: {
+      backgroundColor: "rgba(16, 185, 129, 0.2)",
+      borderColor: "#10B981",
+      borderWidth: 1,
+    },
+    sentimentBadgeBearish: {
+      backgroundColor: "rgba(239, 68, 68, 0.2)",
+      borderColor: "#EF4444",
+      borderWidth: 1,
+    },
+    sentimentBadgeNeutral: {
+      backgroundColor: "rgba(156, 163, 175, 0.2)",
+      borderColor: "#9CA3AF",
+      borderWidth: 1,
+    },
+    sentimentBadgeText: {
+      fontSize: 12,
+      fontWeight: "600",
+      marginLeft: 4,
+    },
+    sentimentBadgeTextBullish: {
+      color: "#10B981",
+    },
+    sentimentBadgeTextBearish: {
+      color: "#EF4444",
+    },
+    sentimentBadgeTextNeutral: {
+      color: "#9CA3AF",
+    },
+    confidenceBar: {
+      height: 4,
+      backgroundColor: "#374151",
+      borderRadius: 2,
+      marginBottom: 12,
+    },
+    confidenceFill: {
+      height: "100%",
+      borderRadius: 2,
+    },
+    confidenceFillBullish: {
+      backgroundColor: "#10B981",
+    },
+    confidenceFillBearish: {
+      backgroundColor: "#EF4444",
+    },
+    confidenceFillNeutral: {
+      backgroundColor: "#9CA3AF",
+    },
+    sentimentFactors: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    sentimentFactor: {
+      backgroundColor: "#374151",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    sentimentFactorText: {
+      fontSize: 11,
+      color: "#D1D5DB",
+    },
+    newsHighlightsCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginHorizontal: 8,
+      marginBottom: 16,
+      borderLeftWidth: 4,
+      borderLeftColor: "#F59E0B",
+    },
+    newsHighlightsTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+      marginBottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    newsHighlightItem: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      marginBottom: 12,
+      paddingVertical: 8,
+    },
+    newsHighlightBullet: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: "#F59E0B",
+      marginTop: 6,
+      marginRight: 12,
+    },
+    newsHighlightText: {
+      flex: 1,
+      fontSize: 14,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+    },
+    dayAheadCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginHorizontal: 8,
+      marginBottom: 16,
+      borderLeftWidth: 4,
+      borderLeftColor: "#6366F1",
+    },
+    dayAheadTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+      marginBottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    timeframeBriefing: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+    },
+    timeframeBriefingTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    timeframeBriefingText: {
+      fontSize: 14,
+      lineHeight: 20,
+      color: theme.colors.textSecondary,
+    },
+    enhancedSummaryContainer: {
+      marginHorizontal: 8,
+      marginBottom: 16,
+      padding: 16,
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      borderLeftWidth: 4,
+      borderLeftColor: theme.colors.primary,
+    },
+    enhancedSummaryTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
+      marginBottom: 12,
+    },
+    enhancedSummaryText: {
+      fontSize: 16,
+      lineHeight: 24,
+      color: theme.colors.textSecondary,
+    },
+  });
 
 export default function MarketOverview({
   onNewsPress,
@@ -579,6 +584,8 @@ export default function MarketOverview({
   navigation,
   fullWidth = false,
 }: Props) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const [overview, setOverview] = useState<MarketOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -908,12 +915,7 @@ export default function MarketOverview({
           ]}
         >
           {/* Timeframe Selector */}
-          <View
-            style={[
-              styles.timeframeContainer,
-              fullWidth && { marginHorizontal: 16 },
-            ]}
-          >
+          <View style={styles.timeframeContainer}>
             {(["1D", "1W", "1M"] as TimeframeType[]).map((tf) => (
               <Pressable
                 key={tf}
@@ -1059,12 +1061,7 @@ export default function MarketOverview({
           {/* Federal Reserve Section */}
           {(overview.fedEvents.length > 0 ||
             overview.economicIndicators.length > 0) && (
-            <View
-              style={[
-                styles.sectionContainer,
-                fullWidth && { marginHorizontal: 16 },
-              ]}
-            >
+            <View style={styles.sectionContainer}>
               <View style={styles.newsSectionHeader}>
                 <Text style={styles.sectionTitle}>
                   <Ionicons
@@ -1174,12 +1171,7 @@ export default function MarketOverview({
 
           {/* Trending Stocks */}
           {!compact && overview.trendingStocks.length > 0 && (
-            <View
-              style={[
-                styles.sectionContainer,
-                fullWidth && { marginHorizontal: 16 },
-              ]}
-            >
+            <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>
                 <Ionicons
                   name="flame"
@@ -1204,12 +1196,7 @@ export default function MarketOverview({
 
           {/* Upcoming Events */}
           {!compact && overview.upcomingEvents.length > 0 && !fullWidth && (
-            <View
-              style={[
-                styles.sectionContainer,
-                fullWidth && { marginHorizontal: 16 },
-              ]}
-            >
+            <View style={styles.sectionContainer}>
               <Text style={styles.sectionTitle}>
                 <Ionicons
                   name="calendar"
@@ -1244,12 +1231,7 @@ export default function MarketOverview({
 
           {/* Top Stories - Only show in full mode, not compact */}
           {!compact && (
-            <View
-              style={[
-                styles.newsSection,
-                fullWidth && { marginHorizontal: 16 },
-              ]}
-            >
+            <View style={styles.newsSection}>
               <View style={styles.newsSectionHeader}>
                 <Text style={styles.sectionTitle}>
                   <Ionicons
@@ -1271,9 +1253,7 @@ export default function MarketOverview({
           )}
 
           {/* Last Updated */}
-          <Text
-            style={[styles.lastUpdated, fullWidth && { marginHorizontal: 16 }]}
-          >
+          <Text style={styles.lastUpdated}>
             🔄 Last updated: {new Date(overview.lastUpdated).toLocaleString()}
           </Text>
         </View>

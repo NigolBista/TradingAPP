@@ -16,6 +16,7 @@ import {
   LinkExit,
 } from "react-native-plaid-link-sdk";
 import { plaidIntegrationService } from "../../services/plaidIntegration";
+import { useTheme } from "../../providers/ThemeProvider";
 
 interface Props {
   visible: boolean;
@@ -28,6 +29,7 @@ export default function PlaidLinkModal({
   onSuccess,
   onCancel,
 }: Props) {
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [opening, setOpening] = useState(false);
@@ -84,54 +86,80 @@ export default function PlaidLinkModal({
   const renderConsentStep = () => (
     <View style={styles.content}>
       <View style={styles.header}>
-        <View style={[styles.providerIcon, { backgroundColor: "#00D4AA20" }]}>
-          <Ionicons name="link" size={32} color="#00D4AA" />
+        <View
+          style={[
+            styles.providerIcon,
+            { backgroundColor: theme.colors.primary + "20" },
+          ]}
+        >
+          <Ionicons name="link" size={32} color={theme.colors.primary} />
         </View>
-        <Text style={styles.title}>Connect your brokerage account</Text>
-        <Text style={styles.subtitle}>Securely via Plaid</Text>
+        <Text style={[styles.title, { color: theme.colors.text }]}>
+          Connect your brokerage account
+        </Text>
+        <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
+          Securely via Plaid
+        </Text>
       </View>
 
       <View style={styles.features}>
         <View style={styles.feature}>
           <Ionicons name="shield-checkmark" size={20} color="#10B981" />
-          <Text style={styles.featureText}>
+          <Text style={[styles.featureText, { color: theme.colors.text }]}>
             Bank-level security with 256-bit encryption
           </Text>
         </View>
         <View style={styles.feature}>
           <Ionicons name="eye" size={20} color="#60a5fa" />
-          <Text style={styles.featureText}>
+          <Text style={[styles.featureText, { color: theme.colors.text }]}>
             Read-only access to balances and holdings
           </Text>
         </View>
         <View style={styles.feature}>
           <Ionicons name="refresh" size={20} color="#f59e0b" />
-          <Text style={styles.featureText}>
+          <Text style={[styles.featureText, { color: theme.colors.text }]}>
             Real-time portfolio sync and updates
           </Text>
         </View>
         <View style={styles.feature}>
           <Ionicons name="lock-closed" size={20} color="#8b5cf6" />
-          <Text style={styles.featureText}>
+          <Text style={[styles.featureText, { color: theme.colors.text }]}>
             Official API - no password sharing required
           </Text>
         </View>
       </View>
 
-      <View style={styles.disclaimer}>
-        <Text style={styles.disclaimerText}>
+      <View
+        style={[styles.disclaimer, { backgroundColor: theme.colors.surface }]}
+      >
+        <Text
+          style={[styles.disclaimerText, { color: theme.colors.textSecondary }]}
+        >
           By continuing, you'll be redirected to your institution's secure
           login. We never see or store your login credentials.
         </Text>
       </View>
 
       <View style={styles.actions}>
-        <Pressable style={styles.cancelButton} onPress={onCancel}>
-          <Text style={styles.cancelText}>Cancel</Text>
+        <Pressable
+          style={[
+            styles.cancelButton,
+            { backgroundColor: theme.colors.surface },
+          ]}
+          onPress={onCancel}
+        >
+          <Text
+            style={[styles.cancelText, { color: theme.colors.textSecondary }]}
+          >
+            Cancel
+          </Text>
         </Pressable>
         {linkToken ? (
           <Pressable
-            style={[styles.connectButton, { backgroundColor: "#00D4AA" }]}
+            style={[
+              styles.connectButton,
+              { backgroundColor: theme.colors.primary },
+            ]}
             onPress={openPlaidLink}
           >
             {loading ? (
@@ -141,8 +169,13 @@ export default function PlaidLinkModal({
             )}
           </Pressable>
         ) : (
-          <View style={[styles.connectButton, { backgroundColor: "#2a2a2a" }]}>
-            <ActivityIndicator size="small" color="#fff" />
+          <View
+            style={[
+              styles.connectButton,
+              { backgroundColor: theme.colors.surface },
+            ]}
+          >
+            <ActivityIndicator size="small" color={theme.colors.primary} />
           </View>
         )}
       </View>
@@ -155,7 +188,11 @@ export default function PlaidLinkModal({
       animationType="slide"
       presentationStyle="fullScreen"
     >
-      <View style={styles.container}>{renderConsentStep()}</View>
+      <View
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+      >
+        {renderConsentStep()}
+      </View>
     </Modal>
   );
 }
@@ -163,7 +200,6 @@ export default function PlaidLinkModal({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0a0a0a",
   },
   content: {
     flex: 1,
@@ -183,14 +219,12 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   title: {
-    color: "#fff",
     fontSize: 24,
     fontWeight: "700",
     textAlign: "center",
     marginBottom: 8,
   },
   subtitle: {
-    color: "#9ca3af",
     fontSize: 16,
     textAlign: "center",
   },
@@ -204,18 +238,15 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   featureText: {
-    color: "#d1d5db",
     fontSize: 16,
     flex: 1,
   },
   disclaimer: {
-    backgroundColor: "#1f2937",
     borderRadius: 8,
     padding: 16,
     marginBottom: 32,
   },
   disclaimerText: {
-    color: "#9ca3af",
     fontSize: 14,
     lineHeight: 20,
     textAlign: "center",
@@ -228,11 +259,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 16,
     borderRadius: 12,
-    backgroundColor: "#1f2937",
     alignItems: "center",
   },
   cancelText: {
-    color: "#9ca3af",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -260,15 +289,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 60,
     paddingBottom: 16,
-    backgroundColor: "#1a1a1a",
     borderBottomWidth: 1,
-    borderBottomColor: "#333",
   },
   backButton: {
     padding: 8,
   },
   webviewTitle: {
-    color: "#fff",
     fontSize: 18,
     fontWeight: "600",
   },
@@ -283,10 +309,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0a0a0a",
   },
   loadingText: {
-    color: "#9ca3af",
     marginTop: 16,
     fontSize: 16,
   },
@@ -302,13 +326,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   successTitle: {
-    color: "#fff",
     fontSize: 28,
     fontWeight: "700",
     marginBottom: 12,
   },
   successSubtitle: {
-    color: "#9ca3af",
     fontSize: 16,
     textAlign: "center",
     lineHeight: 24,

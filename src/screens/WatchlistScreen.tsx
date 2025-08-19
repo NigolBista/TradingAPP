@@ -37,189 +37,202 @@ import { getStockBySymbol } from "../services/stockData";
 import StockAutocomplete from "../components/common/StockAutocomplete";
 import AddToWatchlistModal from "../components/common/AddToWatchlistModal";
 import SwipeableStockItem from "../components/common/SwipeableStockItem";
+import { useTheme } from "../providers/ThemeProvider";
 
 const { width: screenWidth } = Dimensions.get("window");
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0a0a0a" },
-  header: {
-    backgroundColor: "#1a1a1a",
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
-  },
-  headerTitle: { fontSize: 24, fontWeight: "bold", color: "#ffffff" },
-  headerSubtitle: { color: "#888888", fontSize: 14, marginTop: 4 },
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.background },
+    header: {
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: 16,
+      paddingTop: 48,
+      paddingBottom: 16,
+    },
+    headerTitle: { fontSize: 24, fontWeight: "bold", color: theme.colors.text },
+    headerSubtitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      marginTop: 4,
+    },
 
-  // Watchlist selector
-  watchlistSelector: {
-    backgroundColor: "#1a1a1a",
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  watchlistChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 16,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: "#333333",
-    backgroundColor: "transparent",
-  },
-  watchlistChipActive: { borderColor: "#00D4AA", backgroundColor: "#00D4AA20" },
-  watchlistChipText: { fontSize: 12, color: "#ffffff", fontWeight: "500" },
-  watchlistChipTextActive: { color: "#00D4AA" },
+    // Watchlist selector
+    watchlistSelector: {
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: 16,
+      paddingBottom: 16, // Add proper bottom padding
+    },
+    watchlistChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 16,
+      marginRight: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: "transparent",
+    },
+    watchlistChipActive: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primary + "20",
+    },
+    watchlistChipText: {
+      fontSize: 12,
+      color: theme.colors.text,
+      fontWeight: "500",
+    },
+    watchlistChipTextActive: { color: theme.colors.primary },
 
-  // Chart section
-  chartSection: {
-    backgroundColor: "#1a1a1a",
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
-    padding: 16,
-  },
-  chartHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: "600", color: "#ffffff" },
+    // Chart section
+    chartSection: {
+      backgroundColor: theme.colors.card,
+      marginHorizontal: 16,
+      marginVertical: 8,
+      borderRadius: 12,
+      padding: 16,
+    },
+    chartHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    sectionTitle: { fontSize: 18, fontWeight: "600", color: theme.colors.text },
 
-  // Add/Create modals
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 16,
-    padding: 20,
-    width: "90%",
-    maxHeight: "80%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#ffffff" },
-  input: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 8,
-    padding: 12,
-    color: "#ffffff",
-    fontSize: 16,
-    marginBottom: 16,
-  },
-  createButton: {
-    backgroundColor: "#00D4AA",
-    borderRadius: 8,
-    padding: 16,
-    alignItems: "center",
-  },
-  createButtonText: {
-    color: "#000000",
-    fontSize: 16,
-    fontWeight: "600",
-  },
+    // Add/Create modals
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.8)",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    modalContent: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 16,
+      padding: 20,
+      width: "90%",
+      maxHeight: "80%",
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    modalTitle: { fontSize: 20, fontWeight: "bold", color: theme.colors.text },
+    input: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+      padding: 12,
+      color: theme.colors.text,
+      fontSize: 16,
+      marginBottom: 16,
+    },
+    createButton: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: 8,
+      padding: 16,
+      alignItems: "center",
+    },
+    createButtonText: {
+      color: theme.isDark ? "#ffffff" : "#000000",
+      fontSize: 16,
+      fontWeight: "600",
+    },
 
-  // Stock selection
-  stockSearchSection: {
-    marginBottom: 16,
-  },
-  stockSearchInput: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 8,
-    padding: 12,
-    color: "#ffffff",
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  stockResultsContainer: {
-    maxHeight: 200,
-    marginBottom: 16,
-  },
-  stockResultItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2a2a2a",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-  },
-  stockResultItemSelected: {
-    backgroundColor: "#00D4AA20",
-    borderWidth: 1,
-    borderColor: "#00D4AA",
-  },
-  stockResultInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  stockResultSymbol: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  stockResultName: {
-    fontSize: 12,
-    color: "#888888",
-    marginTop: 2,
-  },
-  stockResultType: {
-    fontSize: 10,
-    color: "#00D4AA",
-    textTransform: "uppercase",
-    fontWeight: "600",
-  },
-  selectedStocksSection: {
-    marginBottom: 16,
-  },
-  selectedStocksTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 8,
-  },
-  selectedStockChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#00D4AA20",
-    borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  selectedStockText: {
-    color: "#00D4AA",
-    fontSize: 14,
-    fontWeight: "500",
-    marginRight: 4,
-  },
+    // Stock selection
+    stockSearchSection: {
+      marginBottom: 16,
+    },
+    stockSearchInput: {
+      backgroundColor: "#2a2a2a",
+      borderRadius: 8,
+      padding: 12,
+      color: "#ffffff",
+      fontSize: 16,
+      marginBottom: 12,
+    },
+    stockResultsContainer: {
+      maxHeight: 200,
+      marginBottom: 16,
+    },
+    stockResultItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 8,
+    },
+    stockResultItemSelected: {
+      backgroundColor: theme.colors.primary + "20",
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
+    },
+    stockResultInfo: {
+      flex: 1,
+      marginRight: 12,
+    },
+    stockResultSymbol: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    stockResultName: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    stockResultType: {
+      fontSize: 10,
+      color: theme.colors.primary,
+      textTransform: "uppercase",
+      fontWeight: "600",
+    },
+    selectedStocksSection: {
+      marginBottom: 16,
+    },
+    selectedStocksTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    selectedStockChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.colors.primary + "20",
+      borderRadius: 16,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      marginRight: 8,
+      marginBottom: 8,
+    },
+    selectedStockText: {
+      color: theme.colors.primary,
+      fontSize: 14,
+      fontWeight: "500",
+      marginRight: 4,
+    },
 
-  loadingContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  loadingText: { color: "#888888", marginTop: 12 },
+    loadingContainer: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    loadingText: { color: theme.colors.textSecondary, marginTop: 12 },
 
-  emptyState: {
-    alignItems: "center",
-    padding: 32,
-  },
-  emptyStateText: {
-    color: "#888888",
-    fontSize: 16,
-    textAlign: "center",
-    marginTop: 12,
-  },
-});
+    emptyState: {
+      alignItems: "center",
+      padding: 32,
+    },
+    emptyStateText: {
+      color: theme.colors.textSecondary,
+      fontSize: 16,
+      textAlign: "center",
+      marginTop: 12,
+    },
+  });
 
 interface StockData extends ScanResult {
   currentPrice: number;
@@ -230,6 +243,7 @@ interface StockData extends ScanResult {
 
 export default function WatchlistScreen() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
   const {
     profile,
     getActiveWatchlist,
@@ -242,6 +256,8 @@ export default function WatchlistScreen() {
     isGlobalFavorite,
     setActiveWatchlist,
   } = useUserStore();
+
+  const styles = createStyles(theme);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -515,7 +531,7 @@ export default function WatchlistScreen() {
           <Text style={styles.headerSubtitle}>Loading your stocks...</Text>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00D4AA" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>Loading watchlist data...</Text>
         </View>
       </GestureHandlerRootView>
@@ -561,7 +577,7 @@ export default function WatchlistScreen() {
             style={{ padding: 8 }}
             onPress={() => setShowAddToWatchlistModal(true)}
           >
-            <Ionicons name="add" size={24} color="#00D4AA" />
+            <Ionicons name="add" size={24} color={theme.colors.primary} />
           </Pressable>
         </View>
       </View>
@@ -589,7 +605,7 @@ export default function WatchlistScreen() {
                   size={12}
                   color={
                     viewMode === "favorites" && !selectedWatchlistId
-                      ? "#00D4AA"
+                      ? theme.colors.primary
                       : "#FFD700"
                   }
                   style={{ marginRight: 6 }}
@@ -656,10 +672,15 @@ export default function WatchlistScreen() {
                 <Ionicons
                   name="add"
                   size={12}
-                  color="#888888"
+                  color={theme.colors.textSecondary}
                   style={{ marginRight: 6 }}
                 />
-                <Text style={[styles.watchlistChipText, { color: "#888888" }]}>
+                <Text
+                  style={[
+                    styles.watchlistChipText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
                   New List
                 </Text>
               </View>
@@ -677,14 +698,14 @@ export default function WatchlistScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#00D4AA"
+            tintColor={theme.colors.primary}
           />
         }
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
       >
         {stockData.length === 0 && loading ? (
           <View style={styles.emptyState}>
-            <ActivityIndicator size="large" color="#00D4AA" />
+            <ActivityIndicator size="large" color={theme.colors.primary} />
             <Text style={styles.emptyStateText}>Loading stocks...</Text>
           </View>
         ) : stockData.length === 0 ? (
@@ -692,7 +713,7 @@ export default function WatchlistScreen() {
             <Ionicons
               name={viewMode === "favorites" ? "star-outline" : "list"}
               size={48}
-              color="#888888"
+              color={theme.colors.textSecondary}
             />
             <Text style={styles.emptyStateText}>
               {viewMode === "favorites"
@@ -739,7 +760,11 @@ export default function WatchlistScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Create Watchlist</Text>
               <Pressable onPress={() => setShowCreateWatchlistModal(false)}>
-                <Ionicons name="close" size={24} color="#888888" />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
               </Pressable>
             </View>
 
@@ -747,7 +772,7 @@ export default function WatchlistScreen() {
             <TextInput
               style={styles.input}
               placeholder="Watchlist name"
-              placeholderTextColor="#888888"
+              placeholderTextColor={theme.colors.textSecondary}
               value={newWatchlistName}
               onChangeText={setNewWatchlistName}
             />
@@ -755,7 +780,7 @@ export default function WatchlistScreen() {
             <TextInput
               style={styles.input}
               placeholder="Description (optional)"
-              placeholderTextColor="#888888"
+              placeholderTextColor={theme.colors.textSecondary}
               value={newWatchlistDescription}
               onChangeText={setNewWatchlistDescription}
               multiline
@@ -795,7 +820,11 @@ export default function WatchlistScreen() {
                         />
                       )}
                       <Pressable onPress={() => handleStockSelect(stock)}>
-                        <Ionicons name="close" size={14} color="#00D4AA" />
+                        <Ionicons
+                          name="close"
+                          size={14}
+                          color={theme.colors.primary}
+                        />
                       </Pressable>
                     </View>
                   ))}

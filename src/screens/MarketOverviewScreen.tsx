@@ -1,5 +1,6 @@
 import React from "react";
 import { View, StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import MarketOverview from "../components/insights/MarketOverview";
 
@@ -19,13 +20,13 @@ export default function MarketOverviewScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <MarketOverview 
-        onNewsPress={handleNewsPress} 
-        navigation={navigation} 
+    <SafeAreaView style={styles.container}>
+      <MarketOverview
+        onNewsPress={handleNewsPress}
+        navigation={navigation}
         fullWidth={true}
         compact={false}
       />
-    </View>
+    </SafeAreaView>
   );
 }

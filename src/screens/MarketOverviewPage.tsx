@@ -7,6 +7,7 @@ import {
   RefreshControl,
   Pressable,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import MarketOverview from "../components/insights/MarketOverview";
@@ -74,7 +75,7 @@ export default function MarketOverviewPage() {
   }, [overview1d, rawNews]);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable
@@ -142,7 +143,7 @@ export default function MarketOverviewPage() {
           <MarketOverview fullWidth={true} compact={false} />
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -156,7 +157,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingTop: 60,
+    paddingTop: 16,
     paddingBottom: 16,
     backgroundColor: "#1a1a1a",
     borderBottomWidth: 1,

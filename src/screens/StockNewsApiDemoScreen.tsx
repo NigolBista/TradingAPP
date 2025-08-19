@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import NewsList from "../components/insights/NewsList";
 import {
   fetchTeslaNews,
@@ -51,7 +52,7 @@ const styles = StyleSheet.create({
   },
   header: {
     padding: 20,
-    paddingTop: 60,
+    paddingTop: 20,
     backgroundColor: "#1a1a2e",
   },
   title: {
@@ -390,7 +391,7 @@ export default function StockNewsApiDemoScreen() {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Stock News API Demo</Text>
         <Text style={styles.subtitle}>
@@ -461,6 +462,6 @@ export default function StockNewsApiDemoScreen() {
           </>
         )}
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }

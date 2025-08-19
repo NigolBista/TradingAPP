@@ -7,6 +7,7 @@ import {
   Pressable,
   RefreshControl,
   Dimensions,
+  SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -16,10 +17,12 @@ import { StockSearchResult } from "../services/stockSearch";
 import { fetchYahooCandles } from "../services/marketProviders";
 import { fetchNewsWithDateFilter } from "../services/newsProviders";
 import SimpleLineChart from "../components/charts/SimpleLineChart";
+import { useTheme } from "../providers/ThemeProvider";
 
 const { width } = Dimensions.get("window");
 
 export default function DecalpXScreen() {
+  const { theme } = useTheme();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<StockSearchResult | null>(null);
@@ -256,18 +259,20 @@ export default function DecalpXScreen() {
     };
   }, [selected]);
 
+  const styles = createStyles(theme);
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Pressable
           onPress={() => navigation.goBack()}
           style={styles.backButton}
         >
-          <Ionicons name="arrow-back" size={24} color="#ffffff" />
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>DECALP X</Text>
         <Pressable onPress={handleRefresh} style={styles.refreshButton}>
-          <Ionicons name="refresh" size={20} color="#ffffff" />
+          <Ionicons name="refresh" size={20} color={theme.colors.text} />
         </Pressable>
       </View>
 
@@ -277,14 +282,18 @@ export default function DecalpXScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#00D4AA"
+            tintColor={theme.colors.primary}
           />
         }
       >
         {/* Ticker picker (Add-to-watchlist style) */}
         <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
           <Text
-            style={{ color: "#9CA3AF", marginBottom: 8, fontWeight: "600" }}
+            style={{
+              color: theme.colors.textSecondary,
+              marginBottom: 8,
+              fontWeight: "600",
+            }}
           >
             Analyze a symbol
           </Text>
@@ -292,7 +301,7 @@ export default function DecalpXScreen() {
             onStockSelect={(stk) => setSelected(stk)}
             placeholder="Type a symbol..."
             containerStyle={{}}
-            inputStyle={{ backgroundColor: "#111827" }}
+            inputStyle={{ backgroundColor: theme.colors.surface }}
           />
           {selected && (
             <View
@@ -303,10 +312,10 @@ export default function DecalpXScreen() {
                 justifyContent: "space-between",
               }}
             >
-              <Text style={{ color: "#E5E7EB", fontWeight: "700" }}>
+              <Text style={{ color: theme.colors.text, fontWeight: "700" }}>
                 {selected.symbol} · {selected.name}
               </Text>
-              <Text style={{ color: "#10B981", fontWeight: "700" }}>
+              <Text style={{ color: theme.colors.primary, fontWeight: "700" }}>
                 {selectedPrice ? `$${selectedPrice.toFixed(2)}` : "--"}
               </Text>
             </View>
@@ -457,6 +466,7 @@ export default function DecalpXScreen() {
                 ? "ADEQUATE"
                 : "STRONG BEAR"
             }
+            styles={styles}
           />
           <MarketIndicator
             title="OXYGEN"
@@ -470,6 +480,7 @@ export default function DecalpXScreen() {
                 ? "LIGHT BULLISH"
                 : "ACTIVE"
             }
+            styles={styles}
           />
           <MarketIndicator
             title="PULSE"
@@ -477,6 +488,7 @@ export default function DecalpXScreen() {
             value={pulseRate}
             color="#10B981"
             label="LIGHT BULLISH"
+            styles={styles}
           />
           <MarketIndicator
             title="ADRENALINE"
@@ -490,6 +502,7 @@ export default function DecalpXScreen() {
                 ? "STRONG BEAR"
                 : "CALM"
             }
+            styles={styles}
           />
           <MarketIndicator
             title="GRAVITY"
@@ -497,6 +510,7 @@ export default function DecalpXScreen() {
             value={gravityScore}
             color="#8B5CF6"
             label="CALM"
+            styles={styles}
           />
         </View>
 
@@ -507,30 +521,35 @@ export default function DecalpXScreen() {
             value={Math.min(100, volScore * 0.8)}
             color="#F59E0B"
             label="Watch"
+            styles={styles}
           />
           <TechnicalMetric
             title="Candle Load"
             value={Math.min(100, trendHeat * 0.6)}
             color="#EAB308"
             label="Moderate"
+            styles={styles}
           />
           <TechnicalMetric
             title="Volatility"
             value={volScore}
             color="#06B6D4"
             label="Calm"
+            styles={styles}
           />
           <TechnicalMetric
             title="Money Flow"
             value={moneyFlow}
             color="#EF4444"
             label="Neutral"
+            styles={styles}
           />
           <TechnicalMetric
             title="Stability"
             value={Math.min(100, 100 - volScore)}
             color="#F97316"
             label="Calm"
+            styles={styles}
           />
         </View>
 
@@ -543,24 +562,28 @@ export default function DecalpXScreen() {
               value={75}
               color="#06B6D4"
               label="MOD BULL"
+              styles={styles}
             />
             <TrendHeatMetric
               title="Velocity"
               value={71}
               color="#EAB308"
               label="FAST"
+              styles={styles}
             />
             <TrendHeatMetric
               title="O/B - O/S"
               value={51}
               color="#F97316"
               label="OVERBOUGHT"
+              styles={styles}
             />
             <TrendHeatMetric
               title="Signal Strength"
               value={92}
               color="#06B6D4"
               label="Strong Bull"
+              styles={styles}
             />
           </View>
           <View style={styles.trendHeatBottom}>
@@ -581,7 +604,7 @@ export default function DecalpXScreen() {
           </View>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -591,12 +614,14 @@ function MarketIndicator({
   value,
   color,
   label,
+  styles,
 }: {
   title: string;
   icon: string;
   value: number;
   color: string;
   label: string;
+  styles: any;
 }) {
   return (
     <View style={styles.indicatorCard}>
@@ -615,11 +640,13 @@ function TechnicalMetric({
   value,
   color,
   label,
+  styles,
 }: {
   title: string;
   value: number;
   color: string;
   label: string;
+  styles: any;
 }) {
   return (
     <View style={styles.technicalCard}>
@@ -645,11 +672,13 @@ function TrendHeatMetric({
   value,
   color,
   label,
+  styles,
 }: {
   title: string;
   value: number;
   color: string;
   label: string;
+  styles: any;
 }) {
   return (
     <View style={styles.trendMetric}>
@@ -660,306 +689,307 @@ function TrendHeatMetric({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0A0F1C",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1F2937",
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#00D4AA",
-    letterSpacing: 2,
-  },
-  refreshButton: {
-    padding: 8,
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  timeCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    alignItems: "center",
-  },
-  timeText: {
-    color: "#9CA3AF",
-    fontSize: 14,
-  },
-  countdownText: {
-    color: "#F59E0B",
-    fontSize: 18,
-    fontWeight: "700",
-    marginVertical: 4,
-  },
-  statusText: {
-    color: "#6366F1",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  spyCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  spyHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 16,
-  },
-  spyTitle: {
-    color: "#ffffff",
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  spySubtitle: {
-    color: "#9CA3AF",
-    fontSize: 12,
-    marginBottom: 8,
-  },
-  spyPrice: {
-    color: "#ffffff",
-    fontSize: 20,
-    fontWeight: "600",
-  },
-  spyChange: {
-    alignItems: "flex-end",
-  },
-  changeText: {
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  positive: {
-    color: "#10B981",
-  },
-  negative: {
-    color: "#EF4444",
-  },
-  chartContainer: {
-    marginVertical: 16,
-  },
-  spyMetrics: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  spyMetric: {
-    flex: 1,
-  },
-  metricLabel: {
-    color: "#9CA3AF",
-    fontSize: 12,
-  },
-  metricValue: {
-    color: "#10B981",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  sentimentCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  sentimentHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  cardTitle: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  sentimentBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-  },
-  bullishBadge: {
-    backgroundColor: "#10B981",
-  },
-  bearishBadge: {
-    backgroundColor: "#EF4444",
-  },
-  neutralBadge: {
-    backgroundColor: "#6B7280",
-  },
-  sentimentPercent: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  sentimentLabel: {
-    color: "#10B981",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  indicatorsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginBottom: 16,
-  },
-  indicatorCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    padding: 12,
-    width: (width - 48) / 2,
-    alignItems: "center",
-  },
-  indicatorHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  indicatorValue: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "700",
-    marginLeft: 8,
-  },
-  indicatorTitle: {
-    color: "#9CA3AF",
-    fontSize: 12,
-    marginBottom: 4,
-  },
-  indicatorLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  technicalGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
-  },
-  technicalCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 8,
-    padding: 12,
-    width: (width - 48) / 2,
-  },
-  technicalTitle: {
-    color: "#9CA3AF",
-    fontSize: 11,
-    marginBottom: 8,
-  },
-  technicalProgress: {
-    height: 4,
-    backgroundColor: "#374151",
-    borderRadius: 2,
-    marginBottom: 8,
-  },
-  technicalFill: {
-    height: 4,
-    borderRadius: 2,
-  },
-  technicalBottom: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  technicalValue: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  technicalLabel: {
-    color: "#9CA3AF",
-    fontSize: 11,
-  },
-  trendHeatCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  trendHeatGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-    marginVertical: 16,
-  },
-  trendMetric: {
-    width: (width - 80) / 2,
-    alignItems: "center",
-  },
-  trendMetricTitle: {
-    color: "#9CA3AF",
-    fontSize: 11,
-    marginBottom: 4,
-  },
-  trendMetricValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  trendMetricLabel: {
-    color: "#9CA3AF",
-    fontSize: 10,
-  },
-  trendHeatBottom: {
-    alignItems: "center",
-    marginTop: 16,
-  },
-  trendHeatValue: {
-    color: "#EAB308",
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  trendHeatLabel: {
-    color: "#EAB308",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  universalCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  universalSubtitle: {
-    color: "#9CA3AF",
-    fontSize: 12,
-    marginBottom: 16,
-  },
-  universalContent: {
-    alignItems: "center",
-  },
-  universalTrend: {
-    color: "#10B981",
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 12,
-  },
-  universalProgress: {
-    width: "100%",
-    height: 8,
-    backgroundColor: "#374151",
-    borderRadius: 4,
-  },
-  universalFill: {
-    height: 8,
-    backgroundColor: "#10B981",
-    borderRadius: 4,
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    backButton: {
+      padding: 8,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.primary,
+      letterSpacing: 2,
+    },
+    refreshButton: {
+      padding: 8,
+    },
+    content: {
+      flex: 1,
+      padding: 16,
+    },
+    timeCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      alignItems: "center",
+    },
+    timeText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+    },
+    countdownText: {
+      color: "#F59E0B",
+      fontSize: 18,
+      fontWeight: "700",
+      marginVertical: 4,
+    },
+    statusText: {
+      color: "#6366F1",
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    spyCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+    },
+    spyHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 16,
+    },
+    spyTitle: {
+      color: theme.colors.text,
+      fontSize: 24,
+      fontWeight: "700",
+    },
+    spySubtitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      marginBottom: 8,
+    },
+    spyPrice: {
+      color: theme.colors.text,
+      fontSize: 20,
+      fontWeight: "600",
+    },
+    spyChange: {
+      alignItems: "flex-end",
+    },
+    changeText: {
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    positive: {
+      color: "#10B981",
+    },
+    negative: {
+      color: "#EF4444",
+    },
+    chartContainer: {
+      marginVertical: 16,
+    },
+    spyMetrics: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+    },
+    spyMetric: {
+      flex: 1,
+    },
+    metricLabel: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+    },
+    metricValue: {
+      color: theme.colors.primary,
+      fontSize: 16,
+      fontWeight: "600",
+    },
+    sentimentCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+    },
+    sentimentHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    cardTitle: {
+      color: "#ffffff",
+      fontSize: 16,
+      fontWeight: "700",
+    },
+    sentimentBadge: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+    },
+    bullishBadge: {
+      backgroundColor: "#10B981",
+    },
+    bearishBadge: {
+      backgroundColor: "#EF4444",
+    },
+    neutralBadge: {
+      backgroundColor: "#6B7280",
+    },
+    sentimentPercent: {
+      color: "#ffffff",
+      fontSize: 14,
+      fontWeight: "700",
+    },
+    sentimentLabel: {
+      color: "#10B981",
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    indicatorsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+      marginBottom: 16,
+    },
+    indicatorCard: {
+      backgroundColor: "#1F2937",
+      borderRadius: 12,
+      padding: 12,
+      width: (width - 48) / 2,
+      alignItems: "center",
+    },
+    indicatorHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    indicatorValue: {
+      color: "#ffffff",
+      fontSize: 18,
+      fontWeight: "700",
+      marginLeft: 8,
+    },
+    indicatorTitle: {
+      color: "#9CA3AF",
+      fontSize: 12,
+      marginBottom: 4,
+    },
+    indicatorLabel: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    technicalGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginBottom: 16,
+    },
+    technicalCard: {
+      backgroundColor: "#1F2937",
+      borderRadius: 8,
+      padding: 12,
+      width: (width - 48) / 2,
+    },
+    technicalTitle: {
+      color: "#9CA3AF",
+      fontSize: 11,
+      marginBottom: 8,
+    },
+    technicalProgress: {
+      height: 4,
+      backgroundColor: "#374151",
+      borderRadius: 2,
+      marginBottom: 8,
+    },
+    technicalFill: {
+      height: 4,
+      borderRadius: 2,
+    },
+    technicalBottom: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    technicalValue: {
+      color: theme.colors.text,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    technicalLabel: {
+      color: theme.colors.textSecondary,
+      fontSize: 11,
+    },
+    trendHeatCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+    },
+    trendHeatGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+      marginVertical: 16,
+    },
+    trendMetric: {
+      width: (width - 80) / 2,
+      alignItems: "center",
+    },
+    trendMetricTitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 11,
+      marginBottom: 4,
+    },
+    trendMetricValue: {
+      fontSize: 16,
+      fontWeight: "700",
+      marginBottom: 4,
+    },
+    trendMetricLabel: {
+      color: theme.colors.textSecondary,
+      fontSize: 10,
+    },
+    trendHeatBottom: {
+      alignItems: "center",
+      marginTop: 16,
+    },
+    trendHeatValue: {
+      color: "#EAB308",
+      fontSize: 24,
+      fontWeight: "700",
+    },
+    trendHeatLabel: {
+      color: "#EAB308",
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    universalCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+    },
+    universalSubtitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      marginBottom: 16,
+    },
+    universalContent: {
+      alignItems: "center",
+    },
+    universalTrend: {
+      color: "#10B981",
+      fontSize: 18,
+      fontWeight: "700",
+      marginBottom: 12,
+    },
+    universalProgress: {
+      width: "100%",
+      height: 8,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 4,
+    },
+    universalFill: {
+      height: 8,
+      backgroundColor: "#10B981",
+      borderRadius: 4,
+    },
+  });

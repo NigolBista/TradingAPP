@@ -17,318 +17,322 @@ import {
   type EconomicIndicator,
   type FedRelease,
 } from "../services/federalReserve";
+import { useTheme } from "../providers/ThemeProvider";
 
 interface Props {
   navigation: any;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0A0F1C",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#1F2937",
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 8,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    marginTop: 2,
-  },
-  refreshButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "#1F2937",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  loadingText: {
-    color: "#9CA3AF",
-    marginTop: 12,
-    fontSize: 14,
-  },
-  errorContainer: {
-    padding: 16,
-    alignItems: "center",
-  },
-  errorText: {
-    color: "#EF4444",
-    textAlign: "center",
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  retryButton: {
-    marginTop: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: "#4F46E5",
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#ffffff",
-    fontWeight: "600",
-  },
-  content: {
-    padding: 16,
-  },
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    headerLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    backButton: {
+      padding: 8,
+      marginRight: 8,
+    },
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    headerSubtitle: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    refreshButton: {
+      padding: 8,
+      borderRadius: 8,
+      backgroundColor: theme.colors.surface,
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      paddingVertical: 40,
+    },
+    loadingText: {
+      color: theme.colors.textSecondary,
+      marginTop: 12,
+      fontSize: 14,
+    },
+    errorContainer: {
+      padding: 16,
+      alignItems: "center",
+    },
+    errorText: {
+      color: theme.colors.error,
+      textAlign: "center",
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    retryButton: {
+      marginTop: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      backgroundColor: theme.colors.primary,
+      borderRadius: 8,
+    },
+    retryButtonText: {
+      color: "#ffffff",
+      fontWeight: "600",
+    },
+    content: {
+      padding: 16,
+    },
 
-  // Filter tabs
-  filterContainer: {
-    flexDirection: "row",
-    backgroundColor: "#1F2937",
-    borderRadius: 8,
-    padding: 4,
-    marginBottom: 16,
-  },
-  filterButton: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  filterButtonActive: {
-    backgroundColor: "#DC2626",
-  },
-  filterButtonInactive: {
-    backgroundColor: "transparent",
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  filterTextActive: {
-    color: "#ffffff",
-  },
-  filterTextInactive: {
-    color: "#9CA3AF",
-  },
+    // Filter tabs
+    filterContainer: {
+      flexDirection: "row",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+      padding: 4,
+      marginBottom: 16,
+    },
+    filterButton: {
+      flex: 1,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 6,
+      alignItems: "center",
+    },
+    filterButtonActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    filterButtonInactive: {
+      backgroundColor: "transparent",
+    },
+    filterText: {
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    filterTextActive: {
+      color: "#ffffff",
+    },
+    filterTextInactive: {
+      color: theme.colors.textSecondary,
+    },
 
-  // Section styles
-  sectionContainer: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#ffffff",
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  sectionIcon: {
-    marginRight: 8,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: "#9CA3AF",
-    marginBottom: 16,
-    lineHeight: 20,
-  },
+    // Section styles
+    sectionContainer: {
+      marginBottom: 24,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+      marginBottom: 12,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    sectionIcon: {
+      marginRight: 8,
+    },
+    sectionSubtitle: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginBottom: 16,
+      lineHeight: 20,
+    },
 
-  // Fed Events styles
-  eventItem: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-  },
-  eventHighImpact: {
-    borderLeftColor: "#DC2626",
-  },
-  eventMediumImpact: {
-    borderLeftColor: "#F59E0B",
-  },
-  eventLowImpact: {
-    borderLeftColor: "#10B981",
-  },
-  eventHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-  },
-  eventTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-    flex: 1,
-    marginRight: 12,
-  },
-  eventBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  eventBadgeHigh: {
-    backgroundColor: "#DC2626",
-  },
-  eventBadgeMedium: {
-    backgroundColor: "#F59E0B",
-  },
-  eventBadgeLow: {
-    backgroundColor: "#10B981",
-  },
-  eventBadgeText: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: "#ffffff",
-    marginLeft: 4,
-  },
-  eventDescription: {
-    fontSize: 14,
-    color: "#D1D5DB",
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  eventMeta: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  eventDate: {
-    fontSize: 12,
-    color: "#9CA3AF",
-    fontStyle: "italic",
-  },
-  eventType: {
-    fontSize: 12,
-    color: "#6B7280",
-    textTransform: "capitalize",
-  },
+    // Fed Events styles
+    eventItem: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      borderLeftWidth: 4,
+    },
+    eventHighImpact: {
+      borderLeftColor: "#DC2626",
+    },
+    eventMediumImpact: {
+      borderLeftColor: "#F59E0B",
+    },
+    eventLowImpact: {
+      borderLeftColor: "#10B981",
+    },
+    eventHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 8,
+    },
+    eventTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+      flex: 1,
+      marginRight: 12,
+    },
+    eventBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    eventBadgeHigh: {
+      backgroundColor: "#DC2626",
+    },
+    eventBadgeMedium: {
+      backgroundColor: "#F59E0B",
+    },
+    eventBadgeLow: {
+      backgroundColor: "#10B981",
+    },
+    eventBadgeText: {
+      fontSize: 11,
+      fontWeight: "700",
+      color: "#ffffff",
+      marginLeft: 4,
+    },
+    eventDescription: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      lineHeight: 20,
+      marginBottom: 8,
+    },
+    eventMeta: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    eventDate: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      fontStyle: "italic",
+    },
+    eventType: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      textTransform: "capitalize",
+    },
 
-  // Economic Indicators styles
-  indicatorsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  indicatorCard: {
-    backgroundColor: "#1F2937",
-    borderRadius: 12,
-    padding: 16,
-    minWidth: "48%",
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#374151",
-  },
-  indicatorTitle: {
-    fontSize: 13,
-    color: "#9CA3AF",
-    marginBottom: 8,
-    fontWeight: "500",
-  },
-  indicatorValueRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  indicatorValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  indicatorUnit: {
-    fontSize: 14,
-    color: "#9CA3AF",
-    marginLeft: 2,
-  },
-  indicatorChange: {
-    fontSize: 13,
-    fontWeight: "600",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  indicatorPositive: {
-    color: "#10B981",
-  },
-  indicatorNegative: {
-    color: "#EF4444",
-  },
-  indicatorDate: {
-    fontSize: 11,
-    color: "#6B7280",
-    marginTop: 4,
-  },
+    // Economic Indicators styles
+    indicatorsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    indicatorCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      minWidth: "48%",
+      flex: 1,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    indicatorTitle: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      marginBottom: 8,
+      fontWeight: "500",
+    },
+    indicatorValueRow: {
+      flexDirection: "row",
+      alignItems: "baseline",
+      justifyContent: "space-between",
+      marginBottom: 4,
+    },
+    indicatorValue: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    indicatorUnit: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginLeft: 2,
+    },
+    indicatorChange: {
+      fontSize: 13,
+      fontWeight: "600",
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    indicatorPositive: {
+      color: "#10B981",
+    },
+    indicatorNegative: {
+      color: "#EF4444",
+    },
+    indicatorDate: {
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      marginTop: 4,
+    },
 
-  // Releases styles
-  releaseItem: {
-    backgroundColor: "#1F2937",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  releaseInfo: {
-    flex: 1,
-  },
-  releaseTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 4,
-  },
-  releaseDate: {
-    fontSize: 12,
-    color: "#9CA3AF",
-  },
-  releaseLink: {
-    padding: 8,
-  },
+    // Releases styles
+    releaseItem: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    releaseInfo: {
+      flex: 1,
+    },
+    releaseTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 4,
+    },
+    releaseDate: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+    },
+    releaseLink: {
+      padding: 8,
+    },
 
-  // Empty state
-  emptyContainer: {
-    alignItems: "center",
-    paddingVertical: 40,
-  },
-  emptyText: {
-    color: "#9CA3AF",
-    fontSize: 16,
-    textAlign: "center",
-    marginTop: 12,
-  },
+    // Empty state
+    emptyContainer: {
+      alignItems: "center",
+      paddingVertical: 40,
+    },
+    emptyText: {
+      color: theme.colors.textSecondary,
+      fontSize: 16,
+      textAlign: "center",
+      marginTop: 12,
+    },
 
-  lastUpdated: {
-    textAlign: "center",
-    fontSize: 11,
-    color: "#6B7280",
-    marginTop: 24,
-    fontStyle: "italic",
-  },
-});
+    lastUpdated: {
+      textAlign: "center",
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      marginTop: 24,
+      fontStyle: "italic",
+    },
+  });
 
 type FilterType = "all" | "events" | "indicators" | "releases";
 
 export default function FederalReserveScreen({ navigation }: Props) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const [data, setData] = useState<{
     events: FedEvent[];
     indicators: EconomicIndicator[];
@@ -421,7 +425,7 @@ export default function FederalReserveScreen({ navigation }: Props) {
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
-              <Ionicons name="arrow-back" size={24} color="#ffffff" />
+              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
             </Pressable>
             <View>
               <Text style={styles.headerTitle}>Federal Reserve</Text>
@@ -430,7 +434,7 @@ export default function FederalReserveScreen({ navigation }: Props) {
           </View>
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#DC2626" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
           <Text style={styles.loadingText}>
             Loading Federal Reserve data...
           </Text>
@@ -448,7 +452,7 @@ export default function FederalReserveScreen({ navigation }: Props) {
               style={styles.backButton}
               onPress={() => navigation.goBack()}
             >
-              <Ionicons name="arrow-back" size={24} color="#ffffff" />
+              <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
             </Pressable>
             <View>
               <Text style={styles.headerTitle}>Federal Reserve</Text>
@@ -475,7 +479,7 @@ export default function FederalReserveScreen({ navigation }: Props) {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Ionicons name="arrow-back" size={24} color="#ffffff" />
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
           </Pressable>
           <View>
             <Text style={styles.headerTitle}>Federal Reserve</Text>
@@ -486,7 +490,7 @@ export default function FederalReserveScreen({ navigation }: Props) {
           <Ionicons
             name={refreshing ? "hourglass" : "refresh"}
             size={20}
-            color="#9CA3AF"
+            color={theme.colors.textSecondary}
           />
         </Pressable>
       </View>
@@ -497,8 +501,8 @@ export default function FederalReserveScreen({ navigation }: Props) {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#DC2626"
-            colors={["#DC2626"]}
+            tintColor={theme.colors.primary}
+            colors={[theme.colors.primary]}
           />
         }
       >

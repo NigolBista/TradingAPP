@@ -8,9 +8,12 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Pressable,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { useTheme } from "../providers/ThemeProvider";
 import PlaidLinkModal from "../components/common/PlaidLinkModal";
 import {
   plaidIntegrationService,
@@ -28,7 +31,9 @@ interface ConnectedAccount {
   accounts: PlaidAccount[];
 }
 
-export default function BrokerageAccountsScreen({ navigation }: any) {
+export default function BrokerageAccountsScreen() {
+  const navigation = useNavigation<any>();
+  const { theme } = useTheme();
   const [connectedAccounts, setConnectedAccounts] = useState<
     ConnectedAccount[]
   >([]);
@@ -180,35 +185,72 @@ export default function BrokerageAccountsScreen({ navigation }: any) {
   };
 
   const renderConnectedAccount = (account: ConnectedAccount) => (
-    <View key={account.id} style={styles.accountCard}>
+    <View
+      key={account.id}
+      style={[styles.accountCard, { backgroundColor: theme.colors.card }]}
+    >
       <View style={styles.accountHeader}>
         <View style={styles.accountInfo}>
-          <View style={styles.institutionIcon}>
-            <Ionicons name="business" size={24} color="#00D4AA" />
+          <View
+            style={[
+              styles.institutionIcon,
+              { backgroundColor: theme.colors.primary + "20" },
+            ]}
+          >
+            <Ionicons name="business" size={24} color={theme.colors.primary} />
           </View>
           <View style={styles.accountDetails}>
-            <Text style={styles.institutionName}>
+            <Text
+              style={[styles.institutionName, { color: theme.colors.text }]}
+            >
               {account.institutionName}
             </Text>
-            <Text style={styles.accountType}>{account.accountType}</Text>
-            <Text style={styles.lastSync}>
+            <Text
+              style={[
+                styles.accountType,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
+              {account.accountType}
+            </Text>
+            <Text
+              style={[styles.lastSync, { color: theme.colors.textSecondary }]}
+            >
               Last synced: {new Date(account.lastSync).toLocaleDateString()}
             </Text>
           </View>
         </View>
         <View style={styles.balanceContainer}>
-          <Text style={styles.balance}>{formatCurrency(account.balance)}</Text>
-          <View style={styles.statusDot} />
+          <Text style={[styles.balance, { color: theme.colors.primary }]}>
+            {formatCurrency(account.balance)}
+          </Text>
+          <View
+            style={[
+              styles.statusDot,
+              { backgroundColor: theme.colors.primary },
+            ]}
+          />
         </View>
       </View>
 
       <View style={styles.accountActions}>
         <TouchableOpacity
-          style={styles.actionButton}
+          style={[
+            styles.actionButton,
+            { backgroundColor: theme.colors.surface },
+          ]}
           onPress={() => loadConnectedAccounts()}
         >
-          <Ionicons name="refresh" size={16} color="#666" />
-          <Text style={styles.actionText}>Sync</Text>
+          <Ionicons
+            name="refresh"
+            size={16}
+            color={theme.colors.textSecondary}
+          />
+          <Text
+            style={[styles.actionText, { color: theme.colors.textSecondary }]}
+          >
+            Sync
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -217,8 +259,8 @@ export default function BrokerageAccountsScreen({ navigation }: any) {
             handleDisconnectAccount(account.id, account.institutionName)
           }
         >
-          <Ionicons name="unlink" size={16} color="#dc2626" />
-          <Text style={[styles.actionText, { color: "#dc2626" }]}>
+          <Ionicons name="unlink" size={16} color={theme.colors.error} />
+          <Text style={[styles.actionText, { color: theme.colors.error }]}>
             Disconnect
           </Text>
         </TouchableOpacity>
@@ -228,56 +270,104 @@ export default function BrokerageAccountsScreen({ navigation }: any) {
 
   if (loading && connectedAccounts.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+      >
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#00D4AA" />
-          <Text style={styles.loadingText}>Loading your accounts...</Text>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+            Loading your accounts...
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
+      {/* Header with back button */}
+      <View
+        style={[
+          styles.headerBar,
+          {
+            backgroundColor: theme.colors.background,
+            borderBottomColor: theme.colors.border,
+          },
+        ]}
+      >
+        <Pressable
+          onPress={() => navigation.goBack()}
+          style={styles.backButton}
+        >
+          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+        </Pressable>
+        <View style={styles.headerCenter}>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>
+            Connected Accounts
+          </Text>
+          <Text
+            style={[
+              styles.headerSubtitle,
+              { color: theme.colors.textSecondary },
+            ]}
+          >
+            Securely connected via Plaid
+          </Text>
+        </View>
+        <View style={{ width: 40 }} />
+      </View>
+
       <ScrollView
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Connected Accounts</Text>
-          <Text style={styles.subtitle}>Securely connected via Plaid</Text>
+        <View style={styles.content}>
+          {connectedAccounts.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="link"
+                size={64}
+                color={theme.colors.textSecondary}
+              />
+              <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>
+                No Accounts Connected
+              </Text>
+              <Text
+                style={[
+                  styles.emptySubtitle,
+                  { color: theme.colors.textSecondary },
+                ]}
+              >
+                Connect your brokerage accounts to view your portfolio
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.accountsList}>
+              {connectedAccounts.map(renderConnectedAccount)}
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={styles.connectButton}
+            onPress={() => setShowPlaidModal(true)}
+          >
+            <Ionicons name="add" size={24} color="#fff" />
+            <Text style={styles.connectButtonText}>Connect New Account</Text>
+          </TouchableOpacity>
+
+          {positions.length > 0 && (
+            <View style={styles.holdingsSection}>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+                Your Holdings
+              </Text>
+              <HoldingsList positions={positions} scrollEnabled={false} />
+            </View>
+          )}
         </View>
-
-        {connectedAccounts.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="link" size={64} color="#ccc" />
-            <Text style={styles.emptyTitle}>No Accounts Connected</Text>
-            <Text style={styles.emptySubtitle}>
-              Connect your brokerage accounts to view your portfolio
-            </Text>
-          </View>
-        ) : (
-          <View style={styles.accountsList}>
-            {connectedAccounts.map(renderConnectedAccount)}
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={styles.connectButton}
-          onPress={() => setShowPlaidModal(true)}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-          <Text style={styles.connectButtonText}>Connect New Account</Text>
-        </TouchableOpacity>
-
-        {positions.length > 0 && (
-          <View style={styles.holdingsSection}>
-            <Text style={styles.sectionTitle}>Your Holdings</Text>
-            <HoldingsList positions={positions} scrollEnabled={false} />
-          </View>
-        )}
       </ScrollView>
 
       <PlaidLinkModal
@@ -292,7 +382,6 @@ export default function BrokerageAccountsScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0a0a0a",
   },
   scrollView: {
     flex: 1,
@@ -303,24 +392,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loadingText: {
-    color: "#fff",
     fontSize: 16,
     marginTop: 16,
   },
-  header: {
-    padding: 20,
+  headerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#1a1a1a",
   },
-  title: {
-    fontSize: 24,
+  backButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  headerCenter: {
+    flex: 1,
+  },
+  headerTitle: {
+    fontSize: 20,
     fontWeight: "700",
-    color: "#fff",
-    marginBottom: 4,
+    marginBottom: 2,
   },
-  subtitle: {
+  headerSubtitle: {
     fontSize: 14,
-    color: "#999",
+  },
+  content: {
+    paddingTop: 20,
   },
   emptyState: {
     alignItems: "center",
@@ -330,13 +428,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#fff",
     marginTop: 16,
     marginBottom: 8,
   },
   emptySubtitle: {
     fontSize: 14,
-    color: "#999",
     textAlign: "center",
     paddingHorizontal: 40,
   },
@@ -344,7 +440,6 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   accountCard: {
-    backgroundColor: "#1a1a1a",
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
@@ -364,7 +459,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#00D4AA20",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -375,18 +469,15 @@ const styles = StyleSheet.create({
   institutionName: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#fff",
     marginBottom: 2,
   },
   accountType: {
     fontSize: 14,
-    color: "#999",
     marginBottom: 2,
     textTransform: "capitalize",
   },
   lastSync: {
     fontSize: 12,
-    color: "#666",
   },
   balanceContainer: {
     alignItems: "flex-end",
@@ -394,14 +485,12 @@ const styles = StyleSheet.create({
   balance: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#00D4AA",
     marginBottom: 4,
   },
   statusDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#00D4AA",
   },
   accountActions: {
     flexDirection: "row",
@@ -413,15 +502,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: "#2a2a2a",
     gap: 6,
   },
   disconnectButton: {
-    backgroundColor: "#dc262620",
+    backgroundColor: "rgba(220, 38, 38, 0.1)",
   },
   actionText: {
     fontSize: 14,
-    color: "#666",
     fontWeight: "500",
   },
   connectButton: {
@@ -447,7 +534,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#fff",
     marginBottom: 16,
   },
 });

@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTimeframeStore } from "../../store/timeframeStore";
+import { useTheme } from "../../providers/ThemeProvider";
 
 export type ExtendedTimeframe =
   | "1m"
@@ -58,6 +59,8 @@ export default function TimeframePickerModal({
   selected,
   onSelect,
 }: Props) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const { pinned, toggle } = useTimeframeStore();
   return (
     <Modal
@@ -128,56 +131,73 @@ export default function TimeframePickerModal({
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  backdrop: { position: "absolute", inset: 0 },
-  modal: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 16,
-    width: "88%",
-    maxWidth: 420,
-    padding: 16,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  title: { color: "#fff", fontSize: 16, fontWeight: "700", marginBottom: 8 },
-  closeButton: { padding: 4 },
-  group: { marginVertical: 8 },
-  groupTitle: { color: "#999", fontSize: 12, marginBottom: 8 },
-  grid: { flexDirection: "row", flexWrap: "wrap" },
-  cell: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    marginRight: 8,
-    marginBottom: 8,
-    backgroundColor: "#111",
-  },
-  cellSelected: { backgroundColor: "#00D4AA", borderColor: "#00D4AA" },
-  cellPinned: {
-    borderColor: "#00D4AA",
-    borderWidth: 2,
-    backgroundColor: "#002921",
-  },
-  cellContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  cellText: { color: "#ccc", fontWeight: "600" },
-  cellTextSelected: { color: "#000" },
-  cellTextPinned: { color: "#00D4AA" },
-  instructions: { padding: 16, alignItems: "center" },
-  instructionText: { color: "#888", fontSize: 12, textAlign: "center" },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "rgba(0,0,0,0.5)",
+    },
+    backdrop: { position: "absolute", inset: 0 },
+    modal: {
+      backgroundColor: theme.colors.background,
+      borderRadius: 16,
+      width: "88%",
+      maxWidth: 420,
+      padding: 16,
+    },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    title: {
+      color: theme.colors.text,
+      fontSize: 16,
+      fontWeight: "700",
+      marginBottom: 8,
+    },
+    closeButton: { padding: 4 },
+    group: { marginVertical: 8 },
+    groupTitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      marginBottom: 8,
+    },
+    grid: { flexDirection: "row", flexWrap: "wrap" },
+    cell: {
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginRight: 8,
+      marginBottom: 8,
+      backgroundColor: theme.colors.surface,
+    },
+    cellSelected: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    cellPinned: {
+      borderColor: "#00D4AA",
+      borderWidth: 2,
+      backgroundColor: "#002921",
+    },
+    cellContent: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    cellText: { color: theme.colors.textSecondary, fontWeight: "600" },
+    cellTextSelected: { color: "#000" },
+    cellTextPinned: { color: theme.colors.primary },
+    instructions: { padding: 16, alignItems: "center" },
+    instructionText: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      textAlign: "center",
+    },
+  });

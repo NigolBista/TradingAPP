@@ -5,11 +5,11 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
-  SafeAreaView,
   RefreshControl,
   Modal,
   ActivityIndicator,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import MarketOverview from "../components/insights/MarketOverview";
@@ -20,173 +20,182 @@ import {
   type SignalSummary,
 } from "../services/signalEngine";
 import { useUserStore } from "../store/userStore";
+import { useTheme } from "../providers/ThemeProvider";
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0A0F1C",
-  },
-  header: {
-    backgroundColor: "#1a1a1a",
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 0,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 16,
-  },
-  tabContainer: {
-    flexDirection: "row",
-    backgroundColor: "#0a0a0a",
-    borderRadius: 8,
-    padding: 4,
-    marginHorizontal: 16,
-    marginBottom: 16,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
-    alignItems: "center",
-  },
-  activeTab: {
-    backgroundColor: "#60a5fa",
-  },
-  tabText: {
-    color: "#9ca3af",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  activeTabText: {
-    color: "#ffffff",
-    fontWeight: "600",
-  },
-  content: {
-    flex: 1,
-  },
-  marketContent: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  decalpxContainer: {
-    marginBottom: 16,
-  },
-  // Signals styles
-  section: {
-    backgroundColor: "#1a1a1a",
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
-    padding: 16,
-  },
-  filterRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 16,
-    flexWrap: "wrap",
-  },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#333333",
-    backgroundColor: "transparent",
-  },
-  filterChipActive: {
-    backgroundColor: "#00D4AA",
-    borderColor: "#00D4AA",
-  },
-  filterChipText: {
-    color: "#888888",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  filterChipTextActive: {
-    color: "#ffffff",
-  },
-  signalCard: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: "#00D4AA",
-  },
-  signalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  signalSymbol: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#ffffff",
-  },
-  confidenceBadge: {
-    backgroundColor: "#00D4AA",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  confidenceText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  signalAction: {
-    fontSize: 14,
-    fontWeight: "bold",
-    textTransform: "uppercase",
-  },
-  buyAction: {
-    color: "#00D4AA",
-  },
-  sellAction: {
-    color: "#FF6B6B",
-  },
-  signalType: {
-    color: "#888888",
-    fontSize: 12,
-  },
-  signalDetails: {
-    color: "#CCCCCC",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  strategyModal: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 16,
-    padding: 20,
-    width: "90%",
-    maxHeight: "80%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#ffffff" },
-  strategyItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
-  },
-  strategyName: { fontSize: 16, fontWeight: "600", color: "#ffffff" },
-  strategyDesc: { fontSize: 14, color: "#888888", marginTop: 4 },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 16,
+    },
+    headerTitle: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: theme.colors.text,
+      marginBottom: 16,
+    },
+    tabContainer: {
+      flexDirection: "row",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+      padding: 4,
+      marginHorizontal: 16,
+      marginTop: 16, // Add proper top margin for spacing between header and tabs
+      marginBottom: 16, // Add proper margin for spacing
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      borderRadius: 6,
+      alignItems: "center",
+    },
+    activeTab: {
+      backgroundColor: theme.colors.primary,
+    },
+    tabText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      fontWeight: "500",
+    },
+    activeTabText: {
+      color: theme.isDark ? "#ffffff" : "#000000",
+      fontWeight: "600",
+    },
+    content: {
+      flex: 1,
+      paddingTop: 0, // Remove any top padding
+    },
+    marketContent: {
+      flex: 1,
+      paddingHorizontal: 16,
+      paddingTop: 0, // Remove top padding to eliminate gap
+    },
+    decalpxContainer: {
+      marginBottom: 16,
+    },
+    // Signals styles
+    section: {
+      backgroundColor: theme.colors.card,
+      marginHorizontal: 16,
+      marginVertical: 8,
+      borderRadius: 12,
+      padding: 16,
+    },
+    filterRow: {
+      flexDirection: "row",
+      gap: 8,
+      marginBottom: 16,
+      flexWrap: "wrap",
+    },
+    filterChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: "transparent",
+    },
+    filterChipActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    filterChipText: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    filterChipTextActive: {
+      color: theme.isDark ? "#ffffff" : "#000000",
+    },
+    signalCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+      borderLeftWidth: 4,
+      borderLeftColor: theme.colors.primary,
+    },
+    signalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    signalSymbol: {
+      fontSize: 18,
+      fontWeight: "bold",
+      color: theme.colors.text,
+    },
+    confidenceBadge: {
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+    },
+    confidenceText: {
+      color: theme.isDark ? "#ffffff" : "#000000",
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    signalAction: {
+      fontSize: 14,
+      fontWeight: "bold",
+      textTransform: "uppercase",
+    },
+    buyAction: {
+      color: theme.colors.success,
+    },
+    sellAction: {
+      color: theme.colors.error,
+    },
+    signalType: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+    },
+    signalDetails: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      marginTop: 4,
+    },
+    strategyModal: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.8)",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    modalContent: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 16,
+      padding: 20,
+      width: "90%",
+      maxHeight: "80%",
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    modalTitle: { fontSize: 20, fontWeight: "bold", color: theme.colors.text },
+    strategyItem: {
+      padding: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    strategyName: { fontSize: 16, fontWeight: "600", color: theme.colors.text },
+    strategyDesc: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginTop: 4,
+    },
+  });
 
 type TabType = "Market" | "Signals";
 
@@ -226,8 +235,12 @@ const STRATEGY_FILTERS = [
 
 export default function MarketOverviewTabScreen() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
   const { profile } = useUserStore();
   const [activeTab, setActiveTab] = useState<TabType>("Market");
+  const insets = useSafeAreaInsets();
+
+  const styles = createStyles(theme);
 
   // Signals state
   const [loading, setLoading] = useState(false);
@@ -243,7 +256,8 @@ export default function MarketOverviewTabScreen() {
   }, [selectedStrategy, activeTab]);
 
   const handleNewsPress = () => {
-    navigation.navigate("NewsInsights" as never);
+    // Navigate to the News tab (unified route name)
+    navigation.navigate("News" as never);
   };
 
   async function loadSignals() {
@@ -419,8 +433,8 @@ export default function MarketOverviewTabScreen() {
         <View
           style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
         >
-          <ActivityIndicator size="large" color="#00D4AA" />
-          <Text style={{ color: "#888888", marginTop: 16 }}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text style={{ color: theme.colors.textSecondary, marginTop: 16 }}>
             {favoriteCount > 0
               ? `Analyzing signals for ${favoriteCount} favorite stocks...`
               : "Loading AI signals..."}
@@ -441,14 +455,20 @@ export default function MarketOverviewTabScreen() {
               marginBottom: 12,
             }}
           >
-            <Text style={{ color: "#ffffff", fontSize: 16, fontWeight: "600" }}>
+            <Text
+              style={{
+                color: theme.colors.text,
+                fontSize: 16,
+                fontWeight: "600",
+              }}
+            >
               Strategy Filter
             </Text>
             <Pressable
               style={{ padding: 8 }}
               onPress={() => setShowStrategyModal(true)}
             >
-              <Ionicons name="options" size={20} color="#00D4AA" />
+              <Ionicons name="options" size={20} color={theme.colors.primary} />
             </Pressable>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -485,15 +505,23 @@ export default function MarketOverviewTabScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#00D4AA"
+              tintColor={theme.colors.primary}
             />
           }
         >
           {signals.length === 0 ? (
             <View style={{ alignItems: "center", padding: 32 }}>
-              <Ionicons name="radio-outline" size={48} color="#888888" />
+              <Ionicons
+                name="radio-outline"
+                size={48}
+                color={theme.colors.textSecondary}
+              />
               <Text
-                style={{ color: "#888888", textAlign: "center", marginTop: 12 }}
+                style={{
+                  color: theme.colors.textSecondary,
+                  textAlign: "center",
+                  marginTop: 12,
+                }}
               >
                 {Array.from(
                   new Set([
@@ -545,8 +573,8 @@ export default function MarketOverviewTabScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+    <View style={styles.container}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Text style={styles.headerTitle}>Market Overview</Text>
       </View>
 
@@ -583,7 +611,11 @@ export default function MarketOverviewTabScreen() {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Trading Strategies</Text>
               <Pressable onPress={() => setShowStrategyModal(false)}>
-                <Ionicons name="close" size={24} color="#888888" />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
               </Pressable>
             </View>
 
@@ -600,6 +632,6 @@ export default function MarketOverviewTabScreen() {
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }

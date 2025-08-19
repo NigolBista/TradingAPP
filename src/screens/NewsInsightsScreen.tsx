@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Linking,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import {
   fetchNews,
@@ -23,135 +24,141 @@ import { useNavigation } from "@react-navigation/native";
 import { useMarketData } from "../hooks/useMarketData";
 import { getAllCachedData } from "../services/marketDataCache";
 import NewsList from "../components/insights/NewsList";
+import { useTheme } from "../providers/ThemeProvider";
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0a0a0a" },
-  header: {
-    backgroundColor: "#1a1a1a",
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
-  },
-  headerContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  headerTitle: { fontSize: 24, fontWeight: "bold", color: "#ffffff" },
-  headerSubtitle: { color: "#888888", fontSize: 14, marginTop: 4 },
-  marketOverviewButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1F2937",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#4F46E5",
-  },
-  marketOverviewText: {
-    color: "#4F46E5",
-    fontSize: 12,
-    fontWeight: "600",
-    marginLeft: 6,
-  },
-  tabContainer: {
-    flexDirection: "row",
-    backgroundColor: "#1a1a1a",
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  tabActive: { backgroundColor: "#00D4AA" },
-  tabInactive: { backgroundColor: "transparent" },
-  tabText: { fontSize: 14, fontWeight: "600" },
-  tabTextActive: { color: "#000000" },
-  tabTextInactive: { color: "#888888" },
-  section: {
-    backgroundColor: "#1a1a1a",
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 12,
-  },
-  newsCard: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  newsTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 8,
-  },
-  newsSource: { fontSize: 12, color: "#888888", marginBottom: 8 },
-  newsSummary: { fontSize: 14, color: "#cccccc", lineHeight: 20 },
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.background },
+    header: {
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 16,
+    },
+    headerContent: {
+      alignItems: "flex-start",
+    },
+    headerTitle: { fontSize: 24, fontWeight: "bold", color: theme.colors.text },
+    headerSubtitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      marginTop: 4,
+    },
+    tabContainer: {
+      flexDirection: "row",
+      backgroundColor: theme.colors.surface,
+      marginHorizontal: 16,
+      marginTop: 16, // Add proper top margin for spacing between header and tabs
+      marginBottom: 16, // Add proper bottom margin for spacing
+      borderRadius: 12,
+      padding: 4,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      alignItems: "center",
+    },
+    tabActive: { backgroundColor: theme.colors.primary },
+    tabInactive: { backgroundColor: "transparent" },
+    tabText: { fontSize: 14, fontWeight: "600" },
+    tabTextActive: { color: theme.isDark ? "#ffffff" : "#000000" },
+    tabTextInactive: { color: theme.colors.textSecondary },
+    section: {
+      backgroundColor: theme.colors.card,
+      marginHorizontal: 16,
+      marginVertical: 8,
+      borderRadius: 12,
+      padding: 16,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 12,
+    },
+    newsCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+    },
+    newsTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    newsSource: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginBottom: 8,
+    },
+    newsSummary: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      lineHeight: 20,
+    },
 
-  economicEvent: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
-  },
-  eventTime: { fontSize: 12, color: "#888888", minWidth: 60 },
-  eventText: { fontSize: 14, color: "#ffffff", flex: 1, marginLeft: 12 },
-  eventImpact: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginLeft: 8,
-  },
-  eventImpactText: { fontSize: 10, fontWeight: "600" },
-  keywordChip: {
-    backgroundColor: "#333333",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 6,
-    marginBottom: 6,
-  },
-  keywordText: { fontSize: 12, color: "#ffffff" },
-  trendingContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  trendingCard: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 12,
-    minWidth: 120,
-    alignItems: "center",
-  },
-  trendingTicker: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#ffffff",
-    marginBottom: 4,
-  },
-  trendingMentions: {
-    fontSize: 12,
-    color: "#aaaaaa",
-    marginBottom: 8,
-  },
-});
+    economicEvent: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    eventTime: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      minWidth: 60,
+    },
+    eventText: {
+      fontSize: 14,
+      color: theme.colors.text,
+      flex: 1,
+      marginLeft: 12,
+    },
+    eventImpact: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      marginLeft: 8,
+    },
+    eventImpactText: { fontSize: 10, fontWeight: "600" },
+    keywordChip: {
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 4,
+      marginRight: 6,
+      marginBottom: 6,
+    },
+    keywordText: { fontSize: 12, color: theme.colors.text },
+    trendingContainer: {
+      flexDirection: "row",
+      paddingHorizontal: 16,
+      gap: 12,
+    },
+    trendingCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 12,
+      padding: 12,
+      minWidth: 120,
+      alignItems: "center",
+    },
+    trendingTicker: {
+      fontSize: 16,
+      fontWeight: "bold",
+      color: theme.colors.text,
+      marginBottom: 4,
+    },
+    trendingMentions: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginBottom: 8,
+    },
+  });
 
 const ECONOMIC_EVENTS = [
   { time: "8:30 AM", event: "Jobless Claims", impact: "Medium" },
@@ -162,14 +169,18 @@ const ECONOMIC_EVENTS = [
 ];
 
 export default function NewsInsightsScreen() {
+  const { theme } = useTheme();
   const { profile } = useUserStore();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const {
     news: cachedNews,
     trendingStocks: cachedTrending,
     isValid: cacheValid,
     refreshData,
   } = useMarketData();
+
+  const styles = createStyles(theme);
 
   const [activeTab, setActiveTab] = useState<"news" | "calendar">("news");
   const [loading, setLoading] = useState(false);
@@ -304,8 +315,8 @@ export default function NewsInsightsScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header with safe area padding */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.headerTitle}>News & Insights</Text>
@@ -313,13 +324,6 @@ export default function NewsInsightsScreen() {
               Market news with AI sentiment analysis
             </Text>
           </View>
-          <Pressable
-            style={styles.marketOverviewButton}
-            onPress={() => navigation.navigate("MarketOverview" as never)}
-          >
-            <Ionicons name="analytics" size={20} color="#4F46E5" />
-            <Text style={styles.marketOverviewText}>Market Overview</Text>
-          </Pressable>
         </View>
       </View>
 
@@ -367,11 +371,12 @@ export default function NewsInsightsScreen() {
       {/* Content */}
       <ScrollView
         style={{ flex: 1 }}
+        contentContainerStyle={{ paddingTop: 0 }} // Remove top padding to eliminate gap
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#00D4AA"
+            tintColor={theme.colors.primary}
           />
         }
       >
@@ -451,7 +456,7 @@ export default function NewsInsightsScreen() {
               style={{
                 marginTop: 20,
                 padding: 12,
-                backgroundColor: "#2a2a2a",
+                backgroundColor: theme.colors.surface,
                 borderRadius: 8,
               }}
             >
@@ -465,7 +470,7 @@ export default function NewsInsightsScreen() {
               >
                 ⚠️ Market Impact Notice
               </Text>
-              <Text style={{ color: "#888888", fontSize: 12 }}>
+              <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
                 High-impact events can cause significant market volatility.
                 Consider position sizing and risk management.
               </Text>

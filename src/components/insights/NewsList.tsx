@@ -8,119 +8,133 @@ import {
   Image,
 } from "react-native";
 import type { NewsItem } from "../../services/newsProviders";
+import { useTheme } from "../../providers/ThemeProvider";
 
 interface Props {
   items: NewsItem[];
   fullScreen?: boolean;
 }
 
-const styles = StyleSheet.create({
-  container: { paddingHorizontal: 16 },
-  containerFullScreen: { paddingHorizontal: 0 },
-  card: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-  },
-  cardWithImage: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 0,
-    marginBottom: 10,
-    overflow: "hidden",
-  },
-  cardFullScreen: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    marginHorizontal: 16,
-  },
-  cardWithImageFullScreen: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 0,
-    marginBottom: 10,
-    marginHorizontal: 16,
-    overflow: "hidden",
-  },
-  imageContainer: {
-    width: "100%",
-    height: 120,
-  },
-  newsImage: {
-    width: "100%",
-    height: "100%",
-    resizeMode: "cover",
-  },
-  contentContainer: {
-    padding: 12,
-  },
-  title: { color: "#ffffff", fontWeight: "600", fontSize: 15, lineHeight: 20 },
-  meta: { color: "#aaaaaa", fontSize: 12, marginTop: 6 },
-  metaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    marginTop: 6,
-  },
-  summary: { color: "#cccccc", fontSize: 13, lineHeight: 18, marginTop: 6 },
-  sentimentBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 12,
-    marginRight: 8,
-    marginTop: 4,
-  },
-  sentimentPositive: {
-    backgroundColor: "#10B981",
-  },
-  sentimentNegative: {
-    backgroundColor: "#EF4444",
-  },
-  sentimentNeutral: {
-    backgroundColor: "#6B7280",
-  },
-  sentimentText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  typeBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-    backgroundColor: "#4F46E5",
-    marginRight: 8,
-    marginTop: 4,
-  },
-  typeText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "500",
-  },
-  tickersContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 4,
-  },
-  tickerBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: "#374151",
-    marginRight: 4,
-    marginTop: 2,
-  },
-  tickerText: {
-    color: "#ffffff",
-    fontSize: 9,
-    fontWeight: "500",
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: { paddingHorizontal: 0 },
+    containerFullScreen: { paddingHorizontal: 0 },
+    card: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 8,
+      marginHorizontal: 8,
+    },
+    cardWithImage: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 0,
+      marginBottom: 8,
+      marginHorizontal: 8,
+      overflow: "hidden",
+    },
+    cardFullScreen: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 8,
+      marginHorizontal: 16,
+    },
+    cardWithImageFullScreen: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 0,
+      marginBottom: 8,
+      marginHorizontal: 16,
+      overflow: "hidden",
+    },
+    imageContainer: {
+      width: "100%",
+      height: 120,
+    },
+    newsImage: {
+      width: "100%",
+      height: "100%",
+      resizeMode: "cover",
+    },
+    contentContainer: {
+      padding: 12,
+    },
+    title: {
+      color: theme.colors.text,
+      fontWeight: "600",
+      fontSize: 15,
+      lineHeight: 20,
+    },
+    meta: { color: theme.colors.textSecondary, fontSize: 12, marginTop: 6 },
+    metaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      marginTop: 6,
+    },
+    summary: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+      marginTop: 6,
+    },
+    sentimentBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 12,
+      marginRight: 8,
+      marginTop: 4,
+    },
+    sentimentPositive: {
+      backgroundColor: "#10B981",
+    },
+    sentimentNegative: {
+      backgroundColor: "#EF4444",
+    },
+    sentimentNeutral: {
+      backgroundColor: "#6B7280",
+    },
+    sentimentText: {
+      color: "#ffffff",
+      fontSize: 10,
+      fontWeight: "600",
+    },
+    typeBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 8,
+      backgroundColor: "#4F46E5",
+      marginRight: 8,
+      marginTop: 4,
+    },
+    typeText: {
+      color: "#ffffff",
+      fontSize: 10,
+      fontWeight: "500",
+    },
+    tickersContainer: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      marginTop: 4,
+    },
+    tickerBadge: {
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 6,
+      backgroundColor: theme.colors.surface,
+      marginRight: 4,
+      marginTop: 2,
+    },
+    tickerText: {
+      color: theme.colors.text,
+      fontSize: 9,
+      fontWeight: "500",
+    },
+  });
 
-const getSentimentStyle = (sentiment?: string) => {
+const getSentimentStyle = (sentiment?: string, styles: any) => {
   switch (sentiment) {
     case "Positive":
       return styles.sentimentPositive;
@@ -132,11 +146,14 @@ const getSentimentStyle = (sentiment?: string) => {
 };
 
 export default function NewsList({ items, fullScreen = false }: Props) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
+
   if (!items?.length) return null;
 
   return (
     <View style={fullScreen ? styles.containerFullScreen : styles.container}>
-      {items.map((n) => {
+      {items.map((n, index) => {
         const getCardStyle = () => {
           if (fullScreen) {
             return n.imageUrl
@@ -146,9 +163,12 @@ export default function NewsList({ items, fullScreen = false }: Props) {
           return n.imageUrl ? styles.cardWithImage : styles.card;
         };
 
+        // Create a unique key by combining multiple fields to avoid duplicates
+        const uniqueKey = `${n.id || n.url || n.title}-${index}`;
+
         return (
           <Pressable
-            key={n.id}
+            key={uniqueKey}
             onPress={() => n.url && Linking.openURL(n.url)}
             style={getCardStyle()}
           >
@@ -174,7 +194,7 @@ export default function NewsList({ items, fullScreen = false }: Props) {
                   <View
                     style={[
                       styles.sentimentBadge,
-                      getSentimentStyle(n.sentiment),
+                      getSentimentStyle(n.sentiment, styles),
                     ]}
                   >
                     <Text style={styles.sentimentText}>{n.sentiment}</Text>

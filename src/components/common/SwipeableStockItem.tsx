@@ -2,6 +2,7 @@ import React, { useRef } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../../providers/ThemeProvider";
 
 interface SwipeableStockItemProps {
   symbol: string;
@@ -26,7 +27,10 @@ export default function SwipeableStockItem({
   onToggleFavorite,
   onRemove,
 }: SwipeableStockItemProps) {
+  const { theme } = useTheme();
   const swipeableRef = useRef<Swipeable>(null);
+
+  const styles = createStyles(theme);
 
   const handleFavoritePress = () => {
     onToggleFavorite();
@@ -44,7 +48,7 @@ export default function SwipeableStockItem({
         <Ionicons
           name={isGlobalFavorite ? "star" : "star-outline"}
           size={20}
-          color={isGlobalFavorite ? "#FFD700" : "#00D4AA"}
+          color={isGlobalFavorite ? "#FFD700" : theme.colors.primary}
         />
       </Pressable>
     </View>
@@ -53,7 +57,7 @@ export default function SwipeableStockItem({
   const renderRightActions = () => (
     <View style={styles.rightActionsContainer}>
       <Pressable style={styles.rightAction} onPress={handleRemovePress}>
-        <Ionicons name="trash-outline" size={20} color="#FF5722" />
+        <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
       </Pressable>
     </View>
   );
@@ -111,7 +115,7 @@ export default function SwipeableStockItem({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (theme: any) => StyleSheet.create({
   container: {
     marginHorizontal: 12,
     marginBottom: 8,
@@ -127,22 +131,22 @@ const styles = StyleSheet.create({
   leftAction: {
     width: 80,
     height: "100%",
-    backgroundColor: "#00D4AA20",
+    backgroundColor: theme.colors.primary + "20",
     justifyContent: "center",
     alignItems: "center",
   },
   rightAction: {
     width: 80,
     height: "100%",
-    backgroundColor: "#FF572220",
+    backgroundColor: theme.colors.error + "20",
     justifyContent: "center",
     alignItems: "center",
   },
   stockCard: {
-    backgroundColor: "#141414",
+    backgroundColor: theme.colors.card,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#1f1f1f",
+    borderColor: theme.colors.border,
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
@@ -162,14 +166,14 @@ const styles = StyleSheet.create({
   stockSymbol: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#ffffff",
+    color: theme.colors.text,
   },
   favoriteIcon: {
     marginLeft: 6,
   },
   companyName: {
     fontSize: 12,
-    color: "#888888",
+    color: theme.colors.textSecondary,
     marginTop: 2,
   },
   priceInfo: {
@@ -178,7 +182,7 @@ const styles = StyleSheet.create({
   stockPrice: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#ffffff",
+    color: theme.colors.text,
   },
   stockChange: {
     fontSize: 14,
@@ -186,9 +190,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   positiveChange: {
-    color: "#00D4AA",
+    color: theme.colors.success,
   },
   negativeChange: {
-    color: "#FF5722",
+    color: theme.colors.error,
   },
 });

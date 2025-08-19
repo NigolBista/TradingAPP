@@ -9,6 +9,7 @@ import {
 import type { PortfolioHistory } from "../../services/portfolioAggregationService";
 import { fetchYahooCandles } from "../../services/marketProviders";
 import SimpleLineChart from "../charts/SimpleLineChart";
+import { useTheme } from "../../providers/ThemeProvider";
 
 type Period = "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL";
 
@@ -29,6 +30,7 @@ export default function PerformanceCard({
   selected,
   onChange,
 }: Props) {
+  const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
 
   // Sanitize numeric values
@@ -65,6 +67,7 @@ export default function PerformanceCard({
   }, [history]);
 
   const periods: Period[] = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
+  const styles = createStyles(theme);
 
   return (
     <View style={styles.card}>
@@ -115,29 +118,43 @@ export default function PerformanceCard({
   );
 }
 
-const styles = StyleSheet.create({
-  card: { backgroundColor: "#1a1a1a", borderRadius: 12, padding: 16 },
-  header: { alignItems: "center" },
-  title: { color: "#9ca3af", fontSize: 14, fontWeight: "600" },
-  netWorth: { color: "#ffffff", fontSize: 32, fontWeight: "700", marginTop: 4 },
-  changeRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 4,
-  },
-  change: { fontSize: 14, fontWeight: "600" },
-  period: { color: "#6b7280", fontSize: 12 },
-  up: { color: "#10B981" },
-  down: { color: "#EF4444" },
-  tabs: { flexDirection: "row", gap: 8, marginTop: 12 },
-  tab: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 999,
-    backgroundColor: "#111827",
-  },
-  tabActive: { backgroundColor: "#2563eb" },
-  tabText: { color: "#9ca3af", fontWeight: "700", fontSize: 12 },
-  tabTextActive: { color: "#fff" },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    card: { backgroundColor: theme.colors.card, borderRadius: 12, padding: 16 },
+    header: { alignItems: "center" },
+    title: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    netWorth: {
+      color: theme.colors.text,
+      fontSize: 32,
+      fontWeight: "700",
+      marginTop: 4,
+    },
+    changeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 4,
+    },
+    change: { fontSize: 14, fontWeight: "600" },
+    period: { color: theme.colors.textSecondary, fontSize: 12 },
+    up: { color: "#10B981" },
+    down: { color: "#EF4444" },
+    tabs: { flexDirection: "row", gap: 8, marginTop: 12 },
+    tab: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 999,
+      backgroundColor: theme.colors.surface,
+    },
+    tabActive: { backgroundColor: theme.colors.primary },
+    tabText: {
+      color: theme.colors.textSecondary,
+      fontWeight: "700",
+      fontSize: 12,
+    },
+    tabTextActive: { color: "#fff" },
+  });

@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useUserStore, type Watchlist } from "../../store/userStore";
 import { StockSearchResult } from "../../services/stockSearch";
 import StockAutocomplete from "./StockAutocomplete";
+import { useTheme } from "../../providers/ThemeProvider";
 
 interface AddToWatchlistModalProps {
   visible: boolean;
@@ -19,146 +20,149 @@ interface AddToWatchlistModalProps {
   selectedStock?: StockSearchResult | null;
 }
 
-const styles = StyleSheet.create({
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#1a1a1a",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 20,
-    paddingHorizontal: 20,
-    paddingBottom: 40,
-    maxHeight: "80%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  searchSection: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-    marginBottom: 12,
-  },
-  favoriteSection: {
-    marginBottom: 20,
-  },
-  favoriteButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  favoriteButtonActive: {
-    backgroundColor: "#FFD700",
-  },
-  favoriteIcon: {
-    marginRight: 12,
-  },
-  favoriteText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#ffffff",
-  },
-  favoriteTextActive: {
-    color: "#000000",
-    fontWeight: "600",
-  },
-  watchlistsSection: {
-    marginBottom: 20,
-  },
-  watchlistItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 8,
-  },
-  watchlistItemSelected: {
-    backgroundColor: "#00D4AA20",
-    borderWidth: 1,
-    borderColor: "#00D4AA",
-  },
-  watchlistIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 12,
-  },
-  watchlistInfo: {
-    flex: 1,
-  },
-  watchlistName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  watchlistCount: {
-    fontSize: 12,
-    color: "#888888",
-    marginTop: 2,
-  },
-  selectedStock: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  selectedStockInfo: {
-    flex: 1,
-  },
-  selectedStockSymbol: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  selectedStockName: {
-    fontSize: 14,
-    color: "#cccccc",
-    marginTop: 2,
-  },
-  addButton: {
-    backgroundColor: "#00D4AA",
-    borderRadius: 12,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 10,
-  },
-  addButtonDisabled: {
-    backgroundColor: "#333333",
-    opacity: 0.5,
-  },
-  addButtonText: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.8)",
+      justifyContent: "flex-end",
+    },
+    modalContent: {
+      backgroundColor: theme.colors.background,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingTop: 20,
+      paddingHorizontal: 20,
+      paddingBottom: 40,
+      maxHeight: "80%",
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 20,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    searchSection: {
+      marginBottom: 20,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 12,
+    },
+    favoriteSection: {
+      marginBottom: 20,
+    },
+    favoriteButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 12,
+    },
+    favoriteButtonActive: {
+      backgroundColor: "#FFD700",
+    },
+    favoriteIcon: {
+      marginRight: 12,
+    },
+    favoriteText: {
+      flex: 1,
+      fontSize: 16,
+      color: theme.colors.text,
+    },
+    favoriteTextActive: {
+      color: "#000000",
+      fontWeight: "600",
+    },
+    watchlistsSection: {
+      marginBottom: 20,
+    },
+    watchlistItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      backgroundColor: theme.colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 8,
+    },
+    watchlistItemSelected: {
+      backgroundColor: theme.colors.primary + "20",
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
+    },
+    watchlistIndicator: {
+      width: 12,
+      height: 12,
+      borderRadius: 6,
+      marginRight: 12,
+    },
+    watchlistInfo: {
+      flex: 1,
+    },
+    watchlistName: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    watchlistCount: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    selectedStock: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    selectedStockInfo: {
+      flex: 1,
+    },
+    selectedStockSymbol: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    selectedStockName: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    addButton: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: 12,
+      padding: 16,
+      alignItems: "center",
+      marginTop: 10,
+    },
+    addButtonDisabled: {
+      backgroundColor: theme.colors.surface,
+      opacity: 0.5,
+    },
+    addButtonText: {
+      color: "#ffffff",
+      fontSize: 16,
+      fontWeight: "600",
+    },
+  });
 
 export default function AddToWatchlistModal({
   visible,
   onClose,
   selectedStock,
 }: AddToWatchlistModalProps) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const { profile, addToWatchlist, toggleGlobalFavorite, isGlobalFavorite } =
     useUserStore();
 
