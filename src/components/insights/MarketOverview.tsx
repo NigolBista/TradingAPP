@@ -447,43 +447,7 @@ const createStyles = (theme: any) =>
       fontSize: 11,
       color: "#D1D5DB",
     },
-    newsHighlightsCard: {
-      backgroundColor: "transparent",
-      borderRadius: 12,
-      padding: 16,
-      marginHorizontal: 8,
-      marginBottom: 16,
-      borderLeftWidth: 4,
-      borderLeftColor: "#F59E0B",
-    },
-    newsHighlightsTitle: {
-      fontSize: 18,
-      fontWeight: "700",
-      color: theme.colors.text,
-      marginBottom: 16,
-      flexDirection: "row",
-      alignItems: "center",
-    },
-    newsHighlightItem: {
-      flexDirection: "row",
-      alignItems: "flex-start",
-      marginBottom: 12,
-      paddingVertical: 8,
-    },
-    newsHighlightBullet: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: "#F59E0B",
-      marginTop: 6,
-      marginRight: 12,
-    },
-    newsHighlightText: {
-      flex: 1,
-      fontSize: 14,
-      lineHeight: 20,
-      color: theme.colors.textSecondary,
-    },
+
     dayAheadCard: {
       backgroundColor: "transparent",
       borderRadius: 12,
@@ -538,7 +502,6 @@ export default function MarketOverview({
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [newsHighlights, setNewsHighlights] = useState<string[]>([]);
   const [marketSentiment, setMarketSentiment] = useState<{
     overall: "bullish" | "bearish" | "neutral";
     confidence: number;
@@ -574,8 +537,7 @@ export default function MarketOverview({
           onNewsDataFetched(storeRawNews);
         }
 
-        // Extract news highlights and market sentiment
-        await extractNewsHighlights(storeRawNews);
+        // Calculate market sentiment
         await calculateMarketSentiment(storeRawNews, data.trendingStocks);
       } else {
         // Show loading placeholder if no data available yet
@@ -627,30 +589,6 @@ export default function MarketOverview({
   const handleRetry = () => {
     setError(null);
     loadMarketOverview();
-  };
-
-  // Extract key highlights from news using AI
-  const extractNewsHighlights = async (newsItems: NewsItem[]) => {
-    try {
-      if (newsItems.length === 0) return;
-
-      // Take top 10 most recent news items
-      const topNews = newsItems.slice(0, 10);
-      const newsText = topNews
-        .map((item) => `${item.title}: ${item.summary || ""}`)
-        .join("\n");
-
-      // For now, extract highlights from existing key highlights
-      // In a full implementation, this would use AI to extract key points
-      const highlights = topNews
-        .filter((item) => item.title && item.title.length > 20)
-        .slice(0, 5)
-        .map((item) => item.title);
-
-      setNewsHighlights(highlights);
-    } catch (error) {
-      console.error("Error extracting news highlights:", error);
-    }
   };
 
   // Calculate overall market sentiment
@@ -829,27 +767,6 @@ export default function MarketOverview({
                     </View>
                   ))}
                 </View>
-              </View>
-            )}
-
-            {/* News Highlights */}
-            {newsHighlights.length > 0 && (
-              <View style={styles.newsHighlightsCard}>
-                <Text style={styles.newsHighlightsTitle}>
-                  <Ionicons
-                    name="flash"
-                    size={18}
-                    color="#F59E0B"
-                    style={{ marginRight: 8 }}
-                  />
-                  Breaking News Highlights
-                </Text>
-                {newsHighlights.map((highlight, index) => (
-                  <View key={index} style={styles.newsHighlightItem}>
-                    <View style={styles.newsHighlightBullet} />
-                    <Text style={styles.newsHighlightText}>{highlight}</Text>
-                  </View>
-                ))}
               </View>
             )}
           </>
