@@ -29,7 +29,8 @@ export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuth();
   const profile = useUserStore((state) => state.profile);
   const setProfile = useUserStore((state) => state.setProfile);
-  const { theme, themeMode, setThemeMode } = useTheme();
+  const { theme, themeMode, setThemeMode, isDark } = useTheme();
+  const styles = createStyles(theme);
 
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
@@ -138,7 +139,7 @@ export default function ProfileScreen({ navigation }: any) {
     <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={["#667eea", "#764ba2"]}
+        colors={isDark ? ["#1a1a1a", "#2a2a2a"] : ["#667eea", "#764ba2"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.header}
@@ -195,7 +196,7 @@ export default function ProfileScreen({ navigation }: any) {
               onPress={() => setShowEditProfile(true)}
               style={styles.editButton}
             >
-              <Ionicons name="pencil" size={20} color="#6366f1" />
+              <Ionicons name="pencil" size={20} color={theme.colors.primary} />
             </Pressable>
           </View>
         </Card>
@@ -210,7 +211,11 @@ export default function ProfileScreen({ navigation }: any) {
             >
               <View style={styles.actionLeft}>
                 <View style={[styles.actionIcon, styles.subscriptionIcon]}>
-                  <Ionicons name="star" size={20} color="#8b5cf6" />
+                  <Ionicons
+                    name="star"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
                 </View>
                 <View>
                   <Text style={styles.actionTitle}>Subscription</Text>
@@ -219,7 +224,11 @@ export default function ProfileScreen({ navigation }: any) {
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
 
             <Pressable
@@ -228,7 +237,11 @@ export default function ProfileScreen({ navigation }: any) {
             >
               <View style={styles.actionLeft}>
                 <View style={[styles.actionIcon, styles.preferencesIcon]}>
-                  <Ionicons name="settings" size={20} color="#3b82f6" />
+                  <Ionicons
+                    name="settings"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
                 </View>
                 <View>
                   <Text style={styles.actionTitle}>Preferences</Text>
@@ -237,7 +250,11 @@ export default function ProfileScreen({ navigation }: any) {
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
 
             <Pressable
@@ -246,9 +263,16 @@ export default function ProfileScreen({ navigation }: any) {
             >
               <View style={styles.actionLeft}>
                 <View
-                  style={[styles.actionIcon, { backgroundColor: "#d1fae5" }]}
+                  style={[
+                    styles.actionIcon,
+                    { backgroundColor: theme.colors.surface },
+                  ]}
                 >
-                  <Ionicons name="trending-up" size={20} color="#10b981" />
+                  <Ionicons
+                    name="trending-up"
+                    size={20}
+                    color={theme.colors.success}
+                  />
                 </View>
                 <View>
                   <Text style={styles.actionTitle}>Brokerage Accounts</Text>
@@ -257,7 +281,11 @@ export default function ProfileScreen({ navigation }: any) {
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
 
             <Pressable
@@ -268,7 +296,11 @@ export default function ProfileScreen({ navigation }: any) {
             >
               <View style={styles.actionLeft}>
                 <View style={[styles.actionIcon, styles.helpIcon]}>
-                  <Ionicons name="help-circle" size={20} color="#16a34a" />
+                  <Ionicons
+                    name="help-circle"
+                    size={20}
+                    color={theme.colors.success}
+                  />
                 </View>
                 <View>
                   <Text style={styles.actionTitle}>Help & Support</Text>
@@ -277,7 +309,11 @@ export default function ProfileScreen({ navigation }: any) {
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
 
             <Pressable
@@ -286,9 +322,16 @@ export default function ProfileScreen({ navigation }: any) {
             >
               <View style={styles.actionLeft}>
                 <View
-                  style={[styles.actionIcon, { backgroundColor: "#fef3c7" }]}
+                  style={[
+                    styles.actionIcon,
+                    { backgroundColor: theme.colors.surface },
+                  ]}
                 >
-                  <Ionicons name="newspaper" size={20} color="#f59e0b" />
+                  <Ionicons
+                    name="newspaper"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
                 </View>
                 <View>
                   <Text style={styles.actionTitle}>Stock News API Demo</Text>
@@ -297,7 +340,11 @@ export default function ProfileScreen({ navigation }: any) {
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
 
             <Pressable
@@ -311,7 +358,11 @@ export default function ProfileScreen({ navigation }: any) {
             >
               <View style={styles.actionLeft}>
                 <View style={[styles.actionIcon, styles.privacyIcon]}>
-                  <Ionicons name="shield-checkmark" size={20} color="#ea580c" />
+                  <Ionicons
+                    name="shield-checkmark"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
                 </View>
                 <View>
                   <Text style={styles.actionTitle}>Privacy & Security</Text>
@@ -320,7 +371,11 @@ export default function ProfileScreen({ navigation }: any) {
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
           </View>
         </Card>
@@ -331,7 +386,11 @@ export default function ProfileScreen({ navigation }: any) {
           <View style={styles.planContainer}>
             {getCurrentSubscriptionFeatures().map((feature, index) => (
               <View key={index} style={styles.planItem}>
-                <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
+                <Ionicons
+                  name="checkmark-circle"
+                  size={16}
+                  color={theme.colors.success}
+                />
                 <Text style={styles.planText}>{feature}</Text>
               </View>
             ))}
@@ -344,7 +403,7 @@ export default function ProfileScreen({ navigation }: any) {
           variant="outline"
           icon="log-out"
           onPress={handleLogout}
-          style={{ marginBottom: 32, borderColor: "#ef4444" }}
+          style={{ marginBottom: 32, borderColor: theme.colors.error }}
         />
       </ScrollView>
 
@@ -365,7 +424,11 @@ export default function ProfileScreen({ navigation }: any) {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Edit Profile</Text>
               <Pressable onPress={() => setShowEditProfile(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
               </Pressable>
             </View>
 
@@ -466,7 +529,11 @@ export default function ProfileScreen({ navigation }: any) {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Preferences</Text>
               <Pressable onPress={() => setShowPreferences(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
               </Pressable>
             </View>
 
@@ -668,7 +735,11 @@ export default function ProfileScreen({ navigation }: any) {
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Subscription Plans</Text>
               <Pressable onPress={() => setShowSubscription(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
               </Pressable>
             </View>
 
@@ -688,8 +759,12 @@ export default function ProfileScreen({ navigation }: any) {
                     style={[
                       styles.subscriptionCard,
                       {
-                        borderColor: isCurrentPlan ? "#6366f1" : "#e5e7eb",
-                        backgroundColor: isCurrentPlan ? "#eef2ff" : "#ffffff",
+                        borderColor: isCurrentPlan
+                          ? theme.colors.primary
+                          : theme.colors.border,
+                        backgroundColor: isCurrentPlan
+                          ? theme.colors.surface
+                          : theme.colors.card,
                       },
                     ]}
                   >
@@ -711,7 +786,7 @@ export default function ProfileScreen({ navigation }: any) {
                           <Ionicons
                             name="checkmark"
                             size={16}
-                            color="#16a34a"
+                            color={theme.colors.success}
                           />
                           <Text style={styles.featureText}>{feature}</Text>
                         </View>
@@ -738,275 +813,285 @@ export default function ProfileScreen({ navigation }: any) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f9fafb",
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 24,
-  },
-  headerContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  avatar: {
-    width: 64,
-    height: 64,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    borderRadius: 32,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 16,
-  },
-  avatarText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-  },
-  userInfo: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#ffffff",
-  },
-  userSubtitle: {
-    color: "rgba(255, 255, 255, 0.8)",
-  },
-  scrollView: {
-    flex: 1,
-    paddingHorizontal: 16,
-    marginTop: -16,
-  },
-  card: {
-    marginBottom: 16,
-  },
-  profileRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  profileInfo: {
-    flex: 1,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#111827",
-    marginBottom: 8,
-  },
-  infoContainer: {
-    gap: 8,
-  },
-  infoRow: {
-    flexDirection: "row",
-  },
-  infoLabel: {
-    color: "#6b7280",
-    width: 96,
-  },
-  infoValue: {
-    color: "#111827",
-    flex: 1,
-  },
-  editButton: {
-    padding: 8,
-    backgroundColor: "#e0e7ff",
-    borderRadius: 8,
-  },
-  actionsContainer: {
-    gap: 12,
-  },
-  actionItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  actionLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  actionIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  subscriptionIcon: {
-    backgroundColor: "#f3e8ff",
-  },
-  preferencesIcon: {
-    backgroundColor: "#dbeafe",
-  },
-  helpIcon: {
-    backgroundColor: "#dcfce7",
-  },
-  privacyIcon: {
-    backgroundColor: "#fed7aa",
-  },
-  planContainer: {
-    gap: 8,
-  },
-  planItem: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  planText: {
-    marginLeft: 8,
-    color: "#374151",
-  },
-  modalScrollView: {
-    maxHeight: "80%",
-  },
-  settingsCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-  },
-  settingRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f1f5f9",
-  },
-  settingLeft: { flex: 1, paddingRight: 12 },
-  settingTitle: { fontSize: 15, fontWeight: "500", color: "#111827" },
-  settingSubtitle: { fontSize: 13, color: "#6b7280", marginTop: 2 },
-  preferencesContainer: {
-    gap: 16,
-  },
-  preferenceItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  preferenceLeft: {
-    flex: 1,
-  },
-  preferenceTitle: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#111827",
-  },
-  preferenceSubtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  inputContainer: {
-    marginBottom: 12,
-  },
-  themeContainer: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  subscriptionCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  subscriptionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  subscriptionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#111827",
-  },
-  subscriptionPrice: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#6366f1",
-  },
-  currentBadge: {
-    backgroundColor: "#6366f1",
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 16,
-  },
-  currentBadgeText: {
-    color: "#ffffff",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  featuresList: {
-    gap: 8,
-    marginBottom: 16,
-  },
-  featureItem: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  featureText: {
-    marginLeft: 8,
-    fontSize: 14,
-    color: "#374151",
-  },
-  actionTitle: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#111827",
-  },
-  actionSubtitle: {
-    fontSize: 14,
-    color: "#6b7280",
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#ffffff",
-    borderRadius: 20,
-    padding: 20,
-  },
-  centerModalCard: {
-    width: "90%",
-    maxWidth: 420,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#111827",
-  },
-  formGroup: { marginBottom: 12 },
-  groupLabel: { fontSize: 14, color: "#374151", marginBottom: 8 },
-  segmentList: { gap: 8 },
-  segmentItem: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    backgroundColor: "#ffffff",
-  },
-  segmentItemActive: {
-    backgroundColor: "#4f46e5",
-    borderColor: "#4f46e5",
-  },
-  segmentText: { fontSize: 14, color: "#374151" },
-  segmentTextActive: { color: "#ffffff", fontWeight: "600" },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      paddingHorizontal: 16,
+      paddingTop: 48,
+      paddingBottom: 24,
+    },
+    headerContent: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    avatar: {
+      width: 64,
+      height: 64,
+      backgroundColor: "rgba(255, 255, 255, 0.2)",
+      borderRadius: 32,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 16,
+    },
+    avatarText: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: "#ffffff",
+    },
+    userInfo: {
+      flex: 1,
+    },
+    userName: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: "#ffffff",
+    },
+    userSubtitle: {
+      color: "rgba(255, 255, 255, 0.8)",
+    },
+    scrollView: {
+      flex: 1,
+      paddingHorizontal: 16,
+      marginTop: -16,
+      backgroundColor: theme.colors.background,
+    },
+    card: {
+      marginBottom: 16,
+    },
+    profileRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    profileInfo: {
+      flex: 1,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    infoContainer: {
+      gap: 8,
+    },
+    infoRow: {
+      flexDirection: "row",
+    },
+    infoLabel: {
+      color: theme.colors.textSecondary,
+      width: 96,
+    },
+    infoValue: {
+      color: theme.colors.text,
+      flex: 1,
+    },
+    editButton: {
+      padding: 8,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+    },
+    actionsContainer: {
+      gap: 12,
+    },
+    actionItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    actionLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    actionIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+    subscriptionIcon: {
+      backgroundColor: theme.colors.surface,
+    },
+    preferencesIcon: {
+      backgroundColor: theme.colors.surface,
+    },
+    helpIcon: {
+      backgroundColor: theme.colors.surface,
+    },
+    privacyIcon: {
+      backgroundColor: theme.colors.surface,
+    },
+    planContainer: {
+      gap: 8,
+    },
+    planItem: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    planText: {
+      marginLeft: 8,
+      color: theme.colors.text,
+    },
+    modalScrollView: {
+      maxHeight: "80%",
+    },
+    settingsCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    settingRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    settingLeft: { flex: 1, paddingRight: 12 },
+    settingTitle: { fontSize: 15, fontWeight: "500", color: theme.colors.text },
+    settingSubtitle: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    preferencesContainer: {
+      gap: 16,
+    },
+    preferenceItem: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    preferenceLeft: {
+      flex: 1,
+    },
+    preferenceTitle: {
+      fontSize: 16,
+      fontWeight: "500",
+      color: theme.colors.text,
+    },
+    preferenceSubtitle: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+    },
+    inputContainer: {
+      marginBottom: 12,
+    },
+    themeContainer: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    subscriptionCard: {
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+    },
+    subscriptionHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    subscriptionTitle: {
+      fontSize: 18,
+      fontWeight: "bold",
+      color: theme.colors.text,
+    },
+    subscriptionPrice: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: theme.colors.primary,
+    },
+    currentBadge: {
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 16,
+    },
+    currentBadgeText: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    featuresList: {
+      gap: 8,
+      marginBottom: 16,
+    },
+    featureItem: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    featureText: {
+      marginLeft: 8,
+      fontSize: 14,
+      color: theme.colors.text,
+    },
+    actionTitle: {
+      fontSize: 16,
+      fontWeight: "500",
+      color: theme.colors.text,
+    },
+    actionSubtitle: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+    },
+    modalContainer: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    modalContent: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 20,
+      padding: 20,
+    },
+    centerModalCard: {
+      width: "90%",
+      maxWidth: 420,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 24,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: theme.colors.text,
+    },
+    formGroup: { marginBottom: 12 },
+    groupLabel: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginBottom: 8,
+    },
+    segmentList: { gap: 8 },
+    segmentItem: {
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.card,
+    },
+    segmentItemActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    segmentText: { fontSize: 14, color: theme.colors.text },
+    segmentTextActive: { color: "#ffffff", fontWeight: "600" },
+  });

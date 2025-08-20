@@ -34,6 +34,7 @@ import StockNewsApiDemoScreen from "../screens/StockNewsApiDemoScreen";
 import DecalpXScreen from "../screens/DecalpXScreen";
 import MarketOverviewPage from "../screens/MarketOverviewPage";
 import { useAuth } from "../providers/AuthProvider";
+import { useTheme } from "../providers/ThemeProvider";
 
 const Tab = createBottomTabNavigator();
 const RootStack = createNativeStackNavigator();
@@ -44,14 +45,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
-  },
-  loadingContainerDark: {
-    backgroundColor: "#000000",
   },
 });
 
 function Tabs() {
+  const { theme } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -87,11 +86,11 @@ function Tabs() {
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         headerShown: false,
-        tabBarActiveTintColor: "#6366f1",
-        tabBarInactiveTintColor: "#9ca3af",
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textSecondary,
         tabBarStyle: {
-          backgroundColor: "#ffffff",
-          borderTopColor: "#e5e7eb",
+          backgroundColor: theme.colors.card,
+          borderTopColor: theme.colors.border,
         },
       })}
     >
@@ -116,6 +115,7 @@ function AuthRoutes() {
 export default function RootNavigation() {
   const scheme = useColorScheme();
   const { user, loading } = useAuth();
+  const { theme } = useTheme();
 
   if (loading) {
     function LoadingScreen() {
@@ -123,10 +123,10 @@ export default function RootNavigation() {
         <View
           style={[
             styles.loadingContainer,
-            scheme === "dark" && styles.loadingContainerDark,
+            { backgroundColor: theme.colors.background },
           ]}
         >
-          <ActivityIndicator size="large" color="#6366f1" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       );
     }

@@ -66,6 +66,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       plaidClientId: process.env.PLAID_CLIENT_ID,
       plaidSecret: process.env.PLAID_SECRET,
       plaidEnvironment: process.env.PLAID_ENVIRONMENT || "sandbox",
+      marketDataApiToken: process.env.MARKET_DATA_API_TOKEN,
       expoPublic: {
         sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
       },

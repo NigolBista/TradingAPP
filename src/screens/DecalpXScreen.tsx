@@ -184,6 +184,21 @@ export default function DecalpXScreen() {
   const adrenalineLevel = Math.min(100, Math.max(0, (volScore - 50) * 2));
   const gravityScore = 100 - Math.min(100, signalStrength); // Inverse of signal strength
 
+  // Enhanced oversold and momentum calculations
+  const rsi = Math.max(0, Math.min(100, 50 + (posRatio - 0.5) * 100));
+  const oversoldLevel = rsi < 30 ? 100 - rsi : Math.max(0, 70 - rsi);
+  const momentumScore = Math.min(
+    100,
+    Math.abs(posRatio - 0.5) * 200 + trendHeat * 0.4 + volScore * 0.2
+  );
+
+  // Timeframe bullish signals with enhanced logic
+  const bullishSignals = {
+    day: posRatio > 0.6 && volScore < 60 && momentumScore > 30,
+    swing: posRatio > 0.55 && trendHeat > 40 && oversoldLevel < 70,
+    longterm: posRatio > 0.52 && signalStrength > 50 && momentumScore > 25,
+  };
+
   // Generate mock SPY data for demo
   const generateSPYData = () => {
     const now = Date.now();
@@ -412,7 +427,7 @@ export default function DecalpXScreen() {
           </View>
         </View>
 
-        {/* Market Sentiment */}
+        {/* Market Sentiment + Summary strip */}
         <View style={styles.sentimentCard}>
           <View style={styles.sentimentHeader}>
             <Text style={styles.cardTitle}>SENTIMENT</Text>
@@ -450,6 +465,80 @@ export default function DecalpXScreen() {
               return "NEUTRAL";
             })()}
           </Text>
+
+          {/* Quick Summary Strip for readability */}
+          <View
+            style={{
+              marginTop: 10,
+              paddingVertical: 8,
+              paddingHorizontal: 10,
+              backgroundColor: theme.colors.surface,
+              borderRadius: 8,
+              flexDirection: "row",
+              justifyContent: "space-between",
+            }}
+          >
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+              RSI {Math.round(rsi)}
+            </Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+              Mom {Math.round(momentumScore)}
+            </Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+              Sig {Math.round(signalStrength)}
+            </Text>
+            <Text style={{ color: theme.colors.textSecondary, fontSize: 12 }}>
+              O/S {Math.round(oversoldLevel)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Timeframe Bullish Signals */}
+        <View style={styles.timeframeCard}>
+          <Text style={styles.cardTitle}>BULLISH TIMEFRAMES</Text>
+          <View style={styles.timeframeGrid}>
+            <TimeframeBullish
+              title="Day Trading"
+              active={bullishSignals.day}
+              confidence={bullishSignals.day ? Math.round(posRatio * 100) : 0}
+              condition={
+                bullishSignals.day
+                  ? momentumScore > 60
+                    ? "STRONG"
+                    : "MODERATE"
+                  : "BEARISH"
+              }
+              styles={styles}
+            />
+            <TimeframeBullish
+              title="Swing Trading"
+              active={bullishSignals.swing}
+              confidence={bullishSignals.swing ? Math.round(trendHeat) : 0}
+              condition={
+                bullishSignals.swing
+                  ? oversoldLevel < 30
+                    ? "OVERSOLD BUY"
+                    : "BULLISH"
+                  : "NEUTRAL"
+              }
+              styles={styles}
+            />
+            <TimeframeBullish
+              title="Long Term"
+              active={bullishSignals.longterm}
+              confidence={
+                bullishSignals.longterm ? Math.round(signalStrength) : 0
+              }
+              condition={
+                bullishSignals.longterm
+                  ? signalStrength > 70
+                    ? "STRONG BULL"
+                    : "BULL TREND"
+                  : "BEARISH"
+              }
+              styles={styles}
+            />
+          </View>
         </View>
 
         {/* Market Blood Indicators */}
@@ -505,11 +594,33 @@ export default function DecalpXScreen() {
             styles={styles}
           />
           <MarketIndicator
-            title="GRAVITY"
-            icon="arrow-down"
-            value={gravityScore}
+            title="OVERSOLD"
+            icon="trending-down"
+            value={oversoldLevel}
+            color="#F97316"
+            label={
+              oversoldLevel > 70
+                ? "EXTREME"
+                : oversoldLevel > 40
+                ? "MODERATE"
+                : "NORMAL"
+            }
+            styles={styles}
+          />
+          <MarketIndicator
+            title="MOMENTUM"
+            icon="rocket"
+            value={momentumScore}
             color="#8B5CF6"
-            label="CALM"
+            label={
+              momentumScore > 80
+                ? "EXPLOSIVE"
+                : momentumScore > 60
+                ? "STRONG"
+                : momentumScore > 40
+                ? "MODERATE"
+                : "WEAK"
+            }
             styles={styles}
           />
         </View>
@@ -573,9 +684,21 @@ export default function DecalpXScreen() {
             />
             <TrendHeatMetric
               title="O/B - O/S"
-              value={51}
-              color="#F97316"
-              label="OVERBOUGHT"
+              value={oversoldLevel}
+              color={
+                oversoldLevel > 70
+                  ? "#EF4444"
+                  : oversoldLevel > 30
+                  ? "#F97316"
+                  : "#10B981"
+              }
+              label={
+                oversoldLevel > 70
+                  ? "OVERSOLD"
+                  : rsi > 70
+                  ? "OVERBOUGHT"
+                  : "NEUTRAL"
+              }
               styles={styles}
             />
             <TrendHeatMetric
@@ -663,6 +786,55 @@ function TechnicalMetric({
         <Text style={styles.technicalValue}>{Math.round(value)}%</Text>
         <Text style={styles.technicalLabel}>{label}</Text>
       </View>
+    </View>
+  );
+}
+
+function TimeframeBullish({
+  title,
+  active,
+  confidence,
+  condition,
+  styles,
+}: {
+  title: string;
+  active: boolean;
+  confidence: number;
+  condition: string;
+  styles: any;
+}) {
+  return (
+    <View
+      style={[
+        styles.timeframeBullishCard,
+        active && styles.timeframeBullishActive,
+      ]}
+    >
+      <Text style={styles.timeframeBullishTitle}>{title}</Text>
+      <View style={styles.timeframeBullishContent}>
+        <Text
+          style={[
+            styles.timeframeBullishConfidence,
+            { color: active ? "#10B981" : "#6B7280" },
+          ]}
+        >
+          {confidence}%
+        </Text>
+        <Text
+          style={[
+            styles.timeframeBullishCondition,
+            { color: active ? "#10B981" : "#6B7280" },
+          ]}
+        >
+          {condition}
+        </Text>
+      </View>
+      <View
+        style={[
+          styles.timeframeBullishIndicator,
+          { backgroundColor: active ? "#10B981" : "#374151" },
+        ]}
+      />
     </View>
   );
 }
@@ -842,6 +1014,52 @@ const createStyles = (theme: any) =>
       color: "#10B981",
       fontSize: 18,
       fontWeight: "700",
+    },
+    timeframeCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+    },
+    timeframeGrid: {
+      flexDirection: "row",
+      gap: 12,
+      marginTop: 12,
+    },
+    timeframeBullishCard: {
+      flex: 1,
+      backgroundColor: "#1F2937",
+      borderRadius: 8,
+      padding: 12,
+      borderWidth: 2,
+      borderColor: "#374151",
+    },
+    timeframeBullishActive: {
+      borderColor: "#10B981",
+      backgroundColor: "#10B98110",
+    },
+    timeframeBullishTitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 11,
+      fontWeight: "600",
+      marginBottom: 8,
+    },
+    timeframeBullishContent: {
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    timeframeBullishConfidence: {
+      fontSize: 16,
+      fontWeight: "700",
+      marginBottom: 4,
+    },
+    timeframeBullishCondition: {
+      fontSize: 10,
+      fontWeight: "600",
+    },
+    timeframeBullishIndicator: {
+      height: 3,
+      borderRadius: 2,
     },
     indicatorsGrid: {
       flexDirection: "row",

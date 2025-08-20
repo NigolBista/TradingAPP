@@ -15,13 +15,7 @@ import {
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import {
-  MarketScanner,
-  ScanResult,
-  ScanFilter,
-} from "../services/marketScanner";
-import { fetchCandles } from "../services/marketProviders";
-import { performComprehensiveAnalysis } from "../services/aiAnalytics";
+import { ScanResult } from "../services/marketScanner";
 import {
   useUserStore,
   type Watchlist,
@@ -38,6 +32,11 @@ import StockAutocomplete from "../components/common/StockAutocomplete";
 import AddToWatchlistModal from "../components/common/AddToWatchlistModal";
 import SwipeableStockItem from "../components/common/SwipeableStockItem";
 import { useTheme } from "../providers/ThemeProvider";
+import {
+  getCachedQuotes,
+  fetchAndCacheBulkQuotes,
+  type SimpleQuote,
+} from "../services/quotes";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -335,75 +334,63 @@ export default function WatchlistScreen() {
 
     try {
       setLoading(true);
-      const results: StockData[] = [];
 
-      for (const symbol of symbols) {
-        try {
-          // Get company name first
-          const stockInfo = await getStockBySymbol(symbol);
-          const companyName = stockInfo?.name || symbol;
+      // Preload company names in parallel
+      const nameMap: Record<string, string> = {};
+      await Promise.all(
+        symbols.map(async (s) => {
+          try {
+            const info = await getStockBySymbol(s);
+            if (info?.name) nameMap[s] = info.name;
+          } catch {}
+        })
+      );
 
-          const candles = await fetchCandles(symbol, { resolution: "D" });
-
-          if (candles.length >= 2) {
-            const analysis = await performComprehensiveAnalysis(symbol, {
-              "1d": candles,
-            });
-
-            const currentPrice = candles[candles.length - 1]?.close || 0;
-            const previousPrice =
-              candles[candles.length - 2]?.close || currentPrice;
-            const change = currentPrice - previousPrice;
-            const changePercent =
-              previousPrice > 0 ? (change / previousPrice) * 100 : 0;
-
-            const stockData: StockData = {
-              symbol,
-              analysis,
-              alerts: [],
-              score: analysis.overallRating.score,
-              currentPrice,
-              change,
-              changePercent,
-              companyName,
-            };
-
-            results.push(stockData);
-          } else {
-            // Still add the stock even if we don't have full data
-            const stockData: StockData = {
-              symbol,
-              analysis: {} as any, // Use placeholder analysis
-              alerts: [],
-              score: 0,
-              currentPrice: 0,
-              change: 0,
-              changePercent: 0,
-              companyName,
-            };
-            results.push(stockData);
-          }
-        } catch (error) {
-          console.error(`Error loading data for ${symbol}:`, error);
-          // Still add the stock with placeholder data
-          const stockData: StockData = {
+      // Show cached quotes immediately if available
+      const cached = await getCachedQuotes(symbols);
+      const hasAnyCached = Object.keys(cached).length > 0;
+      if (hasAnyCached) {
+        const immediate: StockData[] = symbols.map((symbol) => {
+          const q = cached[symbol];
+          const price = q?.last ?? 0;
+          const change = q?.change ?? 0;
+          const pct = q?.changePercent ?? 0;
+          return {
             symbol,
-            analysis: {} as any, // Use placeholder analysis
+            analysis: {} as any,
             alerts: [],
             score: 0,
-            currentPrice: 0,
-            change: 0,
-            changePercent: 0,
-            companyName: symbol, // Fallback to symbol if we can't get name
+            currentPrice: price,
+            change,
+            changePercent: pct,
+            companyName: nameMap[symbol] || symbol,
           };
-          results.push(stockData);
-        }
+        });
+        immediate.sort((a, b) => b.changePercent - a.changePercent);
+        setStockData(immediate);
+        setLoading(false);
       }
 
-      // Sort by performance for now (can add favorites sorting later)
-      results.sort((a, b) => b.changePercent - a.changePercent);
-
-      setStockData(results);
+      // Background fetch fresh quotes (bulk)
+      const fresh = await fetchAndCacheBulkQuotes(symbols);
+      const updated: StockData[] = symbols.map((symbol) => {
+        const q = fresh[symbol] as SimpleQuote | undefined;
+        const price = q?.last ?? 0;
+        const change = q?.change ?? 0;
+        const pct = q?.changePercent ?? 0;
+        return {
+          symbol,
+          analysis: {} as any,
+          alerts: [],
+          score: 0,
+          currentPrice: price,
+          change,
+          changePercent: pct,
+          companyName: nameMap[symbol] || symbol,
+        };
+      });
+      updated.sort((a, b) => b.changePercent - a.changePercent);
+      setStockData(updated);
     } catch (error) {
       console.error("Error loading display data:", error);
     } finally {
