@@ -669,14 +669,7 @@ export default function FederalReserveScreen({ navigation }: Props) {
                         </View>
                         {indicator.changePercent !== null &&
                           indicator.changePercent !== undefined && (
-                            <View
-                              style={[
-                                styles.indicatorChange,
-                                indicator.changePercent > 0
-                                  ? styles.indicatorPositive
-                                  : styles.indicatorNegative,
-                              ]}
-                            >
+                            <View style={styles.indicatorChange}>
                               <Ionicons
                                 name={
                                   indicator.changePercent > 0
@@ -692,7 +685,7 @@ export default function FederalReserveScreen({ navigation }: Props) {
                               />
                               <Text
                                 style={[
-                                  styles.indicatorChange,
+                                  { fontSize: 13, fontWeight: "600" },
                                   indicator.changePercent > 0
                                     ? styles.indicatorPositive
                                     : styles.indicatorNegative,

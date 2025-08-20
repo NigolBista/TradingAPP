@@ -18,6 +18,7 @@ import {
 import { refreshGlobalCache } from "../../services/marketDataCache";
 import type { NewsItem } from "../../services/newsProviders";
 import NewsList from "./NewsList";
+import UpcomingEarningsCard from "./UpcomingEarningsCard";
 import { useAppDataStore } from "../../store/appDataStore";
 import { useTheme } from "../../providers/ThemeProvider";
 
@@ -121,10 +122,11 @@ const createStyles = (theme: any) =>
       color: theme.colors.textSecondary,
     },
     highlightsContainer: {
+      marginTop: 12,
       marginBottom: 20,
     },
     highlightsTitle: {
-      fontSize: 16,
+      fontSize: 18,
       fontWeight: "600",
       color: theme.colors.text,
       marginBottom: 12,
@@ -154,19 +156,19 @@ const createStyles = (theme: any) =>
     },
     sectionContainer: {
       marginBottom: 16,
-      marginHorizontal: 8,
+      marginHorizontal: 0,
     },
     sectionTitle: {
-      fontSize: 16,
-      fontWeight: "600",
+      fontSize: 18,
+      fontWeight: "700",
       color: theme.colors.text,
-      marginBottom: 8,
       flexDirection: "row",
       alignItems: "center",
     },
     sectionIcon: {
       marginRight: 8,
     },
+
     trendingContainer: {
       flexDirection: "row",
       flexWrap: "wrap",
@@ -225,8 +227,7 @@ const createStyles = (theme: any) =>
     newsSectionHeader: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: 12,
+      marginBottom: 18,
     },
     viewAllButton: {
       paddingHorizontal: 12,
@@ -257,7 +258,7 @@ const createStyles = (theme: any) =>
       marginTop: 12,
     },
     fedSubtitle: {
-      fontSize: 14,
+      fontSize: 18,
       fontWeight: "600",
       color: theme.colors.text,
       marginBottom: 8,
@@ -317,6 +318,7 @@ const createStyles = (theme: any) =>
       flexDirection: "row",
       flexWrap: "wrap",
       gap: 8,
+      marginTop: 12,
     },
     indicatorItem: {
       backgroundColor: theme.colors.blueTransparent,
@@ -361,7 +363,7 @@ const createStyles = (theme: any) =>
       backgroundColor: "transparent",
       borderRadius: 12,
       padding: 16,
-      marginHorizontal: 8,
+      marginHorizontal: 0,
       marginBottom: 16,
       borderWidth: 1,
       borderColor: theme.colors.border,
@@ -591,47 +593,95 @@ export default function MarketOverview({
     loadMarketOverview();
   };
 
-  // Calculate overall market sentiment
+  // Calculate overall market sentiment based on both news and market performance
   const calculateMarketSentiment = async (
     newsItems: NewsItem[],
     trendingStocks: any[]
   ) => {
     try {
+      // Get news sentiment
       const sentiments = newsItems
         .map((item) => item.sentiment)
         .filter((sentiment) => sentiment);
 
-      if (sentiments.length === 0) return;
+      let newsSentimentScore = 0;
+      if (sentiments.length > 0) {
+        const positiveCount = sentiments.filter(
+          (s) => s && s.toLowerCase() === "positive"
+        ).length;
+        const negativeCount = sentiments.filter(
+          (s) => s && s.toLowerCase() === "negative"
+        ).length;
 
-      const positiveCount = sentiments.filter(
-        (s) => s && s.toLowerCase() === "positive"
-      ).length;
-      const negativeCount = sentiments.filter(
-        (s) => s && s.toLowerCase() === "negative"
-      ).length;
-      const neutralCount = sentiments.length - positiveCount - negativeCount;
+        const totalCount = sentiments.length;
+        const positiveRatio = positiveCount / totalCount;
+        const negativeRatio = negativeCount / totalCount;
 
-      const totalCount = sentiments.length;
-      const positiveRatio = positiveCount / totalCount;
-      const negativeRatio = negativeCount / totalCount;
+        // Convert to score (-100 to +100)
+        newsSentimentScore = (positiveRatio - negativeRatio) * 100;
+      }
+
+      // Get market performance sentiment (fetch major indices)
+      let marketPerformanceScore = 0;
+      try {
+        const { fetchYahooCandles } = await import(
+          "../../services/marketProviders"
+        );
+        const indices = ["SPY", "QQQ", "DIA"]; // Major ETFs representing market
+        const performances = await Promise.all(
+          indices.map(async (symbol) => {
+            try {
+              const candles = await fetchYahooCandles(symbol, "5d", "1d");
+              if (candles.length >= 2) {
+                const current = candles[candles.length - 1].close;
+                const previous = candles[candles.length - 2].close;
+                return ((current - previous) / previous) * 100;
+              }
+              return 0;
+            } catch {
+              return 0;
+            }
+          })
+        );
+
+        // Average performance of major indices
+        marketPerformanceScore =
+          performances.reduce((sum, perf) => sum + perf, 0) /
+          performances.length;
+        // Scale to -100 to +100 range (assuming ±5% is extreme)
+        marketPerformanceScore = Math.max(
+          -100,
+          Math.min(100, marketPerformanceScore * 20)
+        );
+      } catch (error) {
+        console.log("Could not fetch market performance for sentiment");
+      }
+
+      // Combine news sentiment (40%) and market performance (60%)
+      const combinedScore =
+        newsSentimentScore * 0.4 + marketPerformanceScore * 0.6;
 
       let overall: "bullish" | "bearish" | "neutral";
       let confidence: number;
 
-      if (positiveRatio > 0.6) {
+      if (combinedScore > 15) {
         overall = "bullish";
-        confidence = Math.min(positiveRatio * 100, 95);
-      } else if (negativeRatio > 0.6) {
+        confidence = Math.min(Math.abs(combinedScore), 95);
+      } else if (combinedScore < -15) {
         overall = "bearish";
-        confidence = Math.min(negativeRatio * 100, 95);
+        confidence = Math.min(Math.abs(combinedScore), 95);
       } else {
         overall = "neutral";
-        confidence = Math.max(60, Math.max(positiveRatio, negativeRatio) * 100);
+        confidence = Math.max(50, 100 - Math.abs(combinedScore));
       }
 
       const factors = [
-        `${positiveCount} positive signals`,
-        `${negativeCount} negative signals`,
+        `Market performance: ${
+          marketPerformanceScore > 0 ? "+" : ""
+        }${marketPerformanceScore.toFixed(1)}%`,
+        `News sentiment: ${
+          newsSentimentScore > 0 ? "+" : ""
+        }${newsSentimentScore.toFixed(1)}%`,
         `${trendingStocks.length} trending stocks`,
       ];
 
@@ -719,7 +769,7 @@ export default function MarketOverview({
                           ? "trending-down"
                           : "remove"
                       }
-                      size={14}
+                      size={18}
                       color={
                         marketSentiment.overall === "bullish"
                           ? "#10B981"
@@ -782,13 +832,8 @@ export default function MarketOverview({
           }
         >
           {/* Key Highlights */}
-          <View
-            style={[
-              styles.highlightsContainer,
-              fullWidth && { marginHorizontal: 16 },
-            ]}
-          >
-            <Text style={styles.highlightsTitle}>🎯 Key Market Highlights</Text>
+          <View style={[styles.highlightsContainer]}>
+            <Text style={styles.highlightsTitle}>Key Market Highlights</Text>
             {overview.keyHighlights.map((highlight, index) => (
               <View key={index} style={styles.highlightItem}>
                 <View style={styles.highlightBullet} />
@@ -801,40 +846,29 @@ export default function MarketOverview({
           {(overview.fedEvents.length > 0 ||
             overview.economicIndicators.length > 0) && (
             <View style={styles.sectionContainer}>
-              <View style={styles.newsSectionHeader}>
-                <Text style={styles.sectionTitle}>
-                  <Ionicons
-                    name="business"
-                    size={16}
-                    color="#DC2626"
-                    style={styles.sectionIcon}
-                  />
-                  Federal Reserve
-                </Text>
-                {!compact && (
-                  <Pressable
-                    style={styles.viewAllButton}
-                    onPress={() => {
-                      if (navigation) {
-                        navigation.navigate("FederalReserve");
-                      } else {
-                        console.log(
-                          "Navigation not available for Federal Reserve page"
-                        );
-                      }
-                    }}
-                  >
-                    <Text style={styles.viewAllText}>View All</Text>
-                  </Pressable>
-                )}
-              </View>
+              <Pressable
+                style={styles.sectionTitle}
+                onPress={() => {
+                  if (navigation) {
+                    navigation.navigate("FederalReserve");
+                  } else {
+                    console.log(
+                      "Navigation not available for Federal Reserve page"
+                    );
+                  }
+                }}
+              >
+                <Text style={styles.sectionTitle}>Federal Reserve</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={24}
+                  color={theme.colors.text}
+                />
+              </Pressable>
 
               {/* Fed Events */}
               {overview.fedEvents.length > 0 && (
                 <View style={styles.fedEventsContainer}>
-                  <Text style={styles.fedSubtitle}>
-                    {compact ? "Key Events" : "Upcoming Events"}
-                  </Text>
                   {overview.fedEvents
                     .slice(0, compact ? 2 : 3)
                     .map((event, index) => (
@@ -874,7 +908,7 @@ export default function MarketOverview({
               {/* Economic Indicators */}
               {!compact && overview.economicIndicators.length > 0 && (
                 <View style={styles.economicIndicatorsContainer}>
-                  <Text style={styles.fedSubtitle}>Key Economic Data</Text>
+                  <Text style={styles.sectionTitle}>Key Economic Data</Text>
                   <View style={styles.indicatorsGrid}>
                     {overview.economicIndicators.map((indicator, index) => (
                       <View key={index} style={styles.indicatorItem}>
@@ -907,6 +941,17 @@ export default function MarketOverview({
               )}
             </View>
           )}
+
+          <View style={styles.sectionContainer}>
+            <UpcomingEarningsCard
+              onEarningsPress={(symbol) => {
+                if (navigation) {
+                  navigation.navigate("StockDetail", { symbol });
+                }
+              }}
+              compact={false}
+            />
+          </View>
 
           {/* Trending Stocks */}
           {!compact && overview.trendingStocks.length > 0 && (
@@ -969,27 +1014,17 @@ export default function MarketOverview({
           )}
 
           {/* Top Stories - Only show in full mode, not compact */}
-          {!compact && (
-            <View style={styles.newsSection}>
-              <View style={styles.newsSectionHeader}>
-                <Text style={styles.sectionTitle}>
-                  <Ionicons
-                    name="newspaper"
-                    size={16}
-                    color="#10B981"
-                    style={styles.sectionIcon}
-                  />
-                  Top Market Stories
-                </Text>
-                {onNewsPress && (
-                  <Pressable style={styles.viewAllButton} onPress={onNewsPress}>
-                    <Text style={styles.viewAllText}>View All</Text>
-                  </Pressable>
-                )}
-              </View>
-              <NewsList items={overview.topStories} fullScreen={false} />
-            </View>
-          )}
+          <View style={styles.newsSection}>
+            <Pressable style={styles.newsSectionHeader} onPress={onNewsPress}>
+              <Text style={styles.sectionTitle}>Top Stories</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={22}
+                color={theme.colors.text}
+              />
+            </Pressable>
+            <NewsList items={overview.topStories} fullScreen={false} />
+          </View>
 
           {/* Last Updated */}
           <Text style={styles.lastUpdated}>

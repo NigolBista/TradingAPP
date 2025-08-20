@@ -16,6 +16,7 @@ export default function IndexStrip({
   tickers = [
     { symbol: "SPY", label: "S&P" },
     { symbol: "QQQ", label: "Nasdaq" },
+    { symbol: "DIA", label: "Dow" },
     { symbol: "IWM", label: "Russell" },
     { symbol: "^VIX", label: "VIX" },
   ],

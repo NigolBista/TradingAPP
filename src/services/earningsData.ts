@@ -1,5 +1,27 @@
 import Constants from "expo-constants";
 
+interface StockNewsEarningsResponse {
+  data: StockNewsEarningsItem[];
+  total_pages: number;
+  page: number;
+}
+
+interface StockNewsEarningsItem {
+  ID: number;
+  Ticker: string;
+  Company: string;
+  "Earnings Date": string;
+  Type: string;
+  Time: string;
+  URL?: string;
+  eps_estimate?: number;
+  eps_actual?: number;
+  revenue_estimate?: number;
+  revenue_actual?: number;
+  fiscal_quarter?: string;
+  fiscal_year?: number;
+}
+
 export interface EarningsReport {
   symbol: string;
   date: string;
@@ -245,13 +267,323 @@ export async function fetchRecentEarnings(
 }
 
 /**
- * Fetch upcoming earnings calendar
+ * Fetch upcoming earnings calendar from Stock News API
+ * Note: Earnings calendar endpoint requires premium subscription
+ */
+export async function fetchUpcomingEarningsFromStockNewsAPI(
+  daysAhead: number = 30
+): Promise<EarningsCalendarItem[]> {
+  const apiToken = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+
+  if (!apiToken) {
+    console.warn(
+      "Stock News API token missing. Falling back to Market Data API."
+    );
+    return [];
+  }
+
+  try {
+    const url = `https://stocknewsapi.com/api/v1/earnings-calendar?&page=1&items=100&token=${apiToken}`;
+
+    console.log(`🎯 Attempting to fetch earnings calendar from Stock News API`);
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const json = await response.json();
+    console.log(`📊 Stock News API earnings response:`, json);
+
+    // Check if earnings calendar is available with current subscription
+    if (
+      json.message &&
+      json.message.includes("not available with current Subscription")
+    ) {
+      console.warn(
+        "📋 Earnings calendar endpoint requires premium subscription. Using fallback approach."
+      );
+      return await fetchEarningsFromNewsAnalysis(daysAhead);
+    }
+
+    if (!json.data || !Array.isArray(json.data)) {
+      console.warn("Invalid earnings calendar response format");
+      return [];
+    }
+
+    // Convert Stock News API format to our format
+    const earnings: EarningsCalendarItem[] = json.data.map((item: any) => {
+      const earningsDate = item["Earnings Date"];
+      const parsedDate = parseEarningsDate(earningsDate);
+
+      return {
+        symbol: item.Ticker,
+        companyName: item.Company || getCompanyName(item.Ticker),
+        date: parsedDate,
+        time: normalizeEarningsTimeFromType(item.Type),
+        estimatedEPS: item.eps_estimate,
+        estimatedRevenue: item.revenue_estimate,
+        fiscalQuarter:
+          item.fiscal_quarter ||
+          `Q${Math.ceil(new Date(parsedDate).getMonth() / 3) + 1}`,
+        fiscalYear:
+          item.fiscal_year?.toString() ||
+          new Date(parsedDate).getFullYear().toString(),
+      };
+    });
+
+    // Filter for future dates within the specified window
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfWindow = new Date();
+    endOfWindow.setDate(startOfToday.getDate() + daysAhead);
+    endOfWindow.setHours(23, 59, 59, 999);
+
+    const filtered = earnings
+      .filter((item) => {
+        const d = new Date(item.date);
+        const isInRange = d >= startOfToday && d <= endOfWindow;
+        return isInRange;
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    console.log(
+      `📈 Filtered Stock News API earnings:`,
+      filtered.length,
+      filtered
+    );
+    return filtered;
+  } catch (error) {
+    console.error("Stock News API earnings error:", error);
+    // Fallback to news analysis approach
+    return await fetchEarningsFromNewsAnalysis(daysAhead);
+  }
+}
+
+/**
+ * Fallback: Extract earnings information from earnings-related news
+ */
+async function fetchEarningsFromNewsAnalysis(
+  daysAhead: number = 30
+): Promise<EarningsCalendarItem[]> {
+  console.log("📰 Using news analysis fallback for earnings calendar");
+
+  const apiToken = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+  if (!apiToken) return [];
+
+  try {
+    // Search for earnings-related news
+    const url = `https://stocknewsapi.com/api/v1/category?section=general&items=50&topic=earnings&token=${apiToken}`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const json = await response.json();
+
+    if (!json.data || !Array.isArray(json.data)) {
+      return [];
+    }
+
+    const earnings: EarningsCalendarItem[] = [];
+    const today = new Date();
+    const endDate = new Date();
+    endDate.setDate(today.getDate() + daysAhead);
+
+    // Extract earnings information from news titles and content
+    json.data.forEach((newsItem: any) => {
+      const title = newsItem.title || "";
+      const text = newsItem.text || "";
+      const tickers = newsItem.tickers || [];
+
+      // Look for earnings-related keywords and dates
+      const earningsKeywords = [
+        "earnings",
+        "reports",
+        "quarterly",
+        "Q1",
+        "Q2",
+        "Q3",
+        "Q4",
+        "fiscal",
+        "results",
+        "announces",
+        "eps",
+      ];
+
+      const hasEarningsKeyword = earningsKeywords.some(
+        (keyword) =>
+          title.toLowerCase().includes(keyword) ||
+          text.toLowerCase().includes(keyword)
+      );
+
+      if (hasEarningsKeyword && tickers.length > 0) {
+        // Extract potential earnings date from news
+        const dateMatch = text.match(
+          /(\w+\s+\d{1,2},?\s+\d{4})|(\d{1,2}\/\d{1,2}\/\d{4})/
+        );
+        let earningsDate = newsItem.date;
+
+        if (dateMatch) {
+          const extractedDate = new Date(dateMatch[0]);
+          if (
+            !isNaN(extractedDate.getTime()) &&
+            extractedDate > today &&
+            extractedDate <= endDate
+          ) {
+            earningsDate = extractedDate.toISOString();
+          }
+        }
+
+        tickers.forEach((ticker: string) => {
+          // Avoid duplicates
+          const exists = earnings.some(
+            (e) => e.symbol === ticker && e.date === earningsDate
+          );
+          if (!exists) {
+            earnings.push({
+              symbol: ticker,
+              companyName: getCompanyName(ticker),
+              date: earningsDate,
+              time: undefined, // Time not available from news analysis
+              estimatedEPS: undefined,
+              estimatedRevenue: undefined,
+              fiscalQuarter: extractQuarterFromText(text),
+              fiscalYear: new Date(earningsDate).getFullYear().toString(),
+            });
+          }
+        });
+      }
+    });
+
+    console.log(
+      `📊 Extracted ${earnings.length} potential earnings from news analysis`
+    );
+    return earnings.slice(0, 15); // Limit results
+  } catch (error) {
+    console.error("News analysis fallback failed:", error);
+    return [];
+  }
+}
+
+/**
+ * Extract fiscal quarter from news text
+ */
+function extractQuarterFromText(text: string): string | undefined {
+  const quarterMatch = text.match(
+    /Q([1-4])|quarter\s+([1-4])|first|second|third|fourth/i
+  );
+  if (quarterMatch) {
+    if (quarterMatch[1]) return `Q${quarterMatch[1]}`;
+    if (quarterMatch[2]) return `Q${quarterMatch[2]}`;
+    const quarter = quarterMatch[0].toLowerCase();
+    if (quarter.includes("first")) return "Q1";
+    if (quarter.includes("second")) return "Q2";
+    if (quarter.includes("third")) return "Q3";
+    if (quarter.includes("fourth")) return "Q4";
+  }
+  return undefined;
+}
+
+function normalizeEarningsTime(
+  value?: string
+): "bmo" | "amc" | "dmh" | undefined {
+  if (!value) return undefined;
+  const v = value.toLowerCase();
+  if (v.includes("after") || v.includes("amc") || v.includes("close"))
+    return "amc";
+  if (
+    v.includes("before") ||
+    v.includes("bmo") ||
+    v.includes("open") ||
+    v.includes("pre")
+  )
+    return "bmo";
+  if (v.includes("during") || v.includes("dmh") || v.includes("hours"))
+    return "dmh";
+  return undefined;
+}
+
+/**
+ * Parse earnings date from Stock News API format (MM/DD/YYYY)
+ */
+function parseEarningsDate(dateString: string): string {
+  if (!dateString) return new Date().toISOString();
+
+  try {
+    // Stock News API returns dates in MM/DD/YYYY format
+    const [month, day, year] = dateString.split("/");
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.toISOString();
+  } catch (error) {
+    console.warn(`Failed to parse earnings date: ${dateString}`, error);
+    return new Date().toISOString();
+  }
+}
+
+/**
+ * Normalize earnings time from Stock News API Type field
+ */
+function normalizeEarningsTimeFromType(
+  type?: string
+): "bmo" | "amc" | "dmh" | undefined {
+  if (!type) return undefined;
+  const t = type.toLowerCase();
+
+  if (t.includes("bm") || t.includes("before market")) return "bmo";
+  if (t.includes("am") || t.includes("after market")) return "amc";
+  if (t.includes("dmh") || t.includes("during market")) return "dmh";
+  if (t.includes("tbd") || t.includes("to be determined")) return undefined;
+
+  return undefined;
+}
+
+/**
+ * Fetch upcoming earnings calendar (enhanced with better data sources)
  */
 export async function fetchUpcomingEarnings(
   symbols: string[],
   daysAhead: number = 14
 ): Promise<EarningsCalendarItem[]> {
+  console.log(
+    `🎯 Fetching upcoming earnings for ${symbols.length} symbols, ${daysAhead} days ahead`
+  );
+
+  // Try Stock News API first (if premium subscription is available)
+  try {
+    const stockNewsEarnings = await fetchUpcomingEarningsFromStockNewsAPI(
+      daysAhead
+    );
+
+    // If we have specific symbols, filter for those
+    if (symbols && symbols.length > 0 && stockNewsEarnings.length > 0) {
+      const symbolsSet = new Set(symbols.map((s) => s.toUpperCase()));
+      const filtered = stockNewsEarnings.filter((item) =>
+        symbolsSet.has(item.symbol.toUpperCase())
+      );
+
+      if (filtered.length > 0) {
+        console.log(
+          `📊 Found ${filtered.length} earnings for favorite symbols from Stock News API`
+        );
+        return filtered.slice(0, 15);
+      }
+    } else if (!symbols || symbols.length === 0) {
+      // No specific symbols requested, return all upcoming earnings
+      return stockNewsEarnings.slice(0, 15);
+    }
+  } catch (error) {
+    console.log(
+      "📋 Stock News API not available, using Market Data API:",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+
+  // Fallback to Market Data API implementation
   if (!symbols || symbols.length === 0) {
+    console.log("⚠️ No symbols provided for Market Data API fallback");
     return [];
   }
 
@@ -286,9 +618,8 @@ export async function fetchUpcomingEarnings(
   results.forEach((reports) => upcomingEarnings.push(...reports));
 
   console.log(
-    `📊 Raw upcoming earnings fetched:`,
-    upcomingEarnings.length,
-    upcomingEarnings
+    `📊 Raw upcoming earnings fetched from Market Data API:`,
+    upcomingEarnings.length
   );
 
   // Filter for future dates and sort by date
@@ -301,11 +632,6 @@ export async function fetchUpcomingEarnings(
     .filter((item) => {
       const d = new Date(item.date);
       const isInRange = d >= startOfToday && d <= endOfWindow;
-      console.log(
-        `📅 ${item.symbol} ${item.date}: ${
-          isInRange ? "✅" : "❌"
-        } (${d.toDateString()})`
-      );
       return isInRange;
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
@@ -413,4 +739,231 @@ export function formatCurrency(
 export function formatEPS(value?: number): string {
   if (value === undefined || value === null) return "N/A";
   return `$${value.toFixed(2)}`;
+}
+
+/**
+ * Fetch today's earnings from Stock News API
+ */
+export async function fetchTodaysEarnings(): Promise<EarningsCalendarItem[]> {
+  const apiToken = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+
+  if (!apiToken) {
+    console.warn("Stock News API token missing");
+    return [];
+  }
+
+  try {
+    const url = `https://stocknewsapi.com/api/v1/earnings-calendar?&page=1&items=100&token=${apiToken}`;
+
+    console.log(`🎯 Fetching today's earnings`);
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const json = await response.json();
+
+    if (!json.data || !Array.isArray(json.data)) {
+      console.warn("Invalid earnings calendar response format");
+      return [];
+    }
+
+    // Get today's date in MM/DD/YYYY format to match API
+    const today = new Date();
+    const todayString = `${String(today.getMonth() + 1).padStart(
+      2,
+      "0"
+    )}/${String(today.getDate()).padStart(2, "0")}/${today.getFullYear()}`;
+
+    // Filter for today's earnings only
+    const todaysEarnings = json.data
+      .filter((item: any) => item["Earnings Date"] === todayString)
+      .map((item: any) => {
+        const earningsDate = item["Earnings Date"];
+        const parsedDate = parseEarningsDate(earningsDate);
+
+        return {
+          symbol: item.Ticker,
+          companyName: item.Company || getCompanyName(item.Ticker),
+          date: parsedDate,
+          time: normalizeEarningsTimeFromType(item.Type),
+          estimatedEPS: item.eps_estimate,
+          estimatedRevenue: item.revenue_estimate,
+          fiscalQuarter:
+            item.fiscal_quarter ||
+            `Q${Math.ceil(new Date(parsedDate).getMonth() / 3) + 1}`,
+          fiscalYear:
+            item.fiscal_year?.toString() ||
+            new Date(parsedDate).getFullYear().toString(),
+        };
+      });
+
+    console.log(
+      `📊 Found ${todaysEarnings.length} earnings for today (${todayString})`
+    );
+    return todaysEarnings;
+  } catch (error) {
+    console.error("Failed to fetch today's earnings:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetch earnings for the current week from Stock News API
+ */
+export async function fetchWeeklyEarnings(): Promise<EarningsCalendarItem[]> {
+  const apiToken = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+
+  if (!apiToken) {
+    console.warn("Stock News API token missing");
+    return [];
+  }
+
+  try {
+    const url = `https://stocknewsapi.com/api/v1/earnings-calendar?&page=1&items=100&token=${apiToken}`;
+
+    console.log(`🎯 Fetching weekly earnings calendar`);
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const json = await response.json();
+
+    if (!json.data || !Array.isArray(json.data)) {
+      console.warn("Invalid earnings calendar response format");
+      return [];
+    }
+
+    // Get current week's date range
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6); // Saturday
+
+    // Convert Stock News API format and filter for current week
+    const weeklyEarnings = json.data
+      .map((item: any) => {
+        const earningsDate = item["Earnings Date"];
+        const parsedDate = parseEarningsDate(earningsDate);
+        const earningsDateObj = new Date(parsedDate);
+
+        // Check if earnings date is within current week
+        if (earningsDateObj >= startOfWeek && earningsDateObj <= endOfWeek) {
+          return {
+            symbol: item.Ticker,
+            companyName: item.Company || getCompanyName(item.Ticker),
+            date: parsedDate,
+            time: normalizeEarningsTimeFromType(item.Type),
+            estimatedEPS: item.eps_estimate,
+            estimatedRevenue: item.revenue_estimate,
+            fiscalQuarter:
+              item.fiscal_quarter ||
+              `Q${Math.ceil(new Date(parsedDate).getMonth() / 3) + 1}`,
+            fiscalYear:
+              item.fiscal_year?.toString() ||
+              new Date(parsedDate).getFullYear().toString(),
+          };
+        }
+        return null;
+      })
+      .filter((item: any) => item !== null)
+      .sort(
+        (a: any, b: any) =>
+          new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+    console.log(`📊 Found ${weeklyEarnings.length} earnings for current week`);
+    return weeklyEarnings;
+  } catch (error) {
+    console.error("Failed to fetch weekly earnings:", error);
+    return [];
+  }
+}
+
+/**
+ * Fetch all upcoming earnings from Stock News API (not filtered by user favorites)
+ * Now with premium access, we can get comprehensive earnings data
+ */
+export async function fetchAllUpcomingEarnings(
+  daysAhead: number = 30
+): Promise<EarningsCalendarItem[]> {
+  const apiToken = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+
+  if (!apiToken) {
+    console.warn("Stock News API token missing");
+    return [];
+  }
+
+  try {
+    // With premium access, we can fetch more comprehensive data
+    const url = `https://stocknewsapi.com/api/v1/earnings-calendar?&page=1&items=100&token=${apiToken}`;
+
+    console.log(`🎯 Fetching comprehensive earnings calendar (premium access)`);
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const json = await response.json();
+    console.log(`📊 Stock News API premium response:`, json);
+
+    if (!json.data || !Array.isArray(json.data)) {
+      console.warn("Invalid earnings calendar response format");
+      return [];
+    }
+
+    // Convert Stock News API format to our format
+    const earnings: EarningsCalendarItem[] = json.data.map((item: any) => {
+      const earningsDate = item["Earnings Date"];
+      const parsedDate = parseEarningsDate(earningsDate);
+
+      return {
+        symbol: item.Ticker,
+        companyName: item.Company || getCompanyName(item.Ticker),
+        date: parsedDate,
+        time: normalizeEarningsTimeFromType(item.Type),
+        estimatedEPS: item.eps_estimate,
+        estimatedRevenue: item.revenue_estimate,
+        fiscalQuarter:
+          item.fiscal_quarter ||
+          `Q${Math.ceil(new Date(parsedDate).getMonth() / 3) + 1}`,
+        fiscalYear:
+          item.fiscal_year?.toString() ||
+          new Date(parsedDate).getFullYear().toString(),
+      };
+    });
+
+    // Filter for future dates within the specified window
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    const endOfWindow = new Date();
+    endOfWindow.setDate(startOfToday.getDate() + daysAhead);
+    endOfWindow.setHours(23, 59, 59, 999);
+
+    const filtered = earnings
+      .filter((item) => {
+        const d = new Date(item.date);
+        const isInRange = d >= startOfToday && d <= endOfWindow;
+        return isInRange;
+      })
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+    console.log(
+      `📈 Filtered comprehensive earnings calendar:`,
+      filtered.length,
+      "items"
+    );
+    return filtered;
+  } catch (error) {
+    console.error("Failed to fetch comprehensive earnings:", error);
+    return [];
+  }
 }

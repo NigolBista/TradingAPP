@@ -11,9 +11,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../providers/ThemeProvider";
 import { useNavigation } from "@react-navigation/native";
 import { useUserStore } from "../../store/userStore";
+import { useEarningsStore } from "../../store/earningsStore";
 import {
   fetchUpcomingEarnings,
+  fetchRecentEarnings,
+  fetchTodaysEarnings,
   EarningsCalendarItem,
+  RecentEarningsItem,
   formatEPS,
   formatCurrency,
   formatEarningsTime,
@@ -29,8 +33,8 @@ const createStyles = (theme: any) =>
     container: {
       backgroundColor: "transparent",
       borderRadius: 12,
-      padding: 16,
       marginBottom: 16,
+      marginTop: 12,
     },
     header: {
       flexDirection: "row",
@@ -200,11 +204,12 @@ const createStyles = (theme: any) =>
       fontSize: 12,
       fontWeight: "600",
     },
-    sectionHeader: {
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "700",
+      color: theme.colors.text,
       flexDirection: "row",
       alignItems: "center",
-      marginBottom: 12,
-      marginTop: 16,
     },
     sectionHeaderText: {
       fontSize: 16,
@@ -212,9 +217,7 @@ const createStyles = (theme: any) =>
       color: theme.colors.text,
       marginLeft: 6,
     },
-    sectionContainer: {
-      marginBottom: 16,
-    },
+    sectionContainer: {},
   });
 
 export default function UpcomingEarningsCard({
@@ -225,70 +228,64 @@ export default function UpcomingEarningsCard({
   const navigation = useNavigation();
   const styles = createStyles(theme);
   const { profile } = useUserStore();
-  const [earnings, setEarnings] = useState<EarningsCalendarItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const loadEarnings = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  // Use earnings store instead of local state
+  const {
+    todaysEarnings,
+    upcomingEarnings,
+    recentEarnings,
+    isLoading,
+    error,
+    isHydrated,
+    refreshEarningsData,
+  } = useEarningsStore();
 
-      // Get user's favorite stocks (GLOBAL favorites only)
-      const favoriteSymbolsSet = new Set<string>(profile.favorites);
+  const [favoriteEarnings, setFavoriteEarnings] = useState<
+    EarningsCalendarItem[]
+  >([]);
+  const [favoriteRecentEarnings, setFavoriteRecentEarnings] = useState<
+    RecentEarningsItem[]
+  >([]);
+  const [showingRecent, setShowingRecent] = useState(false);
 
-      // Remove duplicates and use default symbols if no favorites
-      const uniqueSymbols = Array.from(favoriteSymbolsSet);
-      const symbolsToUse = uniqueSymbols;
+  const loadEarnings = () => {
+    // Get user's favorite stocks (GLOBAL favorites only)
+    const favoriteSymbolsSet = new Set<string>(profile.favorites);
+    const uniqueFavoriteSymbols = Array.from(favoriteSymbolsSet);
 
-      console.log(
-        "📅 Loading upcoming earnings for favorite stocks:",
-        symbolsToUse
+    // Filter cached data for user's favorites
+    if (uniqueFavoriteSymbols.length > 0) {
+      // Filter upcoming earnings for favorites
+      const filteredUpcoming = upcomingEarnings.filter((item) =>
+        favoriteSymbolsSet.has(item.symbol.toUpperCase())
       );
-      console.log("📋 Current profile.favorites:", profile.favorites);
+      setFavoriteEarnings(filteredUpcoming.slice(0, 5));
 
-      if (symbolsToUse.length === 0) {
-        console.log("⚠️ No favorite stocks found, skipping earnings fetch");
-        setEarnings([]);
-        return;
-      }
+      // Filter recent earnings for favorites
+      const filteredRecent = recentEarnings.filter((item) =>
+        favoriteSymbolsSet.has(item.symbol.toUpperCase())
+      );
+      setFavoriteRecentEarnings(filteredRecent.slice(0, 5));
 
-      // Determine days ahead until end of current month
-      const now = new Date();
-      const endOfMonth = new Date(
-        now.getFullYear(),
-        now.getMonth() + 1,
-        0,
-        23,
-        59,
-        59,
-        999
-      );
-      const daysUntilEndOfMonth = Math.max(
-        1,
-        Math.ceil(
-          (endOfMonth.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)
-        )
-      );
-
-      const data = await fetchUpcomingEarnings(
-        symbolsToUse,
-        daysUntilEndOfMonth
-      );
-      setEarnings(data);
-    } catch (err) {
-      console.error("Failed to load upcoming earnings:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load earnings data"
-      );
-    } finally {
-      setLoading(false);
+      setShowingRecent(false);
+    } else {
+      setFavoriteEarnings([]);
+      setFavoriteRecentEarnings([]);
+      setShowingRecent(false);
     }
   };
 
   useEffect(() => {
+    // Trigger refresh if visiting market overview and data needs refresh
+    if (isHydrated) {
+      refreshEarningsData();
+    }
+  }, []); // Only run once when component mounts
+
+  useEffect(() => {
+    // Filter earnings when favorites or cached data changes
     loadEarnings();
-  }, [profile.favorites]);
+  }, [profile.favorites, upcomingEarnings, recentEarnings, isHydrated]);
 
   const handleEarningsPress = (symbol: string) => {
     if (onEarningsPress) {
@@ -334,71 +331,20 @@ export default function UpcomingEarningsCard({
     }
   };
 
-  const isToday = (dateString: string) => {
-    const today = new Date();
-    const date = new Date(dateString);
-    return (
-      date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear()
-    );
-  };
-
-  const isTomorrow = (dateString: string) => {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const date = new Date(dateString);
-    return (
-      date.getDate() === tomorrow.getDate() &&
-      date.getMonth() === tomorrow.getMonth() &&
-      date.getFullYear() === tomorrow.getFullYear()
-    );
-  };
-
-  const groupByWeekAndMonth = (all: EarningsCalendarItem[]) => {
-    const now = new Date();
-    const endOfWeek = new Date(now);
-    endOfWeek.setDate(now.getDate() + 6);
-    endOfWeek.setHours(23, 59, 59, 999);
-    const endOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999
-    );
-
-    const week: EarningsCalendarItem[] = [];
-    const month: EarningsCalendarItem[] = [];
-
-    all.forEach((item) => {
-      const d = new Date(item.date);
-      if (d <= endOfWeek) {
-        week.push(item);
-      } else if (d > endOfWeek && d <= endOfMonth) {
-        month.push(item);
-      }
-    });
-
-    return { week, month };
-  };
-
-  if (loading) {
+  if (isLoading && !isHydrated) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>
-            <Ionicons
-              name="calendar"
-              size={16}
-              color="#6366F1"
-              style={styles.titleIcon}
-            />
-            Upcoming Earnings - Favorites
-          </Text>
-        </View>
+        <Pressable
+          style={styles.sectionTitle}
+          onPress={() => (navigation as any).navigate("EarningsCalendar")}
+        >
+          <Text style={styles.title}>Earnings</Text>
+          <Ionicons
+            name="chevron-forward"
+            size={22}
+            color={theme.colors.text}
+          />
+        </Pressable>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="small" color="#6366F1" />
           <Text style={styles.loadingText}>Loading earnings calendar...</Text>
@@ -410,17 +356,17 @@ export default function UpcomingEarningsCard({
   if (error) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>
-            <Ionicons
-              name="calendar"
-              size={16}
-              color="#6366F1"
-              style={styles.titleIcon}
-            />
-            Upcoming Earnings - Favorites
-          </Text>
-        </View>
+        <Pressable
+          style={styles.sectionTitle}
+          onPress={() => (navigation as any).navigate("EarningsCalendar")}
+        >
+          <Text style={styles.title}>Earnings</Text>
+          <Ionicons
+            name="chevron-forward"
+            size={22}
+            color={theme.colors.text}
+          />
+        </Pressable>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
           <Pressable style={styles.retryButton} onPress={loadEarnings}>
@@ -431,33 +377,32 @@ export default function UpcomingEarningsCard({
     );
   }
 
-  if (earnings.length === 0) {
+  if (
+    favoriteEarnings.length === 0 &&
+    favoriteRecentEarnings.length === 0 &&
+    todaysEarnings.length === 0
+  ) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>
-            <Ionicons
-              name="calendar"
-              size={16}
-              color="#6366F1"
-              style={styles.titleIcon}
-            />
-            Upcoming Earnings - Favorites
-          </Text>
-        </View>
+        <Pressable
+          style={styles.sectionTitle}
+          onPress={() => (navigation as any).navigate("EarningsCalendar")}
+        >
+          <Text style={styles.title}>Earnings</Text>
+          <Ionicons
+            name="chevron-forward"
+            size={22}
+            color={theme.colors.text}
+          />
+        </Pressable>
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>
-            {profile.favorites.length === 0
-              ? "No favorite stocks set. Add stocks to your favorites to see their earnings here."
-              : "No upcoming earnings found for your favorite stocks"}
+            No earnings found for your favorites
           </Text>
         </View>
       </View>
     );
   }
-
-  const { week, month } = groupByWeekAndMonth(earnings);
-  const displayLimit = compact ? 4 : 8;
 
   const renderEarningsItem = (item: EarningsCalendarItem, index: number) => {
     const timeInfo = getTimeInfo(item.time);
@@ -511,56 +456,134 @@ export default function UpcomingEarningsCard({
     );
   };
 
+  const renderRecentEarningsItem = (
+    item: RecentEarningsItem,
+    index: number
+  ) => {
+    const timeInfo = getTimeInfo(item.time);
+    const beatEstimate =
+      item.actualEPS && item.estimatedEPS
+        ? item.actualEPS > item.estimatedEPS
+        : false;
+    const missedEstimate =
+      item.actualEPS && item.estimatedEPS
+        ? item.actualEPS < item.estimatedEPS
+        : false;
+
+    return (
+      <Pressable
+        key={`recent-${item.symbol}-${index}`}
+        style={styles.earningsItem}
+        onPress={() => handleEarningsPress(item.symbol)}
+      >
+        <View style={styles.earningsHeader}>
+          <View style={styles.symbolContainer}>
+            <Text style={styles.symbol}>{item.symbol}</Text>
+            <Text style={styles.companyName} numberOfLines={1}>
+              {item.companyName}
+            </Text>
+          </View>
+          <View style={styles.dateTimeContainer}>
+            <Text style={styles.date}>{formatDate(item.date)}</Text>
+            {beatEstimate && (
+              <View
+                style={[
+                  styles.timeBadge,
+                  { backgroundColor: "rgba(16, 185, 129, 0.2)" },
+                ]}
+              >
+                <Text style={[styles.timeBadgeText, { color: "#10B981" }]}>
+                  BEAT
+                </Text>
+              </View>
+            )}
+            {missedEstimate && (
+              <View
+                style={[
+                  styles.timeBadge,
+                  { backgroundColor: "rgba(239, 68, 68, 0.2)" },
+                ]}
+              >
+                <Text style={[styles.timeBadgeText, { color: "#EF4444" }]}>
+                  MISS
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.metricsContainer}>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Actual EPS</Text>
+            <Text style={styles.metricValue}>{formatEPS(item.actualEPS)}</Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Est. EPS</Text>
+            <Text style={styles.metricValue}>
+              {formatEPS(item.estimatedEPS)}
+            </Text>
+          </View>
+          {item.surprisePercent !== undefined && (
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>Surprise</Text>
+              <Text
+                style={[
+                  styles.metricValue,
+                  { color: item.surprisePercent > 0 ? "#10B981" : "#EF4444" },
+                ]}
+              >
+                {item.surprisePercent > 0 ? "+" : ""}
+                {item.surprisePercent.toFixed(1)}%
+              </Text>
+            </View>
+          )}
+        </View>
+      </Pressable>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>
-          <Ionicons
-            name="calendar"
-            size={16}
-            color="#6366F1"
-            style={styles.titleIcon}
-          />
-          Upcoming Earnings
-        </Text>
-        {!compact && (
-          <Pressable
-            style={styles.viewAllButton}
-            onPress={() => (navigation as any).navigate("EarningsCalendar")}
-          >
-            <Text style={styles.viewAllText}>View Calendar</Text>
-          </Pressable>
-        )}
-      </View>
+      <Pressable
+        style={styles.header}
+        onPress={() => (navigation as any).navigate("EarningsCalendar")}
+      >
+        <Text style={styles.title}>Earnings</Text>
+        <Ionicons name="chevron-forward" size={18} color={theme.colors.text} />
+      </Pressable>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* This Week */}
-        {week.length > 0 && (
+        {todaysEarnings.length > 0 && (
           <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="calendar-outline" size={16} color="#6366F1" />
-              <Text style={styles.sectionHeaderText}>This Week</Text>
+            <View style={styles.earningsContainer}>
+              {todaysEarnings.map(
+                (item, index) => renderEarningsItem(item, index + 1000) // Use offset to avoid conflicts
+              )}
             </View>
-            {week
-              .slice(0, displayLimit)
-              .map((item, index) => renderEarningsItem(item, index))}
           </View>
         )}
 
-        {/* This Month */}
-        {month.length > 0 && (
+        {/* Upcoming Earnings Section */}
+        {favoriteEarnings.length > 0 && (
           <View style={styles.sectionContainer}>
-            <View style={styles.sectionHeader}>
-              <Ionicons
-                name="calendar-number-outline"
-                size={16}
-                color="#A855F7"
-              />
-              <Text style={styles.sectionHeaderText}>This Month</Text>
+            <Text style={styles.sectionHeaderText}>Upcoming</Text>
+            <View style={styles.earningsContainer}>
+              {favoriteEarnings.map((item, index) =>
+                renderEarningsItem(item, index)
+              )}
             </View>
-            {month
-              .slice(0, displayLimit)
-              .map((item, index) => renderEarningsItem(item, index))}
+          </View>
+        )}
+
+        {/* Recent Earnings Section */}
+        {favoriteRecentEarnings.length > 0 && (
+          <View style={styles.sectionContainer}>
+            <Text style={styles.sectionHeaderText}>Recent</Text>
+            <View style={styles.earningsContainer}>
+              {favoriteRecentEarnings.map((item, index) =>
+                renderRecentEarningsItem(item, index)
+              )}
+            </View>
           </View>
         )}
       </ScrollView>

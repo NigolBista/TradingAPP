@@ -236,15 +236,7 @@ export default function RecentEarningsCard({
           ? uniqueSymbols
           : ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "META", "NVDA", "NFLX"];
 
-      console.log(
-        "📊 Loading recent earnings for favorite stocks:",
-        symbolsToUse
-      );
-
-      const data = await fetchRecentEarnings(
-        symbolsToUse,
-        7 // Last 7 days
-      );
+      const data = await fetchRecentEarnings(symbolsToUse, 7);
       setEarnings(data);
     } catch (err) {
       console.error("Failed to load recent earnings:", err);

@@ -1,5 +1,6 @@
 import { preloadStocksData } from "./stockData";
 import { initializeAppDataStore } from "../store/appDataStore";
+import { useEarningsStore } from "../store/earningsStore";
 
 /**
  * App initialization service
@@ -31,10 +32,14 @@ export async function initializeApp(): Promise<void> {
       // Initialize the centralized app data store
       const storePromise = initializeAppDataStore();
 
-      // Wait for both to complete
-      await Promise.all([stocksPromise, storePromise]);
+      // Hydrate earnings data at app launch
+      const earningsPromise = useEarningsStore.getState().hydrateEarningsData();
+
+      // Wait for all to complete
+      await Promise.all([stocksPromise, storePromise, earningsPromise]);
       console.log("✅ Stocks database loaded successfully");
       console.log("✅ App data store initialized successfully");
+      console.log("✅ Earnings data hydrated successfully");
 
       isInitialized = true;
       resolve();

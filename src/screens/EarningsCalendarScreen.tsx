@@ -13,9 +13,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "../providers/ThemeProvider";
+import { useUserStore } from "../store/userStore";
+import { useEarningsStore } from "../store/earningsStore";
 import {
   fetchUpcomingEarnings,
   fetchRecentEarnings,
+  fetchWeeklyEarnings,
   EarningsCalendarItem,
   RecentEarningsItem,
   formatEPS,
@@ -147,6 +150,9 @@ const createStyles = (theme: any) =>
       backgroundColor: theme.colors.surface,
       borderBottomWidth: 1,
       borderBottomColor: theme.colors.border,
+    },
+    sectionIcon: {
+      marginRight: 8,
     },
     sectionHeaderText: {
       fontSize: 16,
@@ -288,84 +294,34 @@ export default function EarningsCalendarScreen() {
   const navigation = useNavigation();
   const { theme } = useTheme();
   const styles = createStyles(theme);
+  const { profile } = useUserStore();
 
-  const [activeTab, setActiveTab] = useState<"upcoming" | "recent">("upcoming");
-  const [upcomingEarnings, setUpcomingEarnings] = useState<
-    EarningsCalendarItem[]
-  >([]);
-  const [recentEarnings, setRecentEarnings] = useState<RecentEarningsItem[]>(
-    []
+  // Use earnings store
+  const {
+    weeklyEarnings,
+    upcomingEarnings,
+    recentEarnings,
+    isLoading,
+    error,
+    refreshEarningsData,
+  } = useEarningsStore();
+
+  const [activeTab, setActiveTab] = useState<"weekly" | "upcoming" | "recent">(
+    "weekly"
   );
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   const loadData = async (isRefresh = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true);
-      } else {
-        setLoading(true);
+        await refreshEarningsData();
       }
-      setError(null);
-
-      const [upcomingData, recentData] = await Promise.all([
-        fetchUpcomingEarnings(
-          [
-            "AAPL",
-            "MSFT",
-            "GOOGL",
-            "AMZN",
-            "TSLA",
-            "META",
-            "NVDA",
-            "HD",
-            "WMT",
-            "TGT",
-            "PANW",
-            "ALC",
-            "BZ",
-            "DY",
-            "GDS",
-            "COTY",
-            "EL",
-            "WDAY",
-            "ROST",
-            "HEI",
-          ],
-          30 // Next 30 days
-        ),
-        fetchRecentEarnings(
-          [
-            "AAPL",
-            "MSFT",
-            "GOOGL",
-            "AMZN",
-            "TSLA",
-            "META",
-            "NVDA",
-            "HD",
-            "WMT",
-            "PANW",
-            "MDT",
-            "AS",
-            "FN",
-            "XP",
-          ],
-          30 // Last 30 days
-        ),
-      ]);
-
-      setUpcomingEarnings(upcomingData);
-      setRecentEarnings(recentData);
+      // Data is now available from the store
     } catch (err) {
-      console.error("Failed to load earnings data:", err);
-      setError(
-        err instanceof Error ? err.message : "Failed to load earnings data"
-      );
+      console.error("Failed to refresh earnings data:", err);
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   };
@@ -450,8 +406,8 @@ export default function EarningsCalendarScreen() {
     );
   };
 
-  const renderUpcomingEarnings = () => {
-    const filteredEarnings = filterEarnings(upcomingEarnings);
+  const renderWeeklyEarnings = () => {
+    const filteredEarnings = filterEarnings(weeklyEarnings);
 
     if (filteredEarnings.length === 0) {
       return (
@@ -459,7 +415,7 @@ export default function EarningsCalendarScreen() {
           <Text style={styles.emptyText}>
             {searchQuery
               ? "No earnings found matching your search"
-              : "No upcoming earnings found"}
+              : "No earnings scheduled for this week"}
           </Text>
         </View>
       );
@@ -473,6 +429,197 @@ export default function EarningsCalendarScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
       >
+        {groupedEarnings.map(([date, items]) => {
+          const dateObj = new Date(date);
+          const isToday = dateObj.toDateString() === new Date().toDateString();
+          const dayName = dateObj.toLocaleDateString("en-US", {
+            weekday: "long",
+          });
+
+          return (
+            <View key={date}>
+              <View style={styles.sectionHeader}>
+                <Ionicons
+                  name={isToday ? "today" : "calendar-outline"}
+                  size={16}
+                  color={isToday ? "#10B981" : theme.colors.primary}
+                />
+                <Text
+                  style={[
+                    styles.sectionHeaderText,
+                    isToday && { color: "#10B981" },
+                  ]}
+                >
+                  {isToday
+                    ? `Today - ${dayName}`
+                    : `${dayName} - ${formatDate(date)}`}
+                </Text>
+              </View>
+              {items.map((item, index) => {
+                const timeInfo = getTimeInfo(item.time);
+
+                return (
+                  <Pressable
+                    key={`${item.symbol}-${index}`}
+                    style={styles.earningsItem}
+                    onPress={() => handleEarningsPress(item.symbol)}
+                  >
+                    <View style={styles.earningsHeader}>
+                      <View style={styles.symbolContainer}>
+                        <Text style={styles.symbol}>{item.symbol}</Text>
+                        <Text style={styles.companyName} numberOfLines={1}>
+                          {item.companyName}
+                        </Text>
+                      </View>
+                      <View style={styles.dateTimeContainer}>
+                        <Text style={styles.time}>
+                          {formatEarningsTime(item.time)}
+                        </Text>
+                        <View style={[styles.timeBadge, timeInfo.style]}>
+                          <Text
+                            style={[styles.timeBadgeText, timeInfo.textStyle]}
+                          >
+                            {timeInfo.text}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
+                    <View style={styles.metricsContainer}>
+                      <View style={styles.metricItem}>
+                        <Text style={styles.metricLabel}>Est. EPS</Text>
+                        <Text style={styles.metricValue}>
+                          {formatEPS(item.estimatedEPS)}
+                        </Text>
+                      </View>
+                      <View style={styles.metricItem}>
+                        <Text style={styles.metricLabel}>Est. Revenue</Text>
+                        <Text style={styles.metricValue}>
+                          {formatCurrency(item.estimatedRevenue, {
+                            compact: true,
+                          })}
+                        </Text>
+                      </View>
+                      <View style={styles.metricItem}>
+                        <Text style={styles.metricLabel}>Quarter</Text>
+                        <Text style={styles.metricValue}>
+                          {item.fiscalQuarter || "N/A"}
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+          );
+        })}
+      </ScrollView>
+    );
+  };
+
+  const renderUpcomingEarnings = () => {
+    const filteredEarnings = filterEarnings(upcomingEarnings);
+
+    const favoriteSymbolsSet = new Set<string>(
+      (profile?.favorites || []).map((s) => s.toUpperCase())
+    );
+    const favoriteUpcoming = filteredEarnings.filter((item) =>
+      favoriteSymbolsSet.has(item.symbol.toUpperCase())
+    );
+    const nonFavoriteUpcoming = filteredEarnings.filter(
+      (item) => !favoriteSymbolsSet.has(item.symbol.toUpperCase())
+    );
+
+    if (filteredEarnings.length === 0) {
+      return (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>
+            {searchQuery
+              ? "No earnings found matching your search"
+              : "No upcoming earnings found"}
+          </Text>
+        </View>
+      );
+    }
+
+    const groupedEarnings = groupEarningsByDate(nonFavoriteUpcoming);
+
+    return (
+      <ScrollView
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
+      >
+        {/* Favorites Section (deduped from main list) */}
+        {favoriteUpcoming.length > 0 && (
+          <View>
+            <View style={styles.sectionHeader}>
+              <Ionicons
+                name="star"
+                size={16}
+                color={theme.colors.primary}
+                style={styles.sectionIcon}
+              />
+              <Text style={styles.sectionHeaderText}>Favorites</Text>
+            </View>
+            {favoriteUpcoming.map((item, index) => {
+              const timeInfo = getTimeInfo(item.time);
+
+              return (
+                <Pressable
+                  key={`fav-${item.symbol}-${index}`}
+                  style={styles.earningsItem}
+                  onPress={() => handleEarningsPress(item.symbol)}
+                >
+                  <View style={styles.earningsHeader}>
+                    <View style={styles.symbolContainer}>
+                      <Text style={styles.symbol}>{item.symbol}</Text>
+                      <Text style={styles.companyName} numberOfLines={1}>
+                        {item.companyName}
+                      </Text>
+                    </View>
+                    <View style={styles.dateTimeContainer}>
+                      <Text style={styles.time}>
+                        {formatEarningsTime(item.time)}
+                      </Text>
+                      <View style={[styles.timeBadge, timeInfo.style]}>
+                        <Text
+                          style={[styles.timeBadgeText, timeInfo.textStyle]}
+                        >
+                          {timeInfo.text}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <View style={styles.metricsContainer}>
+                    <View style={styles.metricItem}>
+                      <Text style={styles.metricLabel}>Est. EPS</Text>
+                      <Text style={styles.metricValue}>
+                        {formatEPS(item.estimatedEPS)}
+                      </Text>
+                    </View>
+                    <View style={styles.metricItem}>
+                      <Text style={styles.metricLabel}>Est. Revenue</Text>
+                      <Text style={styles.metricValue}>
+                        {formatCurrency(item.estimatedRevenue, {
+                          compact: true,
+                        })}
+                      </Text>
+                    </View>
+                    <View style={styles.metricItem}>
+                      <Text style={styles.metricLabel}>Quarter</Text>
+                      <Text style={styles.metricValue}>
+                        {item.fiscalQuarter || "N/A"}
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
         {groupedEarnings.map(([date, items]) => (
           <View key={date}>
             <View style={styles.sectionHeader}>
@@ -638,7 +785,7 @@ export default function EarningsCalendarScreen() {
     );
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -727,6 +874,19 @@ export default function EarningsCalendarScreen() {
       {/* Tab Selector */}
       <View style={styles.tabContainer}>
         <Pressable
+          style={[styles.tab, activeTab === "weekly" && styles.activeTab]}
+          onPress={() => setActiveTab("weekly")}
+        >
+          <Text
+            style={[
+              styles.tabText,
+              activeTab === "weekly" && styles.activeTabText,
+            ]}
+          >
+            This Week
+          </Text>
+        </Pressable>
+        <Pressable
           style={[styles.tab, activeTab === "upcoming" && styles.activeTab]}
           onPress={() => setActiveTab("upcoming")}
         >
@@ -755,7 +915,9 @@ export default function EarningsCalendarScreen() {
       </View>
 
       {/* Content */}
-      {activeTab === "upcoming"
+      {activeTab === "weekly"
+        ? renderWeeklyEarnings()
+        : activeTab === "upcoming"
         ? renderUpcomingEarnings()
         : renderRecentEarnings()}
     </SafeAreaView>

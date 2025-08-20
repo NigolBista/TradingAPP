@@ -13,6 +13,7 @@ import { useNavigation } from "@react-navigation/native";
 import { COLORS } from "../constants/colors";
 import MarketOverview from "../components/insights/MarketOverview";
 import IndexStrip from "../components/insights/IndexStrip";
+import ETFStrip from "../components/insights/ETFStrip";
 import RecentEarningsCard from "../components/insights/RecentEarningsCard";
 import UpcomingEarningsCard from "../components/insights/UpcomingEarningsCard";
 import { useAppDataStore } from "../store/appDataStore";
@@ -111,6 +112,11 @@ export default function MarketOverviewPage() {
           <IndexStrip />
         </View>
 
+        {/* ETF Strip */}
+        <View style={styles.etfSection}>
+          <ETFStrip />
+        </View>
+
         {/* Full Market Overview */}
         <View style={styles.marketOverviewSection}>
           <MarketOverview fullWidth={true} compact={false} />
@@ -123,20 +129,10 @@ export default function MarketOverviewPage() {
               // Navigate to stock detail screen
               (navigation as any).navigate("StockDetail", { symbol });
             }}
-            compact={false}
           />
         </View>
 
-        {/* Upcoming Earnings */}
-        <View style={styles.earningsSection}>
-          <UpcomingEarningsCard
-            onEarningsPress={(symbol) => {
-              // Navigate to stock detail screen
-              (navigation as any).navigate("StockDetail", { symbol });
-            }}
-            compact={false}
-          />
-        </View>
+        {/* Upcoming Earnings removed to avoid duplicate section */}
 
         {/* Bottom spacing */}
         <View style={{ height: 24 }} />
@@ -215,6 +211,10 @@ const styles = StyleSheet.create({
   indexSection: {
     marginHorizontal: 16,
     marginTop: 12,
+  },
+  etfSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
   },
   marketOverviewSection: {
     marginHorizontal: 16,

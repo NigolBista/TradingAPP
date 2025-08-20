@@ -17,6 +17,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import MarketOverview from "../components/insights/MarketOverview";
 import UpcomingEarningsCard from "../components/insights/UpcomingEarningsCard";
+import ETFStrip from "../components/insights/ETFStrip";
 import DecalpXMini from "../components/insights/DecalpXMini";
 import { MarketScanner, type ScanResult } from "../services/marketScanner";
 import {
@@ -565,6 +566,11 @@ export default function MarketOverviewTabScreen() {
             style={styles.marketContent}
             showsVerticalScrollIndicator={false}
           >
+            {/* ETF Overview */}
+            <View style={{ marginBottom: 16 }}>
+              <ETFStrip compact={true} />
+            </View>
+
             {/* Market Overview */}
             <MarketOverview
               onNewsPress={handleNewsPress}
@@ -572,16 +578,6 @@ export default function MarketOverviewTabScreen() {
               fullWidth={true}
               compact={false}
             />
-
-            {/* Upcoming Earnings for Favorites */}
-            <View style={{ marginTop: 16 }}>
-              <UpcomingEarningsCard
-                onEarningsPress={(symbol) =>
-                  (navigation as any).navigate("StockDetail", { symbol })
-                }
-                compact={false}
-              />
-            </View>
           </ScrollView>
         );
       case "Signals":
