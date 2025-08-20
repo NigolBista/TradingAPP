@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -4,
   },
   positionCard: {
-    backgroundColor: "#111827",
+    backgroundColor: "rgba(17, 24, 39, 0.5)",
     borderRadius: 8,
     padding: 12,
     marginHorizontal: 4,

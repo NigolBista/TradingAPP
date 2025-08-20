@@ -89,8 +89,8 @@ function Tabs() {
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.textSecondary,
         tabBarStyle: {
-          backgroundColor: theme.colors.card,
-          borderTopColor: theme.colors.border,
+          backgroundColor: theme.colors.background,
+          borderTopWidth: 0,
         },
       })}
     >

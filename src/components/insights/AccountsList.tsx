@@ -98,11 +98,6 @@ export default function AccountsList({
       accountTypeLower.includes(type)
     );
 
-    // Debug log to see what account types we're getting
-    console.log(
-      `Account type: "${accountType}" -> Investment: ${isInvestment}`
-    );
-
     return isInvestment;
   };
 
@@ -114,7 +109,7 @@ export default function AccountsList({
           style={[
             styles.accountCard,
             {
-              backgroundColor: theme.colors.card,
+              backgroundColor: "rgba(17, 24, 39, 0.5)",
               borderColor: theme.colors.border,
             },
           ]}
@@ -195,7 +190,7 @@ export default function AccountsList({
         style={[
           styles.addAccountCard,
           {
-            backgroundColor: theme.colors.card,
+            backgroundColor: "rgba(17, 24, 39, 0.5)",
             borderColor: theme.colors.border,
           },
         ]}

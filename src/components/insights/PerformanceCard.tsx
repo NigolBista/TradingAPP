@@ -126,7 +126,7 @@ const createStyles = (theme: any) =>
       padding: 0,
       minHeight: 220,
     },
-    header: { alignItems: "center" },
+    header: { alignItems: "flex-start" },
     title: {
       color: theme.colors.textSecondary,
       fontSize: 14,
