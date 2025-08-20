@@ -9,7 +9,10 @@ import {
   Modal,
   ActivityIndicator,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import MarketOverview from "../components/insights/MarketOverview";
@@ -30,15 +33,18 @@ const createStyles = (theme: any) =>
       backgroundColor: theme.colors.background,
     },
     header: {
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.background,
       paddingHorizontal: 16,
-      paddingTop: 16,
       paddingBottom: 16,
     },
     headerTitle: {
       fontSize: 24,
       fontWeight: "bold",
       color: theme.colors.text,
+    },
+    headerSubtitle: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
       marginBottom: 16,
     },
     tabContainer: {
@@ -46,7 +52,7 @@ const createStyles = (theme: any) =>
       backgroundColor: theme.colors.surface,
       borderRadius: 8,
       padding: 4,
-      marginHorizontal: 16,
+      marginHorizontal: 16, // Match content boxes: 16 + 8 = 24
       marginTop: 16, // Add proper top margin for spacing between header and tabs
       marginBottom: 16, // Add proper margin for spacing
     },
@@ -83,7 +89,7 @@ const createStyles = (theme: any) =>
     },
     // Signals styles
     section: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: "transparent",
       marginHorizontal: 16,
       marginVertical: 8,
       borderRadius: 12,
@@ -116,7 +122,7 @@ const createStyles = (theme: any) =>
       color: theme.isDark ? "#ffffff" : "#000000",
     },
     signalCard: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: "transparent",
       borderRadius: 12,
       padding: 16,
       marginBottom: 12,
@@ -558,11 +564,6 @@ export default function MarketOverviewTabScreen() {
             style={styles.marketContent}
             showsVerticalScrollIndicator={false}
           >
-            {/* DecalpX Snapshot */}
-            <View style={styles.decalpxContainer}>
-              <DecalpXMini />
-            </View>
-
             {/* Market Overview */}
             <MarketOverview
               onNewsPress={handleNewsPress}
@@ -580,65 +581,13 @@ export default function MarketOverviewTabScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <View style={styles.header}>
         <Text style={styles.headerTitle}>Market Overview</Text>
-      </View>
-
-      <View style={styles.tabContainer}>
-        {(["Market", "Signals"] as TabType[]).map((tab) => (
-          <Pressable
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.activeTab]}
-            onPress={() => setActiveTab(tab)}
-          >
-            <Text
-              style={[
-                styles.tabText,
-                activeTab === tab && styles.activeTabText,
-              ]}
-            >
-              {tab}
-            </Text>
-          </Pressable>
-        ))}
+        <Text style={styles.headerSubtitle}>AI Powered Market Analysis</Text>
       </View>
 
       <View style={styles.content}>{renderContent()}</View>
-
-      {/* Strategy Info Modal */}
-      <Modal
-        visible={showStrategyModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowStrategyModal(false)}
-      >
-        <View style={styles.strategyModal}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Trading Strategies</Text>
-              <Pressable onPress={() => setShowStrategyModal(false)}>
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color={theme.colors.textSecondary}
-                />
-              </Pressable>
-            </View>
-
-            <ScrollView>
-              {STRATEGY_FILTERS.map((strategy) => (
-                <View key={strategy.id} style={styles.strategyItem}>
-                  <Text style={styles.strategyName}>{strategy.label}</Text>
-                  <Text style={styles.strategyDesc}>
-                    {strategy.description}
-                  </Text>
-                </View>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    </View>
+    </SafeAreaView>
   );
 }

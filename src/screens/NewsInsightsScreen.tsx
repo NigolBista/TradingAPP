@@ -8,7 +8,10 @@ import {
   StyleSheet,
   Linking,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import {
   fetchNews,
@@ -30,9 +33,8 @@ const createStyles = (theme: any) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.background },
     header: {
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.background,
       paddingHorizontal: 16,
-      paddingTop: 16,
       paddingBottom: 16,
     },
     headerContent: {
@@ -314,9 +316,9 @@ export default function NewsInsightsScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header with safe area padding */}
-      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      {/* Header */}
+      <View style={styles.header}>
         <View style={styles.headerContent}>
           <View>
             <Text style={styles.headerTitle}>News & Insights</Text>
@@ -480,6 +482,6 @@ export default function NewsInsightsScreen() {
 
         <View style={{ height: 32 }} />
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 }

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { COLORS } from "../../constants/colors";
 import {
   create,
   open,
@@ -110,7 +111,7 @@ export default function PlaidLinkModal({
           </Text>
         </View>
         <View style={styles.feature}>
-          <Ionicons name="eye" size={20} color="#60a5fa" />
+          <Ionicons name="eye" size={20} color={COLORS.BLUE_BASE} />
           <Text style={[styles.featureText, { color: theme.colors.text }]}>
             Read-only access to balances and holdings
           </Text>

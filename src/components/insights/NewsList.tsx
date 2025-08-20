@@ -20,14 +20,14 @@ const createStyles = (theme: any) =>
     container: { paddingHorizontal: 0 },
     containerFullScreen: { paddingHorizontal: 0 },
     card: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: "rgba(17, 24, 39, 0.5)",
       borderRadius: 12,
       padding: 12,
       marginBottom: 8,
       marginHorizontal: 8,
     },
     cardWithImage: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: "rgba(17, 24, 39, 0.5)",
       borderRadius: 12,
       padding: 0,
       marginBottom: 8,

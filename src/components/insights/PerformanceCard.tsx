@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import type { PortfolioHistory } from "../../services/portfolioAggregationService";
 import { fetchYahooCandles } from "../../services/marketProviders";
+import { COLORS } from "../../constants/colors";
 import SimpleLineChart from "../charts/SimpleLineChart";
 import { useTheme } from "../../providers/ThemeProvider";
 
@@ -93,7 +94,7 @@ export default function PerformanceCard({
         <SimpleLineChart
           data={chartSeries}
           height={120}
-          color="#60a5fa"
+          color={COLORS.BLUE_BASE}
           strokeWidth={2}
           showFill={false}
         />

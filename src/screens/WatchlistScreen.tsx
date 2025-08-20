@@ -12,6 +12,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -44,9 +45,8 @@ const createStyles = (theme: any) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.background },
     header: {
-      backgroundColor: theme.colors.surface,
+      backgroundColor: theme.colors.background,
       paddingHorizontal: 16,
-      paddingTop: 48,
       paddingBottom: 16,
     },
     headerTitle: { fontSize: 24, fontWeight: "bold", color: theme.colors.text },
@@ -58,7 +58,7 @@ const createStyles = (theme: any) =>
 
     // Watchlist selector
     watchlistSelector: {
-      backgroundColor: theme.colors.surface,
+      backgroundColor: "transparent",
       paddingHorizontal: 16,
       paddingBottom: 16, // Add proper bottom padding
     },
@@ -512,338 +512,345 @@ export default function WatchlistScreen() {
 
   if (loading && stockData.length === 0) {
     return (
-      <GestureHandlerRootView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Watchlists</Text>
-          <Text style={styles.headerSubtitle}>Loading your stocks...</Text>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Loading watchlist data...</Text>
-        </View>
-      </GestureHandlerRootView>
+      <SafeAreaView style={styles.container} edges={["top"]}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Watchlists</Text>
+            <Text style={styles.headerSubtitle}>Loading your stocks...</Text>
+          </View>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={styles.loadingText}>Loading watchlist data...</Text>
+          </View>
+        </GestureHandlerRootView>
+      </SafeAreaView>
     );
   }
 
   return (
-    <GestureHandlerRootView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <View>
-            <Text style={styles.headerTitle}>
-              {viewMode === "favorites"
-                ? "Favorites"
-                : selectedWatchlistId
-                ? profile.watchlists.find((w) => w.id === selectedWatchlistId)
-                    ?.name || "Watchlist"
-                : "Watchlists"}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              {viewMode === "favorites"
-                ? `${profile.favorites.length} favorite${
-                    profile.favorites.length !== 1 ? "s" : ""
-                  }`
-                : selectedWatchlistId
-                ? `${
-                    profile.watchlists.find((w) => w.id === selectedWatchlistId)
-                      ?.items.length || 0
-                  } stocks`
-                : `${profile.watchlists.length} watchlist${
-                    profile.watchlists.length !== 1 ? "s" : ""
-                  }`}
-            </Text>
-          </View>
-          <Pressable
-            style={{ padding: 8 }}
-            onPress={() => setShowAddToWatchlistModal(true)}
+    <SafeAreaView style={styles.container} edges={["top"]}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
           >
-            <Ionicons name="add" size={24} color={theme.colors.primary} />
-          </Pressable>
-        </View>
-      </View>
-
-      {/* View Selector - Favorites and Watchlists */}
-      <View style={styles.watchlistSelector}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={{ flexDirection: "row", paddingHorizontal: 4 }}>
-            {/* Favorites Option */}
+            <View>
+              <Text style={styles.headerTitle}>
+                {viewMode === "favorites"
+                  ? "Favorites"
+                  : selectedWatchlistId
+                  ? profile.watchlists.find((w) => w.id === selectedWatchlistId)
+                      ?.name || "Watchlist"
+                  : "Watchlists"}
+              </Text>
+              <Text style={styles.headerSubtitle}>
+                {viewMode === "favorites"
+                  ? `${profile.favorites.length} favorite${
+                      profile.favorites.length !== 1 ? "s" : ""
+                    }`
+                  : selectedWatchlistId
+                  ? `${
+                      profile.watchlists.find(
+                        (w) => w.id === selectedWatchlistId
+                      )?.items.length || 0
+                    } stocks`
+                  : `${profile.watchlists.length} watchlist${
+                      profile.watchlists.length !== 1 ? "s" : ""
+                    }`}
+              </Text>
+            </View>
             <Pressable
-              style={[
-                styles.watchlistChip,
-                viewMode === "favorites" &&
-                  !selectedWatchlistId &&
-                  styles.watchlistChipActive,
-              ]}
-              onPress={() => {
-                setViewMode("favorites");
-                setSelectedWatchlistId(null);
-              }}
+              style={{ padding: 8 }}
+              onPress={() => setShowAddToWatchlistModal(true)}
             >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Ionicons
-                  name="star"
-                  size={12}
-                  color={
-                    viewMode === "favorites" && !selectedWatchlistId
-                      ? theme.colors.primary
-                      : "#FFD700"
-                  }
-                  style={{ marginRight: 6 }}
-                />
-                <Text
-                  style={[
-                    styles.watchlistChipText,
-                    viewMode === "favorites" &&
-                      !selectedWatchlistId &&
-                      styles.watchlistChipTextActive,
-                  ]}
-                >
-                  Favorites
-                </Text>
-              </View>
+              <Ionicons name="add" size={24} color={theme.colors.primary} />
             </Pressable>
+          </View>
+        </View>
 
-            {/* Individual Watchlists */}
-            {profile.watchlists.map((watchlist) => (
+        {/* View Selector - Favorites and Watchlists */}
+        <View style={styles.watchlistSelector}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={{ flexDirection: "row", paddingHorizontal: 4 }}>
+              {/* Favorites Option */}
               <Pressable
-                key={watchlist.id}
                 style={[
                   styles.watchlistChip,
-                  selectedWatchlistId === watchlist.id &&
+                  viewMode === "favorites" &&
+                    !selectedWatchlistId &&
                     styles.watchlistChipActive,
                 ]}
                 onPress={() => {
-                  setViewMode("watchlist");
-                  setSelectedWatchlistId(watchlist.id);
+                  setViewMode("favorites");
+                  setSelectedWatchlistId(null);
                 }}
-                onLongPress={() =>
-                  !watchlist.isDefault && handleDeleteWatchlist(watchlist.id)
-                }
               >
                 <View style={{ flexDirection: "row", alignItems: "center" }}>
-                  <View
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 4,
-                      backgroundColor: watchlist.color,
-                      marginRight: 6,
-                    }}
+                  <Ionicons
+                    name="star"
+                    size={12}
+                    color={
+                      viewMode === "favorites" && !selectedWatchlistId
+                        ? theme.colors.primary
+                        : "#FFD700"
+                    }
+                    style={{ marginRight: 6 }}
                   />
                   <Text
                     style={[
                       styles.watchlistChipText,
-                      selectedWatchlistId === watchlist.id &&
+                      viewMode === "favorites" &&
+                        !selectedWatchlistId &&
                         styles.watchlistChipTextActive,
                     ]}
                   >
-                    {watchlist.name}
+                    Favorites
                   </Text>
                 </View>
               </Pressable>
-            ))}
 
-            {/* Create New Watchlist */}
-            <Pressable
-              style={[styles.watchlistChip, { borderStyle: "dashed" }]}
-              onPress={() => setShowCreateWatchlistModal(true)}
-            >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                <Ionicons
-                  name="add"
-                  size={12}
-                  color={theme.colors.textSecondary}
-                  style={{ marginRight: 6 }}
-                />
-                <Text
+              {/* Individual Watchlists */}
+              {profile.watchlists.map((watchlist) => (
+                <Pressable
+                  key={watchlist.id}
                   style={[
-                    styles.watchlistChipText,
-                    { color: theme.colors.textSecondary },
+                    styles.watchlistChip,
+                    selectedWatchlistId === watchlist.id &&
+                      styles.watchlistChipActive,
                   ]}
+                  onPress={() => {
+                    setViewMode("watchlist");
+                    setSelectedWatchlistId(watchlist.id);
+                  }}
+                  onLongPress={() =>
+                    !watchlist.isDefault && handleDeleteWatchlist(watchlist.id)
+                  }
                 >
-                  New List
-                </Text>
-              </View>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </View>
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 4,
+                        backgroundColor: watchlist.color,
+                        marginRight: 6,
+                      }}
+                    />
+                    <Text
+                      style={[
+                        styles.watchlistChipText,
+                        selectedWatchlistId === watchlist.id &&
+                          styles.watchlistChipTextActive,
+                      ]}
+                    >
+                      {watchlist.name}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
 
-      {/* Chart Section Removed - Now handled in StockDetailScreen */}
-
-      {/* Stocks List */}
-      <ScrollView
-        style={{ flex: 1 }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={theme.colors.primary}
-          />
-        }
-        contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
-      >
-        {stockData.length === 0 && loading ? (
-          <View style={styles.emptyState}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
-            <Text style={styles.emptyStateText}>Loading stocks...</Text>
-          </View>
-        ) : stockData.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons
-              name={viewMode === "favorites" ? "star-outline" : "list"}
-              size={48}
-              color={theme.colors.textSecondary}
-            />
-            <Text style={styles.emptyStateText}>
-              {viewMode === "favorites"
-                ? "No favorites yet\nTap the star to add favorites!"
-                : selectedWatchlistId
-                ? "This watchlist is empty\nAdd some stocks to get started!"
-                : "Select a watchlist or view favorites"}
-            </Text>
-          </View>
-        ) : (
-          stockData.map((stock) => {
-            const isGlobalFav = isGlobalFavorite(stock.symbol);
-
-            return (
-              <SwipeableStockItem
-                key={stock.symbol}
-                symbol={stock.symbol}
-                companyName={stock.companyName}
-                currentPrice={stock.currentPrice}
-                change={stock.change}
-                changePercent={stock.changePercent}
-                isGlobalFavorite={isGlobalFav}
-                onPress={() => handleStockPress(stock.symbol)}
-                onToggleFavorite={() => toggleGlobalFavorite(stock.symbol)}
-                onRemove={() => handleRemoveStock(stock.symbol)}
-              />
-            );
-          })
-        )}
-      </ScrollView>
-
-      {/* Create Watchlist Modal */}
-      <Modal
-        visible={showCreateWatchlistModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowCreateWatchlistModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <ScrollView
-            style={[styles.modalContent, { maxHeight: "90%" }]}
-            showsVerticalScrollIndicator={false}
-          >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Create Watchlist</Text>
-              <Pressable onPress={() => setShowCreateWatchlistModal(false)}>
-                <Ionicons
-                  name="close"
-                  size={24}
-                  color={theme.colors.textSecondary}
-                />
+              {/* Create New Watchlist */}
+              <Pressable
+                style={[styles.watchlistChip, { borderStyle: "dashed" }]}
+                onPress={() => setShowCreateWatchlistModal(true)}
+              >
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Ionicons
+                    name="add"
+                    size={12}
+                    color={theme.colors.textSecondary}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text
+                    style={[
+                      styles.watchlistChipText,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    New List
+                  </Text>
+                </View>
               </Pressable>
             </View>
-
-            {/* Watchlist Info */}
-            <TextInput
-              style={styles.input}
-              placeholder="Watchlist name"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={newWatchlistName}
-              onChangeText={setNewWatchlistName}
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Description (optional)"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={newWatchlistDescription}
-              onChangeText={setNewWatchlistDescription}
-              multiline
-              numberOfLines={3}
-            />
-
-            {/* Stock Search */}
-            <View style={styles.stockSearchSection}>
-              <Text style={styles.selectedStocksTitle}>Add Stocks</Text>
-              <StockAutocomplete
-                onStockSelect={handleStockSelect}
-                selectedStocks={selectedStocks}
-                maxResults={15}
-                placeholder="Search from 6,000+ NASDAQ stocks..."
-                containerStyle={{ marginBottom: 16 }}
-              />
-            </View>
-
-            {/* Selected Stocks */}
-            {selectedStocks.length > 0 && (
-              <View style={styles.selectedStocksSection}>
-                <Text style={styles.selectedStocksTitle}>
-                  Selected Stocks ({selectedStocks.length})
-                </Text>
-                <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                  {selectedStocks.map((stock) => (
-                    <View key={stock.symbol} style={styles.selectedStockChip}>
-                      <Text style={styles.selectedStockText}>
-                        {stock.symbol}
-                      </Text>
-                      {favoriteStocks.has(stock.symbol) && (
-                        <Ionicons
-                          name="star"
-                          size={12}
-                          color="#FFD700"
-                          style={{ marginRight: 4 }}
-                        />
-                      )}
-                      <Pressable onPress={() => handleStockSelect(stock)}>
-                        <Ionicons
-                          name="close"
-                          size={14}
-                          color={theme.colors.primary}
-                        />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            <Pressable
-              style={[
-                styles.createButton,
-                (!newWatchlistName.trim() || selectedStocks.length === 0) && {
-                  opacity: 0.5,
-                },
-              ]}
-              onPress={handleCreateWatchlist}
-              disabled={!newWatchlistName.trim() || selectedStocks.length === 0}
-            >
-              <Text style={styles.createButtonText}>
-                Create Watchlist{" "}
-                {selectedStocks.length > 0 &&
-                  `(${selectedStocks.length} stocks)`}
-              </Text>
-            </Pressable>
           </ScrollView>
         </View>
-      </Modal>
 
-      {/* Add to Watchlist Modal */}
-      <AddToWatchlistModal
-        visible={showAddToWatchlistModal}
-        onClose={() => setShowAddToWatchlistModal(false)}
-      />
-    </GestureHandlerRootView>
+        {/* Chart Section Removed - Now handled in StockDetailScreen */}
+
+        {/* Stocks List */}
+        <ScrollView
+          style={{ flex: 1 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.primary}
+            />
+          }
+          contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
+        >
+          {stockData.length === 0 && loading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <Text style={styles.emptyStateText}>Loading stocks...</Text>
+            </View>
+          ) : stockData.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons
+                name={viewMode === "favorites" ? "star-outline" : "list"}
+                size={48}
+                color={theme.colors.textSecondary}
+              />
+              <Text style={styles.emptyStateText}>
+                {viewMode === "favorites"
+                  ? "No favorites yet\nTap the star to add favorites!"
+                  : selectedWatchlistId
+                  ? "This watchlist is empty\nAdd some stocks to get started!"
+                  : "Select a watchlist or view favorites"}
+              </Text>
+            </View>
+          ) : (
+            stockData.map((stock) => {
+              const isGlobalFav = isGlobalFavorite(stock.symbol);
+
+              return (
+                <SwipeableStockItem
+                  key={stock.symbol}
+                  symbol={stock.symbol}
+                  companyName={stock.companyName}
+                  currentPrice={stock.currentPrice}
+                  change={stock.change}
+                  changePercent={stock.changePercent}
+                  isGlobalFavorite={isGlobalFav}
+                  onPress={() => handleStockPress(stock.symbol)}
+                  onToggleFavorite={() => toggleGlobalFavorite(stock.symbol)}
+                  onRemove={() => handleRemoveStock(stock.symbol)}
+                />
+              );
+            })
+          )}
+        </ScrollView>
+
+        {/* Create Watchlist Modal */}
+        <Modal
+          visible={showCreateWatchlistModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowCreateWatchlistModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <ScrollView
+              style={[styles.modalContent, { maxHeight: "90%" }]}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Create Watchlist</Text>
+                <Pressable onPress={() => setShowCreateWatchlistModal(false)}>
+                  <Ionicons
+                    name="close"
+                    size={24}
+                    color={theme.colors.textSecondary}
+                  />
+                </Pressable>
+              </View>
+
+              {/* Watchlist Info */}
+              <TextInput
+                style={styles.input}
+                placeholder="Watchlist name"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={newWatchlistName}
+                onChangeText={setNewWatchlistName}
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Description (optional)"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={newWatchlistDescription}
+                onChangeText={setNewWatchlistDescription}
+                multiline
+                numberOfLines={3}
+              />
+
+              {/* Stock Search */}
+              <View style={styles.stockSearchSection}>
+                <Text style={styles.selectedStocksTitle}>Add Stocks</Text>
+                <StockAutocomplete
+                  onStockSelect={handleStockSelect}
+                  selectedStocks={selectedStocks}
+                  maxResults={15}
+                  placeholder="Search from 6,000+ NASDAQ stocks..."
+                  containerStyle={{ marginBottom: 16 }}
+                />
+              </View>
+
+              {/* Selected Stocks */}
+              {selectedStocks.length > 0 && (
+                <View style={styles.selectedStocksSection}>
+                  <Text style={styles.selectedStocksTitle}>
+                    Selected Stocks ({selectedStocks.length})
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                    {selectedStocks.map((stock) => (
+                      <View key={stock.symbol} style={styles.selectedStockChip}>
+                        <Text style={styles.selectedStockText}>
+                          {stock.symbol}
+                        </Text>
+                        {favoriteStocks.has(stock.symbol) && (
+                          <Ionicons
+                            name="star"
+                            size={12}
+                            color="#FFD700"
+                            style={{ marginRight: 4 }}
+                          />
+                        )}
+                        <Pressable onPress={() => handleStockSelect(stock)}>
+                          <Ionicons
+                            name="close"
+                            size={14}
+                            color={theme.colors.primary}
+                          />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <Pressable
+                style={[
+                  styles.createButton,
+                  (!newWatchlistName.trim() || selectedStocks.length === 0) && {
+                    opacity: 0.5,
+                  },
+                ]}
+                onPress={handleCreateWatchlist}
+                disabled={
+                  !newWatchlistName.trim() || selectedStocks.length === 0
+                }
+              >
+                <Text style={styles.createButtonText}>
+                  Create Watchlist{" "}
+                  {selectedStocks.length > 0 &&
+                    `(${selectedStocks.length} stocks)`}
+                </Text>
+              </Pressable>
+            </ScrollView>
+          </View>
+        </Modal>
+
+        {/* Add to Watchlist Modal */}
+        <AddToWatchlistModal
+          visible={showAddToWatchlistModal}
+          onClose={() => setShowAddToWatchlistModal(false)}
+        />
+      </GestureHandlerRootView>
+    </SafeAreaView>
   );
 }

@@ -115,84 +115,84 @@ export default function SwipeableStockItem({
   );
 }
 
-const createStyles = (theme: any) => StyleSheet.create({
-  container: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-  },
-  leftActionsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  rightActionsContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  leftAction: {
-    width: 80,
-    height: "100%",
-    backgroundColor: theme.colors.primary + "20",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  rightAction: {
-    width: 80,
-    height: "100%",
-    backgroundColor: theme.colors.error + "20",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  stockCard: {
-    backgroundColor: theme.colors.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  stockHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  stockInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  symbolRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  stockSymbol: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: theme.colors.text,
-  },
-  favoriteIcon: {
-    marginLeft: 6,
-  },
-  companyName: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  priceInfo: {
-    alignItems: "flex-end",
-  },
-  stockPrice: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: theme.colors.text,
-  },
-  stockChange: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  positiveChange: {
-    color: theme.colors.success,
-  },
-  negativeChange: {
-    color: theme.colors.error,
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      marginHorizontal: 12,
+      marginBottom: 8,
+    },
+    leftActionsContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    rightActionsContainer: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    leftAction: {
+      width: 80,
+      height: "100%",
+      backgroundColor: theme.colors.primary + "20",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    rightAction: {
+      width: 80,
+      height: "100%",
+      backgroundColor: theme.colors.error + "20",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    stockCard: {
+      backgroundColor: "rgba(17, 24, 39, 0.5)",
+      borderRadius: 12,
+      borderWidth: 0,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+    },
+    stockHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    stockInfo: {
+      flex: 1,
+      marginRight: 12,
+    },
+    symbolRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    stockSymbol: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    favoriteIcon: {
+      marginLeft: 6,
+    },
+    companyName: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    priceInfo: {
+      alignItems: "flex-end",
+    },
+    stockPrice: {
+      fontSize: 16,
+      fontWeight: "700",
+      color: theme.colors.text,
+    },
+    stockChange: {
+      fontSize: 14,
+      fontWeight: "500",
+      marginTop: 2,
+    },
+    positiveChange: {
+      color: theme.colors.success,
+    },
+    negativeChange: {
+      color: theme.colors.error,
+    },
+  });

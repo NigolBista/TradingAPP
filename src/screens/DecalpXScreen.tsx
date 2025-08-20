@@ -867,7 +867,7 @@ const createStyles = (theme: any) =>
       padding: 16,
     },
     timeCard: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: theme.colors.blueTransparent,
       borderRadius: 12,
       padding: 16,
       marginBottom: 16,
@@ -889,7 +889,7 @@ const createStyles = (theme: any) =>
       fontWeight: "600",
     },
     spyCard: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: theme.colors.blueTransparent,
       borderRadius: 12,
       padding: 16,
       marginBottom: 16,
@@ -1153,7 +1153,7 @@ const createStyles = (theme: any) =>
       fontWeight: "600",
     },
     universalCard: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: theme.colors.blueTransparent,
       borderRadius: 12,
       padding: 16,
       marginBottom: 16,

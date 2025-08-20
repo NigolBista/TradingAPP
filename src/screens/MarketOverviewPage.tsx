@@ -10,8 +10,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { COLORS } from "../constants/colors";
 import MarketOverview from "../components/insights/MarketOverview";
-import DecalpXMini from "../components/insights/DecalpXMini";
 import IndexStrip from "../components/insights/IndexStrip";
 import { useAppDataStore } from "../store/appDataStore";
 // Remove marketOverviewStore to prevent loops
@@ -61,6 +61,7 @@ export default function MarketOverviewPage() {
         </Pressable>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Market Overview</Text>
+          <Text style={styles.headerSubtitle}>AI Powered Market Analysis</Text>
           {sentimentSummary && (
             <View
               style={[
@@ -92,7 +93,7 @@ export default function MarketOverviewPage() {
           )}
         </View>
         <Pressable onPress={handleDecalpXPress} style={styles.decalpxButton}>
-          <Ionicons name="analytics" size={20} color="#60a5fa" />
+          <Ionicons name="analytics" size={20} color={COLORS.BLUE_BASE} />
         </Pressable>
       </View>
 
@@ -104,19 +105,17 @@ export default function MarketOverviewPage() {
         showsVerticalScrollIndicator={false}
       >
         {/* Index Strip */}
-        <View style={styles.section}>
+        <View style={styles.indexSection}>
           <IndexStrip />
         </View>
 
-        {/* DecalpX Snapshot */}
-        <View style={styles.section}>
-          <DecalpXMini />
-        </View>
-
         {/* Full Market Overview */}
-        <View style={styles.section}>
+        <View style={styles.marketOverviewSection}>
           <MarketOverview fullWidth={true} compact={false} />
         </View>
+
+        {/* Bottom spacing */}
+        <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -161,6 +160,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
   },
+  headerSubtitle: {
+    color: "#9CA3AF",
+    fontSize: 12,
+    fontWeight: "500",
+    marginTop: 2,
+  },
   sentimentBadge: {
     flexDirection: "row",
     alignItems: "center",
@@ -183,8 +188,12 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  section: {
+  indexSection: {
     marginHorizontal: 16,
-    marginBottom: 16,
+    marginTop: 12,
+  },
+  marketOverviewSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
   },
 });

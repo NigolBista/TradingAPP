@@ -225,7 +225,7 @@ function CompactMetric({
 const createStyles = (theme: any) =>
   StyleSheet.create({
     card: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: theme.colors.blueTransparent,
       borderRadius: 12,
       padding: 16,
     },

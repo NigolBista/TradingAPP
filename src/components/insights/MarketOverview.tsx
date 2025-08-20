@@ -29,8 +29,6 @@ interface Props {
   fullWidth?: boolean; // New prop for full width display
 }
 
-type TimeframeType = "1D" | "1W" | "1M";
-
 const createStyles = (theme: any) =>
   StyleSheet.create({
     container: {
@@ -47,8 +45,6 @@ const createStyles = (theme: any) =>
       justifyContent: "space-between",
       paddingHorizontal: 16,
       paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
     },
     headerTitle: {
       fontSize: 20,
@@ -108,7 +104,7 @@ const createStyles = (theme: any) =>
       marginBottom: 16,
       marginHorizontal: 8,
       padding: 12,
-      backgroundColor: theme.colors.card,
+      backgroundColor: "transparent",
       borderRadius: 12,
       borderLeftWidth: 4,
       borderLeftColor: theme.colors.primary,
@@ -251,39 +247,6 @@ const createStyles = (theme: any) =>
       fontStyle: "italic",
     },
 
-    // Timeframe selector styles
-    timeframeContainer: {
-      flexDirection: "row",
-      backgroundColor: theme.colors.surface,
-      borderRadius: 8,
-      padding: 4,
-      marginBottom: 12,
-      marginHorizontal: 8,
-    },
-    timeframeButton: {
-      flex: 1,
-      paddingVertical: 8,
-      paddingHorizontal: 12,
-      borderRadius: 6,
-      alignItems: "center",
-    },
-    timeframeButtonActive: {
-      backgroundColor: theme.colors.primary,
-    },
-    timeframeButtonInactive: {
-      backgroundColor: "transparent",
-    },
-    timeframeText: {
-      fontSize: 14,
-      fontWeight: "600",
-    },
-    timeframeTextActive: {
-      color: "#ffffff",
-    },
-    timeframeTextInactive: {
-      color: theme.colors.textSecondary,
-    },
-
     // Full width container
     fullWidthContainer: {
       marginHorizontal: -16, // Negative margin to span full width
@@ -300,7 +263,7 @@ const createStyles = (theme: any) =>
       marginBottom: 8,
     },
     fedEventItem: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: "transparent",
       borderRadius: 8,
       padding: 12,
       marginBottom: 8,
@@ -356,7 +319,7 @@ const createStyles = (theme: any) =>
       gap: 8,
     },
     indicatorItem: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: theme.colors.blueTransparent,
       borderRadius: 8,
       padding: 10,
       minWidth: "48%",
@@ -395,7 +358,7 @@ const createStyles = (theme: any) =>
       paddingHorizontal: 0, // Full width
     },
     marketSentimentCard: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: "transparent",
       borderRadius: 12,
       padding: 16,
       marginHorizontal: 8,
@@ -485,7 +448,7 @@ const createStyles = (theme: any) =>
       color: "#D1D5DB",
     },
     newsHighlightsCard: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: "transparent",
       borderRadius: 12,
       padding: 16,
       marginHorizontal: 8,
@@ -522,7 +485,7 @@ const createStyles = (theme: any) =>
       color: theme.colors.textSecondary,
     },
     dayAheadCard: {
-      backgroundColor: theme.colors.card,
+      backgroundColor: "transparent",
       borderRadius: 12,
       padding: 16,
       marginHorizontal: 8,
@@ -538,28 +501,12 @@ const createStyles = (theme: any) =>
       flexDirection: "row",
       alignItems: "center",
     },
-    timeframeBriefing: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: 12,
-      padding: 16,
-      marginBottom: 16,
-    },
-    timeframeBriefingTitle: {
-      fontSize: 16,
-      fontWeight: "600",
-      color: theme.colors.text,
-      marginBottom: 8,
-    },
-    timeframeBriefingText: {
-      fontSize: 14,
-      lineHeight: 20,
-      color: theme.colors.textSecondary,
-    },
+
     enhancedSummaryContainer: {
       marginHorizontal: 8,
       marginBottom: 16,
       padding: 16,
-      backgroundColor: theme.colors.card,
+      backgroundColor: "transparent",
       borderRadius: 12,
       borderLeftWidth: 4,
       borderLeftColor: theme.colors.primary,
@@ -590,7 +537,7 @@ export default function MarketOverview({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [timeframe, setTimeframe] = useState<TimeframeType>("1D");
+
   const [newsHighlights, setNewsHighlights] = useState<string[]>([]);
   const [marketSentiment, setMarketSentiment] = useState<{
     overall: "bullish" | "bearish" | "neutral";
@@ -617,7 +564,7 @@ export default function MarketOverview({
       setError(null);
 
       // Get data from centralized store - always available immediately
-      const data = getMarketOverview(timeframe);
+      const data = getMarketOverview("1D");
 
       if (data) {
         setOverview(data);
@@ -660,7 +607,7 @@ export default function MarketOverview({
 
   useEffect(() => {
     loadMarketOverview();
-  }, [timeframe]); // Reload when timeframe changes
+  }, []); // Load on mount
 
   const handleRefresh = async () => {
     try {
@@ -807,24 +754,6 @@ export default function MarketOverview({
           : styles.container
       }
     >
-      {!compact && (
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.headerTitle}>Market Overview</Text>
-            <Text style={styles.headerSubtitle}>
-              AI-powered market analysis
-            </Text>
-          </View>
-          <Pressable style={styles.refreshButton} onPress={handleRefresh}>
-            <Ionicons
-              name={refreshing ? "hourglass" : "refresh"}
-              size={20}
-              color="#9CA3AF"
-            />
-          </Pressable>
-        </View>
-      )}
-
       <ContentComponent {...contentProps}>
         {/* Enhanced Market Overview Content */}
         {fullWidth && (
@@ -927,40 +856,6 @@ export default function MarketOverview({
         )}
 
         <View
-          style={[
-            compact ? styles.compactContent : styles.content,
-            fullWidth ? { paddingHorizontal: 0 } : styles.fullWidthContainer,
-          ]}
-        >
-          {/* Timeframe Selector */}
-          <View style={styles.timeframeContainer}>
-            {(["1D", "1W", "1M"] as TimeframeType[]).map((tf) => (
-              <Pressable
-                key={tf}
-                style={[
-                  styles.timeframeButton,
-                  timeframe === tf
-                    ? styles.timeframeButtonActive
-                    : styles.timeframeButtonInactive,
-                ]}
-                onPress={() => setTimeframe(tf)}
-              >
-                <Text
-                  style={[
-                    styles.timeframeText,
-                    timeframe === tf
-                      ? styles.timeframeTextActive
-                      : styles.timeframeTextInactive,
-                  ]}
-                >
-                  {tf}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View
           style={
             compact
               ? styles.compactContent
@@ -969,97 +864,6 @@ export default function MarketOverview({
               : styles.content
           }
         >
-          {/* Enhanced AI Summary */}
-          <View
-            style={
-              fullWidth
-                ? styles.enhancedSummaryContainer
-                : styles.summaryContainer
-            }
-          >
-            <Text
-              style={
-                fullWidth ? styles.enhancedSummaryTitle : styles.summaryTitle
-              }
-            >
-              {timeframe === "1D"
-                ? "📊 Today's Market Brief"
-                : timeframe === "1W"
-                ? "📈 This Week's Market Outlook"
-                : "📅 Monthly Market Trends"}
-            </Text>
-            <Text
-              style={
-                fullWidth ? styles.enhancedSummaryText : styles.summaryText
-              }
-            >
-              {overview.summary}
-            </Text>
-          </View>
-
-          {/* Day Ahead Briefing - Enhanced for full width */}
-          {fullWidth && (
-            <View style={styles.dayAheadCard}>
-              <Text style={styles.dayAheadTitle}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={18}
-                  color="#6366F1"
-                  style={{ marginRight: 8 }}
-                />
-                Day Ahead Briefing
-              </Text>
-
-              {/* Timeframe-specific briefings */}
-              <View style={styles.timeframeBriefing}>
-                <Text style={styles.timeframeBriefingTitle}>
-                  {timeframe === "1D"
-                    ? "🌅 Today's Focus"
-                    : timeframe === "1W"
-                    ? "📅 This Week's Key Events"
-                    : "🗓️ Monthly Outlook"}
-                </Text>
-                <Text style={styles.timeframeBriefingText}>
-                  {timeframe === "1D"
-                    ? "Key market movers, earnings releases, and economic data to watch today. Stay alert for Fed communications and sector rotation signals."
-                    : timeframe === "1W"
-                    ? "Major earnings reports, FOMC meetings, economic indicators, and technical levels to monitor this week. Watch for trend confirmations."
-                    : "Long-term market themes, policy changes, and seasonal patterns. Focus on major economic cycles and structural market shifts."}
-                </Text>
-              </View>
-
-              {overview.upcomingEvents.length > 0 && (
-                <View>
-                  <Text style={styles.timeframeBriefingTitle}>
-                    ⚡ Key Events Coming Up
-                  </Text>
-                  {overview.upcomingEvents.slice(0, 3).map((event, index) => (
-                    <View key={index} style={{ marginBottom: 8 }}>
-                      <Text
-                        style={{
-                          color: "#E5E7EB",
-                          fontSize: 13,
-                          fontWeight: "600",
-                        }}
-                      >
-                        • {event.title}
-                      </Text>
-                      <Text
-                        style={{
-                          color: "#9CA3AF",
-                          fontSize: 12,
-                          marginLeft: 12,
-                        }}
-                      >
-                        {event.description}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          )}
-
           {/* Key Highlights */}
           <View
             style={[
