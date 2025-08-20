@@ -26,13 +26,14 @@ import RegisterScreen from "../screens/RegisterScreen";
 import MarketScreenerScreen from "../screens/MarketScreenerScreen";
 import StockDetailScreen from "../screens/StockDetailScreen";
 import SignalsFeedScreen from "../screens/SignalsFeedScreen";
-import NewsInsightsScreen from "../screens/NewsInsightsScreen";
+import FocusScreen from "../screens/FocusScreen";
 import MarketOverviewScreen from "../screens/MarketOverviewScreen";
 import MarketOverviewTabScreen from "../screens/MarketOverviewTabScreen";
 import FederalReserveScreen from "../screens/FederalReserveScreen";
 import StockNewsApiDemoScreen from "../screens/StockNewsApiDemoScreen";
 import DecalpXScreen from "../screens/DecalpXScreen";
 import MarketOverviewPage from "../screens/MarketOverviewPage";
+import EarningsCalendarScreen from "../screens/EarningsCalendarScreen";
 import { useAuth } from "../providers/AuthProvider";
 import { useTheme } from "../providers/ThemeProvider";
 
@@ -73,8 +74,8 @@ function Tabs() {
             case "Market":
               iconName = focused ? "trending-up" : "trending-up-outline";
               break;
-            case "News":
-              iconName = focused ? "newspaper" : "newspaper-outline";
+            case "Focus":
+              iconName = focused ? "flag" : "flag-outline";
               break;
             case "Profile":
               iconName = focused ? "person" : "person-outline";
@@ -97,7 +98,7 @@ function Tabs() {
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Watchlist" component={WatchlistScreen} />
       <Tab.Screen name="Market" component={MarketOverviewTabScreen} />
-      <Tab.Screen name="News" component={NewsInsightsScreen} />
+      <Tab.Screen name="Focus" component={FocusScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
@@ -180,6 +181,11 @@ export default function RootNavigation() {
           <RootStack.Screen
             name="MarketOverviewPage"
             component={MarketOverviewPage}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="EarningsCalendar"
+            component={EarningsCalendarScreen}
             options={{ headerShown: false }}
           />
         </RootStack.Navigator>

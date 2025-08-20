@@ -57,7 +57,7 @@ export interface MarketOverview {
   economicIndicators: any[]; // Key economic indicators
   lastUpdated: string;
   marketSentiment?: {
-    overall: 'bullish' | 'bearish' | 'neutral';
+    overall: "bullish" | "bearish" | "neutral";
     confidence: number;
     factors: string[];
   };
@@ -69,7 +69,7 @@ export interface MarketOverview {
   };
   timeframeSpecificInsights?: {
     shortTerm: string; // 1D insights
-    mediumTerm: string; // 1W insights  
+    mediumTerm: string; // 1W insights
     longTerm: string; // 1M insights
   };
 }
@@ -123,12 +123,12 @@ export async function generateMarketOverview(
     );
 
     // Extract key highlights from AI response
-    const { 
-      summary, 
-      keyHighlights, 
-      marketSentiment, 
-      dayAheadInsights, 
-      timeframeSpecificInsights 
+    const {
+      summary,
+      keyHighlights,
+      marketSentiment,
+      dayAheadInsights,
+      timeframeSpecificInsights,
     } = parseAIResponse(aiSummary);
 
     return {
@@ -146,10 +146,10 @@ export async function generateMarketOverview(
       ...(dayAheadInsights && { dayAheadInsights }),
       ...(timeframeSpecificInsights && {
         timeframeSpecificInsights: {
-          shortTerm: timeframe === '1D' ? timeframeSpecificInsights : '',
-          mediumTerm: timeframe === '1W' ? timeframeSpecificInsights : '',
-          longTerm: timeframe === '1M' ? timeframeSpecificInsights : ''
-        }
+          shortTerm: timeframe === "1D" ? timeframeSpecificInsights : "",
+          mediumTerm: timeframe === "1W" ? timeframeSpecificInsights : "",
+          longTerm: timeframe === "1M" ? timeframeSpecificInsights : "",
+        },
       }),
     };
   } catch (error) {
@@ -398,22 +398,27 @@ function createDetailedAnalysisPrompt(
 ): string {
   const detailedTimeframeContext = {
     "1D": {
-      focus: "today's trading session, intraday opportunities, and immediate market reactions",
+      focus:
+        "today's trading session, intraday opportunities, and immediate market reactions",
       horizon: "next 24 hours",
-      actionItems: "key levels to watch, earnings reactions, economic data releases"
+      actionItems:
+        "key levels to watch, earnings reactions, economic data releases",
     },
     "1W": {
-      focus: "this week's major events, earnings season impact, and short-term trends",
-      horizon: "next 5-7 trading days", 
-      actionItems: "weekly technical levels, FOMC meetings, major earnings, economic calendar"
+      focus:
+        "this week's major events, earnings season impact, and short-term trends",
+      horizon: "next 5-7 trading days",
+      actionItems:
+        "weekly technical levels, FOMC meetings, major earnings, economic calendar",
     },
     "1M": {
       focus: "monthly trends, sector rotation, and longer-term market themes",
       horizon: "next 30 days",
-      actionItems: "monthly support/resistance, policy changes, seasonal patterns"
-    }
+      actionItems:
+        "monthly support/resistance, policy changes, seasonal patterns",
+    },
   };
-  
+
   const context = detailedTimeframeContext[timeframe];
   const timeframeContext = {
     "1D": "today's developments",
@@ -475,7 +480,9 @@ ${economicIndicators
 
 Provide a comprehensive analysis with:
 
-1. EXECUTIVE_SUMMARY: 3-4 sentences capturing the overall market narrative and key themes for ${context.horizon}
+1. EXECUTIVE_SUMMARY: 3-4 sentences capturing the overall market narrative and key themes for ${
+    context.horizon
+  }
 
 2. KEY_HIGHLIGHTS: 8-10 critical points covering:
    - Major market movers and catalysts
@@ -495,7 +502,9 @@ Provide a comprehensive analysis with:
    - RISK_FACTORS: Key risks that could impact markets
    - OPPORTUNITIES: Potential trading/investment opportunities
 
-5. TIMEFRAME_INSIGHTS: Specific insights for ${timeframe} timeframe focusing on ${context.focus}
+5. TIMEFRAME_INSIGHTS: Specific insights for ${timeframe} timeframe focusing on ${
+    context.focus
+  }
 
 6. TRENDING_FOCUS: Brief analysis of why certain stocks are trending
 
@@ -511,7 +520,7 @@ function parseAIResponse(aiResponse: string): {
   summary: string;
   keyHighlights: string[];
   marketSentiment?: {
-    overall: 'bullish' | 'bearish' | 'neutral';
+    overall: "bullish" | "bearish" | "neutral";
     confidence: number;
     factors: string[];
   };
@@ -579,48 +588,66 @@ function parseAIResponse(aiResponse: string): {
 
   // Extract market sentiment
   let marketSentiment: any = undefined;
-  const sentimentMatch = aiResponse.match(/MARKET_SENTIMENT:\s*([^]*?)(?=\n\d+\.|DAY_AHEAD_INSIGHTS|$)/i);
+  const sentimentMatch = aiResponse.match(
+    /MARKET_SENTIMENT:\s*([^]*?)(?=\n\d+\.|DAY_AHEAD_INSIGHTS|$)/i
+  );
   if (sentimentMatch) {
     const sentimentText = sentimentMatch[1];
     const bullishMatch = sentimentText.match(/BULLISH/i);
     const bearishMatch = sentimentText.match(/BEARISH/i);
     const neutralMatch = sentimentText.match(/NEUTRAL/i);
-    
+
     if (bullishMatch || bearishMatch || neutralMatch) {
-      const overall = bullishMatch ? 'bullish' : bearishMatch ? 'bearish' : 'neutral';
+      const overall = bullishMatch
+        ? "bullish"
+        : bearishMatch
+        ? "bearish"
+        : "neutral";
       const confidenceMatch = sentimentText.match(/(\d+)%/);
       const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 75;
-      
+
       marketSentiment = {
         overall,
         confidence,
-        factors: ['AI analysis', 'News sentiment', 'Market indicators']
+        factors: ["AI analysis", "News sentiment", "Market indicators"],
       };
     }
   }
 
   // Extract day ahead insights
   let dayAheadInsights: any = undefined;
-  const dayAheadMatch = aiResponse.match(/DAY_AHEAD_INSIGHTS:\s*([^]*?)(?=\n\d+\.|TIMEFRAME_INSIGHTS|$)/i);
+  const dayAheadMatch = aiResponse.match(
+    /DAY_AHEAD_INSIGHTS:\s*([^]*?)(?=\n\d+\.|TIMEFRAME_INSIGHTS|$)/i
+  );
   if (dayAheadMatch) {
     const dayAheadText = dayAheadMatch[1];
-    
-    const keyEventsMatch = dayAheadText.match(/KEY_EVENTS:\s*([^]*?)(?=WATCH_LIST|$)/i);
-    const watchListMatch = dayAheadText.match(/WATCH_LIST:\s*([^]*?)(?=RISK_FACTORS|$)/i);
-    const riskFactorsMatch = dayAheadText.match(/RISK_FACTORS:\s*([^]*?)(?=OPPORTUNITIES|$)/i);
-    const opportunitiesMatch = dayAheadText.match(/OPPORTUNITIES:\s*([^]*?)(?=\n\d+\.|$)/i);
-    
+
+    const keyEventsMatch = dayAheadText.match(
+      /KEY_EVENTS:\s*([^]*?)(?=WATCH_LIST|$)/i
+    );
+    const watchListMatch = dayAheadText.match(
+      /WATCH_LIST:\s*([^]*?)(?=RISK_FACTORS|$)/i
+    );
+    const riskFactorsMatch = dayAheadText.match(
+      /RISK_FACTORS:\s*([^]*?)(?=OPPORTUNITIES|$)/i
+    );
+    const opportunitiesMatch = dayAheadText.match(
+      /OPPORTUNITIES:\s*([^]*?)(?=\n\d+\.|$)/i
+    );
+
     dayAheadInsights = {
-      keyEvents: extractBulletPoints(keyEventsMatch?.[1] || ''),
-      watchList: extractBulletPoints(watchListMatch?.[1] || ''),
-      riskFactors: extractBulletPoints(riskFactorsMatch?.[1] || ''),
-      opportunities: extractBulletPoints(opportunitiesMatch?.[1] || '')
+      keyEvents: extractBulletPoints(keyEventsMatch?.[1] || ""),
+      watchList: extractBulletPoints(watchListMatch?.[1] || ""),
+      riskFactors: extractBulletPoints(riskFactorsMatch?.[1] || ""),
+      opportunities: extractBulletPoints(opportunitiesMatch?.[1] || ""),
     };
   }
 
   // Extract timeframe specific insights
   let timeframeSpecificInsights: string | undefined;
-  const timeframeMatch = aiResponse.match(/TIMEFRAME_INSIGHTS:\s*([^]*?)(?=\n\d+\.|TRENDING_FOCUS|$)/i);
+  const timeframeMatch = aiResponse.match(
+    /TIMEFRAME_INSIGHTS:\s*([^]*?)(?=\n\d+\.|TRENDING_FOCUS|$)/i
+  );
   if (timeframeMatch) {
     timeframeSpecificInsights = timeframeMatch[1].trim();
   }
@@ -649,14 +676,15 @@ function parseAIResponse(aiResponse: string): {
  */
 function extractBulletPoints(text: string): string[] {
   if (!text) return [];
-  
+
   return text
-    .split('\n')
-    .map(line => line.trim())
-    .filter(line => 
-      line.startsWith('•') || line.startsWith('-') || /^\d+\./.test(line)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(
+      (line) =>
+        line.startsWith("•") || line.startsWith("-") || /^\d+\./.test(line)
     )
-    .map(line => line.replace(/^[•\-\d\.\s]*/, '').trim())
-    .filter(line => line.length > 5)
+    .map((line) => line.replace(/^[•\-\d\.\s]*/, "").trim())
+    .filter((line) => line.length > 5)
     .slice(0, 5);
 }

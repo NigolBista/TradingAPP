@@ -11,6 +11,8 @@ import {
   Dimensions,
   StyleSheet,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -743,10 +745,14 @@ export default function WatchlistScreen() {
           animationType="fade"
           onRequestClose={() => setShowCreateWatchlistModal(false)}
         >
-          <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            style={styles.modalOverlay}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
             <ScrollView
-              style={[styles.modalContent, { maxHeight: "90%" }]}
+              style={[styles.modalContent, { maxHeight: "85%" }]}
               showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
             >
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Create Watchlist</Text>
@@ -842,7 +848,7 @@ export default function WatchlistScreen() {
                 </Text>
               </Pressable>
             </ScrollView>
-          </View>
+          </KeyboardAvoidingView>
         </Modal>
 
         {/* Add to Watchlist Modal */}

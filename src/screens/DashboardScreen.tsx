@@ -267,7 +267,7 @@ export default function DashboardScreen() {
         </View>
         <MarketOverview
           compact={true}
-          onNewsPress={() => navigation.navigate("News" as never)}
+          onNewsPress={() => navigation.navigate("Focus" as never)}
           onNewsDataFetched={handleNewsDataFetched}
           navigation={navigation}
           fullWidth={false}

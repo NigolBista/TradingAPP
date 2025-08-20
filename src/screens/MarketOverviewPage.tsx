@@ -13,6 +13,8 @@ import { useNavigation } from "@react-navigation/native";
 import { COLORS } from "../constants/colors";
 import MarketOverview from "../components/insights/MarketOverview";
 import IndexStrip from "../components/insights/IndexStrip";
+import RecentEarningsCard from "../components/insights/RecentEarningsCard";
+import UpcomingEarningsCard from "../components/insights/UpcomingEarningsCard";
 import { useAppDataStore } from "../store/appDataStore";
 // Remove marketOverviewStore to prevent loops
 
@@ -114,6 +116,28 @@ export default function MarketOverviewPage() {
           <MarketOverview fullWidth={true} compact={false} />
         </View>
 
+        {/* Recent Earnings */}
+        <View style={styles.earningsSection}>
+          <RecentEarningsCard
+            onEarningsPress={(symbol) => {
+              // Navigate to stock detail screen
+              (navigation as any).navigate("StockDetail", { symbol });
+            }}
+            compact={false}
+          />
+        </View>
+
+        {/* Upcoming Earnings */}
+        <View style={styles.earningsSection}>
+          <UpcomingEarningsCard
+            onEarningsPress={(symbol) => {
+              // Navigate to stock detail screen
+              (navigation as any).navigate("StockDetail", { symbol });
+            }}
+            compact={false}
+          />
+        </View>
+
         {/* Bottom spacing */}
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -193,6 +217,10 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   marketOverviewSection: {
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  earningsSection: {
     marginHorizontal: 16,
     marginTop: 16,
   },
