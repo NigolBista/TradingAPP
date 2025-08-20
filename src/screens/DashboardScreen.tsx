@@ -3,7 +3,6 @@ import {
   View,
   Text,
   ScrollView,
-  ActivityIndicator,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -12,12 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import {
-  portfolioAggregationService,
-  type PortfolioSummary,
-} from "../services/portfolioAggregationService";
-import { plaidPortfolioService } from "../services/portfolioAggregationService_NEW";
-import { plaidIntegrationService } from "../services/plaidIntegration";
+import { useAppDataStore, type PortfolioHistory } from "../store/appDataStore";
 import { useNavigation } from "@react-navigation/native";
 import SimpleLineChart from "../components/charts/SimpleLineChart";
 import MarketOverview from "../components/insights/MarketOverview";
@@ -31,13 +25,6 @@ import { useTheme } from "../providers/ThemeProvider";
 
 const { width } = Dimensions.get("window");
 
-interface DashboardState {
-  portfolio: PortfolioSummary | null;
-  watchlist: any[]; // Using any for now - will be replaced with Plaid watchlist
-  loading: boolean;
-  refreshing: boolean;
-}
-
 interface DashboardData {
   cachedNews: NewsItem[];
 }
@@ -48,6 +35,20 @@ export default function DashboardScreen() {
   const ensureOverview = useMarketOverviewStore((s) => s.ensureOverview);
   const overviewByTf = useMarketOverviewStore((s) => s.overviewByTf);
   const rawNews = useMarketOverviewStore((s) => s.rawNews);
+
+  // Use centralized store instead of local state
+  const {
+    accounts,
+    positions,
+    portfolioSummary,
+    getPortfolioHistory,
+    getAccountsByCategory,
+    getAccountCategories,
+    refresh,
+    refreshInBackground,
+    isRefreshing,
+    isHydrated,
+  } = useAppDataStore();
 
   const sentimentSummary = useMemo(() => {
     const ov = overviewByTf["1D"] || overviewByTf["1W"] || overviewByTf["1M"];
@@ -81,12 +82,6 @@ export default function DashboardScreen() {
     }
     return { overall, confidence };
   }, [overviewByTf, rawNews]);
-  const [state, setState] = useState<DashboardState>({
-    portfolio: null,
-    watchlist: [],
-    loading: true,
-    refreshing: false,
-  });
 
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     cachedNews: [],
@@ -95,10 +90,12 @@ export default function DashboardScreen() {
   const [perfPeriod, setPerfPeriod] = useState<
     "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL"
   >("1M");
-  const [portfolioHistory, setPortfolioHistory] = useState<any>(null);
-  const [portfolioPositions, setPortfolioPositions] = useState<any[]>([]);
-  const [plaidAccounts, setPlaidAccounts] = useState<any[]>([]);
   const [selectedAccountTab, setSelectedAccountTab] = useState<string>("All");
+
+  // Get data from store
+  const portfolioHistory = getPortfolioHistory(perfPeriod);
+  const filteredAccounts = getAccountsByCategory(selectedAccountTab);
+  const accountTabs = getAccountCategories();
 
   // Callback to receive news data from MarketOverview component
   const handleNewsDataFetched = (news: NewsItem[]) => {
@@ -172,225 +169,17 @@ export default function DashboardScreen() {
     return series;
   }
 
-  const getAccountCategory = (type: string, subtype?: string) => {
-    const accountType = (subtype || type).toLowerCase();
+  // Simple refresh function that uses the centralized store
+  const handleRefresh = async () => {
+    // Prime market overview store early so navigating to View Full reuses data
+    ensureOverview("1D").catch(() => {});
 
-    // Investment accounts
-    if (
-      [
-        "investment",
-        "brokerage",
-        "ira",
-        "401k",
-        "403b",
-        "457b",
-        "529",
-        "roth",
-        "rollover",
-        "sep",
-        "simple",
-        "sarsep",
-        "profit sharing plan",
-        "stock plan",
-        "pension",
-        "defined benefit",
-        "defined contribution",
-      ].includes(accountType)
-    ) {
-      return "Investment";
-    }
-
-    // Banking accounts
-    if (
-      [
-        "depository",
-        "checking",
-        "savings",
-        "money market",
-        "cd",
-        "treasury",
-        "sweep",
-      ].includes(accountType)
-    ) {
-      return "Banking";
-    }
-
-    // Credit accounts
-    if (["credit", "credit card", "paypal"].includes(accountType)) {
-      return "Credit";
-    }
-
-    // Loan accounts
-    if (
-      [
-        "loan",
-        "mortgage",
-        "home equity",
-        "line of credit",
-        "auto",
-        "business",
-        "commercial",
-        "construction",
-        "consumer",
-        "home equity line of credit",
-        "overdraft",
-        "student",
-      ].includes(accountType)
-    ) {
-      return "Loans";
-    }
-
-    return "Other";
-  };
-
-  const formatAccountType = (type: string, subtype?: string) => {
-    // Map Plaid account types to user-friendly names
-    const typeMap: { [key: string]: string } = {
-      // Investment accounts
-      investment: "Investment Account",
-      brokerage: "Brokerage Account",
-      ira: "IRA",
-      "401k": "401(k)",
-      "403b": "403(b)",
-      "457b": "457(b)",
-      "529": "529 Education",
-      roth: "Roth IRA",
-      rollover: "Rollover IRA",
-      sep: "SEP IRA",
-      simple: "SIMPLE IRA",
-      sarsep: "SARSEP",
-      "profit sharing plan": "Profit Sharing",
-      "stock plan": "Stock Plan",
-      pension: "Pension",
-      "defined benefit": "Defined Benefit",
-      "defined contribution": "Defined Contribution",
-
-      // Banking accounts
-      depository: "Bank Account",
-      checking: "Checking Account",
-      savings: "Savings Account",
-      "money market": "Money Market",
-      cd: "Certificate of Deposit",
-      treasury: "Treasury Account",
-      sweep: "Sweep Account",
-
-      // Credit accounts
-      credit: "Credit Card",
-      "credit card": "Credit Card",
-      paypal: "PayPal",
-
-      // Loan accounts
-      loan: "Loan",
-      mortgage: "Mortgage",
-      "home equity": "Home Equity",
-      "line of credit": "Line of Credit",
-      auto: "Auto Loan",
-      business: "Business Loan",
-      commercial: "Commercial Loan",
-      construction: "Construction Loan",
-      consumer: "Consumer Loan",
-      "home equity line of credit": "HELOC",
-      overdraft: "Overdraft",
-      student: "Student Loan",
-    };
-
-    // First try subtype, then type, then fallback
-    const accountType = subtype || type;
-    return (
-      typeMap[accountType.toLowerCase()] ||
-      typeMap[type.toLowerCase()] ||
-      accountType.charAt(0).toUpperCase() + accountType.slice(1)
-    );
-  };
-
-  const getAccountTabs = () => {
-    const categories = ["All"];
-    const accountCategories = plaidAccounts.map((account) => account.category);
-    const uniqueCategories = [...new Set(accountCategories)];
-    return [...categories, ...uniqueCategories.sort()];
-  };
-
-  const getFilteredAccounts = () => {
-    if (selectedAccountTab === "All") {
-      return plaidAccounts;
-    }
-    return plaidAccounts.filter(
-      (account) => account.category === selectedAccountTab
-    );
-  };
-
-  const loadData = async (isRefresh = false) => {
-    const fetchPlaidAccounts = async () => {
-      try {
-        const tokens = plaidIntegrationService.getStoredTokens();
-        const accountsPromises = tokens.map(async (token) => {
-          const accounts = await plaidIntegrationService.getAccounts(token);
-          return accounts.map((account) => ({
-            id: account.account_id,
-            provider: "Plaid",
-            accountName: account.name,
-            accountType: formatAccountType(account.type, account.subtype),
-            category: getAccountCategory(account.type, account.subtype),
-            balance: account.balances.current || 0,
-            dayChange: 0, // Plaid doesn't provide daily change directly
-            dayChangePercent: 0,
-            lastSync: new Date(),
-            isConnected: true,
-          }));
-        });
-        const allAccounts = await Promise.all(accountsPromises);
-        return allAccounts.flat();
-      } catch (error) {
-        console.error("Failed to fetch Plaid accounts:", error);
-        return [];
-      }
-    };
-    if (isRefresh) {
-      setState((prev) => ({ ...prev, refreshing: true }));
-    } else {
-      setState((prev) => ({ ...prev, loading: true }));
-    }
-
-    try {
-      // Prime market overview store early so navigating to View Full reuses data
-      ensureOverview("1D").catch(() => {});
-      const [portfolioData, watchlistData, history, positions, accounts] =
-        await Promise.all([
-          plaidPortfolioService.getPortfolioSummary(),
-          Promise.resolve([]), // Watchlist will be implemented with Plaid later
-          plaidPortfolioService.getPortfolioHistory(perfPeriod),
-          plaidPortfolioService.getAllPositions(),
-          fetchPlaidAccounts(),
-        ]);
-
-      setState((prev) => ({
-        ...prev,
-        portfolio: {
-          ...portfolioData,
-          positionsCount: portfolioData.positionCount || 0,
-          providersConnected: Array(portfolioData.connectedAccounts || 0).fill(
-            "Plaid"
-          ),
-        } as any,
-        watchlist: watchlistData,
-        loading: false,
-        refreshing: false,
-      }));
-      setPortfolioHistory(history);
-      setPortfolioPositions(positions);
-      setPlaidAccounts(accounts);
-    } catch (error) {
-      console.error("Failed to load dashboard data:", error);
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        refreshing: false,
-      }));
-    }
+    // Refresh the centralized store
+    await refresh();
   };
 
   useEffect(() => {
-    loadData();
+    // Generate dummy chart series for the portfolio chart
     const main = generateDummySeries();
     setDummySeries(main);
     const bench = main.map((d, i) => ({
@@ -402,15 +191,10 @@ export default function DashboardScreen() {
 
   const handleAddToWatchlist = async (symbol: string) => {
     try {
-      const result = await portfolioAggregationService.addToAllWatchlists(
-        symbol
-      );
-      if (result.success) {
-        Alert.alert("Success", `${symbol} added to watchlist`);
-        loadData(true);
-      } else {
-        Alert.alert("Partial Success", `${symbol} added to some accounts`);
-      }
+      // In a real app, this would add to watchlist via API
+      // For now, just show success and refresh data
+      Alert.alert("Success", `${symbol} added to watchlist`);
+      refreshInBackground();
     } catch (error) {
       Alert.alert("Error", `Failed to add ${symbol} to watchlist`);
     }
@@ -428,24 +212,10 @@ export default function DashboardScreen() {
   };
 
   const renderPortfolioHeader = () => {
-    const hasReal = !!state.portfolio && (state.portfolio!.totalValue || 0) > 0;
-    // Derive fallback values from dummy series so direction matches the chart
-    const first = dummySeries[0]?.close ?? 0;
-    const last = dummySeries[dummySeries.length - 1]?.close ?? 0;
-    const fallbackValue = last || 1205340.12;
-    const fallbackChange = first > 0 ? last - first : 0;
-    const fallbackPct = first > 0 ? (fallbackChange / first) * 100 : 0;
-
-    const totalValue = hasReal ? state.portfolio!.totalValue : fallbackValue;
-    const totalGainLoss = hasReal
-      ? state.portfolio!.totalGainLoss
-      : fallbackChange;
-    const totalGainLossPercent = hasReal
-      ? state.portfolio!.totalGainLossPercent
-      : fallbackPct;
-    const accounts = hasReal
-      ? state.portfolio!.providersConnected?.length || 0
-      : 0;
+    const totalValue = portfolioSummary.totalValue;
+    const totalGainLoss = portfolioSummary.totalGainLoss;
+    const totalGainLossPercent = portfolioSummary.totalGainLossPercent;
+    const connectedAccounts = portfolioSummary.connectedAccounts;
     const isPositive = totalGainLoss >= 0;
 
     return (
@@ -463,7 +233,7 @@ export default function DashboardScreen() {
           </Text>
         </View>
         <Text style={styles.portfolioSubtext}>
-          {accounts} account(s) connected
+          {connectedAccounts} account(s) connected
         </Text>
       </View>
     );
@@ -526,24 +296,7 @@ export default function DashboardScreen() {
   };
 
   const renderWatchlist = () => {
-    if (state.watchlist.length === 0) {
-      return (
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Watchlist</Text>
-            <Pressable
-              onPress={() => {
-                /* Navigate to search */
-              }}
-            >
-              <Ionicons name="add" size={24} color="#00D4AA" />
-            </Pressable>
-          </View>
-          <Text style={styles.emptyText}>No stocks in watchlist</Text>
-        </View>
-      );
-    }
-
+    // For now, show empty watchlist since we're focusing on portfolio data
     return (
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -556,27 +309,7 @@ export default function DashboardScreen() {
             <Ionicons name="add" size={24} color="#00D4AA" />
           </Pressable>
         </View>
-        {state.watchlist.map((item, index) => (
-          <View key={index} style={styles.watchlistItem}>
-            <View style={styles.watchlistLeft}>
-              <Text style={styles.watchlistSymbol}>{item.symbol}</Text>
-              <Text style={styles.watchlistName}>{item.name}</Text>
-            </View>
-            <View style={styles.watchlistRight}>
-              <Text style={styles.watchlistPrice}>
-                {formatCurrency(item.price)}
-              </Text>
-              <Text
-                style={[
-                  styles.watchlistChange,
-                  item.changePercent >= 0 ? styles.positive : styles.negative,
-                ]}
-              >
-                {formatPercent(item.changePercent)}
-              </Text>
-            </View>
-          </View>
-        ))}
+        <Text style={styles.emptyText}>No stocks in watchlist</Text>
       </View>
     );
   };
@@ -587,40 +320,47 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
+      {/* Mock Data Banner */}
+      <View style={styles.mockDataBanner}>
+        <Text style={styles.mockDataText}>
+          🔧 Demo Mode: Using mock financial data
+        </Text>
+      </View>
+
       <ScrollView
         style={styles.content}
         refreshControl={
           <RefreshControl
-            refreshing={state.refreshing}
-            onRefresh={() => loadData(true)}
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
             tintColor={theme.colors.primary}
           />
         }
       >
         <View style={{ marginHorizontal: 16, marginTop: 12 }}>
           <PerformanceCard
-            history={portfolioHistory}
-            totalNetWorth={state.portfolio?.totalValue || 0}
-            netWorthChange={state.portfolio?.dayChange || 0}
-            netWorthChangePercent={state.portfolio?.dayChangePercent || 0}
+            history={portfolioHistory as any}
+            totalNetWorth={portfolioSummary.totalValue}
+            netWorthChange={portfolioSummary.dayChange}
+            netWorthChangePercent={portfolioSummary.dayChangePercent}
             selected={perfPeriod}
             onChange={(p) => setPerfPeriod(p)}
           />
         </View>
         {/* Top Gainers from Portfolio */}
-        {portfolioPositions && portfolioPositions.length > 0 && (
+        {positions && positions.length > 0 && (
           <View style={{ marginHorizontal: 16, marginTop: 12 }}>
             <TopGainersCard
-              positions={portfolioPositions.map((pos) => ({
+              positions={positions.map((pos) => ({
                 symbol: pos.symbol,
-                name: pos.symbol,
-                quantity: pos.totalQuantity,
-                currentPrice: pos.averagePrice,
-                costBasis: pos.totalCost,
-                marketValue: pos.totalMarketValue,
+                name: pos.name,
+                quantity: pos.quantity,
+                currentPrice: pos.currentPrice,
+                costBasis: pos.averageCost * pos.quantity,
+                marketValue: pos.marketValue,
                 unrealizedPnL: pos.unrealizedPnL,
                 unrealizedPnLPercent: pos.unrealizedPnLPercent,
-                provider: pos.providers?.[0]?.provider || "Unknown",
+                provider: pos.provider,
               }))}
               onPositionPress={(position) => {
                 (navigation as any).navigate("StockDetail", {
@@ -642,7 +382,7 @@ export default function DashboardScreen() {
             style={styles.accountTabsContainer}
             contentContainerStyle={styles.accountTabsContent}
           >
-            {getAccountTabs().map((tab) => (
+            {accountTabs.map((tab) => (
               <Pressable
                 key={tab}
                 style={[
@@ -664,7 +404,7 @@ export default function DashboardScreen() {
           </ScrollView>
 
           <AccountsList
-            accounts={getFilteredAccounts()}
+            accounts={filteredAccounts}
             onAccountPress={(account) => {
               (navigation as any).navigate("BrokerageAccounts");
             }}
@@ -682,6 +422,19 @@ const createStyles = (theme: any) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.background },
     content: { flex: 1 },
+
+    // Mock Data Banner
+    mockDataBanner: {
+      backgroundColor: "#FFA500",
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      alignItems: "center",
+    },
+    mockDataText: {
+      color: "#000000",
+      fontSize: 12,
+      fontWeight: "600",
+    },
     centered: { justifyContent: "center", alignItems: "center" },
     loadingText: { color: "#888888", marginTop: 16, fontSize: 16 },
 

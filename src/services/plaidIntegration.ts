@@ -1,8 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 
+// Import mock data
+import mockAccountsData from "../data/mockPlaidAccounts.json";
+import mockHoldingsData from "../data/mockPlaidHoldings.json";
+
 const { plaidClientId, plaidSecret, plaidEnvironment } = Constants.expoConfig
   ?.extra as any;
+
+// Mock mode flag - set to true to use mock data instead of real API calls
+const USE_MOCK_DATA = true;
 
 // Plaid Integration Service
 // This shows how to integrate with Plaid for real brokerage connections
@@ -86,6 +93,14 @@ class PlaidIntegrationService {
 
   // Create link token for Plaid Link initialization
   async createLinkToken(): Promise<string> {
+    if (USE_MOCK_DATA) {
+      // Return a mock link token
+      console.log("🔧 Using mock link token");
+      return (
+        "link-sandbox-mock-token-" + Math.random().toString(36).substring(7)
+      );
+    }
+
     // Debug: Check if credentials are loaded
     console.log("Creating link token with credentials:", {
       clientId: plaidClientId?.substring(0, 8) + "...",
@@ -127,6 +142,19 @@ class PlaidIntegrationService {
 
   // Exchange public token for access token
   async exchangePublicToken(publicToken: string): Promise<string> {
+    if (USE_MOCK_DATA) {
+      // Return a mock access token and store it
+      console.log("🔧 Using mock access token exchange");
+      const mockAccessToken =
+        "access-sandbox-mock-token-" + Math.random().toString(36).substring(7);
+      const mockItemId = "item-mock-" + Math.random().toString(36).substring(7);
+
+      this.accessTokens.set(mockItemId, mockAccessToken);
+      await this.saveTokens();
+
+      return mockAccessToken;
+    }
+
     const response = await fetch(
       `https://${plaidEnvironment}.plaid.com/item/public_token/exchange`,
       {
@@ -158,6 +186,12 @@ class PlaidIntegrationService {
 
   // Get accounts for a connected institution
   async getAccounts(accessToken: string): Promise<PlaidAccount[]> {
+    if (USE_MOCK_DATA) {
+      console.log("🔧 Using mock accounts data");
+      // Return mock accounts data
+      return mockAccountsData.accounts as PlaidAccount[];
+    }
+
     const response = await fetch(
       `https://${plaidEnvironment}.plaid.com/accounts/get`,
       {
@@ -188,6 +222,15 @@ class PlaidIntegrationService {
     holdings: PlaidHolding[];
     securities: PlaidSecurity[];
   }> {
+    if (USE_MOCK_DATA) {
+      console.log("🔧 Using mock holdings data");
+      return {
+        accounts: mockAccountsData.accounts as PlaidAccount[],
+        holdings: mockHoldingsData.holdings as PlaidHolding[],
+        securities: mockHoldingsData.securities as PlaidSecurity[],
+      };
+    }
+
     const response = await fetch(
       `https://${plaidEnvironment}.plaid.com/investments/holdings/get`,
       {
@@ -222,6 +265,17 @@ class PlaidIntegrationService {
     startDate: string,
     endDate: string
   ) {
+    if (USE_MOCK_DATA) {
+      console.log("🔧 Using mock investment transactions data");
+      // Return mock transactions data (empty for now, can be expanded)
+      return {
+        accounts: mockAccountsData.accounts,
+        investment_transactions: [],
+        securities: mockHoldingsData.securities,
+        total_investment_transactions: 0,
+      };
+    }
+
     const response = await fetch(
       `https://${plaidEnvironment}.plaid.com/investments/transactions/get`,
       {
@@ -289,6 +343,14 @@ class PlaidIntegrationService {
 
   // Get all stored access tokens
   getStoredTokens(): string[] {
+    if (USE_MOCK_DATA) {
+      // Ensure we have at least one mock token for testing
+      if (this.accessTokens.size === 0) {
+        const mockToken = "access-sandbox-mock-token-default";
+        const mockItemId = "item-mock-default";
+        this.accessTokens.set(mockItemId, mockToken);
+      }
+    }
     return Array.from(this.accessTokens.values());
   }
 }

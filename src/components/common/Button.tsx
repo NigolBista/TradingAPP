@@ -143,7 +143,7 @@ export default function Button({
       {loading ? (
         <ActivityIndicator size="small" color={getIconColor()} />
       ) : (
-        <View style={styles.base}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
           {icon && iconPosition === "left" && (
             <Ionicons
               name={icon}

@@ -1,4 +1,5 @@
 import { preloadStocksData } from "./stockData";
+import { initializeAppDataStore } from "../store/appDataStore";
 
 /**
  * App initialization service
@@ -27,12 +28,13 @@ export async function initializeApp(): Promise<void> {
       // Start preloading stocks data in the background
       const stocksPromise = preloadStocksData();
 
-      // Add other initialization tasks here if needed
-      // const otherPromise = someOtherInitFunction();
+      // Initialize the centralized app data store
+      const storePromise = initializeAppDataStore();
 
-      // Wait for stocks data to load
-      await stocksPromise;
+      // Wait for both to complete
+      await Promise.all([stocksPromise, storePromise]);
       console.log("✅ Stocks database loaded successfully");
+      console.log("✅ App data store initialized successfully");
 
       isInitialized = true;
       resolve();

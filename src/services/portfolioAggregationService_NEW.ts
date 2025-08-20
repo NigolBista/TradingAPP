@@ -1,6 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { plaidIntegrationService } from "./plaidIntegration";
 
+// Import mock portfolio history data
+import mockPortfolioHistory from "../data/mockPortfolioHistory.json";
+
+// Mock mode flag - should match the one in plaidIntegration.ts
+const USE_MOCK_DATA = true;
+
 // Simplified portfolio interfaces using Plaid data
 export interface PortfolioPosition {
   symbol: string;
@@ -184,6 +190,31 @@ class PlaidPortfolioService {
     period: "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL"
   ): Promise<PortfolioHistory> {
     try {
+      if (USE_MOCK_DATA) {
+        console.log("🔧 Using mock portfolio history data for period:", period);
+
+        // Get mock data for the requested period
+        const mockData =
+          (mockPortfolioHistory as any)[period] || mockPortfolioHistory["1M"];
+
+        // Calculate returns
+        const firstValue = mockData[0]?.totalValue || 0;
+        const lastValue = mockData[mockData.length - 1]?.totalValue || 0;
+        const totalReturn = lastValue - firstValue;
+        const totalReturnPercent =
+          firstValue > 0 ? (totalReturn / firstValue) * 100 : 0;
+
+        return {
+          period,
+          data: mockData.map((point: any) => ({
+            date: point.date,
+            totalValue: point.totalValue,
+          })),
+          totalReturn,
+          totalReturnPercent,
+        };
+      }
+
       // Get current portfolio value
       const currentSummary = await this.getPortfolioSummary();
       const currentValue = currentSummary.totalValue;
