@@ -5,10 +5,14 @@ import { plaidIntegrationService } from "../services/plaidIntegration";
 import { plaidPortfolioService } from "../services/portfolioAggregationService_NEW";
 import { MockDataInitializer } from "../services/mockDataInitializer";
 
-// Import mock data for immediate hydration
+// Import mock data for immediate hydration (portfolio data only)
 import mockAccountsData from "../data/mockPlaidAccounts.json";
 import mockHoldingsData from "../data/mockPlaidHoldings.json";
 import mockPortfolioHistory from "../data/mockPortfolioHistory.json";
+
+// Import real API services for market data
+import { generateMarketOverviewWithData } from "../services/marketOverview";
+import { fetchGeneralMarketNews } from "../services/newsProviders";
 
 // Types
 export interface Account {
@@ -66,12 +70,24 @@ export interface PortfolioHistory {
   totalReturnPercent: number;
 }
 
+// Import types from services to ensure consistency
+import type {
+  NewsItem,
+  TrendingStock,
+  MarketEvent,
+} from "../services/newsProviders";
+import type { MarketOverview } from "../services/marketOverview";
+
+type Timeframe = "1D" | "1W" | "1M";
+
 export interface AppDataState {
   // Data
   accounts: Account[];
   positions: Position[];
   portfolioSummary: PortfolioSummary;
   portfolioHistory: Record<string, PortfolioHistory>;
+  marketOverview: Record<Timeframe, MarketOverview>;
+  news: NewsItem[];
 
   // Status
   isHydrated: boolean;
@@ -83,10 +99,20 @@ export interface AppDataState {
   refresh: () => Promise<void>;
   refreshInBackground: () => void;
   getPortfolioHistory: (
-    period: "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL"
+    period: "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "ALL"
   ) => PortfolioHistory;
   getAccountsByCategory: (category?: string) => Account[];
   getAccountCategories: () => string[];
+  getMarketOverview: (timeframe: Timeframe) => MarketOverview | null;
+  getSentimentSummary: () => {
+    overall: "bullish" | "bearish" | "neutral";
+    confidence: number;
+  } | null;
+  getNewsSentimentCounts: () => {
+    positive: number;
+    negative: number;
+    neutral: number;
+  };
 }
 
 // Helper functions
@@ -232,7 +258,74 @@ const formatAccountType = (type: string, subtype?: string): string => {
   );
 };
 
-// Create immediate mock data for hydration
+// Fetch real market data from APIs
+const fetchRealMarketData = async (): Promise<{
+  marketOverview: Record<Timeframe, MarketOverview>;
+  news: NewsItem[];
+}> => {
+  console.log("🔄 Fetching real market data from APIs...");
+
+  try {
+    // Fetch market overview for different timeframes
+    const [overview1D, overview1W, overview1M, generalNews] = await Promise.all(
+      [
+        generateMarketOverviewWithData({
+          timeframe: "1D",
+          analysisDepth: "brief",
+        }),
+        generateMarketOverviewWithData({
+          timeframe: "1W",
+          analysisDepth: "brief",
+        }),
+        generateMarketOverviewWithData({
+          timeframe: "1M",
+          analysisDepth: "brief",
+        }),
+        fetchGeneralMarketNews(20),
+      ]
+    );
+
+    const marketOverview: Record<Timeframe, MarketOverview> = {
+      "1D": overview1D.overview,
+      "1W": overview1W.overview,
+      "1M": overview1M.overview,
+    };
+
+    // Use news from market overview or fallback to general news
+    const news =
+      overview1D.rawData.news.length > 0
+        ? overview1D.rawData.news
+        : generalNews;
+
+    console.log("✅ Successfully fetched real market data");
+    return { marketOverview, news };
+  } catch (error) {
+    console.error("❌ Failed to fetch real market data:", error);
+
+    // Return minimal fallback data
+    const fallbackOverview: MarketOverview = {
+      summary: "Market data temporarily unavailable. Please check back later.",
+      keyHighlights: ["Market data service temporarily unavailable"],
+      topStories: [],
+      trendingStocks: [],
+      upcomingEvents: [],
+      fedEvents: [],
+      economicIndicators: [],
+      lastUpdated: new Date().toISOString(),
+    };
+
+    return {
+      marketOverview: {
+        "1D": fallbackOverview,
+        "1W": fallbackOverview,
+        "1M": fallbackOverview,
+      },
+      news: [],
+    };
+  }
+};
+
+// Create immediate mock data for hydration (portfolio data only)
 const createInitialMockData = () => {
   // Transform mock accounts
   const accounts: Account[] = mockAccountsData.accounts.map((account) => {
@@ -350,6 +443,7 @@ const createInitialMockData = () => {
     };
   });
 
+  // Return only portfolio data - market data will be fetched from APIs
   return {
     accounts,
     positions,
@@ -362,8 +456,10 @@ const createInitialMockData = () => {
 export const useAppDataStore = create<AppDataState>()(
   persist(
     (set, get) => ({
-      // Initial state with mock data for immediate hydration
+      // Initial state with mock portfolio data and empty market data
       ...createInitialMockData(),
+      marketOverview: {} as Record<Timeframe, MarketOverview>,
+      news: [] as NewsItem[],
       isHydrated: false,
       lastRefresh: null,
       isRefreshing: false,
@@ -373,22 +469,36 @@ export const useAppDataStore = create<AppDataState>()(
         console.log("🔄 Hydrating app data store...");
 
         try {
-          // Initialize mock data
+          // Initialize mock portfolio data
           await MockDataInitializer.initialize();
+          const portfolioData = createInitialMockData();
 
-          // Get fresh data (which will be mock data in our case)
-          const mockData = createInitialMockData();
-
+          // Set portfolio data immediately for instant access
           set({
-            ...mockData,
+            ...portfolioData,
             isHydrated: true,
             lastRefresh: new Date(),
           });
 
-          console.log("✅ App data store hydrated successfully");
+          console.log("✅ Portfolio data hydrated immediately");
+
+          // Fetch real market data in background
+          fetchRealMarketData()
+            .then(({ marketOverview, news }) => {
+              set((state) => ({
+                ...state,
+                marketOverview,
+                news,
+                lastRefresh: new Date(),
+              }));
+              console.log("✅ Market data loaded in background");
+            })
+            .catch((error) => {
+              console.error("❌ Background market data fetch failed:", error);
+            });
         } catch (error) {
           console.error("❌ Failed to hydrate app data store:", error);
-          // Keep existing mock data if hydration fails
+          // Keep existing data if hydration fails
           set({
             isHydrated: true,
             lastRefresh: new Date(),
@@ -405,12 +515,16 @@ export const useAppDataStore = create<AppDataState>()(
         set({ isRefreshing: true });
 
         try {
-          // In a real app, this would fetch fresh data from APIs
-          // For now, we'll regenerate mock data with slight variations
-          const mockData = createInitialMockData();
+          // Refresh portfolio data (mock for now)
+          const portfolioData = createInitialMockData();
+
+          // Fetch fresh market data from APIs
+          const { marketOverview, news } = await fetchRealMarketData();
 
           set({
-            ...mockData,
+            ...portfolioData,
+            marketOverview,
+            news,
             lastRefresh: new Date(),
             isRefreshing: false,
           });
@@ -462,6 +576,81 @@ export const useAppDataStore = create<AppDataState>()(
         ];
         return [...categories, ...uniqueCategories.sort()];
       },
+
+      // Get market overview for specific timeframe
+      getMarketOverview: (timeframe) => {
+        const { marketOverview } = get();
+        return marketOverview[timeframe] || null;
+      },
+
+      // Get sentiment summary from market data
+      getSentimentSummary: () => {
+        const { marketOverview, news } = get();
+
+        // Try to get sentiment from market overview first
+        const overview =
+          marketOverview["1D"] || marketOverview["1W"] || marketOverview["1M"];
+        if (overview?.marketSentiment) {
+          // Convert API format to our format
+          return {
+            overall: overview.marketSentiment.overall,
+            confidence: overview.marketSentiment.confidence,
+          };
+        }
+
+        // Fallback to news sentiment calculation
+        if (!news || news.length === 0) return null;
+
+        let positive = 0;
+        let negative = 0;
+        let neutral = 0;
+
+        for (const item of news) {
+          const sentiment = (item.sentiment || "").toLowerCase();
+          if (sentiment === "positive") positive++;
+          else if (sentiment === "negative") negative++;
+          else neutral++;
+        }
+
+        const total = positive + negative + neutral;
+        if (total === 0) return null;
+
+        const pos = positive / total;
+        const neg = negative / total;
+
+        let overall: "bullish" | "bearish" | "neutral";
+        let confidence: number;
+
+        if (pos > 0.6) {
+          overall = "bullish";
+          confidence = Math.round(pos * 100);
+        } else if (neg > 0.6) {
+          overall = "bearish";
+          confidence = Math.round(neg * 100);
+        } else {
+          overall = "neutral";
+          confidence = Math.round(Math.max(pos, neg) * 100);
+        }
+
+        return { overall, confidence };
+      },
+
+      // Get news sentiment counts
+      getNewsSentimentCounts: () => {
+        const { news } = get();
+        let positive = 0;
+        let negative = 0;
+        let neutral = 0;
+
+        for (const item of news) {
+          const sentiment = (item.sentiment || "").toLowerCase();
+          if (sentiment === "positive") positive++;
+          else if (sentiment === "negative") negative++;
+          else neutral++;
+        }
+
+        return { positive, negative, neutral };
+      },
     }),
     {
       name: "app-data-store",
@@ -472,6 +661,8 @@ export const useAppDataStore = create<AppDataState>()(
         positions: state.positions,
         portfolioSummary: state.portfolioSummary,
         portfolioHistory: state.portfolioHistory,
+        marketOverview: state.marketOverview,
+        news: state.news,
         lastRefresh: state.lastRefresh,
       }),
     }

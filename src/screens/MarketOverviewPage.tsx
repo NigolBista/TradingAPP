@@ -13,69 +13,44 @@ import { useNavigation } from "@react-navigation/native";
 import MarketOverview from "../components/insights/MarketOverview";
 import DecalpXMini from "../components/insights/DecalpXMini";
 import IndexStrip from "../components/insights/IndexStrip";
-import { useMarketOverviewStore } from "../store/marketOverviewStore";
+import { useAppDataStore } from "../store/appDataStore";
+// Remove marketOverviewStore to prevent loops
 
 export default function MarketOverviewPage() {
   const navigation = useNavigation();
-  const [refreshing, setRefreshing] = useState(false);
 
-  const ensureOverview = useMarketOverviewStore((s) => s.ensureOverview);
-  const overview1d = useMarketOverviewStore((s) => s.overviewByTf["1D"]);
-  const rawNews = useMarketOverviewStore((s) => s.rawNews);
+  // Use centralized store - no loading states needed!
+  const {
+    getMarketOverview,
+    getSentimentSummary,
+    news,
+    refresh,
+    isRefreshing,
+  } = useAppDataStore();
+
+  const overview1d = getMarketOverview("1D");
+  const sentimentSummary = getSentimentSummary();
 
   const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await ensureOverview("1D", { force: true });
-    } catch (error) {
-      console.error("Error refreshing market overview:", error);
-    } finally {
-      setRefreshing(false);
-    }
-  }, [ensureOverview]);
+    // Simple refresh - data is always available
+    await refresh();
+  }, [refresh]);
 
   const handleDecalpXPress = useCallback(() => {
     navigation.navigate("DecalpX" as never);
   }, [navigation]);
 
-  // Calculate sentiment summary for header
-  const sentimentSummary = React.useMemo(() => {
-    const ov = overview1d;
-    if (!ov && !rawNews?.length) return null;
-    if ((ov as any)?.marketSentiment) {
-      return (ov as any).marketSentiment;
-    }
-    const news = rawNews || [];
-    let positive = 0,
-      negative = 0,
-      neutral = 0;
-    for (const n of news) {
-      const sentiment = (n.sentiment || "").toLowerCase();
-      if (sentiment === "positive") positive++;
-      else if (sentiment === "negative") negative++;
-      else neutral++;
-    }
-    const total = positive + negative + neutral;
-    if (total === 0) return null;
-    const pos = positive / total;
-    const neg = negative / total;
-    let overall: "bullish" | "bearish" | "neutral";
-    let confidence: number;
-    if (pos > 0.6) {
-      overall = "bullish";
-      confidence = Math.round(pos * 100);
-    } else if (neg > 0.6) {
-      overall = "bearish";
-      confidence = Math.round(neg * 100);
-    } else {
-      overall = "neutral";
-      confidence = Math.round(Math.max(pos, neg) * 100);
-    }
-    return { overall, confidence };
-  }, [overview1d, rawNews]);
+  // Sentiment summary is now available immediately from the store
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Live Data Banner */}
+      <View style={styles.liveDataBanner}>
+        <Text style={styles.liveDataText}>
+          📡 Live Market Data: Real-time API feeds
+        </Text>
+      </View>
+
       {/* Header */}
       <View style={styles.header}>
         <Pressable
@@ -124,7 +99,7 @@ export default function MarketOverviewPage() {
       <ScrollView
         style={styles.scrollView}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
         }
         showsVerticalScrollIndicator={false}
       >
@@ -151,6 +126,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000000",
+  },
+  liveDataBanner: {
+    backgroundColor: "#1a4d3a",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  liveDataText: {
+    color: "#4ade80",
+    fontSize: 12,
+    fontWeight: "600",
   },
   header: {
     flexDirection: "row",

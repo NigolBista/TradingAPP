@@ -278,5 +278,117 @@
       "dayChange": 25400,
       "dayChangePercent": 8.19
     }
+  ],
+  "YTD": [
+    {
+      "date": "2024-01-01",
+      "totalValue": 320000,
+      "dayChange": 0,
+      "dayChangePercent": 0
+    },
+    {
+      "date": "2024-01-15",
+      "totalValue": 325800,
+      "dayChange": 5800,
+      "dayChangePercent": 1.81
+    },
+    {
+      "date": "2024-02-01",
+      "totalValue": 328400,
+      "dayChange": 2600,
+      "dayChangePercent": 0.8
+    },
+    {
+      "date": "2024-02-15",
+      "totalValue": 331200,
+      "dayChange": 2800,
+      "dayChangePercent": 0.85
+    },
+    {
+      "date": "2024-03-01",
+      "totalValue": 329800,
+      "dayChange": -1400,
+      "dayChangePercent": -0.42
+    },
+    {
+      "date": "2024-03-15",
+      "totalValue": 334600,
+      "dayChange": 4800,
+      "dayChangePercent": 1.46
+    },
+    {
+      "date": "2024-04-01",
+      "totalValue": 337200,
+      "dayChange": 2600,
+      "dayChangePercent": 0.78
+    },
+    {
+      "date": "2024-04-15",
+      "totalValue": 335600,
+      "dayChange": -1600,
+      "dayChangePercent": -0.47
+    }
+  ],
+  "ALL": [
+    {
+      "date": "2020-01-01",
+      "totalValue": 150000,
+      "dayChange": 0,
+      "dayChangePercent": 0
+    },
+    {
+      "date": "2020-06-01",
+      "totalValue": 165000,
+      "dayChange": 15000,
+      "dayChangePercent": 10.0
+    },
+    {
+      "date": "2021-01-01",
+      "totalValue": 180000,
+      "dayChange": 15000,
+      "dayChangePercent": 9.09
+    },
+    {
+      "date": "2021-06-01",
+      "totalValue": 220000,
+      "dayChange": 40000,
+      "dayChangePercent": 22.22
+    },
+    {
+      "date": "2022-01-01",
+      "totalValue": 280000,
+      "dayChange": 60000,
+      "dayChangePercent": 27.27
+    },
+    {
+      "date": "2022-06-01",
+      "totalValue": 260000,
+      "dayChange": -20000,
+      "dayChangePercent": -7.14
+    },
+    {
+      "date": "2023-01-01",
+      "totalValue": 290000,
+      "dayChange": 30000,
+      "dayChangePercent": 11.54
+    },
+    {
+      "date": "2023-06-01",
+      "totalValue": 310000,
+      "dayChange": 20000,
+      "dayChangePercent": 6.9
+    },
+    {
+      "date": "2024-01-01",
+      "totalValue": 320000,
+      "dayChange": 10000,
+      "dayChangePercent": 3.23
+    },
+    {
+      "date": "2024-04-15",
+      "totalValue": 335600,
+      "dayChange": 15600,
+      "dayChangePercent": 4.88
+    }
   ]
 }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { useNavigation } from "@react-navigation/native";
 import SimpleLineChart from "../components/charts/SimpleLineChart";
 import MarketOverview from "../components/insights/MarketOverview";
 import type { NewsItem } from "../services/newsProviders";
-import { useMarketOverviewStore } from "../store/marketOverviewStore";
+// Removed useMarketOverviewStore to prevent loops - using centralized store instead
 import DecalpXMini from "../components/insights/DecalpXMini";
 import PerformanceCard from "../components/insights/PerformanceCard";
 import TopGainersCard from "../components/insights/TopGainersCard";
@@ -32,9 +32,8 @@ interface DashboardData {
 export default function DashboardScreen() {
   const navigation = useNavigation();
   const { theme } = useTheme();
-  const ensureOverview = useMarketOverviewStore((s) => s.ensureOverview);
-  const overviewByTf = useMarketOverviewStore((s) => s.overviewByTf);
-  const rawNews = useMarketOverviewStore((s) => s.rawNews);
+  // Use centralized store for market data too
+  const { getSentimentSummary } = useAppDataStore();
 
   // Use centralized store instead of local state
   const {
@@ -50,47 +49,19 @@ export default function DashboardScreen() {
     isHydrated,
   } = useAppDataStore();
 
-  const sentimentSummary = useMemo(() => {
-    const ov = overviewByTf["1D"] || overviewByTf["1W"] || overviewByTf["1M"];
-    if (!ov && !rawNews?.length) return null;
-    if ((ov as any)?.marketSentiment) return (ov as any).marketSentiment;
-    const news = rawNews || [];
-    let positive = 0,
-      negative = 0,
-      neutral = 0;
-    for (const n of news) {
-      const snt = (n.sentiment || "").toLowerCase();
-      if (snt === "positive") positive++;
-      else if (snt === "negative") negative++;
-      else neutral++;
-    }
-    const total = positive + negative + neutral;
-    if (total === 0) return null;
-    const pos = positive / total;
-    const neg = negative / total;
-    let overall: "bullish" | "bearish" | "neutral";
-    let confidence: number;
-    if (pos > 0.6) {
-      overall = "bullish";
-      confidence = Math.round(pos * 100);
-    } else if (neg > 0.6) {
-      overall = "bearish";
-      confidence = Math.round(neg * 100);
-    } else {
-      overall = "neutral";
-      confidence = Math.round(Math.max(pos, neg) * 100);
-    }
-    return { overall, confidence };
-  }, [overviewByTf, rawNews]);
+  // Get sentiment from centralized store
+  const sentimentSummary = getSentimentSummary();
 
   const [dashboardData, setDashboardData] = useState<DashboardData>({
     cachedNews: [],
   });
 
   const [perfPeriod, setPerfPeriod] = useState<
-    "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL"
+    "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "ALL"
   >("1M");
   const [selectedAccountTab, setSelectedAccountTab] = useState<string>("All");
+  const scrollViewRef = useRef<ScrollView>(null);
+  const [currentScrollY, setCurrentScrollY] = useState(0);
 
   // Get data from store
   const portfolioHistory = getPortfolioHistory(perfPeriod);
@@ -171,11 +142,21 @@ export default function DashboardScreen() {
 
   // Simple refresh function that uses the centralized store
   const handleRefresh = async () => {
-    // Prime market overview store early so navigating to View Full reuses data
-    ensureOverview("1D").catch(() => {});
-
-    // Refresh the centralized store
+    // Refresh the centralized store (includes market data)
     await refresh();
+  };
+
+  const handleAccountTabChange = (tab: string) => {
+    // Store current scroll position
+    const currentY = currentScrollY;
+
+    // Change the tab
+    setSelectedAccountTab(tab);
+
+    // Restore scroll position after a brief delay to allow content to update
+    setTimeout(() => {
+      scrollViewRef.current?.scrollTo({ y: currentY, animated: false });
+    }, 50);
   };
 
   useEffect(() => {
@@ -320,15 +301,13 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Mock Data Banner */}
-      <View style={styles.mockDataBanner}>
-        <Text style={styles.mockDataText}>
-          🔧 Demo Mode: Using mock financial data
-        </Text>
-      </View>
-
       <ScrollView
+        ref={scrollViewRef}
         style={styles.content}
+        onScroll={(event) => {
+          setCurrentScrollY(event.nativeEvent.contentOffset.y);
+        }}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -349,7 +328,7 @@ export default function DashboardScreen() {
         </View>
         {/* Top Gainers from Portfolio */}
         {positions && positions.length > 0 && (
-          <View style={{ marginHorizontal: 16, marginTop: 12 }}>
+          <View style={{ marginHorizontal: 16, marginTop: 56 }}>
             <TopGainersCard
               positions={positions.map((pos) => ({
                 symbol: pos.symbol,
@@ -389,7 +368,7 @@ export default function DashboardScreen() {
                   styles.accountTab,
                   selectedAccountTab === tab && styles.accountTabActive,
                 ]}
-                onPress={() => setSelectedAccountTab(tab)}
+                onPress={() => handleAccountTabChange(tab)}
               >
                 <Text
                   style={[
@@ -413,6 +392,9 @@ export default function DashboardScreen() {
             }}
           />
         </View>
+
+        {/* Bottom spacing */}
+        <View style={{ height: 24 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -494,11 +476,11 @@ const createStyles = (theme: any) =>
 
     // Sections
     section: {
-      backgroundColor: "#1a1a1a",
+      backgroundColor: "transparent",
       marginHorizontal: 16,
       marginTop: 16,
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: 0,
+      padding: 0,
     },
     sentimentStrip: {
       marginBottom: 12,
@@ -631,17 +613,17 @@ const createStyles = (theme: any) =>
 
     // Account Tabs
     accountsSection: {
-      backgroundColor: theme.colors.card,
-      borderRadius: 12,
-      padding: 16,
+      backgroundColor: "transparent",
+      borderRadius: 0,
+      padding: 0,
       marginHorizontal: 16,
-      marginTop: 12,
+      marginTop: 44,
     },
     accountTabsContainer: {
       marginBottom: 16,
-      backgroundColor: theme.colors.surface,
-      borderRadius: 8,
-      padding: 4,
+      backgroundColor: "transparent",
+      borderRadius: 0,
+      padding: 0,
     },
     accountTabsContent: {
       paddingHorizontal: 0,

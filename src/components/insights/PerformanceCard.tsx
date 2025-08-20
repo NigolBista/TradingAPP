@@ -11,7 +11,7 @@ import { fetchYahooCandles } from "../../services/marketProviders";
 import SimpleLineChart from "../charts/SimpleLineChart";
 import { useTheme } from "../../providers/ThemeProvider";
 
-type Period = "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL";
+type Period = "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "ALL";
 
 interface Props {
   history: PortfolioHistory | null;
@@ -66,7 +66,7 @@ export default function PerformanceCard({
       );
   }, [history]);
 
-  const periods: Period[] = ["1D", "1W", "1M", "3M", "1Y", "ALL"];
+  const periods: Period[] = ["1D", "1W", "1M", "3M", "YTD", "1Y", "ALL"];
   const styles = createStyles(theme);
 
   return (
@@ -89,7 +89,7 @@ export default function PerformanceCard({
         </View>
       </View>
 
-      <View style={{ marginTop: 12 }}>
+      <View style={styles.chartContainer}>
         <SimpleLineChart
           data={chartSeries}
           height={120}
@@ -120,7 +120,12 @@ export default function PerformanceCard({
 
 const createStyles = (theme: any) =>
   StyleSheet.create({
-    card: { backgroundColor: theme.colors.card, borderRadius: 12, padding: 16 },
+    card: {
+      backgroundColor: "transparent",
+      borderRadius: 0,
+      padding: 0,
+      minHeight: 220,
+    },
     header: { alignItems: "center" },
     title: {
       color: theme.colors.textSecondary,
@@ -143,18 +148,27 @@ const createStyles = (theme: any) =>
     period: { color: theme.colors.textSecondary, fontSize: 12 },
     up: { color: "#10B981" },
     down: { color: "#EF4444" },
-    tabs: { flexDirection: "row", gap: 8, marginTop: 12 },
+    chartContainer: {
+      marginTop: 12,
+      height: 120,
+      overflow: "hidden",
+    },
+    tabs: { flexDirection: "row", gap: 4, marginTop: 16 },
     tab: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 999,
-      backgroundColor: theme.colors.surface,
+      flex: 1,
+      paddingHorizontal: 6,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: "transparent",
+      alignItems: "center",
+      justifyContent: "center",
     },
     tabActive: { backgroundColor: theme.colors.primary },
     tabText: {
       color: theme.colors.textSecondary,
-      fontWeight: "700",
-      fontSize: 12,
+      fontWeight: "600",
+      fontSize: 11,
+      textAlign: "center",
     },
-    tabTextActive: { color: "#fff" },
+    tabTextActive: { color: "#fff", fontWeight: "700" },
   });

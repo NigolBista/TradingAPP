@@ -20,6 +20,7 @@ import {
   type SignalSummary,
 } from "../services/signalEngine";
 import { useUserStore } from "../store/userStore";
+import { useAppDataStore } from "../store/appDataStore";
 import { useTheme } from "../providers/ThemeProvider";
 
 const createStyles = (theme: any) =>
@@ -240,11 +241,13 @@ export default function MarketOverviewTabScreen() {
   const [activeTab, setActiveTab] = useState<TabType>("Market");
   const insets = useSafeAreaInsets();
 
+  // Use centralized store for market data
+  const { refresh, isRefreshing } = useAppDataStore();
+
   const styles = createStyles(theme);
 
   // Signals state
   const [loading, setLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [signals, setSignals] = useState<SignalSummary[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState("all");
   const [showStrategyModal, setShowStrategyModal] = useState(false);
@@ -317,7 +320,6 @@ export default function MarketOverviewTabScreen() {
       console.error("Error loading signals:", error);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }
 
@@ -367,8 +369,13 @@ export default function MarketOverviewTabScreen() {
   }
 
   async function onRefresh() {
-    setRefreshing(true);
-    await loadSignals();
+    if (activeTab === "Market") {
+      // Refresh market data from centralized store
+      await refresh();
+    } else {
+      // Refresh signals data
+      await loadSignals();
+    }
   }
 
   function renderSignal(summary: SignalSummary) {
@@ -503,7 +510,7 @@ export default function MarketOverviewTabScreen() {
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
+              refreshing={activeTab === "Market" ? isRefreshing : loading}
               onRefresh={onRefresh}
               tintColor={theme.colors.primary}
             />

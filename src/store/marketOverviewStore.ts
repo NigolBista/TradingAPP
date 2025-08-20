@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useAppDataStore } from "./appDataStore";
 import {
   generateMarketOverviewWithData,
   type MarketOverview,
@@ -40,102 +41,70 @@ const TTL_MS = 120_000; // Keep in sync with marketDataCache
 
 export const useMarketOverviewStore = create<MarketOverviewStore>(
   (set, get) => ({
-    overviewByTf: {},
-    rawNews: [],
+    // Static properties - data comes from centralized store
+    overviewByTf: {} as Partial<Record<Timeframe, MarketOverview>>,
+    rawNews: [] as NewsItem[],
     lastFetchedMs: 0,
     isLoading: false,
     error: null,
 
-    setOverview: (tf, overview, rawNews) =>
+    setOverview: (tf, overview, rawNews) => {
+      // This is now handled by the centralized store
+      // Just update local state for compatibility
       set((s) => ({
-        overviewByTf: { ...s.overviewByTf, [tf]: overview },
-        rawNews: rawNews ?? s.rawNews,
         lastFetchedMs: Date.now(),
         isLoading: false,
         error: null,
-      })),
+      }));
+    },
 
-    clear: () =>
-      set({ overviewByTf: {}, rawNews: [], lastFetchedMs: 0, error: null }),
+    clear: () => {
+      // Clear handled by centralized store
+      set({ lastFetchedMs: 0, error: null });
+    },
 
     ensureOverview: async (tf, options) => {
-      const { overviewByTf, lastFetchedMs, isLoading } = get();
-      const hasFresh = overviewByTf[tf] && Date.now() - lastFetchedMs < TTL_MS;
-      if (!options?.force && hasFresh) {
-        return overviewByTf[tf] as MarketOverview;
-      }
-      if (isLoading && overviewByTf[tf]) {
-        return overviewByTf[tf] as MarketOverview;
-      }
-      set({ isLoading: true, error: null });
-      try {
-        const { overview, rawData } = await generateMarketOverviewWithData({
-          analysisDepth: options?.analysisDepth ?? "brief",
-          timeframe: tf,
-        });
-        get().setOverview(tf, overview, rawData.news);
+      const appStore = useAppDataStore.getState();
+      const overview = appStore.getMarketOverview(tf);
+
+      // Return immediately with cached data - no loading states!
+      if (overview && !options?.force) {
         return overview;
-      } catch (err: any) {
-        set({
-          isLoading: false,
-          error: err?.message || "Failed to load market overview",
-        });
-        throw err;
       }
+
+      // If forced refresh, trigger background refresh
+      if (options?.force) {
+        appStore.refreshInBackground();
+      }
+
+      // Always return available data immediately
+      return (
+        overview ||
+        ({
+          summary: "Market data loading from live sources...",
+          keyHighlights: [
+            "Fetching real-time market data",
+            "AI analysis in progress",
+          ],
+          topStories: [],
+          trendingStocks: [],
+          upcomingEvents: [],
+          fedEvents: [],
+          economicIndicators: [],
+          lastUpdated: new Date().toISOString(),
+          marketSentiment: { overall: "neutral", confidence: 50, factors: [] },
+        } as MarketOverview)
+      );
     },
 
     getSentimentSummary: () => {
-      const state = get();
-      const ov =
-        state.overviewByTf["1D"] ||
-        state.overviewByTf["1W"] ||
-        state.overviewByTf["1M"];
-      if (!ov) return null;
-      if ((ov as any).marketSentiment) {
-        const ms = (ov as any).marketSentiment as SentimentSummary;
-        return ms || null;
-      }
-      const news = state.rawNews || [];
-      let positive = 0;
-      let negative = 0;
-      let neutral = 0;
-      for (const n of news) {
-        const s = (n.sentiment || "").toLowerCase();
-        if (s === "positive") positive++;
-        else if (s === "negative") negative++;
-        else neutral++;
-      }
-      const total = positive + negative + neutral;
-      if (total === 0) return null;
-      const pos = positive / total;
-      const neg = negative / total;
-      let overall: "bullish" | "bearish" | "neutral";
-      let confidence: number;
-      if (pos > 0.6) {
-        overall = "bullish";
-        confidence = Math.round(pos * 100);
-      } else if (neg > 0.6) {
-        overall = "bearish";
-        confidence = Math.round(neg * 100);
-      } else {
-        overall = "neutral";
-        confidence = Math.round(Math.max(pos, neg) * 100);
-      }
-      return { overall, confidence };
+      const appStore = useAppDataStore.getState();
+      return appStore.getSentimentSummary();
     },
 
     getNewsSentimentCounts: () => {
-      const news = get().rawNews || [];
-      let positive = 0;
-      let negative = 0;
-      let neutral = 0;
-      for (const n of news) {
-        const s = (n.sentiment || "").toLowerCase();
-        if (s === "positive") positive++;
-        else if (s === "negative") negative++;
-        else neutral++;
-      }
-      return { positive, negative, neutral };
+      const appStore = useAppDataStore.getState();
+      return appStore.getNewsSentimentCounts();
     },
   })
 );

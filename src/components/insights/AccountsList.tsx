@@ -250,6 +250,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111827",
     borderRadius: 8,
     padding: 12,
+    marginHorizontal: 0,
   },
   accountHeader: {
     flexDirection: "row",

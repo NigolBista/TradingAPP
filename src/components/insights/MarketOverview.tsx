@@ -18,7 +18,7 @@ import {
 import { refreshGlobalCache } from "../../services/marketDataCache";
 import type { NewsItem } from "../../services/newsProviders";
 import NewsList from "./NewsList";
-import { useMarketOverviewStore } from "../../store/marketOverviewStore";
+import { useAppDataStore } from "../../store/appDataStore";
 import { useTheme } from "../../providers/ThemeProvider";
 
 interface Props {
@@ -598,34 +598,55 @@ export default function MarketOverview({
     factors: string[];
   } | null>(null);
 
-  const ensureOverview = useMarketOverviewStore((s) => s.ensureOverview);
-  const storeRawNews = useMarketOverviewStore((s) => s.rawNews);
+  // Use centralized store instead of old marketOverviewStore
+  const {
+    getMarketOverview,
+    news: storeRawNews,
+    refreshInBackground,
+  } = useAppDataStore();
 
   const loadMarketOverview = async (isRefresh = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true);
+        // Trigger background refresh for fresh data
+        refreshInBackground();
       } else {
         setLoading(true);
       }
       setError(null);
 
-      // Use shared store to avoid duplicate API calls across screens
-      const data = await ensureOverview(timeframe, {
-        force: false,
-        analysisDepth: compact ? "brief" : "detailed",
-      });
+      // Get data from centralized store - always available immediately
+      const data = getMarketOverview(timeframe);
 
-      setOverview(data);
+      if (data) {
+        setOverview(data);
 
-      // Share the news data with parent component to avoid duplicate API calls
-      if (onNewsDataFetched && storeRawNews.length > 0) {
-        onNewsDataFetched(storeRawNews);
+        // Share the news data with parent component
+        if (onNewsDataFetched && storeRawNews.length > 0) {
+          onNewsDataFetched(storeRawNews);
+        }
+
+        // Extract news highlights and market sentiment
+        await extractNewsHighlights(storeRawNews);
+        await calculateMarketSentiment(storeRawNews, data.trendingStocks);
+      } else {
+        // Show loading placeholder if no data available yet
+        setOverview({
+          summary: "Market data loading from live sources...",
+          keyHighlights: [
+            "Fetching real-time market data",
+            "AI analysis in progress",
+          ],
+          topStories: [],
+          trendingStocks: [],
+          upcomingEvents: [],
+          fedEvents: [],
+          economicIndicators: [],
+          lastUpdated: new Date().toISOString(),
+          marketSentiment: { overall: "neutral", confidence: 50, factors: [] },
+        });
       }
-
-      // Extract news highlights and market sentiment
-      await extractNewsHighlights(storeRawNews);
-      await calculateMarketSentiment(storeRawNews, data.trendingStocks);
     } catch (err) {
       console.error("Market Overview Error:", err);
       setError(
@@ -646,11 +667,8 @@ export default function MarketOverview({
       setRefreshing(true);
       // Force refresh the global cache first
       await refreshGlobalCache(compact ? 15 : 30, !compact, !compact);
-      // Then reload the overview with fresh data (force store to refetch)
-      await ensureOverview(timeframe, {
-        force: true,
-        analysisDepth: compact ? "brief" : "detailed",
-      });
+      // Trigger background refresh for fresh data
+      refreshInBackground();
       await loadMarketOverview(true);
     } catch (err) {
       console.error("Refresh Error:", err);

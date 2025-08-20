@@ -37,15 +37,34 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
     PositionWithDayChange[]
   >([]);
   const [loading, setLoading] = useState(false);
+  const [lastFetchedSymbols, setLastFetchedSymbols] = useState<string>("");
 
   // Fetch day change data for all positions
   useEffect(() => {
     if (!positions.length) return;
 
+    // Create a stable key from positions to avoid unnecessary refetches
+    const currentSymbols = positions
+      .map((p) => `${p.symbol}-${p.provider}`)
+      .sort()
+      .join(",");
+
+    // Skip if we already have data for the same positions
+    if (
+      currentSymbols === lastFetchedSymbols &&
+      positionsWithDayChange.length > 0
+    ) {
+      return;
+    }
+
     let mounted = true;
     (async () => {
       try {
-        setLoading(true);
+        // Only show loading if we don't have any existing data
+        if (positionsWithDayChange.length === 0) {
+          setLoading(true);
+        }
+
         const enrichedPositions = await Promise.all(
           positions.map(async (position) => {
             try {
@@ -86,6 +105,7 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
 
         if (mounted) {
           setPositionsWithDayChange(enrichedPositions);
+          setLastFetchedSymbols(currentSymbols);
         }
       } catch (error) {
         console.error("Error fetching day changes:", error);
@@ -99,7 +119,7 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
     return () => {
       mounted = false;
     };
-  }, [positions]);
+  }, [positions, lastFetchedSymbols, positionsWithDayChange.length]);
 
   // Sort by day change percent (top gainers first)
   const sortedPositions = useMemo(() => {
@@ -118,7 +138,8 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
     return `$${value.toFixed(2)}`;
   };
 
-  if (loading) {
+  // Only show loading state if we have no data at all
+  if (loading && !sortedPositions.length) {
     return (
       <View style={styles.card}>
         <Text style={styles.title}>Your Top Movers</Text>
@@ -130,7 +151,7 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
     );
   }
 
-  if (!sortedPositions.length) {
+  if (!sortedPositions.length && !loading) {
     return (
       <View style={styles.card}>
         <Text style={styles.title}>Your Top Movers</Text>
@@ -198,9 +219,9 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: "transparent",
+    borderRadius: 0,
+    padding: 0,
   },
   title: {
     color: "#ffffff",

@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { useMarketOverviewStore } from "../store/marketOverviewStore";
+import { useAppDataStore } from "../store/appDataStore";
 import StockAutocomplete from "../components/common/StockAutocomplete";
 import { StockSearchResult } from "../services/stockSearch";
 import { fetchYahooCandles } from "../services/marketProviders";
@@ -36,52 +36,25 @@ export default function DecalpXScreen() {
     neutral: number;
   }>({ positive: 0, negative: 0, neutral: 0 });
 
-  const ensureOverview = useMarketOverviewStore((s) => s.ensureOverview);
-  const overview1d = useMarketOverviewStore((s) => s.overviewByTf["1D"]);
-  const rawNews = useMarketOverviewStore((s) => s.rawNews);
+  // Use centralized store instead of old marketOverviewStore
+  const {
+    getMarketOverview,
+    getSentimentSummary,
+    refreshInBackground,
+    news: rawNews,
+  } = useAppDataStore();
+  const overview1d = getMarketOverview("1D");
 
-  // Derive sentiment locally to avoid selectors returning new objects each render
-  const sentimentSummary = React.useMemo(() => {
-    const ov = overview1d;
-    if (!ov && !rawNews?.length) return null;
-    if ((ov as any)?.marketSentiment) return (ov as any).marketSentiment;
-    const news = rawNews || [];
-    let positive = 0,
-      negative = 0,
-      neutral = 0;
-    for (const n of news) {
-      const snt = (n.sentiment || "").toLowerCase();
-      if (snt === "positive") positive++;
-      else if (snt === "negative") negative++;
-      else neutral++;
-    }
-    const total = positive + negative + neutral;
-    if (total === 0) return null;
-    const pos = positive / total;
-    const neg = negative / total;
-    let overall: "bullish" | "bearish" | "neutral";
-    let confidence: number;
-    if (pos > 0.6) {
-      overall = "bullish";
-      confidence = Math.round(pos * 100);
-    } else if (neg > 0.6) {
-      overall = "bearish";
-      confidence = Math.round(neg * 100);
-    } else {
-      overall = "neutral";
-      confidence = Math.round(Math.max(pos, neg) * 100);
-    }
-    return { overall, confidence };
-  }, [overview1d, rawNews]);
+  // Get sentiment from centralized store
+  const sentimentSummary = getSentimentSummary();
 
-  useEffect(() => {
-    if (!overview1d) ensureOverview("1D").catch(() => {});
-  }, [overview1d, ensureOverview]);
+  // Data is always available from centralized store - no need to ensure
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await ensureOverview("1D", { force: true });
+      // Trigger background refresh from centralized store
+      refreshInBackground();
     } catch (error) {
       console.error("Failed to refresh DecalpX data:", error);
     } finally {
