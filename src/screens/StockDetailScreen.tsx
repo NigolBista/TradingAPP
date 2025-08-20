@@ -40,6 +40,7 @@ import {
   fetchStockNewsApi,
   type NewsItem,
 } from "../services/newsProviders";
+import DecalpXMini from "../components/insights/DecalpXMini";
 import {
   generateSignalSummary,
   type SignalSummary,
@@ -235,6 +236,44 @@ export default function StockDetailScreen() {
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>("1D");
   const { pinned, hydrate, toggle } = useTimeframeStore();
   const [activeTab, setActiveTab] = useState<"signals" | "news">("signals");
+
+  const symbolSentimentCounts = useMemo(() => {
+    if (!news || news.length === 0) return null;
+    let positive = 0;
+    let negative = 0;
+    let neutral = 0;
+    for (const n of news) {
+      const s = (n.sentiment || "").toLowerCase();
+      if (s === "positive") positive++;
+      else if (s === "negative") negative++;
+      else neutral++;
+    }
+    return { positive, negative, neutral };
+  }, [news]);
+
+  const symbolSentimentSummary = useMemo(() => {
+    if (!symbolSentimentCounts) return null;
+    const total =
+      symbolSentimentCounts.positive +
+      symbolSentimentCounts.negative +
+      symbolSentimentCounts.neutral;
+    if (total === 0) return null;
+    const pos = symbolSentimentCounts.positive / total;
+    const neg = symbolSentimentCounts.negative / total;
+    let overall: "bullish" | "bearish" | "neutral";
+    let confidence: number;
+    if (pos > 0.6) {
+      overall = "bullish";
+      confidence = Math.round(pos * 100);
+    } else if (neg > 0.6) {
+      overall = "bearish";
+      confidence = Math.round(neg * 100);
+    } else {
+      overall = "neutral";
+      confidence = Math.round(Math.max(pos, neg) * 100);
+    }
+    return { overall, confidence };
+  }, [symbolSentimentCounts]);
 
   useEffect(() => {
     load();
@@ -642,6 +681,20 @@ export default function StockDetailScreen() {
                 R/R {summary.topSignal.riskReward}:1 • Size{" "}
                 {summary.topSignal.tradePlan.positionSize}
               </Text>
+            </View>
+            <View style={{ marginTop: 12 }}>
+              <DecalpXMini
+                countsOverride={symbolSentimentCounts || undefined}
+                sentimentOverride={symbolSentimentSummary}
+                signalOverride={{
+                  action: summary.topSignal.action,
+                  type: summary.topSignal.type,
+                  confidence: summary.topSignal.confidence,
+                  entry: summary.topSignal.entry,
+                  stopLoss: summary.topSignal.stopLoss,
+                  riskReward: summary.topSignal.riskReward,
+                }}
+              />
             </View>
           </View>
         )}

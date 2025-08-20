@@ -23,6 +23,13 @@ interface Props {
   maPeriods?: number[];
   showGrid?: boolean;
   showCrosshair?: boolean;
+  // Optional trade levels - used to render zones/lines
+  levels?: {
+    entry?: number;
+    entryExtended?: number;
+    exit?: number;
+    exitExtended?: number;
+  };
 }
 
 export default function LightweightCandles({
@@ -35,6 +42,7 @@ export default function LightweightCandles({
   maPeriods = [20, 50],
   showGrid = true,
   showCrosshair = true,
+  levels,
 }: Props) {
   const series = useMemo(
     () =>
@@ -79,11 +87,15 @@ export default function LightweightCandles({
       .btn:hover{background:rgba(37,99,235,.8);}
       .btn.active{background:#2563eb;}
       #debug{position:absolute;bottom:10px;left:10px;background:rgba(255,0,0,0.8);color:white;padding:5px;font-size:10px;z-index:100;}
+      #zones{position:absolute;left:0;right:0;top:0;bottom:0;pointer-events:none;z-index:50;}
+      .zone{position:absolute;left:0;right:0;opacity:.22;border:1px solid rgba(255,255,255,0.35);z-index:51;} 
+      .zone-label{position:absolute;right:8px;top:4px;font:11px -apple-system,Segoe UI,Roboto,Helvetica,Arial;color:#fff;padding:2px 6px;border-radius:6px;background:rgba(0,0,0,0.35);} 
     </style>
     </head><body>
     <div id="wrap">
       <div id="c">
         <div id="t" style="display:none"></div>
+        <div id="zones"></div>
         <div id="controls">
           <button class="btn" onclick="chart.timeScale().fitContent()">Fit</button>
           <button class="btn" onclick="resetZoom()">Reset</button>
@@ -91,7 +103,7 @@ export default function LightweightCandles({
       </div>
       <div id="debug">Loading...</div>
     </div>
-    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js"></script>
     <script>
       const debugEl = document.getElementById('debug');
       function log(msg) {
@@ -183,32 +195,70 @@ export default function LightweightCandles({
       
       log('Chart created successfully');
       
+      // Compatibility layer for Lightweight Charts v5 (addSeries) and v4 (addXSeries)
+      function addSeriesCompat(kind, options){
+        const hasNewApi = typeof chart.addSeries === 'function' && window.LightweightCharts && (
+          window.LightweightCharts.CandlestickSeries || window.LightweightCharts.LineSeries
+        );
+        if (hasNewApi) {
+          switch(kind){
+            case 'area':
+              return chart.addSeries(window.LightweightCharts.AreaSeries, options);
+            case 'line':
+              return chart.addSeries(window.LightweightCharts.LineSeries, options);
+            case 'bar':
+              return chart.addSeries(window.LightweightCharts.BarSeries, options);
+            case 'candlestick':
+              return chart.addSeries(window.LightweightCharts.CandlestickSeries, options);
+            case 'histogram':
+              return chart.addSeries(window.LightweightCharts.HistogramSeries, options);
+            default:
+              return chart.addSeries(window.LightweightCharts.LineSeries, options);
+          }
+        }
+        // Fallback to legacy methods
+        switch(kind){
+          case 'area':
+            return chart.addAreaSeries(options);
+          case 'line':
+            return chart.addLineSeries(options);
+          case 'bar':
+            return chart.addBarSeries(options);
+          case 'candlestick':
+            return chart.addCandlestickSeries(options);
+          case 'histogram':
+            return chart.addHistogramSeries(options);
+          default:
+            return chart.addLineSeries(options);
+        }
+      }
+
       let mainSeries;
       const type = ${JSON.stringify(type)};
       
       if (type === 'area') {
-        mainSeries = chart.addAreaSeries({ 
+        mainSeries = addSeriesCompat('area', { 
           lineColor: '#2563eb', 
           topColor: 'rgba(37,99,235,0.4)', 
           bottomColor: 'rgba(37,99,235,0.05)',
           lineWidth: 2
         });
       } else if (type === 'line') {
-        mainSeries = chart.addLineSeries({ 
+        mainSeries = addSeriesCompat('line', { 
           color: '#2563eb', 
           lineWidth: 3,
           crosshairMarkerVisible: true,
           crosshairMarkerRadius: 6
         });
       } else if (type === 'bar') {
-        mainSeries = chart.addBarSeries({ 
+        mainSeries = addSeriesCompat('bar', { 
           upColor: '#16a34a', 
           downColor: '#dc2626',
           openVisible: true,
           thinBars: false
         });
       } else {
-        mainSeries = chart.addCandlestickSeries({ 
+        mainSeries = addSeriesCompat('candlestick', { 
           upColor: '#16a34a', 
           downColor: '#dc2626', 
           wickUpColor: '#16a34a', 
@@ -225,6 +275,36 @@ export default function LightweightCandles({
       log('Setting data on main series');
       mainSeries.setData(seriesData);
       log('Data set on main series');
+      
+      // Add price lines as a fallback so levels are always visible
+      function addPriceLine(price, color, title){
+        if (price == null || !isFinite(price)) return;
+        try { 
+          mainSeries.createPriceLine({
+            price: Number(price),
+            color: color,
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: true,
+            title
+          });
+        } catch(e) {}
+      }
+      
+      // Render fallback price lines immediately if we have levels
+      try {
+        const lv = ${JSON.stringify(levels || {})};
+        if (lv.entry) addPriceLine(lv.entry, '#10B981', 'TP');
+        if (lv.entryExtended) addPriceLine(lv.entryExtended, '#14b8a6', 'TP Ext');
+        if (lv.exit) addPriceLine(lv.exit, '#EF4444', 'SL');
+        if (lv.exitExtended) addPriceLine(lv.exitExtended, '#F97316', 'SL Ext');
+        // Also show the assumed entry at the latest close
+        try {
+          const last = Array.isArray(raw) && raw.length > 0 ? raw[raw.length - 1] : null;
+          const lastClose = last && typeof last.close === 'number' ? last.close : null;
+          if (lastClose != null) addPriceLine(lastClose, '#0ea5e9', 'Entry');
+        } catch(_inner) {}
+      } catch(_){ }
 
       // Add Moving Averages
       ${
@@ -262,7 +342,7 @@ export default function LightweightCandles({
       ${
         showVolume
           ? `
-        const volumeSeries = chart.addHistogramSeries({
+        const volumeSeries = addSeriesCompat('histogram', {
           color: '#94a3b8',
           priceFormat: { type: 'volume' },
           priceScaleId: '',
@@ -341,20 +421,91 @@ export default function LightweightCandles({
         chart.timeScale().resetTimeScale();
       }
 
+      // Trade levels zones/lines
+      const levels = ${JSON.stringify(levels || {})};
+      const zonesRoot = document.getElementById('zones');
+      function ensureZone(id, color, labelText) {
+        let el = document.getElementById(id);
+        if (!el) {
+          el = document.createElement('div');
+          el.id = id;
+          el.className = 'zone';
+          el.style.background = color;
+          const lab = document.createElement('div');
+          lab.className = 'zone-label';
+          lab.textContent = labelText;
+          el.appendChild(lab);
+          zonesRoot.appendChild(el);
+        }
+        return el;
+      }
+
+      function px(v){return Math.max(0, Math.round(v || 0));}
+      function updateZones(){
+        if (!mainSeries || !levels) return;
+        const h = container.clientHeight;
+        const priceToY = (p) => mainSeries.priceToCoordinate(p);
+
+        // Take Profit zone
+        if (levels.entry) {
+          const p1 = priceToY(levels.entry);
+          const p2 = levels.entryExtended ? priceToY(levels.entryExtended) : p1;
+          if (p1 != null && p2 != null) {
+            const top = Math.min(p1, p2);
+            const bottom = Math.max(p1, p2);
+            const el = ensureZone('tp-zone', 'rgba(16,185,129,0.25)', 'Take Profit');
+            el.style.top = px(top - (top===bottom ? 8 : 0)) + 'px';
+            el.style.height = px((bottom - top) || 16) + 'px';
+          }
+        }
+
+        // Stop Loss zone
+        if (levels.exit) {
+          const p1 = priceToY(levels.exit);
+          const p2 = levels.exitExtended ? priceToY(levels.exitExtended) : p1;
+          if (p1 != null && p2 != null) {
+            const top = Math.min(p1, p2);
+            const bottom = Math.max(p1, p2);
+            const el = ensureZone('sl-zone', 'rgba(239,68,68,0.28)', 'Stop Loss');
+            el.style.top = px(top - (top===bottom ? 8 : 0)) + 'px';
+            el.style.height = px((bottom - top) || 16) + 'px';
+          }
+        }
+      }
+
       // Ensure width and fit on load
       setTimeout(() => {
         log('Applying width: ' + container.clientWidth);
         chart.applyOptions({ width: container.clientWidth });
         chart.timeScale().fitContent();
         log('Chart fitted and ready');
+        // Re-append zones to ensure they are on top of chart internal nodes
+        try { container.appendChild(zonesRoot); } catch(e) {}
+        updateZones();
       }, 100);
 
       // Handle window resize
       function handleResize() {
         chart.applyOptions({ width: container.clientWidth });
+        updateZones();
       }
       
       window.addEventListener('resize', handleResize);
+      
+      // Recompute zones when price scale changes or time range changes
+      const ps = mainSeries.priceScale && mainSeries.priceScale();
+      if (ps && ps.subscribeVisiblePriceRangeChange) {
+        ps.subscribeVisiblePriceRangeChange(() => updateZones());
+      }
+      if (chart.timeScale && chart.timeScale().subscribeVisibleTimeRangeChange) {
+        chart.timeScale().subscribeVisibleTimeRangeChange(() => updateZones());
+      }
+      chart.subscribeCrosshairMove(() => updateZones());
+      
+      // Initial draw and a couple of delayed retries in case scale isn't ready yet
+      updateZones();
+      setTimeout(updateZones, 250);
+      setTimeout(updateZones, 800);
       
       // Post ready message
       try {

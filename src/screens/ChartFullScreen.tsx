@@ -5,6 +5,7 @@ import {
   StyleSheet,
   useWindowDimensions,
   Text,
+  ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -26,6 +27,7 @@ export default function ChartFullScreen() {
   const symbol: string = route.params?.symbol || "AAPL";
   const chartType: string = route.params?.chartType || "line";
   const timeframe: string = route.params?.timeframe || "1D";
+  const levels = route.params?.levels;
   const [tfModalVisible, setTfModalVisible] = useState(false);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>("1D");
   const [stockName, setStockName] = useState<string>("");
@@ -116,21 +118,42 @@ export default function ChartFullScreen() {
           symbol={symbol}
           height={chartHeight}
           interval={mapExtendedToTradingView(extendedTf)}
+          showExpand={false}
+          levels={levels}
         />
-        <View style={{ position: "absolute", right: 12, top: 72 }}>
-          <Pressable
-            onPress={() => setTfModalVisible(true)}
-            style={{
-              backgroundColor: "rgba(0,0,0,0.6)",
-              borderRadius: 20,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-            }}
+        <View style={styles.rangeSwitcherContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.rangeSwitcherScroll}
           >
-            <Text style={{ color: "#fff", fontWeight: "600" }}>
-              {extendedTf}
-            </Text>
-          </Pressable>
+            {pinned.map((tf) => (
+              <Pressable
+                key={tf}
+                onPress={() => setExtendedTf(tf)}
+                style={[
+                  styles.tfChip,
+                  extendedTf === tf && styles.tfChipActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tfChipText,
+                    extendedTf === tf && styles.tfChipTextActive,
+                  ]}
+                >
+                  {tf}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => setTfModalVisible(true)}
+              style={[styles.tfChip, styles.tfMoreChip]}
+              hitSlop={10}
+            >
+              <Text style={[styles.tfChipText, styles.tfMoreText]}>⋯</Text>
+            </Pressable>
+          </ScrollView>
         </View>
         {/* Removed left quick row to avoid duplicate controls; modal picker handles timeframe switching */}
       </View>
@@ -174,5 +197,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "#888",
+  },
+  rangeSwitcherContainer: {
+    position: "absolute",
+    right: 12,
+    top: 72,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
+  },
+  rangeSwitcherScroll: {
+    alignItems: "center",
+  },
+  tfChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "transparent",
+    marginHorizontal: 4,
+  },
+  tfChipActive: {
+    backgroundColor: "#00D4AA",
+  },
+  tfChipText: {
+    color: "#e5e5e5",
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  tfChipTextActive: {
+    color: "#000",
+  },
+  tfMoreChip: {
+    backgroundColor: "#1f2937",
+  },
+  tfMoreText: {
+    color: "#fff",
+    fontSize: 14,
+    marginTop: -1,
   },
 });

@@ -34,6 +34,7 @@ interface EarningsStore {
   // Hydration and refresh
   hydrateEarningsData: () => Promise<void>;
   refreshEarningsData: () => Promise<void>;
+  forceRefreshEarningsData: () => Promise<void>;
   shouldRefresh: () => boolean;
   clearCache: () => void;
 }
@@ -120,7 +121,7 @@ export const useEarningsStore = create<EarningsStore>()(
       refreshEarningsData: async () => {
         const state = get();
 
-        // Skip if data is fresh
+        // Skip if data is fresh (but allow forced refresh)
         if (!state.shouldRefresh()) {
           console.log("📊 Earnings data is fresh, skipping refresh");
           return;
@@ -155,6 +156,47 @@ export const useEarningsStore = create<EarningsStore>()(
           );
         } catch (error) {
           console.error("❌ Failed to refresh earnings data:", error);
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to refresh earnings data",
+            isLoading: false,
+          });
+        }
+      },
+
+      // Force refresh earnings data (ignores cache freshness)
+      forceRefreshEarningsData: async () => {
+        console.log("🔄 Force refreshing earnings data...");
+        set({ isLoading: true, error: null });
+
+        try {
+          // Fetch all earnings data in parallel
+          const [todaysData, weeklyData, upcomingData, recentData] =
+            await Promise.all([
+              fetchTodaysEarnings(),
+              fetchWeeklyEarnings(),
+              fetchUpcomingEarnings([], 60), // Get general upcoming earnings
+              fetchRecentEarnings([], 14), // Get general recent earnings
+            ]);
+
+          set({
+            todaysEarnings: todaysData,
+            weeklyEarnings: weeklyData,
+            upcomingEarnings: upcomingData,
+            recentEarnings: recentData,
+            lastUpdated: new Date().toISOString(),
+            isHydrated: true,
+            isLoading: false,
+            error: null,
+          });
+
+          console.log(
+            `✅ Force refresh complete: ${todaysData.length} today, ${weeklyData.length} weekly, ${upcomingData.length} upcoming, ${recentData.length} recent`
+          );
+        } catch (error) {
+          console.error("❌ Failed to force refresh earnings data:", error);
           set({
             error:
               error instanceof Error

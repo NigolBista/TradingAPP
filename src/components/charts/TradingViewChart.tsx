@@ -1,8 +1,25 @@
-import React from "react";
-import { View, useColorScheme, Pressable } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  View,
+  useColorScheme,
+  Pressable,
+  ActivityIndicator,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { WebView } from "react-native-webview";
+import LightweightCandles from "./LightweightCandles";
+import {
+  fetchCandles,
+  MarketDataResolution,
+  aggregateCandles,
+} from "../../services/marketProviders";
+
+type TradeLevels = {
+  entry?: number;
+  entryExtended?: number;
+  exit?: number;
+  exitExtended?: number;
+};
 
 type Props = {
   symbol: string; // e.g. "AAPL" or "NASDAQ:AAPL"
@@ -10,6 +27,7 @@ type Props = {
   interval?: "1" | "5" | "15" | "30" | "60" | "120" | "240" | "D" | "W" | "M";
   theme?: "light" | "dark";
   showExpand?: boolean;
+  levels?: TradeLevels;
 };
 
 export default function TradingViewChart({
@@ -18,97 +36,138 @@ export default function TradingViewChart({
   interval = "D",
   theme,
   showExpand = true,
+  levels,
 }: Props) {
   const scheme = useColorScheme();
   const resolvedTheme = theme || (scheme === "dark" ? "dark" : "light");
   const navigation = useNavigation<any>();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any[]>([]);
 
-  // Ensure the symbol has an exchange prefix; default to NASDAQ
-  const normalizedSymbol = symbol.includes(":") ? symbol : `NASDAQ:${symbol}`;
+  const normalizedSymbol = useMemo(
+    () => (symbol.includes(":") ? symbol.split(":")[1] : symbol),
+    [symbol]
+  );
 
-  const html = `<!doctype html><html><head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <style>
-      html,body,#wrap{margin:0;padding:0;height:100%;width:100%;}
-      #container{position:relative;height:100%;width:100%;}
-    </style>
-    </head><body>
-    <div id="wrap">
-      <div id="tradingview_container" style="height:100%;width:100%"></div>
-    </div>
-    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-    <script type="text/javascript">
-      function init() {
-        if (!window.TradingView) {
-          setTimeout(init, 100);
-          return;
-        }
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        setLoading(true);
+        // Map TradingView-style interval to our provider resolution and optional aggregation factor
+        let base: MarketDataResolution =
+          interval === "60"
+            ? "1H"
+            : interval === "120"
+            ? "1H"
+            : interval === "240"
+            ? "1H"
+            : (interval as MarketDataResolution);
+        const group = interval === "120" ? 2 : interval === "240" ? 4 : 1;
+
+        // Try configured provider; on 403 or failure, fallback to Yahoo open endpoint
+        let candles: any[] = [];
         try {
-          new window.TradingView.widget({
-            width: "100%",
-            height: "100%",
-            autosize: true,
-            symbol: ${JSON.stringify(normalizedSymbol)},
-            interval: ${JSON.stringify(interval)},
-            timezone: "Etc/UTC",
-            theme: ${JSON.stringify(resolvedTheme)},
-            style: "1",
-            locale: "en",
-            toolbar_bg: "transparent",
-            enable_publishing: false,
-            hide_top_toolbar: false,
-            hide_legend: false,
-            withdateranges: true,
-            allow_symbol_change: true,
-            calendar: true,
-            details: true,
-            hotlist: false,
-            studies: [
-              "VWAP@tv-basicstudies",
-              "MACD@tv-basicstudies",
-              "RSI@tv-basicstudies",
-              // Simple/Exponential moving averages
-              "MAExp@tv-basicstudies",
-              "MASimple@tv-basicstudies"
-            ],
-            container_id: "tradingview_container"
+          candles = await fetchCandles(normalizedSymbol, {
+            resolution: base,
           });
-        } catch (e) {
-          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ error: e.message }));
+        } catch (primaryErr) {
+          console.warn(
+            "Primary provider failed, retrying with Yahoo:",
+            primaryErr
+          );
+          candles = await fetchCandles(normalizedSymbol, {
+            resolution: base,
+            providerOverride: "yahoo",
+          });
         }
+        if (group > 1) {
+          candles = aggregateCandles(candles, group);
+        }
+        if (!isMounted) return;
+        setData(
+          candles.map((c) => ({
+            time:
+              typeof c.time === "number" && c.time < 1e12
+                ? c.time * 1000
+                : c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+          }))
+        );
+      } catch (e) {
+        console.warn("Failed to load candles", e);
+        if (isMounted) setData([]);
+      } finally {
+        if (isMounted) setLoading(false);
       }
-      init();
-    </script>
-  </body></html>`;
+    }
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [normalizedSymbol, interval]);
+
+  const effectiveLevels = useMemo(() => {
+    if (
+      levels &&
+      (levels.entry ||
+        levels.exit ||
+        levels.entryExtended ||
+        levels.exitExtended)
+    ) {
+      return levels;
+    }
+    if (data && data.length > 0) {
+      const last = data[data.length - 1];
+      const close = Number(last.close) || 0;
+      if (!close) return undefined;
+      const delta = close * 0.01; // 1% bands default
+      return {
+        entry: close + delta * 0.5,
+        entryExtended: close + delta * 1.0,
+        exit: Math.max(0, close - delta * 0.5),
+        exitExtended: Math.max(0, close - delta * 1.0),
+      };
+    }
+    return undefined;
+  }, [levels, data]);
 
   return (
     <View style={{ height, width: "100%" }}>
-      <WebView
-        originWhitelist={["*"]}
-        source={{ html }}
-        style={{ height, width: "100%" }}
-        javaScriptEnabled
-        domStorageEnabled
-        startInLoadingState={false}
-        scalesPageToFit={false}
-        scrollEnabled={false}
-        mixedContentMode="always"
-        onMessage={(e) => {
-          try {
-            const msg = JSON.parse(e.nativeEvent.data);
-            console.log("TradingViewChart message:", msg);
-          } catch {
-            console.log("TradingViewChart message:", e.nativeEvent.data);
-          }
-        }}
-        onError={(e) => {
-          console.warn("TradingViewChart WebView error:", e.nativeEvent);
-        }}
-      />
+      {loading ? (
+        <View
+          style={{
+            height: "100%",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <ActivityIndicator />
+        </View>
+      ) : (
+        <LightweightCandles
+          data={data}
+          height={height}
+          type="candlestick"
+          theme={resolvedTheme}
+          showVolume={false}
+          showMA={false}
+          showGrid={true}
+          showCrosshair={true}
+          levels={effectiveLevels}
+        />
+      )}
       {showExpand && (
         <Pressable
           onPress={() =>
-            navigation.navigate("ChartFullScreen", { symbol: normalizedSymbol })
+            navigation.navigate("ChartFullScreen", {
+              symbol: normalizedSymbol,
+              levels,
+            })
           }
           style={{
             position: "absolute",

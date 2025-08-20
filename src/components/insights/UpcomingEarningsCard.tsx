@@ -9,9 +9,10 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../providers/ThemeProvider";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useUserStore } from "../../store/userStore";
 import { useEarningsStore } from "../../store/earningsStore";
+import { useCallback } from "react";
 import {
   fetchUpcomingEarnings,
   fetchRecentEarnings,
@@ -73,7 +74,7 @@ const createStyles = (theme: any) =>
       fontSize: 12,
     },
     earningsContainer: {
-      gap: 12,
+      gap: 2,
     },
     earningsItem: {
       backgroundColor: theme.colors.surface,
@@ -99,6 +100,13 @@ const createStyles = (theme: any) =>
       fontSize: 11,
       color: theme.colors.textSecondary,
       marginTop: 2,
+    },
+    companyRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    favoriteIcon: {
+      marginLeft: 6,
     },
     dateTimeContainer: {
       alignItems: "flex-end",
@@ -216,8 +224,11 @@ const createStyles = (theme: any) =>
       fontWeight: "600",
       color: theme.colors.text,
       marginLeft: 6,
+      marginBottom: 12,
     },
-    sectionContainer: {},
+    sectionContainer: {
+      marginTop: 16,
+    },
   });
 
 export default function UpcomingEarningsCard({
@@ -238,6 +249,7 @@ export default function UpcomingEarningsCard({
     error,
     isHydrated,
     refreshEarningsData,
+    forceRefreshEarningsData,
   } = useEarningsStore();
 
   const [favoriteEarnings, setFavoriteEarnings] = useState<
@@ -247,45 +259,296 @@ export default function UpcomingEarningsCard({
     RecentEarningsItem[]
   >([]);
   const [showingRecent, setShowingRecent] = useState(false);
+  const [topEarnings, setTopEarnings] = useState<EarningsCalendarItem[]>([]);
+  const [recentForTop, setRecentForTop] = useState<RecentEarningsItem[]>([]);
 
-  const loadEarnings = () => {
+  const loadEarnings = async () => {
+    console.log("🔄 Loading earnings with favorites:", profile.favorites);
+
     // Get user's favorite stocks (GLOBAL favorites only)
-    const favoriteSymbolsSet = new Set<string>(profile.favorites);
+    const favoriteSymbolsSet = new Set<string>(
+      profile.favorites.map((f) => f.toUpperCase())
+    );
     const uniqueFavoriteSymbols = Array.from(favoriteSymbolsSet);
 
-    // Filter cached data for user's favorites
+    // Special debug for WKHS
+    const hasWKHS = favoriteSymbolsSet.has("WKHS");
+    console.log("🐎 WKHS Debug:", {
+      inFavorites: hasWKHS,
+      favoriteSymbolsSet: Array.from(favoriteSymbolsSet),
+      originalFavorites: profile.favorites,
+    });
+
+    console.log("📊 Available data:", {
+      todaysEarnings: todaysEarnings.length,
+      upcomingEarnings: upcomingEarnings.length,
+      recentEarnings: recentEarnings.length,
+      favorites: uniqueFavoriteSymbols,
+    });
+
+    // Debug: Show all upcoming earnings symbols
+    console.log(
+      "📋 All upcoming earnings symbols:",
+      upcomingEarnings.map((e) => e.symbol.toUpperCase())
+    );
+    console.log(
+      "📋 All today's earnings symbols:",
+      todaysEarnings.map((e) => e.symbol.toUpperCase())
+    );
+
+    // Debug: Check if any favorites match upcoming earnings
+    const matchingUpcoming = upcomingEarnings.filter((item) =>
+      favoriteSymbolsSet.has(item.symbol.toUpperCase())
+    );
+    console.log(
+      "🎯 Matching upcoming earnings for favorites:",
+      matchingUpcoming.map((e) => `${e.symbol} - ${e.date}`)
+    );
+
+    const matchingTodays = todaysEarnings.filter((item) =>
+      favoriteSymbolsSet.has(item.symbol.toUpperCase())
+    );
+    console.log(
+      "🎯 Matching today's earnings for favorites:",
+      matchingTodays.map((e) => `${e.symbol} - ${e.date}`)
+    );
+
+    // Special WKHS debug
+    const wkhsInUpcoming = upcomingEarnings.find(
+      (item) => item.symbol.toUpperCase() === "WKHS"
+    );
+    const wkhsInTodays = todaysEarnings.find(
+      (item) => item.symbol.toUpperCase() === "WKHS"
+    );
+    console.log("🐎 WKHS in earnings data:", {
+      inUpcoming: wkhsInUpcoming
+        ? `${wkhsInUpcoming.symbol} - ${wkhsInUpcoming.date}`
+        : "Not found",
+      inTodays: wkhsInTodays
+        ? `${wkhsInTodays.symbol} - ${wkhsInTodays.date}`
+        : "Not found",
+      upcomingCount: upcomingEarnings.length,
+      todaysCount: todaysEarnings.length,
+    });
+
+    // Filter cached data for user's favorites (upcoming earnings within 1 month)
     if (uniqueFavoriteSymbols.length > 0) {
-      // Filter upcoming earnings for favorites
-      const filteredUpcoming = upcomingEarnings.filter((item) =>
-        favoriteSymbolsSet.has(item.symbol.toUpperCase())
+      // Get current date for filtering
+      const now = new Date();
+      now.setHours(0, 0, 0, 0); // Start of today
+      const oneMonthFromNow = new Date();
+      oneMonthFromNow.setMonth(now.getMonth() + 1);
+      oneMonthFromNow.setHours(23, 59, 59, 999); // End of day one month from now
+
+      console.log("📅 Date filtering range:", {
+        now: now.toLocaleDateString(),
+        oneMonthFromNow: oneMonthFromNow.toLocaleDateString(),
+      });
+
+      // Filter upcoming earnings for favorites within next month
+      const filteredUpcoming = upcomingEarnings.filter((item) => {
+        const earningsDate = new Date(item.date);
+        const isFavorite = favoriteSymbolsSet.has(item.symbol.toUpperCase());
+        const isInDateRange =
+          earningsDate >= now && earningsDate <= oneMonthFromNow;
+
+        // Debug each favorite check
+        if (isFavorite) {
+          console.log(`🔍 Checking favorite ${item.symbol}:`, {
+            earningsDate: earningsDate.toLocaleDateString(),
+            now: now.toLocaleDateString(),
+            oneMonthFromNow: oneMonthFromNow.toLocaleDateString(),
+            isInDateRange,
+            rawDate: item.date,
+          });
+        }
+
+        // Re-enable strict 30-day filter for favorites
+        return isFavorite && isInDateRange;
+      });
+
+      console.log(
+        "⭐ Filtered upcoming favorites:",
+        filteredUpcoming.map((e) => `${e.symbol} - ${e.date}`)
       );
-      setFavoriteEarnings(filteredUpcoming.slice(0, 5));
+      let favoritesToShow = filteredUpcoming;
+
+      // Fallback: if cache doesn't include favorite earnings, fetch specifically for favorites
+      if (favoritesToShow.length === 0 && uniqueFavoriteSymbols.length > 0) {
+        try {
+          console.log(
+            "🔁 No favorites found in cached upcoming; fetching favorites directly..."
+          );
+          const fetchedFavorites = await fetchUpcomingEarnings(
+            uniqueFavoriteSymbols,
+            60
+          );
+
+          // Apply same 30-day window filter
+          const filteredFetched = fetchedFavorites.filter((item) => {
+            const d = new Date(item.date);
+            return d >= now && d <= oneMonthFromNow;
+          });
+
+          console.log(
+            "⭐ Fetched favorites within 30 days:",
+            filteredFetched.map((e) => `${e.symbol} - ${e.date}`)
+          );
+          favoritesToShow = filteredFetched;
+        } catch (e) {
+          console.warn("⚠️ Failed to fetch favorites upcoming earnings:", e);
+        }
+      }
+
+      const slicedUpcoming = favoritesToShow.slice(0, 5);
+      console.log(
+        "⭐ Setting favoriteEarnings to:",
+        slicedUpcoming.length,
+        "items"
+      );
+      setFavoriteEarnings(slicedUpcoming);
 
       // Filter recent earnings for favorites
       const filteredRecent = recentEarnings.filter((item) =>
         favoriteSymbolsSet.has(item.symbol.toUpperCase())
       );
+
+      console.log(
+        "📈 Filtered recent favorites:",
+        filteredRecent.map((e) => `${e.symbol} - ${e.date}`)
+      );
       setFavoriteRecentEarnings(filteredRecent.slice(0, 5));
 
       setShowingRecent(false);
     } else {
+      console.log("❌ No favorites found");
       setFavoriteEarnings([]);
       setFavoriteRecentEarnings([]);
       setShowingRecent(false);
     }
+
+    // Create prioritized top 5 earnings list for main display
+    // Combine today's earnings with upcoming earnings, prioritizing favorites
+    const allEarnings = [...todaysEarnings, ...upcomingEarnings];
+    console.log("🔄 All earnings for prioritization:", allEarnings.length);
+    console.log(
+      "🔄 All earnings symbols:",
+      allEarnings.map(
+        (e) => `${e.symbol} - ${new Date(e.date).toLocaleDateString()}`
+      )
+    );
+
+    // Separate favorites and non-favorites
+    const favoriteEarningsAll = allEarnings.filter((item) => {
+      const isMatch = favoriteSymbolsSet.has(item.symbol.toUpperCase());
+      if (isMatch) {
+        console.log(
+          `✅ Found favorite match for prioritization: ${item.symbol} - ${item.date}`
+        );
+      }
+      return isMatch;
+    });
+
+    const nonFavoriteEarnings = allEarnings.filter(
+      (item) => !favoriteSymbolsSet.has(item.symbol.toUpperCase())
+    );
+
+    console.log(
+      "🎯 Favorite earnings found for prioritization:",
+      favoriteEarningsAll.length
+    );
+    console.log("🎯 Non-favorite earnings found:", nonFavoriteEarnings.length);
+
+    console.log("🎯 Prioritization breakdown:", {
+      favoriteEarningsAll: favoriteEarningsAll.map(
+        (e) => `${e.symbol} - ${e.date}`
+      ),
+      nonFavoriteEarnings: nonFavoriteEarnings
+        .slice(0, 3)
+        .map((e) => `${e.symbol} - ${e.date}`),
+    });
+
+    // Sort by date (earliest first)
+    favoriteEarningsAll.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+    nonFavoriteEarnings.sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    // Combine favorites first, then fill with non-favorites, limit to 5
+    const prioritizedEarnings = [
+      ...favoriteEarningsAll.slice(0, 5), // Take up to 5 favorites first
+      ...nonFavoriteEarnings.slice(
+        0,
+        Math.max(0, 5 - favoriteEarningsAll.length)
+      ), // Fill remaining slots
+    ].slice(0, 5); // Ensure we never exceed 5 total
+
+    console.log(
+      "🏆 Final prioritized earnings:",
+      prioritizedEarnings.map((e) => `${e.symbol} - ${e.date}`)
+    );
+    setTopEarnings(prioritizedEarnings);
+
+    // Fetch recent actuals for top symbols to show actual vs estimate when available
+    try {
+      const symbolsForTop = Array.from(
+        new Set(prioritizedEarnings.map((e) => e.symbol.toUpperCase()))
+      );
+      if (symbolsForTop.length > 0) {
+        const recent = await fetchRecentEarnings(symbolsForTop, 14);
+        setRecentForTop(recent);
+      } else {
+        setRecentForTop([]);
+      }
+    } catch (e) {
+      console.warn("⚠️ Failed to fetch recent earnings for top symbols", e);
+      setRecentForTop([]);
+    }
   };
 
   useEffect(() => {
-    // Trigger refresh if visiting market overview and data needs refresh
+    // Force refresh when component mounts to ensure fresh data
+    console.log("🚀 Component mounted, forcing refresh...");
     if (isHydrated) {
-      refreshEarningsData();
+      forceRefreshEarningsData();
     }
   }, []); // Only run once when component mounts
 
   useEffect(() => {
-    // Filter earnings when favorites or cached data changes
+    // Force refresh when favorites change to get updated earnings data
+    console.log("⭐ Favorites changed, forcing refresh...", profile.favorites);
+    if (isHydrated && profile.favorites.length > 0) {
+      forceRefreshEarningsData();
+    }
+  }, [JSON.stringify(profile.favorites)]); // Watch favorites array content changes
+
+  useEffect(() => {
+    // Filter earnings when cached data changes
+    console.log("🔄 Data changed, reloading earnings...");
     loadEarnings();
-  }, [profile.favorites, upcomingEarnings, recentEarnings, isHydrated]);
+  }, [todaysEarnings, upcomingEarnings, recentEarnings, isHydrated]);
+
+  useEffect(() => {
+    // Debug when favoriteEarnings state changes
+    console.log(
+      "📊 favoriteEarnings state updated:",
+      favoriteEarnings.length,
+      favoriteEarnings.map((e) => e.symbol)
+    );
+  }, [favoriteEarnings]);
+
+  // Add focus effect to refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log("🎯 Screen focused, checking if refresh needed...");
+      if (isHydrated) {
+        console.log("🎯 Screen focused, forcing refresh for latest data...");
+        forceRefreshEarningsData();
+      }
+    }, [isHydrated, forceRefreshEarningsData])
+  );
 
   const handleEarningsPress = (symbol: string) => {
     if (onEarningsPress) {
@@ -300,6 +563,17 @@ export default function UpcomingEarningsCard({
       month: "short",
       day: "numeric",
     });
+  };
+
+  const isSameDay = (a?: string, b?: string) => {
+    if (!a || !b) return false;
+    const da = new Date(a);
+    const db = new Date(b);
+    return (
+      da.getFullYear() === db.getFullYear() &&
+      da.getMonth() === db.getMonth() &&
+      da.getDate() === db.getDate()
+    );
   };
 
   const getTimeInfo = (time?: string) => {
@@ -378,9 +652,9 @@ export default function UpcomingEarningsCard({
   }
 
   if (
+    topEarnings.length === 0 &&
     favoriteEarnings.length === 0 &&
-    favoriteRecentEarnings.length === 0 &&
-    todaysEarnings.length === 0
+    favoriteRecentEarnings.length === 0
   ) {
     return (
       <View style={styles.container}>
@@ -404,8 +678,26 @@ export default function UpcomingEarningsCard({
     );
   }
 
+  const isFavoriteSymbol = (symbol: string): boolean => {
+    return profile.favorites
+      .map((s) => s.toUpperCase())
+      .includes(symbol.toUpperCase());
+  };
+
   const renderEarningsItem = (item: EarningsCalendarItem, index: number) => {
     const timeInfo = getTimeInfo(item.time);
+    const isFav = isFavoriteSymbol(item.symbol);
+    const matchFromStore = recentEarnings.find(
+      (r) =>
+        r.symbol.toUpperCase() === item.symbol.toUpperCase() &&
+        isSameDay(r.date, item.date)
+    );
+    const matchFromLocal = recentForTop.find(
+      (r) =>
+        r.symbol.toUpperCase() === item.symbol.toUpperCase() &&
+        isSameDay(r.date, item.date)
+    );
+    const matchingRecent = matchFromStore || matchFromLocal;
 
     return (
       <Pressable
@@ -416,9 +708,19 @@ export default function UpcomingEarningsCard({
         <View style={styles.earningsHeader}>
           <View style={styles.symbolContainer}>
             <Text style={styles.symbol}>{item.symbol}</Text>
-            <Text style={styles.companyName} numberOfLines={1}>
-              {item.companyName}
-            </Text>
+            <View style={styles.companyRow}>
+              <Text style={styles.companyName} numberOfLines={1}>
+                {item.companyName}
+              </Text>
+              {isFav && (
+                <Ionicons
+                  name="star"
+                  size={12}
+                  color="#F59E0B"
+                  style={styles.favoriteIcon}
+                />
+              )}
+            </View>
           </View>
           <View style={styles.dateTimeContainer}>
             <Text style={styles.date}>{formatDate(item.date)}</Text>
@@ -427,31 +729,103 @@ export default function UpcomingEarningsCard({
                 {timeInfo.text}
               </Text>
             </View>
+            {matchingRecent &&
+              matchingRecent.actualEPS !== undefined &&
+              matchingRecent.estimatedEPS !== undefined && (
+                <View
+                  style={[
+                    styles.timeBadge,
+                    {
+                      backgroundColor:
+                        matchingRecent.actualEPS > matchingRecent.estimatedEPS
+                          ? "rgba(16, 185, 129, 0.2)"
+                          : "rgba(239, 68, 68, 0.2)",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.timeBadgeText,
+                      {
+                        color:
+                          matchingRecent.actualEPS > matchingRecent.estimatedEPS
+                            ? "#10B981"
+                            : "#EF4444",
+                      },
+                    ]}
+                  >
+                    {matchingRecent.actualEPS > matchingRecent.estimatedEPS
+                      ? "BEAT"
+                      : "MISS"}
+                  </Text>
+                </View>
+              )}
           </View>
         </View>
 
-        <View style={styles.metricsContainer}>
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>Est. EPS</Text>
-            <Text style={styles.metricValue}>
-              {formatEPS(item.estimatedEPS)}
-            </Text>
-          </View>
-          {!compact && (
+        {matchingRecent ? (
+          <>
+            <View style={styles.metricsContainer}>
+              <View style={styles.metricItem}>
+                <Text style={styles.metricLabel}>Actual EPS</Text>
+                <Text style={styles.metricValue}>
+                  {formatEPS(matchingRecent.actualEPS)}
+                </Text>
+              </View>
+              <View style={styles.metricItem}>
+                <Text style={styles.metricLabel}>Est. EPS</Text>
+                <Text style={styles.metricValue}>
+                  {formatEPS(matchingRecent.estimatedEPS)}
+                </Text>
+              </View>
+            </View>
+            {!compact && (
+              <View style={[styles.metricsContainer, { marginTop: 8 }]}>
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricLabel}>Actual Revenue</Text>
+                  <Text style={styles.metricValue}>
+                    {formatCurrency(
+                      (matchingRecent as any).actualRevenue ??
+                        (matchingRecent as any).revenue,
+                      { compact: true }
+                    )}
+                  </Text>
+                </View>
+                <View style={styles.metricItem}>
+                  <Text style={styles.metricLabel}>Est. Revenue</Text>
+                  <Text style={styles.metricValue}>
+                    {formatCurrency((matchingRecent as any).estimatedRevenue, {
+                      compact: true,
+                    })}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </>
+        ) : (
+          <View style={styles.metricsContainer}>
             <View style={styles.metricItem}>
-              <Text style={styles.metricLabel}>Est. Revenue</Text>
+              <Text style={styles.metricLabel}>Est. EPS</Text>
               <Text style={styles.metricValue}>
-                {formatCurrency(item.estimatedRevenue, { compact: true })}
+                {formatEPS(item.estimatedEPS)}
               </Text>
             </View>
-          )}
-          <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>Quarter</Text>
-            <Text style={styles.metricValue}>
-              {item.fiscalQuarter || "N/A"}
-            </Text>
+            {!compact && (
+              <View style={styles.metricItem}>
+                <Text style={styles.metricLabel}>Est. Revenue</Text>
+                <Text style={styles.metricValue}>
+                  {formatCurrency(item.estimatedRevenue, { compact: true })}
+                </Text>
+              </View>
+            )}
+            <View style={styles.metricItem}>
+              <Text style={styles.metricLabel}>Quarter</Text>
+              <Text style={styles.metricValue}>
+                {item.fiscalQuarter || "N/A"}
+              </Text>
+            </View>
           </View>
-        </View>
+        )}
       </Pressable>
     );
   };
@@ -461,6 +835,7 @@ export default function UpcomingEarningsCard({
     index: number
   ) => {
     const timeInfo = getTimeInfo(item.time);
+    const isFav = isFavoriteSymbol(item.symbol);
     const beatEstimate =
       item.actualEPS && item.estimatedEPS
         ? item.actualEPS > item.estimatedEPS
@@ -469,6 +844,11 @@ export default function UpcomingEarningsCard({
       item.actualEPS && item.estimatedEPS
         ? item.actualEPS < item.estimatedEPS
         : false;
+    const actualRevenue =
+      (item as any).actualRevenue !== undefined
+        ? (item as any).actualRevenue
+        : (item as any).revenue;
+    const estimatedRevenue = (item as any).estimatedRevenue;
 
     return (
       <Pressable
@@ -479,9 +859,19 @@ export default function UpcomingEarningsCard({
         <View style={styles.earningsHeader}>
           <View style={styles.symbolContainer}>
             <Text style={styles.symbol}>{item.symbol}</Text>
-            <Text style={styles.companyName} numberOfLines={1}>
-              {item.companyName}
-            </Text>
+            <View style={styles.companyRow}>
+              <Text style={styles.companyName} numberOfLines={1}>
+                {item.companyName}
+              </Text>
+              {isFav && (
+                <Ionicons
+                  name="star"
+                  size={12}
+                  color="#F59E0B"
+                  style={styles.favoriteIcon}
+                />
+              )}
+            </View>
           </View>
           <View style={styles.dateTimeContainer}>
             <Text style={styles.date}>{formatDate(item.date)}</Text>
@@ -538,38 +928,71 @@ export default function UpcomingEarningsCard({
             </View>
           )}
         </View>
+
+        <View style={[styles.metricsContainer, { marginTop: 8 }]}>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Actual Revenue</Text>
+            <Text style={styles.metricValue}>
+              {formatCurrency(actualRevenue, { compact: true })}
+            </Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>Est. Revenue</Text>
+            <Text style={styles.metricValue}>
+              {formatCurrency(estimatedRevenue, { compact: true })}
+            </Text>
+          </View>
+        </View>
       </Pressable>
     );
   };
 
+  // Debug render data
+  console.log("🎨 Rendering with data:", {
+    topEarnings: topEarnings.length,
+    favoriteEarnings: favoriteEarnings.length,
+    favoriteRecentEarnings: favoriteRecentEarnings.length,
+    isLoading,
+    isHydrated,
+  });
+
+  // Debug specific sections
+  console.log("🎨 Section visibility:", {
+    showTopEarnings: topEarnings.length > 0,
+    showFavoriteEarnings: favoriteEarnings.length > 0,
+    showRecentEarnings: favoriteRecentEarnings.length > 0,
+    favoriteEarningsItems: favoriteEarnings.map(
+      (e) => `${e.symbol} - ${e.date}`
+    ),
+  });
+
   return (
     <View style={styles.container}>
       <Pressable
-        style={styles.header}
+        style={styles.sectionTitle}
         onPress={() => (navigation as any).navigate("EarningsCalendar")}
       >
         <Text style={styles.title}>Earnings</Text>
-        <Ionicons name="chevron-forward" size={18} color={theme.colors.text} />
+        <Ionicons name="chevron-forward" size={22} color={theme.colors.text} />
       </Pressable>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {todaysEarnings.length > 0 && (
-          <View style={styles.sectionContainer}>
-            <View style={styles.earningsContainer}>
-              {todaysEarnings.map(
-                (item, index) => renderEarningsItem(item, index + 1000) // Use offset to avoid conflicts
-              )}
-            </View>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={{ marginTop: 12 }}
+      >
+        {topEarnings.length > 0 && (
+          <View style={styles.earningsContainer}>
+            {topEarnings.map((item, index) => renderEarningsItem(item, index))}
           </View>
         )}
 
-        {/* Upcoming Earnings Section */}
+        {/* Favorite Stocks Upcoming Earnings (Next 30 Days) */}
         {favoriteEarnings.length > 0 && (
           <View style={styles.sectionContainer}>
-            <Text style={styles.sectionHeaderText}>Upcoming</Text>
+            <Text style={styles.sectionHeaderText}>Your Favorites</Text>
             <View style={styles.earningsContainer}>
-              {favoriteEarnings.map((item, index) =>
-                renderEarningsItem(item, index)
+              {favoriteEarnings.map(
+                (item, index) => renderEarningsItem(item, index + 2000) // Use offset to avoid conflicts
               )}
             </View>
           </View>

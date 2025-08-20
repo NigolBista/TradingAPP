@@ -18,12 +18,13 @@ import { fetchYahooCandles } from "../services/marketProviders";
 import { fetchNewsWithDateFilter } from "../services/newsProviders";
 import SimpleLineChart from "../components/charts/SimpleLineChart";
 import { useTheme } from "../providers/ThemeProvider";
+import { useUserStore, type TraderType } from "../store/userStore";
 
 const { width } = Dimensions.get("window");
 
 export default function DecalpXScreen() {
   const { theme } = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<StockSearchResult | null>(null);
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
@@ -35,6 +36,7 @@ export default function DecalpXScreen() {
     negative: number;
     neutral: number;
   }>({ positive: 0, negative: 0, neutral: 0 });
+  const { profile } = useUserStore();
 
   // Use centralized store instead of old marketOverviewStore
   const {
@@ -193,7 +195,9 @@ export default function DecalpXScreen() {
   const priceChangePercent = (priceChange / previousPrice) * 100;
 
   // Trade mode: day vs swing
-  const [tradeMode, setTradeMode] = useState<"day" | "swing">("day");
+  const [tradeMode, setTradeMode] = useState<"day" | "swing" | "long">(
+    mapTraderTypeToMode(profile.traderType)
+  );
   const { entryPrice, exitPrice } = useMemo(() => {
     const momentum = symbolMetrics?.momentumPct ?? (priceChangePercent || 0);
     const biasLong = momentum >= 0;
@@ -201,7 +205,7 @@ export default function DecalpXScreen() {
       Math.abs(priceChange) || currentPrice * 0.005,
       currentPrice * 0.004
     );
-    const k = tradeMode === "day" ? 1.2 : 3.0;
+    const k = tradeMode === "day" ? 1.2 : tradeMode === "swing" ? 2.2 : 3.5;
     const delta = baseMove * k;
     if (biasLong) {
       return {
@@ -214,6 +218,14 @@ export default function DecalpXScreen() {
       exitPrice: Math.max(0, currentPrice - delta),
     };
   }, [currentPrice, priceChange, priceChangePercent, tradeMode, symbolMetrics]);
+  const extendedLevels = useMemo(() => {
+    const delta = Math.abs(entryPrice - exitPrice);
+    const halfR = delta * 0.5;
+    const isBuyBias = exitPrice > entryPrice;
+    const entryExtended = isBuyBias ? entryPrice + halfR : entryPrice - halfR;
+    const exitExtended = isBuyBias ? exitPrice - halfR : exitPrice + halfR;
+    return { entryExtended, exitExtended };
+  }, [entryPrice, exitPrice]);
 
   // When user selects a ticker, fetch a quick price snapshot
   useEffect(() => {
@@ -248,6 +260,19 @@ export default function DecalpXScreen() {
   }, [selected]);
 
   const styles = createStyles(theme);
+
+  const navigateToFullChart = () => {
+    const sym = selected?.symbol || "SPY";
+    navigation.navigate("ChartFullScreen", {
+      symbol: sym,
+      levels: {
+        entry: entryPrice,
+        entryExtended: extendedLevels.entryExtended,
+        exit: exitPrice,
+        exitExtended: extendedLevels.exitExtended,
+      },
+    });
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -356,6 +381,19 @@ export default function DecalpXScreen() {
               strokeWidth={2}
               showFill={false}
             />
+            <Pressable
+              onPress={navigateToFullChart}
+              style={{
+                position: "absolute",
+                right: 8,
+                top: 8,
+                backgroundColor: "rgba(0,0,0,0.5)",
+                borderRadius: 999,
+                padding: 6,
+              }}
+            >
+              <Ionicons name="expand" size={14} color="#fff" />
+            </Pressable>
           </View>
           {/* Trade mode tabs */}
           <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
@@ -385,7 +423,28 @@ export default function DecalpXScreen() {
                 Swing Trade
               </Text>
             </Pressable>
+            <Pressable
+              onPress={() => setTradeMode("long")}
+              style={{
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 999,
+                backgroundColor: tradeMode === "long" ? "#10B981" : "#374151",
+              }}
+            >
+              <Text style={{ color: "#fff", fontWeight: "700" }}>
+                Long Term
+              </Text>
+            </Pressable>
           </View>
+
+          {/* Timeframe Ribbon for selected mode */}
+          <TimeframeRibbon
+            theme={theme}
+            tradeMode={tradeMode}
+            momentumScore={momentumScore}
+            signalStrength={signalStrength}
+          />
 
           {/* Dynamic targets */}
           <View style={styles.spyMetrics}>
@@ -398,6 +457,17 @@ export default function DecalpXScreen() {
               <Text style={styles.metricValue}>${exitPrice.toFixed(2)}</Text>
             </View>
           </View>
+          <Text
+            style={{
+              color: theme.colors.textSecondary,
+              marginTop: 6,
+              fontSize: 12,
+              fontWeight: "600",
+            }}
+          >
+            Entry Ext ${extendedLevels.entryExtended.toFixed(2)} • Exit Ext $
+            {extendedLevels.exitExtended.toFixed(2)}
+          </Text>
         </View>
 
         {/* Market Sentiment + Summary strip */}
@@ -701,6 +771,113 @@ export default function DecalpXScreen() {
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+type TradeMode = "day" | "swing" | "long";
+const TIMEFRAME_MAP: Record<
+  TradeMode,
+  Array<"1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1w">
+> = {
+  day: ["1m", "5m", "15m", "30m", "1h"],
+  swing: ["5m", "15m", "30m", "1h", "4h", "1d"],
+  long: ["1h", "4h", "1d", "1w"],
+};
+
+const TF_WEIGHTS: Record<string, { mom: number; sig: number }> = {
+  "1m": { mom: 0.9, sig: 0.1 },
+  "5m": { mom: 0.8, sig: 0.2 },
+  "15m": { mom: 0.7, sig: 0.3 },
+  "30m": { mom: 0.6, sig: 0.4 },
+  "1h": { mom: 0.5, sig: 0.5 },
+  "4h": { mom: 0.35, sig: 0.65 },
+  "1d": { mom: 0.25, sig: 0.75 },
+  "1w": { mom: 0.15, sig: 0.85 },
+};
+
+function mapTraderTypeToMode(traderType: TraderType): TradeMode {
+  if (traderType === "Day trader") return "day";
+  if (traderType === "Swing trader") return "swing";
+  return "long";
+}
+
+function computeTimeframeSignalsForMode(
+  tradeMode: TradeMode,
+  momentumScore: number,
+  signalStrength: number
+) {
+  const tfs = TIMEFRAME_MAP[tradeMode];
+  return tfs.map((tf) => {
+    const w = TF_WEIGHTS[tf] || { mom: 0.5, sig: 0.5 };
+    const composite =
+      w.mom * (momentumScore - 50) + w.sig * (signalStrength - 50);
+    const direction =
+      composite > 2 ? "bull" : composite < -2 ? "bear" : "neutral";
+    const strengthPct = Math.min(
+      100,
+      Math.max(0, Math.round(Math.abs(composite)))
+    );
+    return { timeframe: tf, direction, strengthPct } as const;
+  });
+}
+
+function TimeframeRibbon({
+  theme,
+  tradeMode,
+  momentumScore,
+  signalStrength,
+}: {
+  theme: any;
+  tradeMode: TradeMode;
+  momentumScore: number;
+  signalStrength: number;
+}) {
+  const signals = computeTimeframeSignalsForMode(
+    tradeMode,
+    momentumScore,
+    signalStrength
+  );
+  return (
+    <View
+      style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 }}
+    >
+      {signals.map((s) => {
+        const isBull = s.direction === "bull";
+        const isBear = s.direction === "bear";
+        const bg = isBull ? "#065f46" : isBear ? "#7f1d1d" : "#374151";
+        const color = isBull ? "#10b981" : isBear ? "#ef4444" : "#9CA3AF";
+        return (
+          <View
+            key={s.timeframe}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 8,
+              paddingVertical: 6,
+              borderRadius: 8,
+              gap: 6,
+              backgroundColor: bg,
+            }}
+          >
+            <Text style={{ color, fontSize: 11, fontWeight: "700" }}>
+              {s.timeframe}
+            </Text>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+            >
+              <Ionicons
+                name={isBull ? "arrow-up" : isBear ? "arrow-down" : "remove"}
+                size={10}
+                color={color}
+              />
+              <Text style={{ color, fontSize: 11, fontWeight: "700" }}>
+                {s.strengthPct}%
+              </Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
   );
 }
 

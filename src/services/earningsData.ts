@@ -263,7 +263,7 @@ export async function fetchRecentEarnings(
   return recentEarnings
     .filter((report) => report.date)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 10); // Limit to top 10 most recent
+    .slice(0, 5); // Limit to top 10 most recent
 }
 
 /**
