@@ -31,8 +31,6 @@ const createStyles = (theme: any) =>
       borderRadius: 12,
       padding: 16,
       marginBottom: 16,
-      borderLeftWidth: 4,
-      borderLeftColor: "#6366F1",
     },
     header: {
       flexDirection: "row",
@@ -77,8 +75,7 @@ const createStyles = (theme: any) =>
       backgroundColor: theme.colors.surface,
       borderRadius: 8,
       padding: 12,
-      borderLeftWidth: 3,
-      borderLeftColor: "#6366F1",
+      marginBottom: 8,
     },
     earningsHeader: {
       flexDirection: "row",
@@ -206,26 +203,17 @@ const createStyles = (theme: any) =>
     sectionHeader: {
       flexDirection: "row",
       alignItems: "center",
-      marginBottom: 8,
-      marginTop: 8,
+      marginBottom: 12,
+      marginTop: 16,
     },
     sectionHeaderText: {
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: "600",
       color: theme.colors.text,
-      marginLeft: 4,
+      marginLeft: 6,
     },
-    todaySection: {
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.border,
-      paddingTop: 12,
-      marginTop: 8,
-    },
-    tomorrowSection: {
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.border,
-      paddingTop: 12,
-      marginTop: 8,
+    sectionContainer: {
+      marginBottom: 16,
     },
   });
 
@@ -257,6 +245,13 @@ export default function UpcomingEarningsCard({
         "📅 Loading upcoming earnings for favorite stocks:",
         symbolsToUse
       );
+      console.log("📋 Current profile.favorites:", profile.favorites);
+
+      if (symbolsToUse.length === 0) {
+        console.log("⚠️ No favorite stocks found, skipping earnings fetch");
+        setEarnings([]);
+        return;
+      }
 
       // Determine days ahead until end of current month
       const now = new Date();
@@ -541,9 +536,9 @@ export default function UpcomingEarningsCard({
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* This Week */}
         {week.length > 0 && (
-          <View style={styles.todaySection}>
+          <View style={styles.sectionContainer}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="calendar-outline" size={14} color="#6366F1" />
+              <Ionicons name="calendar-outline" size={16} color="#6366F1" />
               <Text style={styles.sectionHeaderText}>This Week</Text>
             </View>
             {week
@@ -554,11 +549,11 @@ export default function UpcomingEarningsCard({
 
         {/* This Month */}
         {month.length > 0 && (
-          <View style={styles.tomorrowSection}>
+          <View style={styles.sectionContainer}>
             <View style={styles.sectionHeader}>
               <Ionicons
                 name="calendar-number-outline"
-                size={14}
+                size={16}
                 color="#A855F7"
               />
               <Text style={styles.sectionHeaderText}>This Month</Text>

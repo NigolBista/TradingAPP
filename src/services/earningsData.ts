@@ -248,22 +248,13 @@ export async function fetchRecentEarnings(
  * Fetch upcoming earnings calendar
  */
 export async function fetchUpcomingEarnings(
-  symbols: string[] = [
-    "AAPL",
-    "MSFT",
-    "GOOGL",
-    "AMZN",
-    "TSLA",
-    "META",
-    "NVDA",
-    "NFLX",
-    "HD",
-    "WMT",
-    "TGT",
-    "PANW",
-  ],
+  symbols: string[],
   daysAhead: number = 14
 ): Promise<EarningsCalendarItem[]> {
+  if (!symbols || symbols.length === 0) {
+    return [];
+  }
+
   const fromDate = new Date();
   const toDate = new Date();
   toDate.setDate(fromDate.getDate() + daysAhead);
@@ -294,19 +285,34 @@ export async function fetchUpcomingEarnings(
   const results = await Promise.all(promises);
   results.forEach((reports) => upcomingEarnings.push(...reports));
 
+  console.log(
+    `📊 Raw upcoming earnings fetched:`,
+    upcomingEarnings.length,
+    upcomingEarnings
+  );
+
   // Filter for future dates and sort by date
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const endOfWindow = new Date(toDate);
   endOfWindow.setHours(23, 59, 59, 999);
 
-  return upcomingEarnings
+  const filtered = upcomingEarnings
     .filter((item) => {
       const d = new Date(item.date);
-      return d >= startOfToday && d <= endOfWindow;
+      const isInRange = d >= startOfToday && d <= endOfWindow;
+      console.log(
+        `📅 ${item.symbol} ${item.date}: ${
+          isInRange ? "✅" : "❌"
+        } (${d.toDateString()})`
+      );
+      return isInRange;
     })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     .slice(0, 15); // Limit to next 15 earnings
+
+  console.log(`📈 Filtered upcoming earnings:`, filtered.length, filtered);
+  return filtered;
 }
 
 /**
