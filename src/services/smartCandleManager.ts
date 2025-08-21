@@ -1,5 +1,6 @@
 import { fetchCandlesForTimeframe } from "./marketProviders";
 import type { Candle } from "./marketProviders";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // Base candle data structure
 export interface BaseCandle {
@@ -44,6 +45,40 @@ class SmartCandleManager {
   private inflightRequests = new Map<string, Promise<BaseCandle[]>>();
   private readonly CACHE_TTL = 30 * 60 * 1000; // 30 minutes
   private readonly MAX_INCREMENTAL_GAP = 24 * 60 * 60 * 1000; // 24 hours
+  private readonly STORAGE_PREFIX = "candles_cache_";
+  private readonly STORAGE_TTL = 60 * 60 * 1000; // 1 hour
+
+  /** Ensure a symbol's cache is loaded from persistent storage */
+  private async ensureCacheLoaded(symbol: string): Promise<void> {
+    if (this.cache.has(symbol)) return;
+    try {
+      const raw = await AsyncStorage.getItem(this.STORAGE_PREFIX + symbol);
+      if (!raw) return;
+      const parsed: CandleCache = JSON.parse(raw);
+      if (Date.now() - parsed.lastUpdate < this.STORAGE_TTL) {
+        this.cache.set(symbol, parsed);
+      } else {
+        await AsyncStorage.removeItem(this.STORAGE_PREFIX + symbol);
+      }
+    } catch (error) {
+      console.warn("⚠️ Failed to load candle cache", symbol, error);
+    }
+  }
+
+  /** Persist a symbol's cache to AsyncStorage */
+  private async saveToStorage(
+    symbol: string,
+    cache: CandleCache
+  ): Promise<void> {
+    try {
+      await AsyncStorage.setItem(
+        this.STORAGE_PREFIX + symbol,
+        JSON.stringify(cache)
+      );
+    } catch (error) {
+      console.warn("⚠️ Failed to persist candle cache", symbol, error);
+    }
+  }
 
   /**
    * Get candles for any timeframe - uses smart derivation when possible
@@ -60,6 +95,9 @@ class SmartCandleManager {
     console.log(
       `🔧 Normalized timeframe: ${timeframe} → ${normalizedTimeframe}`
     );
+
+    // Load from persistent storage if available
+    await this.ensureCacheLoaded(symbol);
 
     // Check if we can derive from cached data
     const derived = this.tryDeriveFromCache(symbol, normalizedTimeframe, limit);
@@ -158,6 +196,7 @@ class SmartCandleManager {
       if (recentCandles.length > 0) {
         // Merge new candles with existing data
         this.mergeCandles(cached, recentCandles);
+        await this.saveToStorage(symbol, cached);
         console.log(
           `✅ Updated ${symbol} with ${recentCandles.length} new candles`
         );
@@ -296,15 +335,16 @@ class SmartCandleManager {
 
     try {
       const candles = await promise;
-
-      // Update cache
-      this.cache.set(symbol, {
+      // Update cache and persist
+      const cacheEntry: CandleCache = {
         symbol,
         baseTimeframe: timeframe,
         data: candles,
         lastUpdate: Date.now(),
         lastCandle: candles.length > 0 ? candles[candles.length - 1].time : 0,
-      });
+      };
+      this.cache.set(symbol, cacheEntry);
+      await this.saveToStorage(symbol, cacheEntry);
 
       return candles;
     } finally {
@@ -407,11 +447,12 @@ class SmartCandleManager {
   /**
    * Cleanup stale cache entries
    */
-  cleanup(): void {
+  async cleanup(): Promise<void> {
     const now = Date.now();
     for (const [symbol, cached] of this.cache.entries()) {
       if (this.isCacheStale(cached)) {
         this.cache.delete(symbol);
+        await AsyncStorage.removeItem(this.STORAGE_PREFIX + symbol);
         console.log(`🧹 Cleaned up stale cache for ${symbol}`);
       }
     }
@@ -441,7 +482,7 @@ export const smartCandleManager = new SmartCandleManager();
 
 // Cleanup every 10 minutes
 setInterval(() => {
-  smartCandleManager.cleanup();
+  void smartCandleManager.cleanup();
 }, 10 * 60 * 1000);
 
 export default smartCandleManager;
