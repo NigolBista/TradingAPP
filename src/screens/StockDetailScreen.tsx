@@ -50,6 +50,12 @@ import {
 } from "../services/newsProviders";
 import { realtimeDataManager } from "../services/realtimeDataManager";
 import { smartCandleManager } from "../services/smartCandleManager";
+import {
+  ensureRange,
+  getLoadedRange,
+  getSeries,
+  planViewportFetch,
+} from "../services/viewportBars";
 
 import { type SignalSummary } from "../services/signalEngine";
 import NewsList from "../components/insights/NewsList";
@@ -899,6 +905,51 @@ export default function StockDetailScreen() {
     });
   }
 
+  // Debounced viewport-driven fetching
+  const handleVisibleRangeChange = useMemo(() => {
+    let t: any;
+    return (range: { fromMs: number; toMs: number }) => {
+      if (!range || !range.fromMs || !range.toMs) return;
+      if (t) clearTimeout(t);
+      t = setTimeout(async () => {
+        try {
+          const domain = {
+            min: Math.min(range.fromMs, range.toMs),
+            max: Math.max(range.fromMs, range.toMs),
+          };
+          const plan = planViewportFetch(symbol, extendedTf, domain);
+          const leftNeed = plan.backfillFrom != null && plan.backfillTo != null;
+          const rightNeed =
+            plan.prefetchFrom != null && plan.prefetchTo != null;
+
+          // Fetch only one side per tick to avoid canceling ourselves
+          if (leftNeed) {
+            await ensureRange(
+              symbol,
+              extendedTf,
+              plan.backfillFrom!,
+              plan.backfillTo!,
+              domain
+            );
+          } else if (rightNeed) {
+            await ensureRange(
+              symbol,
+              extendedTf,
+              plan.prefetchFrom!,
+              plan.prefetchTo!,
+              domain
+            );
+          }
+          // Update series from stitched cache
+          const stitched = getSeries(symbol, extendedTf);
+          if (stitched && stitched.length) setDailySeries(toLWC(stitched));
+        } catch (e) {
+          console.warn("Viewport fetch failed:", e);
+        }
+      }, 160);
+    };
+  }, [symbol, extendedTf]);
+
   // Load sentiment stats in background
   async function loadSentimentStats() {
     setSentimentLoading(true);
@@ -1431,6 +1482,7 @@ export default function StockDetailScreen() {
                   ? todayChange >= 0
                   : undefined
               }
+              onVisibleRangeChange={handleVisibleRangeChange}
             />
           </View>
 

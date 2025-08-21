@@ -47,8 +47,12 @@ export type MarketDataResolution =
   | "M";
 
 /** Small helper */
-async function fetchJson(url: string, headers: Record<string, string>) {
-  const res = await fetch(url, { headers });
+async function fetchJson(
+  url: string,
+  headers: Record<string, string>,
+  signal?: AbortSignal
+) {
+  const res = await fetch(url, { headers, signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -75,7 +79,7 @@ export function aggregateCandles(candles: Candle[], group: number): Candle[] {
 /** Map UI timeframe → base resolution + grouping factor.
  *  (Use coarser bases for larger ranges to keep payloads tiny.)
  */
-function mapExtendedTimeframe(tf: ExtendedTimeframe): {
+export function mapExtendedTimeframe(tf: ExtendedTimeframe): {
   base: MarketDataResolution;
   group: number;
 } {
@@ -263,6 +267,65 @@ export async function fetchMarketDataCandles(
   return candles.length > limit ? candles.slice(-limit) : candles;
 }
 
+/** MarketData.app windowed fetch (by explicit from/to) */
+export async function fetchMarketDataCandlesWindow(
+  symbol: string,
+  resolution: MarketDataResolution,
+  fromMs: number,
+  toMs: number,
+  limit: number,
+  signal?: AbortSignal
+): Promise<Candle[]> {
+  const apiToken = (Constants.expoConfig?.extra as any)?.marketDataApiToken;
+  if (!apiToken) {
+    throw new Error(
+      "MarketData API token missing. Set extra.marketDataApiToken."
+    );
+  }
+
+  const from = new Date(Math.min(fromMs, toMs));
+  const to = new Date(Math.max(fromMs, toMs));
+
+  const formatDate = (d: Date) => d.toISOString().split("T")[0];
+  const url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
+    symbol
+  )}/?from=${formatDate(from)}&to=${formatDate(to)}&limit=${limit}`;
+
+  const headers = {
+    Authorization: `Bearer ${apiToken}`,
+    "Content-Type": "application/json",
+  };
+
+  const json = await fetchJson(url, headers, signal);
+
+  if (json?.s !== "ok") {
+    const errorMsg = json?.errmsg || "Unknown MarketData error";
+    throw new Error(errorMsg);
+  }
+
+  const t = json.t || [];
+  const o = json.o || [];
+  const h = json.h || [];
+  const l = json.l || [];
+  const c = json.c || [];
+  const v = json.v || [];
+
+  const candles: Candle[] = t
+    .map((ts: number, i: number) => ({
+      time: ts * 1000,
+      open: o[i],
+      high: h[i],
+      low: l[i],
+      close: c[i],
+      volume: v[i],
+    }))
+    .filter((k: Candle) => Number.isFinite(k.open) && Number.isFinite(k.close))
+    .sort((a: Candle, b: Candle) => a.time - b.time);
+
+  // Extra safety — server respects limit, but trim if needed
+  return candles.length > limit ? candles.slice(-limit) : candles;
+}
+
 /** Public entry that your UI should call for timeframe-based charts */
 export async function fetchCandlesForTimeframe(
   symbol: string,
@@ -287,6 +350,65 @@ export async function fetchCandlesForTimeframe(
     limit: baseLimit,
   });
   return aggregateCandles(baseCandles, group).slice(-outBars);
+}
+
+/** Convenience: resolution to milliseconds */
+export function resolutionToMs(resolution: MarketDataResolution): number {
+  switch (resolution) {
+    case "1":
+      return 60_000;
+    case "5":
+      return 5 * 60_000;
+    case "15":
+      return 15 * 60_000;
+    case "30":
+      return 30 * 60_000;
+    case "1H":
+      return 60 * 60_000;
+    case "D":
+      return 24 * 60 * 60_000;
+    case "W":
+      return 7 * 24 * 60 * 60_000;
+    case "M":
+      return 30 * 24 * 60 * 60_000; // approx
+  }
+}
+
+/** Windowed timeframe fetch honoring from/to and output bar budget */
+export async function fetchCandlesForTimeframeWindow(
+  symbol: string,
+  timeframe: ExtendedTimeframe,
+  fromMs: number,
+  toMs: number,
+  opts?: { outBars?: number; baseCushion?: number },
+  signal?: AbortSignal
+): Promise<Candle[]> {
+  const { base, group } = mapExtendedTimeframe(timeframe);
+  const outBars = opts?.outBars ?? desiredOutputBars(timeframe);
+  const BASE_CUSHION = opts?.baseCushion ?? 1.2;
+  const MAX_BASE = 1200;
+  const baseLimit = Math.min(
+    Math.ceil(outBars * group * BASE_CUSHION),
+    MAX_BASE
+  );
+
+  const baseCandles = await fetchMarketDataCandlesWindow(
+    symbol,
+    base,
+    fromMs,
+    toMs,
+    baseLimit,
+    signal
+  );
+
+  // Aggregate to target frame and trim to requested time window
+  const aggregated = aggregateCandles(baseCandles, group);
+  const minMs = Math.min(fromMs, toMs);
+  const maxMs = Math.max(fromMs, toMs);
+  const windowed = aggregated.filter((c) => c.time >= minMs && c.time <= maxMs);
+
+  // Respect outBars budget if needed
+  return windowed.length > outBars ? windowed.slice(-outBars) : windowed;
 }
 
 /** Minimal options (provider removed) */

@@ -18,6 +18,11 @@ import LightweightCandles, {
   type LWCDatum,
   TradePlanOverlay,
 } from "../components/charts/LightweightCandles";
+import {
+  ensureRange,
+  getSeries,
+  planViewportFetch,
+} from "../services/viewportBars";
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
@@ -30,8 +35,8 @@ import { useTimeframeStore } from "../store/timeframeStore";
 import {
   fetchCandlesForTimeframe,
   fetchCandles,
-  fetchNews,
 } from "../services/marketProviders";
+import { fetchNews as fetchSymbolNews } from "../services/newsProviders";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
@@ -81,6 +86,54 @@ export default function ChartFullScreen() {
   const [stockName, setStockName] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
   const [data, setData] = useState<LWCDatum[]>(initialDataParam || []);
+  const handleVisibleRangeChange = React.useMemo(() => {
+    let t: any;
+    return (range: { fromMs: number; toMs: number }) => {
+      if (!range || !range.fromMs || !range.toMs) return;
+      if (t) clearTimeout(t);
+      t = setTimeout(async () => {
+        try {
+          const domain = {
+            min: Math.min(range.fromMs, range.toMs),
+            max: Math.max(range.fromMs, range.toMs),
+          };
+          const plan = planViewportFetch(symbol, extendedTf, domain);
+          const leftNeed = plan.backfillFrom != null && plan.backfillTo != null;
+          const rightNeed =
+            plan.prefetchFrom != null && plan.prefetchTo != null;
+          if (leftNeed) {
+            await ensureRange(
+              symbol,
+              extendedTf,
+              plan.backfillFrom!,
+              plan.backfillTo!,
+              domain
+            );
+          } else if (rightNeed) {
+            await ensureRange(
+              symbol,
+              extendedTf,
+              plan.prefetchFrom!,
+              plan.prefetchTo!,
+              domain
+            );
+          }
+          const stitched = getSeries(symbol, extendedTf);
+          if (stitched && stitched.length)
+            setData(
+              stitched.map((c) => ({
+                time: c.time,
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close,
+                volume: c.volume,
+              }))
+            );
+        } catch (e) {}
+      }, 160);
+    };
+  }, [symbol, extendedTf]);
 
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
   const [bottomSheetAnim] = useState(new Animated.Value(0));
@@ -351,10 +404,7 @@ export default function ChartFullScreen() {
         try {
           return await fetchCandles(symbol, { resolution: res });
         } catch (e) {
-          return await fetchCandles(symbol, {
-            resolution: res,
-            providerOverride: "yahoo",
-          });
+          return await fetchCandles(symbol, { resolution: res });
         }
       };
       const [d, h1, m15, m5] = await Promise.all([
@@ -377,7 +427,7 @@ export default function ChartFullScreen() {
       // Fetch symbol news
       if (shouldFetchContext) {
         try {
-          const news = await fetchNews(symbol);
+          const news = await fetchSymbolNews(symbol);
           newsBrief = (news || []).slice(0, 5).map((n: any) => ({
             title: n.title,
             summary: (n.summary || "").slice(0, 180),
@@ -390,7 +440,7 @@ export default function ChartFullScreen() {
         if (isAutoAnalysis) {
           // Fetch market news
           try {
-            const marketNews = await fetchNews("SPY"); // Use SPY as market proxy
+            const marketNews = await fetchSymbolNews("SPY"); // Use SPY as market proxy
             marketNewsBrief = (marketNews || []).slice(0, 3).map((n: any) => ({
               title: n.title,
               summary: (n.summary || "").slice(0, 120),
@@ -415,10 +465,7 @@ export default function ChartFullScreen() {
             try {
               vixCandles = await fetchCandles("^VIX", { resolution: "D" });
             } catch {
-              vixCandles = await fetchCandles("^VIX", {
-                resolution: "D",
-                providerOverride: "yahoo",
-              });
+              vixCandles = await fetchCandles("^VIX", { resolution: "D" });
             }
             const last = vixCandles[vixCandles.length - 1];
             const val = Number(last?.close) || 0;
@@ -891,6 +938,7 @@ export default function ChartFullScreen() {
             forcePositive={typeof dayUp === "boolean" ? dayUp : undefined}
             levels={effectiveLevels}
             tradePlan={currentTradePlan}
+            onVisibleRangeChange={handleVisibleRangeChange}
           />
         )}
         <Pressable

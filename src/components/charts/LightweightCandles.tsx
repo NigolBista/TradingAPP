@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { WebView } from "react-native-webview";
 import { Asset } from "expo-asset";
@@ -48,6 +48,10 @@ interface Props {
   };
   // New: richer trade overlay input. If provided, takes precedence over `levels`.
   tradePlan?: TradePlanOverlay;
+  // Notify RN when visible time range changes (ms)
+  onVisibleRangeChange?: (range: { fromMs: number; toMs: number }) => void;
+  // Notify when the web chart is ready
+  onReady?: () => void;
 }
 
 export default function LightweightCandles({
@@ -63,7 +67,11 @@ export default function LightweightCandles({
   forcePositive,
   levels,
   tradePlan,
+  onVisibleRangeChange,
+  onReady,
 }: Props) {
+  const webRef = useRef<WebView>(null);
+  const [isReady, setIsReady] = useState(false);
   const series = useMemo(
     () =>
       data.map((d) => ({
@@ -298,7 +306,7 @@ export default function LightweightCandles({
       let mainSeries;
       const type = ${JSON.stringify(type)};
       const forced = ${JSON.stringify(forcePositive)};
-      const raw = ${JSON.stringify(series)};
+      let raw = ${JSON.stringify(series)};
       
       // Determine if price is up or down based on first and last prices
       // Use a more robust approach: if we have enough data, compare recent vs earlier prices
@@ -343,13 +351,16 @@ export default function LightweightCandles({
         });
       }
       
-      log('Raw data length: ' + raw.length);
-      const seriesData = (type === 'area' || type === 'line') 
-        ? raw.map(d => ({ time: d.time, value: d.close }))
-        : raw;
-      log('Setting data on main series');
-      mainSeries.setData(seriesData);
-      log('Data set on main series');
+      function applySeriesData(initial){
+        try {
+          raw = Array.isArray(initial) ? initial : [];
+          const seriesData = (type === 'area' || type === 'line')
+            ? raw.map(d => ({ time: d.time, value: d.close }))
+            : raw;
+          mainSeries.setData(seriesData);
+        } catch(e) { log('applySeriesData error: ' + e.message); }
+      }
+      applySeriesData(raw);
       
       // Add price lines as a fallback so levels are always visible
       function addPriceLine(price, color, title){
@@ -411,13 +422,17 @@ export default function LightweightCandles({
           scaleMargins: { top: 0.7, bottom: 0 }
         });
         
-        const volumeData = raw.map(d => ({
-          time: d.time,
-          value: d.volume,
-          color: (d.close >= d.open) ? 'rgba(22,163,74,0.5)' : 'rgba(220,38,38,0.5)'
-        }));
-        
-        volumeSeries.setData(volumeData);
+        function setVolumeData(){
+          try {
+            const volumeData = raw.map(d => ({
+              time: d.time,
+              value: d.volume,
+              color: (d.close >= d.open) ? 'rgba(22,163,74,0.5)' : 'rgba(220,38,38,0.5)'
+            }));
+            volumeSeries.setData(volumeData);
+          } catch(_) {}
+        }
+        setVolumeData();
       `
           : ""
       }
@@ -547,6 +562,48 @@ export default function LightweightCandles({
       setTimeout(updateZones, 250);
       setTimeout(updateZones, 800);
       
+      // RN -> Web command handler
+      function appendSeriesData(items){
+        try {
+          if (!Array.isArray(items) || items.length === 0) return;
+          for (var i=0;i<items.length;i++) {
+            var d = items[i];
+            if (!d) continue;
+            if (type === 'area' || type === 'line') {
+              mainSeries.update({ time: d.time, value: d.close });
+            } else {
+              mainSeries.update(d);
+            }
+          }
+        } catch(e) { log('appendSeriesData error: ' + e.message); }
+      }
+      window.addEventListener('message', function(event){
+        try {
+          const msg = JSON.parse(event.data);
+          if (!msg || !msg.cmd) return;
+          if (msg.cmd === 'setData') {
+            applySeriesData(msg.data || []);
+            try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
+          } else if (msg.cmd === 'appendData') {
+            appendSeriesData(msg.data || []);
+          }
+        } catch(e) { log('message handler error: ' + e.message); }
+      });
+
+      // Forward visible range changes to RN
+      try {
+        chart.timeScale().subscribeVisibleTimeRangeChange((range) => {
+          if (!range || range.from == null || range.to == null) return;
+          const fromMs = Math.round(range.from * 1000);
+          const toMs = Math.round(range.to * 1000);
+          try {
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+              visibleRange: { fromMs, toMs }
+            }));
+          } catch(_) {}
+        });
+      } catch(_) {}
+
       // Post ready message
       try {
         const count = Array.isArray(raw) ? raw.length : 0;
@@ -588,6 +645,16 @@ export default function LightweightCandles({
     </script>
   </body></html>`;
 
+  // Push data updates to WebView when RN data changes and web is ready
+  useEffect(() => {
+    if (!isReady || !webRef.current) return;
+    try {
+      (webRef.current as any)?.postMessage?.(
+        JSON.stringify({ cmd: "setData", data: series })
+      );
+    } catch (_) {}
+  }, [isReady, series]);
+
   return (
     <View
       style={{
@@ -602,6 +669,7 @@ export default function LightweightCandles({
         source={{ html }}
         style={{ height, width: "100%", backgroundColor: "transparent" }}
         containerStyle={{ backgroundColor: "transparent" }}
+        /* @ts-expect-error react-native-webview may not expose opaque in types */
         opaque={false}
         javaScriptEnabled={true}
         domStorageEnabled={true}
@@ -613,10 +681,23 @@ export default function LightweightCandles({
         scrollEnabled={false}
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
+        ref={webRef}
         onMessage={(e) => {
           try {
             const msg = JSON.parse(e.nativeEvent.data);
-            console.log("LightweightCandles WebView message:", msg);
+            if (msg?.ready) {
+              setIsReady(true);
+              if (onReady) onReady();
+              try {
+                (webRef.current as any)?.postMessage?.(
+                  JSON.stringify({ cmd: "setData", data: series })
+                );
+              } catch (_) {}
+            } else if (msg?.visibleRange && onVisibleRangeChange) {
+              onVisibleRangeChange(msg.visibleRange);
+            } else {
+              console.log("LightweightCandles WebView message:", msg);
+            }
           } catch {
             console.log(
               "LightweightCandles WebView message:",
