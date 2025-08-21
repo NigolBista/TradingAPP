@@ -35,6 +35,8 @@ interface Props {
   maPeriods?: number[];
   showGrid?: boolean;
   showCrosshair?: boolean;
+  // If provided, override chart up/down color choice
+  forcePositive?: boolean;
   // Optional trade levels - used to render zones/lines
   levels?: {
     entry?: number;
@@ -56,6 +58,7 @@ export default function LightweightCandles({
   maPeriods = [20, 50],
   showGrid = true,
   showCrosshair = true,
+  forcePositive,
   levels,
   tradePlan,
 }: Props) {
@@ -246,12 +249,15 @@ export default function LightweightCandles({
 
       let mainSeries;
       const type = ${JSON.stringify(type)};
+      const forced = ${JSON.stringify(forcePositive)};
       const raw = ${JSON.stringify(series)};
       
       // Determine if price is up or down based on first and last prices
       // Use a more robust approach: if we have enough data, compare recent vs earlier prices
       let isPositive = true;
-      if (raw.length > 1) {
+      if (typeof forced === 'boolean') {
+        isPositive = forced;
+      } else if (raw.length > 1) {
         const firstPrice = raw[0].close;
         const lastPrice = raw[raw.length - 1].close;
         isPositive = lastPrice >= firstPrice;
@@ -346,7 +352,7 @@ export default function LightweightCandles({
           : ""
       }
 
-      // Volume histogram
+      // Volume histogram (use forced up/down for consistency)
       ${
         showVolume
           ? `

@@ -489,9 +489,17 @@ export default function WatchlistScreen() {
     }
   }
 
-  function handleStockPress(symbol: string) {
-    // Navigate to dedicated stock detail page
-    (navigation as any).navigate("StockDetail", { symbol });
+  function handleStockPress(stock: StockData) {
+    // Navigate to dedicated stock detail page with initial quote for instant price
+    (navigation as any).navigate("StockDetail", {
+      symbol: stock.symbol,
+      initialQuote: {
+        symbol: stock.symbol,
+        last: stock.currentPrice,
+        change: stock.change,
+        changePercent: stock.changePercent,
+      },
+    });
   }
 
   function handleDeleteWatchlist(watchlistId: string) {
@@ -729,7 +737,7 @@ export default function WatchlistScreen() {
                   change={stock.change}
                   changePercent={stock.changePercent}
                   isGlobalFavorite={isGlobalFav}
-                  onPress={() => handleStockPress(stock.symbol)}
+                  onPress={() => handleStockPress(stock)}
                   onToggleFavorite={() => toggleGlobalFavorite(stock.symbol)}
                   onRemove={() => handleRemoveStock(stock.symbol)}
                 />

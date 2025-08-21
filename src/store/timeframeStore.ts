@@ -23,7 +23,7 @@ const DEFAULT_PINNED: ExtendedTimeframe[] = [
   "1D",
   "1W",
 ];
-const INITIAL_DEFAULT_TIMEFRAME: ExtendedTimeframe = "1m";
+const INITIAL_DEFAULT_TIMEFRAME: ExtendedTimeframe = "1D";
 
 export const useTimeframeStore = create<TimeframeState>((set, get) => ({
   pinned: DEFAULT_PINNED,

@@ -266,38 +266,24 @@ const fetchRealMarketData = async (): Promise<{
   console.log("🔄 Fetching real market data from APIs...");
 
   try {
-    // Fetch market overview for different timeframes
-    const [overview1D, overview1W, overview1M, generalNews] = await Promise.all(
-      [
-        generateMarketOverviewWithData({
-          timeframe: "1D",
-          analysisDepth: "brief",
-        }),
-        generateMarketOverviewWithData({
-          timeframe: "1W",
-          analysisDepth: "brief",
-        }),
-        generateMarketOverviewWithData({
-          timeframe: "1M",
-          analysisDepth: "brief",
-        }),
-        fetchGeneralMarketNews(20),
-      ]
-    );
+    // Fetch only 1D overview on background hydrate to reduce AI/API calls
+    const [overview1D] = await Promise.all([
+      generateMarketOverviewWithData({
+        timeframe: "1D",
+        analysisDepth: "brief",
+      }),
+    ]);
 
     const marketOverview: Record<Timeframe, MarketOverview> = {
       "1D": overview1D.overview,
-      "1W": overview1W.overview,
-      "1M": overview1M.overview,
+      // Defer 1W/1M generation to on-demand views
+      "1W": overview1D.overview,
+      "1M": overview1D.overview,
     };
 
-    // Use news from market overview or fallback to general news
-    const news =
-      overview1D.rawData.news.length > 0
-        ? overview1D.rawData.news
-        : generalNews;
+    const news = overview1D.rawData.news;
 
-    console.log("✅ Successfully fetched real market data");
+    console.log("✅ Successfully fetched real market data (1D only)");
     return { marketOverview, news };
   } catch (error) {
     console.error("❌ Failed to fetch real market data:", error);

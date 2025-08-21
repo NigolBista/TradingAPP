@@ -56,9 +56,10 @@ import { useTimeframeStore } from "../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
+import { type SimpleQuote, getCachedQuotes } from "../services/quotes";
 
 type RootStackParamList = {
-  StockDetail: { symbol: string };
+  StockDetail: { symbol: string; initialQuote?: SimpleQuote };
 };
 
 const styles = StyleSheet.create({
@@ -349,11 +350,17 @@ export default function StockDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "StockDetail">>();
   const navigation = useNavigation();
   const symbol = route.params?.symbol || "AAPL";
+  const initialQuoteParam = route.params?.initialQuote as
+    | SimpleQuote
+    | undefined;
 
   const [loading, setLoading] = useState(true);
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
   const [dailySeries, setDailySeries] = useState<LWCDatum[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [initialQuote, setInitialQuote] = useState<SimpleQuote | null>(
+    initialQuoteParam || null
+  );
   const [summary, setSummary] = useState<SignalSummary | null>(null);
   const [newsLoading, setNewsLoading] = useState<boolean>(true);
   const [showNoteModal, setShowNoteModal] = useState(false);
@@ -366,7 +373,7 @@ export default function StockDetailScreen() {
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1D");
   const [tfModalVisible, setTfModalVisible] = useState(false);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    defaultTimeframe || "1D"
+    defaultTimeframe || "1m"
   );
   const { messages, addAnalysisMessage, clearSymbolMessages } = useChatStore();
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
@@ -472,6 +479,23 @@ export default function StockDetailScreen() {
     hydrate();
   }, [symbol]);
 
+  // If no initialQuote provided, try hydrate from cached quotes quickly
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!initialQuote) {
+        try {
+          const cached = await getCachedQuotes([symbol]);
+          const q = cached[symbol];
+          if (q && mounted) setInitialQuote(q);
+        } catch {}
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [symbol]);
+
   // Update extendedTf when defaultTimeframe changes
   useEffect(() => {
     if (defaultTimeframe) {
@@ -498,8 +522,8 @@ export default function StockDetailScreen() {
       // Initial refresh
       refreshCachedSignal();
 
-      // Set up periodic refresh while screen is focused
-      const interval = setInterval(refreshCachedSignal, 1000); // Check every second
+      // Set up periodic refresh while screen is focused (reduced frequency)
+      const interval = setInterval(refreshCachedSignal, 2500);
 
       // Return cleanup function
       return () => {
@@ -507,6 +531,13 @@ export default function StockDetailScreen() {
       };
     }, [symbol, getCachedSignal, cachedSignal])
   );
+
+  // Lazy-trigger auto analysis when user opens the Signals tab
+  useEffect(() => {
+    if (activeTab === "signals" && !signalLoading && !cachedSignal) {
+      performAutoAnalysis();
+    }
+  }, [activeTab]);
 
   async function loadStockName() {
     try {
@@ -533,12 +564,22 @@ export default function StockDetailScreen() {
       }
 
       // Fetch candle data for analysis
+      const limits: Record<"D" | "1H" | "15" | "5", number> = {
+        D: 365,
+        "1H": 300,
+        "15": 200,
+        "5": 150,
+      };
       const get = async (res: "D" | "1H" | "15" | "5") => {
         try {
-          return await fetchCandles(symbol, { resolution: res });
+          return await fetchCandles(symbol, {
+            resolution: res,
+            limit: limits[res],
+          });
         } catch (e) {
           return await fetchCandles(symbol, {
             resolution: res,
+            limit: limits[res],
             providerOverride: "yahoo",
           });
         }
@@ -690,28 +731,20 @@ export default function StockDetailScreen() {
   async function load() {
     try {
       setLoading(true);
-      // Fetch only default timeframe first (daily) for fast initial render
-      const d = await fetchCandles(symbol, { resolution: "D" });
-      setDailySeries(toLWC(d));
-
-      // Start auto-analysis immediately for signal display
-      performAutoAnalysis();
+      // Fetch initial timeframe (1m by default) for fast initial render with optimized limit
+      const initialCandles = await fetchCandlesForTimeframe(symbol, extendedTf);
+      setDailySeries(toLWC(initialCandles));
 
       // Defer secondary data (analysis, news, summary) to not block UI
       Promise.allSettled([
         (async () => {
           try {
-            const [h1, m15, m5] = await Promise.all([
-              fetchCandles(symbol, { resolution: "1H" }),
-              fetchCandles(symbol, { resolution: "15" }),
-              fetchCandles(symbol, { resolution: "5" }),
-            ]);
-            const candleData = {
-              "1d": d,
-              "1h": h1,
-              "15m": m15,
-              "5m": m5,
-            } as const;
+            // Lightweight overview: daily-only for initial analysis
+            const d = await fetchCandles(symbol, {
+              resolution: "D",
+              limit: 365,
+            });
+            const candleData = { "1d": d } as const;
             const a = await performComprehensiveAnalysis(
               symbol,
               candleData as any
@@ -840,12 +873,22 @@ export default function StockDetailScreen() {
       setSignalLoading(true);
 
       // Fetch fresh candle data
+      const limits: Record<"D" | "1H" | "15" | "5", number> = {
+        D: 365,
+        "1H": 300,
+        "15": 200,
+        "5": 150,
+      };
       const get = async (res: "D" | "1H" | "15" | "5") => {
         try {
-          return await fetchCandles(symbol, { resolution: res });
+          return await fetchCandles(symbol, {
+            resolution: res,
+            limit: limits[res],
+          });
         } catch (e) {
           return await fetchCandles(symbol, {
             resolution: res,
+            limit: limits[res],
             providerOverride: "yahoo",
           });
         }
@@ -1017,14 +1060,39 @@ export default function StockDetailScreen() {
     }
   }
 
-  const currentPrice = analysis?.currentPrice || 0;
-  const prev = currentPrice * 0.98;
-  const priceChange = currentPrice - prev;
-  const priceChangePercent = prev > 0 ? (priceChange / prev) * 100 : 0;
+  const currentPrice = initialQuote?.last ?? analysis?.currentPrice ?? 0;
 
-  // Mock after-hours data - replace with real data when available
-  const afterHoursChange = 0.06;
-  const afterHoursPercent = 0.02;
+  // Use real quote deltas when available; otherwise avoid showing potentially incorrect values
+  const todayChange =
+    typeof initialQuote?.change === "number" ? initialQuote.change : null;
+  const todayChangePercent =
+    typeof initialQuote?.changePercent === "number"
+      ? initialQuote.changePercent
+      : null;
+
+  // After-hours visibility: only show in US after-hours window (4:00pm–8:00pm ET on weekdays)
+  function isUSAfterHours(now: Date = new Date()): boolean {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+        weekday: "short",
+      }).formatToParts(now);
+      const hour = Number(parts.find((p) => p.type === "hour")?.value || "0");
+      const minute = Number(
+        parts.find((p) => p.type === "minute")?.value || "0"
+      );
+      const weekday = parts.find((p) => p.type === "weekday")?.value || "";
+      const isWeekday = weekday ? weekday[0] !== "S" : false; // Mon-Fri
+      const minutes = hour * 60 + minute;
+      return !!isWeekday && minutes >= 16 * 60 && minutes < 20 * 60;
+    } catch {
+      return false;
+    }
+  }
+  const showAfterHours = isUSAfterHours();
 
   function toLWC(candles: Candle[]): LWCDatum[] {
     return (candles || []).map((c) => ({
@@ -1114,25 +1182,32 @@ export default function StockDetailScreen() {
         {/* Price Information */}
         <View style={styles.priceRow}>
           <Text style={styles.mainPrice}>${currentPrice.toFixed(2)}</Text>
-          <Text
-            style={[
-              styles.todayChange,
-              { color: priceChange >= 0 ? "#00D4AA" : "#FF6B6B" },
-            ]}
-          >
-            {priceChange >= 0 ? "+" : ""}${priceChange.toFixed(2)} (
-            {priceChangePercent.toFixed(2)}%) Today
-          </Text>
-          {/* After Hours - Mock data for now */}
-          <Text
-            style={[
-              styles.afterHours,
-              { color: afterHoursChange >= 0 ? "#16a34a" : "#dc2626" },
-            ]}
-          >
-            {afterHoursChange >= 0 ? "+" : ""}${afterHoursChange.toFixed(2)} (
-            {afterHoursPercent.toFixed(2)}%) After hours
-          </Text>
+          {todayChange !== null && todayChangePercent !== null && (
+            <Text
+              style={[
+                styles.todayChange,
+                { color: todayChange >= 0 ? "#00D4AA" : "#FF6B6B" },
+              ]}
+            >
+              {todayChange >= 0 ? "+" : ""}${todayChange.toFixed(2)} (
+              {todayChangePercent.toFixed(2)}%) Today
+            </Text>
+          )}
+          {showAfterHours && (
+            <Text
+              style={[
+                styles.afterHours,
+                {
+                  color:
+                    todayChange !== null && todayChange < 0
+                      ? "#16a34a"
+                      : "#dc2626",
+                },
+              ]}
+            >
+              After hours
+            </Text>
+          )}
         </View>
       </View>
 
@@ -1150,6 +1225,11 @@ export default function StockDetailScreen() {
               showMA={false}
               showGrid={true}
               showCrosshair={true}
+              forcePositive={
+                todayChange !== null && todayChangePercent !== null
+                  ? todayChange >= 0
+                  : undefined
+              }
             />
           </View>
 
@@ -1202,6 +1282,12 @@ export default function StockDetailScreen() {
                   symbol,
                   chartType,
                   timeframe: extendedTf, // Use extendedTf instead of selectedTimeframe for consistency
+                  initialTimeframe: extendedTf,
+                  initialData: dailySeries,
+                  isDayUp:
+                    todayChange !== null && todayChangePercent !== null
+                      ? todayChange >= 0
+                      : undefined,
                   // Pass cached signal data if available
                   ...(cachedSignal && {
                     tradePlan: cachedSignal.tradePlan,
@@ -1328,18 +1414,19 @@ export default function StockDetailScreen() {
                   >
                     ${currentPrice.toFixed(2)}
                   </Text>
-                  <Text
-                    style={{
-                      color: priceChangePercent >= 0 ? "#10B981" : "#EF4444",
-                      fontSize: 14,
-                      fontWeight: "600",
-                    }}
-                  >
-                    {priceChangePercent >= 0 ? "+" : ""}
-                    {priceChangePercent.toFixed(2)}% (
-                    {priceChangePercent >= 0 ? "+" : ""}$
-                    {priceChange.toFixed(2)})
-                  </Text>
+                  {todayChange !== null && todayChangePercent !== null && (
+                    <Text
+                      style={{
+                        color: todayChangePercent >= 0 ? "#10B981" : "#EF4444",
+                        fontSize: 14,
+                        fontWeight: "600",
+                      }}
+                    >
+                      {todayChangePercent >= 0 ? "+" : ""}
+                      {todayChangePercent.toFixed(2)}% (
+                      {todayChange >= 0 ? "+" : ""}${todayChange.toFixed(2)})
+                    </Text>
+                  )}
                 </View>
                 {symbolSentimentSummary && (
                   <View style={{ alignItems: "flex-end" }}>

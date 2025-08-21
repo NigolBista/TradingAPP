@@ -36,6 +36,7 @@ import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
 import { getUpcomingFedEvents } from "../services/federalReserve";
+import { getCachedQuotes, type SimpleQuote } from "../services/quotes";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -50,6 +51,10 @@ export default function ChartFullScreen() {
     (route.params?.chartType as ChartType) || "candlestick"
   );
   const timeframe: string = route.params?.timeframe || "1D";
+  const initialTimeframe: string | undefined = route.params?.initialTimeframe;
+  const isDayUp: boolean | undefined = route.params?.isDayUp;
+  const [dayUp, setDayUp] = useState<boolean | undefined>(isDayUp);
+  const initialDataParam: LWCDatum[] | undefined = route.params?.initialData;
   const levels = route.params?.levels;
   const initialTradePlan: TradePlanOverlay | undefined =
     route.params?.tradePlan;
@@ -69,11 +74,13 @@ export default function ChartFullScreen() {
     useTimeframeStore();
 
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    (timeframe as ExtendedTimeframe) || defaultTimeframe || "1m"
+    ((initialTimeframe || timeframe) as ExtendedTimeframe) ||
+      defaultTimeframe ||
+      "1m"
   );
   const [stockName, setStockName] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
-  const [data, setData] = useState<LWCDatum[]>([]);
+  const [data, setData] = useState<LWCDatum[]>(initialDataParam || []);
 
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
   const [bottomSheetAnim] = useState(new Animated.Value(0));
@@ -161,6 +168,29 @@ export default function ChartFullScreen() {
     }
   }, [symbol]);
 
+  // Fallback: if no isDayUp provided, hydrate from cached quotes
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (typeof isDayUp === "boolean") {
+        setDayUp(isDayUp);
+        return;
+      }
+      try {
+        const cached = await getCachedQuotes([symbol]);
+        const q: SimpleQuote | undefined = cached[symbol];
+        if (q && mounted) {
+          if (typeof q.change === "number") setDayUp(q.change >= 0);
+          else if (typeof q.changePercent === "number")
+            setDayUp(q.changePercent >= 0);
+        }
+      } catch {}
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [symbol, isDayUp]);
+
   // Update timeframe when store is hydrated
   useEffect(() => {
     if (defaultTimeframe && !initialAnalysisContext) {
@@ -198,6 +228,11 @@ export default function ChartFullScreen() {
     let isMounted = true;
     async function load() {
       try {
+        // If initial data provided and timeframe matches, use it and avoid refetch
+        if (initialDataParam && initialDataParam.length > 0) {
+          setLoading(false);
+          return;
+        }
         setLoading(true);
         const candles = await fetchCandlesForTimeframe(symbol, extendedTf);
         if (!isMounted) return;
@@ -223,6 +258,17 @@ export default function ChartFullScreen() {
       isMounted = false;
     };
   }, [symbol, extendedTf]);
+
+  // Final fallback: derive direction from loaded data if still unknown
+  useEffect(() => {
+    if (typeof dayUp === "boolean") return;
+    if (!data || data.length < 2) return;
+    const first = data[0]?.close;
+    const last = data[data.length - 1]?.close;
+    if (typeof first === "number" && typeof last === "number") {
+      setDayUp(last >= first);
+    }
+  }, [data, dayUp]);
 
   const effectiveLevels = useMemo(() => {
     if (
@@ -842,6 +888,7 @@ export default function ChartFullScreen() {
             showMA={false}
             showGrid={true}
             showCrosshair={true}
+            forcePositive={typeof dayUp === "boolean" ? dayUp : undefined}
             levels={effectiveLevels}
             tradePlan={currentTradePlan}
           />
