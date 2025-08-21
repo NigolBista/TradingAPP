@@ -4,6 +4,7 @@ import {
   useColorScheme,
   Pressable,
   ActivityIndicator,
+  Text,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -13,6 +14,11 @@ import {
   MarketDataResolution,
   aggregateCandles,
 } from "../../services/marketProviders";
+import {
+  runAIStrategy,
+  aiOutputToTradePlan,
+} from "../../logic/aiStrategyEngine";
+import { useChatStore } from "../../store/chatStore";
 
 type TradeLevels = {
   entry?: number;
@@ -45,6 +51,11 @@ export default function TradingViewChart({
   const navigation = useNavigation<any>();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any[]>([]);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [currentTradePlan, setCurrentTradePlan] = useState<
+    TradePlanOverlay | undefined
+  >(tradePlan);
+  const { addAnalysisMessage } = useChatStore();
 
   const normalizedSymbol = useMemo(
     () => (symbol.includes(":") ? symbol.split(":")[1] : symbol),
@@ -113,6 +124,96 @@ export default function TradingViewChart({
     };
   }, [normalizedSymbol, interval]);
 
+  useEffect(() => {
+    setCurrentTradePlan(tradePlan);
+  }, [tradePlan]);
+
+  async function handleAnalyzePress() {
+    try {
+      setAnalyzing(true);
+      const get = async (res: "D" | "1H" | "15" | "5") => {
+        try {
+          return await fetchCandles(normalizedSymbol, { resolution: res });
+        } catch (e) {
+          return await fetchCandles(normalizedSymbol, {
+            resolution: res,
+            providerOverride: "yahoo",
+          });
+        }
+      };
+      const [d, h1, m15, m5] = await Promise.all([
+        get("D"),
+        get("1H"),
+        get("15"),
+        get("5"),
+      ]);
+
+      const output = await runAIStrategy({
+        symbol: normalizedSymbol,
+        mode: "auto",
+        candleData: {
+          "1d": d.map((c) => ({
+            time: c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+          })),
+          "1h": h1.map((c) => ({
+            time: c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+          })),
+          "15m": m15.map((c) => ({
+            time: c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+          })),
+          "5m": m5.map((c) => ({
+            time: c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+          })),
+        },
+        indicators: {},
+        context: {},
+      });
+
+      if (output) {
+        const tp = aiOutputToTradePlan(output);
+        setCurrentTradePlan(tp);
+        addAnalysisMessage({
+          symbol: normalizedSymbol,
+          strategy: String(output.strategyChosen),
+          side: output.side,
+          entry: output.entry,
+          lateEntry: output.lateEntry,
+          exit: output.exit,
+          lateExit: output.lateExit,
+          stop: output.stop,
+          targets: output.targets,
+          riskReward: output.riskReward,
+          confidence: output.confidence,
+          why: output.why,
+        });
+      }
+    } catch (error) {
+      console.warn("AI analysis failed:", error);
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
   const effectiveLevels = useMemo(() => {
     if (
       levels &&
@@ -161,15 +262,45 @@ export default function TradingViewChart({
           showGrid={true}
           showCrosshair={true}
           levels={effectiveLevels}
-          tradePlan={tradePlan}
+          tradePlan={currentTradePlan}
         />
       )}
+      <Pressable
+        onPress={handleAnalyzePress}
+        disabled={analyzing}
+        style={{
+          position: "absolute",
+          right: 12,
+          top: showExpand ? 56 : 20,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          borderRadius: 20,
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          flexDirection: "row",
+          alignItems: "center",
+        }}
+        hitSlop={10}
+      >
+        {analyzing ? (
+          <Text style={{ color: "#fff", fontWeight: "600" }}>Analyzing…</Text>
+        ) : (
+          <>
+            <Ionicons
+              name="analytics"
+              size={16}
+              color="#fff"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={{ color: "#fff", fontWeight: "600" }}>Analyze</Text>
+          </>
+        )}
+      </Pressable>
       {showExpand && (
         <Pressable
           onPress={() =>
             navigation.navigate("ChartFullScreen", {
               symbol: normalizedSymbol,
-              tradePlan,
+              tradePlan: currentTradePlan,
             })
           }
           style={{

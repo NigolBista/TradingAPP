@@ -10,6 +10,10 @@ import {
   SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { buildDayTradePlan } from "../logic/dayTrade";
+import { buildSwingTradePlan } from "../logic/swingTrade";
+import { aiOutputToTradePlan, runAIStrategy } from "../logic/aiStrategyEngine";
+import type { TradePlanOverlay } from "../logic/types";
 import { useNavigation } from "@react-navigation/native";
 import { useAppDataStore } from "../store/appDataStore";
 import StockAutocomplete from "../components/common/StockAutocomplete";
@@ -19,6 +23,7 @@ import { fetchNewsWithDateFilter } from "../services/newsProviders";
 import SimpleLineChart from "../components/charts/SimpleLineChart";
 import { useTheme } from "../providers/ThemeProvider";
 import { useUserStore, type TraderType } from "../store/userStore";
+import { buildSignalContext } from "../services/signalEngine";
 
 const { width } = Dimensions.get("window");
 
@@ -36,6 +41,16 @@ export default function DecalpXScreen() {
     negative: number;
     neutral: number;
   }>({ positive: 0, negative: 0, neutral: 0 });
+  const [aiPlan, setAiPlan] = useState<TradePlanOverlay | null>(null);
+  const [aiMeta, setAiMeta] = useState<{
+    strategyChosen?: string;
+    confidence?: number;
+    why?: string[];
+    notes?: string[];
+    targets?: number[];
+    riskReward?: number;
+  } | null>(null);
+  const [aiLoading, setAiLoading] = useState<boolean>(false);
   const { profile } = useUserStore();
 
   // Use centralized store instead of old marketOverviewStore
@@ -244,6 +259,99 @@ export default function DecalpXScreen() {
     return { entryExtended, exitExtended };
   }, [entryPrice, exitPrice]);
 
+  // AI strategy computation for DecalpX screen (not only on full chart navigation)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const sym = selected?.symbol || "SPY";
+      setAiLoading(true);
+      try {
+        const sc = await buildSignalContext(sym);
+        const mode =
+          tradeMode === "day"
+            ? "day_trade"
+            : tradeMode === "swing"
+            ? "swing_trade"
+            : "auto";
+
+        let candleData: any = sc?.candleData || {};
+        if (!candleData || Object.keys(candleData).length === 0) {
+          if (symbolSeries && symbolSeries.length) {
+            candleData = {
+              "1d": symbolSeries.map((p) => ({
+                time: p.time,
+                open: p.close,
+                high: p.close,
+                low: p.close,
+                close: p.close,
+              })),
+            };
+          }
+        }
+
+        const aiRes = await runAIStrategy({
+          symbol: sym,
+          mode,
+          candleData,
+          indicators: sc?.analysis || {
+            momentumPct: symbolMetrics?.momentumPct ?? priceChangePercent,
+          },
+          context: {
+            decalpX: symbolMetrics || null,
+            market: {
+              recommendation: sc?.analysis?.overallRating,
+              supportResistance: sc?.analysis?.supportResistance,
+            },
+          },
+        });
+
+        if (!cancelled) {
+          if (aiRes) {
+            setAiPlan(aiOutputToTradePlan(aiRes));
+            setAiMeta({
+              strategyChosen: aiRes.strategyChosen,
+              confidence: aiRes.confidence,
+              why: aiRes.why,
+              notes: aiRes.tradePlanNotes,
+              targets: aiRes.targets,
+              riskReward: aiRes.riskReward,
+            });
+          } else {
+            setAiPlan(null);
+            setAiMeta(null);
+          }
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setAiPlan(null);
+          setAiMeta(null);
+        }
+      } finally {
+        if (!cancelled) setAiLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.symbol, tradeMode, symbolSeries]);
+
+  const displayEntry = useMemo(
+    () => aiPlan?.entry ?? entryPrice,
+    [aiPlan, entryPrice]
+  );
+  const displayExit = useMemo(
+    () => aiPlan?.exit ?? exitPrice,
+    [aiPlan, exitPrice]
+  );
+  const displayLateEntry = useMemo(
+    () => aiPlan?.lateEntry ?? extendedLevels.entryExtended,
+    [aiPlan, extendedLevels.entryExtended]
+  );
+  const displayLateExit = useMemo(
+    () => aiPlan?.lateExit ?? extendedLevels.exitExtended,
+    [aiPlan, extendedLevels.exitExtended]
+  );
+
   // When user selects a ticker, fetch a quick price snapshot
   useEffect(() => {
     let mounted = true;
@@ -278,18 +386,79 @@ export default function DecalpXScreen() {
 
   const styles = createStyles(theme);
 
-  const navigateToFullChart = () => {
+  const navigateToFullChart = async () => {
     const sym = selected?.symbol || "SPY";
-    navigation.navigate("ChartFullScreen", {
-      symbol: sym,
-      tradePlan: {
-        side: exitPrice > entryPrice ? "long" : "short",
-        entry: entryPrice,
-        lateEntry: extendedLevels.entryExtended,
-        exit: exitPrice,
-        lateExit: extendedLevels.exitExtended,
-      },
-    });
+    try {
+      const closes = chartData
+        .map((c) => c.close)
+        .filter((n) => Number.isFinite(n));
+      const ctx = {
+        currentPrice,
+        recentCloses: closes,
+        momentumPct: symbolMetrics?.momentumPct ?? priceChangePercent,
+      };
+
+      // Build full multi-timeframe context and indicators
+      const sc = await buildSignalContext(sym);
+
+      // Try AI strategy first with full payload
+      const mode =
+        tradeMode === "day"
+          ? "day_trade"
+          : tradeMode === "swing"
+          ? "swing_trade"
+          : "auto";
+      const aiResult = await runAIStrategy({
+        symbol: sym,
+        mode,
+        candleData: sc?.candleData || {},
+        indicators: sc?.analysis || { momentumPct: ctx.momentumPct },
+        context: {
+          decalpX: symbolMetrics || null,
+          market: {
+            recommendation: sc?.analysis?.overallRating,
+            supportResistance: sc?.analysis?.supportResistance,
+          },
+        },
+      });
+
+      let plan: TradePlanOverlay | undefined;
+      let aiMeta: any = undefined;
+      if (aiResult) {
+        plan = aiOutputToTradePlan(aiResult);
+        aiMeta = {
+          strategyChosen: aiResult.strategyChosen,
+          confidence: aiResult.confidence,
+          why: aiResult.why,
+          notes: aiResult.tradePlanNotes,
+          targets: aiResult.targets,
+          riskReward: aiResult.riskReward,
+        };
+      } else {
+        // Fallback to local logic
+        plan =
+          tradeMode === "day"
+            ? buildDayTradePlan(ctx)
+            : buildSwingTradePlan(ctx);
+      }
+      navigation.navigate("ChartFullScreen", {
+        symbol: sym,
+        tradePlan: plan,
+        ai: aiMeta,
+      });
+    } catch (e) {
+      const closes = chartData
+        .map((c) => c.close)
+        .filter((n) => Number.isFinite(n));
+      const ctx = {
+        currentPrice,
+        recentCloses: closes,
+        momentumPct: symbolMetrics?.momentumPct ?? priceChangePercent,
+      };
+      const plan: TradePlanOverlay =
+        tradeMode === "day" ? buildDayTradePlan(ctx) : buildSwingTradePlan(ctx);
+      navigation.navigate("ChartFullScreen", { symbol: sym, tradePlan: plan });
+    }
   };
 
   return (
@@ -464,15 +633,19 @@ export default function DecalpXScreen() {
             signalStrength={signalStrength}
           />
 
-          {/* Dynamic targets */}
+          {/* Dynamic targets (AI-first) */}
           <View style={styles.spyMetrics}>
             <View style={styles.spyMetric}>
               <Text style={styles.metricLabel}>Potential Entry:</Text>
-              <Text style={styles.metricValue}>${entryPrice.toFixed(2)}</Text>
+              <Text style={styles.metricValue}>
+                ${Number(displayEntry).toFixed(2)}
+              </Text>
             </View>
             <View style={styles.spyMetric}>
               <Text style={styles.metricLabel}>Potential Exit:</Text>
-              <Text style={styles.metricValue}>${exitPrice.toFixed(2)}</Text>
+              <Text style={styles.metricValue}>
+                ${Number(displayExit).toFixed(2)}
+              </Text>
             </View>
           </View>
           <Text
@@ -483,8 +656,8 @@ export default function DecalpXScreen() {
               fontWeight: "600",
             }}
           >
-            Entry Ext ${extendedLevels.entryExtended.toFixed(2)} • Exit Ext $
-            {extendedLevels.exitExtended.toFixed(2)}
+            Entry Ext ${Number(displayLateEntry).toFixed(2)} • Exit Ext $
+            {Number(displayLateExit).toFixed(2)}
           </Text>
         </View>
 
