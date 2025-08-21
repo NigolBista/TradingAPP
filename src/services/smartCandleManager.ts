@@ -360,7 +360,8 @@ class SmartCandleManager {
     cached: CandleCache
   ): Promise<BaseCandle[]> {
     const now = Date.now();
-    const timeSinceLastCandle = now - cached.lastCandle * 1000;
+    // cached.lastCandle is stored in epoch milliseconds, do not multiply
+    const timeSinceLastCandle = now - cached.lastCandle;
 
     // If gap is too large, do full reload
     if (timeSinceLastCandle > this.MAX_INCREMENTAL_GAP) {
@@ -385,6 +386,14 @@ class SmartCandleManager {
     // Find overlap point
     const lastCachedTime =
       cached.data.length > 0 ? cached.data[cached.data.length - 1].time : 0;
+    // If provider returned an updated last candle with the same timestamp,
+    // replace the cached last candle in-place to keep price up to date
+    if (cached.data.length > 0) {
+      const updatedIdx = newCandles.findIndex((c) => c.time === lastCachedTime);
+      if (updatedIdx >= 0) {
+        cached.data[cached.data.length - 1] = newCandles[updatedIdx];
+      }
+    }
     const newCandlesFiltered = newCandles.filter(
       (c) => c.time > lastCachedTime
     );

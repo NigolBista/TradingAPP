@@ -1312,7 +1312,20 @@ export default function StockDetailScreen() {
     }
   }
 
-  const currentPrice = initialQuote?.last ?? analysis?.currentPrice ?? 0;
+  const latestChartPrice = useMemo(() => {
+    try {
+      return dailySeries && dailySeries.length > 0
+        ? dailySeries[dailySeries.length - 1].close
+        : null;
+    } catch {
+      return null;
+    }
+  }, [dailySeries]);
+  const currentPrice =
+    (latestChartPrice != null ? latestChartPrice : undefined) ??
+    initialQuote?.last ??
+    analysis?.currentPrice ??
+    0;
 
   // Use real quote deltas when available; otherwise avoid showing potentially incorrect values
   const todayChange =

@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useImperativeHandle,
+} from "react";
 import { View } from "react-native";
 import { WebView } from "react-native-webview";
 import { Asset } from "expo-asset";
@@ -54,103 +60,105 @@ interface Props {
   onReady?: () => void;
 }
 
-export default function LightweightCandles({
-  data,
-  height = 320,
-  type = "candlestick",
-  theme = "light",
-  showVolume = true,
-  showMA = true,
-  maPeriods = [20, 50],
-  showGrid = true,
-  showCrosshair = true,
-  forcePositive,
-  levels,
-  tradePlan,
-  onVisibleRangeChange,
-  onReady,
-}: Props) {
-  const webRef = useRef<WebView>(null);
-  const [isReady, setIsReady] = useState(false);
-  const series = useMemo(
-    () =>
-      data.map((d) => ({
-        time: Math.floor(d.time / 1000),
-        open: d.open,
-        high: d.high,
-        low: d.low,
-        close: d.close,
-        volume: d.volume || Math.random() * 1000000, // Generate random volume if not provided
-      })),
-    [data]
-  );
+export type LightweightCandlesHandle = {
+  scrollToRealTime: () => void;
+};
 
-  // Calculate moving averages
-  const calculateMA = (data: any[], period: number) => {
-    const result: any[] = [];
-    for (let i = 0; i < data.length; i++) {
-      if (i < period - 1) {
-        result.push(null);
-      } else {
-        const sum = data
-          .slice(i - period + 1, i + 1)
-          .reduce((acc, item) => acc + item.close, 0);
-        result.push({ time: data[i].time, value: sum / period });
-      }
-    }
-    return result.filter((item) => item !== null);
-  };
-
-  const ma20 = calculateMA(series, maPeriods[0] || 20);
-  const ma50 = calculateMA(series, maPeriods[1] || 50);
-
-  // Resolve local lightweight-charts asset stored as .txt (so Metro treats as asset)
-  const [inlineLibText, setInlineLibText] = useState<string | null>(null);
-  useEffect(() => {
-    (async () => {
-      try {
-        console.log("LightweightCandles: Starting to load local asset...");
-        const lib = Asset.fromModule(
-          require("../../../assets/js/lightweight-charts.txt")
-        );
-        await lib.downloadAsync();
-        const uri = lib.localUri || lib.uri;
-        console.log("LightweightCandles: Asset URI:", uri);
-        if (uri) {
-          const content = await FileSystem.readAsStringAsync(uri, {
-            encoding: FileSystem.EncodingType.UTF8,
-          });
-          console.log("LightweightCandles: Content length:", content?.length);
-          console.log(
-            "LightweightCandles: Contains LightweightCharts:",
-            content?.includes("LightweightCharts")
+const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
+  function LightweightCandles(
+    {
+      data,
+      height = 320,
+      type = "candlestick",
+      theme = "light",
+      showVolume = true,
+      showMA = true,
+      maPeriods = [20, 50],
+      showGrid = true,
+      showCrosshair = true,
+      forcePositive,
+      levels,
+      tradePlan,
+      onVisibleRangeChange,
+      onReady,
+    }: Props,
+    ref
+  ) {
+    const webRef = useRef<WebView>(null);
+    const [isReady, setIsReady] = useState(false);
+    useImperativeHandle(ref, () => ({
+      scrollToRealTime: () => {
+        try {
+          (webRef.current as any)?.postMessage?.(
+            JSON.stringify({ cmd: "scrollToRealTime" })
           );
-          if (content && content.includes("LightweightCharts")) {
-            console.log("LightweightCandles: Using local asset");
-            setInlineLibText(content);
-          } else {
-            console.log(
-              "LightweightCandles: Local asset invalid, falling back to CDN"
-            );
-            setInlineLibText(null);
-          }
-        }
-      } catch (e) {
-        console.log("LightweightCandles: Error loading local asset:", e);
-        setInlineLibText(null);
-      }
-    })();
-  }, []);
-  // Only use CDN as fallback; local is injected inline from .txt asset
-  const libSrc =
-    "https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js";
-  const scriptLoader = inlineLibText
-    ? `<script>console.log('LightweightCandles: Using inline script');(function(){try{var s=document.createElement('script');s.type='text/javascript';s.text=${JSON.stringify(
-        inlineLibText
-      )};document.head.appendChild(s);}catch(e){console.log('LightweightCandles: Error injecting inline script:', e);}})();</script>`
-    : `<script>console.log('LightweightCandles: Using CDN script');</script><script src="${libSrc}"></script>`;
+        } catch (_) {}
+      },
+    }));
+    const series = useMemo(
+      () =>
+        data.map((d) => ({
+          time: Math.floor(d.time / 1000),
+          open: d.open,
+          high: d.high,
+          low: d.low,
+          close: d.close,
+          volume: d.volume ?? 0,
+        })),
+      [data]
+    );
 
-  const html = `<!doctype html><html><head>
+    // Track last pushed bar time to prefer append over full set
+    const lastPushedTimeRef = useRef<number | null>(null);
+
+    // Resolve local lightweight-charts asset stored as .txt (so Metro treats as asset)
+    const [inlineLibText, setInlineLibText] = useState<string | null>(null);
+    useEffect(() => {
+      (async () => {
+        try {
+          console.log("LightweightCandles: Starting to load local asset...");
+          const lib = Asset.fromModule(
+            require("../../../assets/js/lightweight-charts.txt")
+          );
+          await lib.downloadAsync();
+          const uri = lib.localUri || lib.uri;
+          console.log("LightweightCandles: Asset URI:", uri);
+          if (uri) {
+            const content = await FileSystem.readAsStringAsync(uri, {
+              encoding: FileSystem.EncodingType.UTF8,
+            });
+            console.log("LightweightCandles: Content length:", content?.length);
+            console.log(
+              "LightweightCandles: Contains LightweightCharts:",
+              content?.includes("LightweightCharts")
+            );
+            if (content && content.includes("LightweightCharts")) {
+              console.log("LightweightCandles: Using local asset");
+              setInlineLibText(content);
+            } else {
+              console.log(
+                "LightweightCandles: Local asset invalid, falling back to CDN"
+              );
+              setInlineLibText(null);
+            }
+          }
+        } catch (e) {
+          console.log("LightweightCandles: Error loading local asset:", e);
+          setInlineLibText(null);
+        }
+      })();
+    }, []);
+    // Only use CDN as fallback; local is injected inline from .txt asset
+    const libSrc =
+      "https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js";
+    const scriptLoader = inlineLibText
+      ? `<script>console.log('LightweightCandles: Using inline script');(function(){try{var s=document.createElement('script');s.type='text/javascript';s.text=${JSON.stringify(
+          inlineLibText
+        )};document.head.appendChild(s);}catch(e){console.log('LightweightCandles: Error injecting inline script:', e);}})();</script>`
+      : `<script>console.log('LightweightCandles: Using CDN script');</script><script src="${libSrc}"></script>`;
+
+    const html = useMemo(
+      () => `<!doctype html><html><head>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <style>
       html,body,#wrap{margin:0;padding:0;height:100%;width:100%;background:transparent;overscroll-behavior:none;-webkit-text-size-adjust:100%;}
@@ -305,8 +313,8 @@ export default function LightweightCandles({
 
       let mainSeries;
       const type = ${JSON.stringify(type)};
-      const forced = ${JSON.stringify(forcePositive)};
-      let raw = ${JSON.stringify(series)};
+      const forced = undefined;
+      let raw = [];
       
       // Determine if price is up or down based on first and last prices
       // Use a more robust approach: if we have enough data, compare recent vs earlier prices
@@ -379,36 +387,53 @@ export default function LightweightCandles({
       
       // Level lines are added after initial fit via addLevelLines()
 
-      // Add Moving Averages
-      ${
-        showMA
-          ? `
-        const ma20Data = ${JSON.stringify(ma20)};
-        const ma50Data = ${JSON.stringify(ma50)};
-        
-        if (ma20Data.length > 0) {
-          const ma20Series = chart.addLineSeries({
-            color: '#f59e0b',
-            lineWidth: 2,
-            title: 'MA20',
-            priceLineVisible: false,
-            crosshairMarkerVisible: false
-          });
-          ma20Series.setData(ma20Data);
-        }
-        
-        if (ma50Data.length > 0) {
-          const ma50Series = chart.addLineSeries({
-            color: '#8b5cf6',
-            lineWidth: 2,
-            title: 'MA50',
-            priceLineVisible: false,
-            crosshairMarkerVisible: false
-          });
-          ma50Series.setData(ma50Data);
-        }
-      `
-          : ""
+      // Moving averages computed within webview on updates
+      const showMAs = ${JSON.stringify(showMA)};
+      let ma20Series = null;
+      let ma50Series = null;
+      function calculateMAForRaw(source, period) {
+        try {
+          if (!Array.isArray(source) || source.length === 0 || period <= 1) return [];
+          const result = [];
+          for (let i = 0; i < source.length; i++) {
+            if (i < period - 1) continue;
+            let sum = 0;
+            for (let j = i - period + 1; j <= i; j++) sum += Number(source[j].close || 0);
+            result.push({ time: source[i].time, value: sum / period });
+          }
+          return result;
+        } catch(_) { return []; }
+      }
+      function updateMovingAverages(){
+        if (!showMAs) return;
+        try {
+          const ma20Data = calculateMAForRaw(raw, ${maPeriods[0] || 20});
+          const ma50Data = calculateMAForRaw(raw, ${maPeriods[1] || 50});
+          if (ma20Data.length > 0) {
+            if (!ma20Series) {
+              ma20Series = chart.addLineSeries({
+                color: '#f59e0b',
+                lineWidth: 2,
+                title: 'MA20',
+                priceLineVisible: false,
+                crosshairMarkerVisible: false
+              });
+            }
+            ma20Series.setData(ma20Data);
+          }
+          if (ma50Data.length > 0) {
+            if (!ma50Series) {
+              ma50Series = chart.addLineSeries({
+                color: '#8b5cf6',
+                lineWidth: 2,
+                title: 'MA50',
+                priceLineVisible: false,
+                crosshairMarkerVisible: false
+              });
+            }
+            ma50Series.setData(ma50Data);
+          }
+        } catch(_) {}
       }
 
       // Volume histogram (use forced up/down for consistency)
@@ -575,6 +600,8 @@ export default function LightweightCandles({
               mainSeries.update(d);
             }
           }
+          try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
+          try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
         } catch(e) { log('appendSeriesData error: ' + e.message); }
       }
       window.addEventListener('message', function(event){
@@ -582,10 +609,16 @@ export default function LightweightCandles({
           const msg = JSON.parse(event.data);
           if (!msg || !msg.cmd) return;
           if (msg.cmd === 'setData') {
+            let preserve = null;
+            try { preserve = chart.timeScale().getVisibleLogicalRange && chart.timeScale().getVisibleLogicalRange(); } catch(_) {}
             applySeriesData(msg.data || []);
             try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
+            try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
+            try { if (preserve && chart.timeScale().setVisibleLogicalRange) chart.timeScale().setVisibleLogicalRange(preserve); } catch(_) {}
           } else if (msg.cmd === 'appendData') {
             appendSeriesData(msg.data || []);
+          } else if (msg.cmd === 'scrollToRealTime') {
+            try { chart.timeScale().scrollToRealTime(); } catch(_) {}
           }
         } catch(e) { log('message handler error: ' + e.message); }
       });
@@ -643,72 +676,119 @@ export default function LightweightCandles({
         }, 100);
       }
     </script>
-  </body></html>`;
+  </body></html>`,
+      [inlineLibText, height, theme, showVolume, showGrid, showCrosshair, type]
+    );
 
-  // Push data updates to WebView when RN data changes and web is ready
-  useEffect(() => {
-    if (!isReady || !webRef.current) return;
-    try {
-      (webRef.current as any)?.postMessage?.(
-        JSON.stringify({ cmd: "setData", data: series })
-      );
-    } catch (_) {}
-  }, [isReady, series]);
+    // Push data updates to WebView when RN data changes and web is ready
+    // Reset ready state when HTML re-initializes to avoid premature posts
+    useEffect(() => {
+      setIsReady(false);
+      lastPushedTimeRef.current = null;
+    }, [html]);
 
-  return (
-    <View
-      style={{
-        height,
-        width: "100%",
-        overflow: "hidden",
-        backgroundColor: "transparent",
-      }}
-    >
-      <WebView
-        originWhitelist={["*"]}
-        source={{ html }}
-        style={{ height, width: "100%", backgroundColor: "transparent" }}
-        containerStyle={{ backgroundColor: "transparent" }}
-        /* @ts-expect-error react-native-webview may not expose opaque in types */
-        opaque={false}
-        javaScriptEnabled={true}
-        domStorageEnabled={true}
-        bounces={false}
-        overScrollMode="never"
-        decelerationRate="normal"
-        startInLoadingState={false}
-        scalesPageToFit={false}
-        scrollEnabled={false}
-        showsHorizontalScrollIndicator={false}
-        showsVerticalScrollIndicator={false}
-        ref={webRef}
-        onMessage={(e) => {
-          try {
-            const msg = JSON.parse(e.nativeEvent.data);
-            if (msg?.ready) {
-              setIsReady(true);
-              if (onReady) onReady();
-              try {
-                (webRef.current as any)?.postMessage?.(
-                  JSON.stringify({ cmd: "setData", data: series })
-                );
-              } catch (_) {}
-            } else if (msg?.visibleRange && onVisibleRangeChange) {
-              onVisibleRangeChange(msg.visibleRange);
-            } else {
-              console.log("LightweightCandles WebView message:", msg);
-            }
-          } catch {
-            console.log(
-              "LightweightCandles WebView message:",
-              e.nativeEvent.data
+    // Prefer incremental appends to avoid viewport resets
+    useEffect(() => {
+      if (!isReady || !webRef.current) return;
+      if (!series || series.length === 0) return;
+      // If we haven't pushed initial data via onReady yet, wait
+      if (lastPushedTimeRef.current == null) return;
+      try {
+        const lastTime = lastPushedTimeRef.current as number;
+        const latest = series[series.length - 1];
+        if (!latest) return;
+
+        // Case 1: same candle is being updated (e.g., in-progress bar)
+        if (latest.time === lastTime) {
+          (webRef.current as any)?.postMessage?.(
+            JSON.stringify({ cmd: "appendData", data: [latest] })
+          );
+          return;
+        }
+
+        // Case 2: new bars appended
+        if (latest.time > lastTime) {
+          const newBars = series.filter((b) => b.time > lastTime);
+          if (newBars.length > 0 && newBars.length <= 500) {
+            (webRef.current as any)?.postMessage?.(
+              JSON.stringify({ cmd: "appendData", data: newBars })
+            );
+          } else {
+            (webRef.current as any)?.postMessage?.(
+              JSON.stringify({ cmd: "setData", data: series })
             );
           }
+          lastPushedTimeRef.current = latest.time;
+          return;
+        }
+
+        // Case 3: no change or older data -> do nothing to preserve viewport
+      } catch (_) {}
+    }, [isReady, series]);
+
+    return (
+      <View
+        style={{
+          height,
+          width: "100%",
+          overflow: "hidden",
+          backgroundColor: "transparent",
         }}
-        onError={(e) => {
-          console.warn("LightweightCandles WebView error:", e.nativeEvent);
-        }}
-      />
-    </View>
-  );
-}
+      >
+        <WebView
+          originWhitelist={["*"]}
+          source={{ html }}
+          style={{ height, width: "100%", backgroundColor: "transparent" }}
+          containerStyle={{ backgroundColor: "transparent" }}
+          /* @ts-expect-error react-native-webview may not expose opaque in types */
+          opaque={false}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          bounces={false}
+          overScrollMode="never"
+          decelerationRate="normal"
+          startInLoadingState={false}
+          scalesPageToFit={false}
+          scrollEnabled={false}
+          showsHorizontalScrollIndicator={false}
+          showsVerticalScrollIndicator={false}
+          ref={webRef}
+          onMessage={(e) => {
+            try {
+              const msg = JSON.parse(e.nativeEvent.data);
+              if (msg?.ready) {
+                setIsReady(true);
+                if (onReady) onReady();
+                try {
+                  (webRef.current as any)?.postMessage?.(
+                    JSON.stringify({ cmd: "setData", data: series })
+                  );
+                  // Initialize last pushed time from the dataset we just sent
+                  if (Array.isArray(series) && series.length > 0) {
+                    lastPushedTimeRef.current = series[series.length - 1].time;
+                  } else {
+                    lastPushedTimeRef.current = null;
+                  }
+                } catch (_) {}
+              } else if (msg?.visibleRange && onVisibleRangeChange) {
+                onVisibleRangeChange(msg.visibleRange);
+              } else {
+                console.log("LightweightCandles WebView message:", msg);
+              }
+            } catch {
+              console.log(
+                "LightweightCandles WebView message:",
+                e.nativeEvent.data
+              );
+            }
+          }}
+          onError={(e) => {
+            console.warn("LightweightCandles WebView error:", e.nativeEvent);
+          }}
+        />
+      </View>
+    );
+  }
+);
+
+export default LightweightCandles;
