@@ -12,11 +12,9 @@ import {
 } from "react-native";
 import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import AdvancedTradingChart, {
+import LightweightCandles, {
   type LWCDatum,
-} from "../components/charts/AdvancedTradingChart";
-import SimpleLineChart from "../components/charts/SimpleLineChart";
-import CompactCandlestickChart from "../components/charts/CompactCandlestickChart";
+} from "../components/charts/LightweightCandles";
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
@@ -567,28 +565,16 @@ export default function StockDetailScreen() {
         <View style={styles.chartSection}>
           {/* Chart */}
           <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
-            {chartType === "candlestick" ? (
-              <CompactCandlestickChart
-                data={dailySeries.map((d) => ({
-                  time: d.time,
-                  open: d.open || d.close,
-                  high: d.high || d.close,
-                  low: d.low || d.close,
-                  close: d.close,
-                }))}
-                height={200}
-                greenColor="#00D4AA"
-                redColor="#FF6B6B"
-              />
-            ) : (
-              // Default to simple line chart for all other types on main screen
-              <SimpleLineChart
-                data={dailySeries}
-                height={200}
-                color={priceChange >= 0 ? "#00D4AA" : "#FF6B6B"}
-                strokeWidth={chartType === "area" ? 1.5 : 2}
-              />
-            )}
+            <LightweightCandles
+              data={dailySeries}
+              height={200}
+              type={chartType}
+              theme="dark"
+              showVolume={false}
+              showMA={false}
+              showGrid={true}
+              showCrosshair={true}
+            />
           </View>
 
           {/* Chart Controls Row */}

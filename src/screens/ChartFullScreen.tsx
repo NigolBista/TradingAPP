@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Pressable,
@@ -6,32 +6,44 @@ import {
   useWindowDimensions,
   Text,
   ScrollView,
+  useColorScheme,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import TradingViewChart from "../components/charts/TradingViewChart";
+import LightweightCandles, {
+  type LWCDatum,
+} from "../components/charts/LightweightCandles";
+import ChartSettingsModal, {
+  type ChartType,
+} from "../components/charts/ChartSettingsModal";
 import TimeframePickerModal, {
   ExtendedTimeframe,
 } from "../components/charts/TimeframePickerModal";
-import AdvancedTradingChart from "../components/charts/AdvancedTradingChart";
 import StockSearchBar from "../components/common/StockSearchBar";
 import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
+import { fetchCandlesForTimeframe } from "../services/marketProviders";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const scheme = useColorScheme();
   const symbol: string = route.params?.symbol || "AAPL";
-  const chartType: string = route.params?.chartType || "line";
+  const [chartType, setChartType] = useState<ChartType>(
+    (route.params?.chartType as ChartType) || "candlestick"
+  );
   const timeframe: string = route.params?.timeframe || "1D";
   const levels = route.params?.levels;
   const [tfModalVisible, setTfModalVisible] = useState(false);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>("1D");
   const [stockName, setStockName] = useState<string>("");
   const { pinned, hydrate } = useTimeframeStore();
+  const [loading, setLoading] = useState<boolean>(true);
+  const [data, setData] = useState<LWCDatum[]>([]);
+  const [showChartSettings, setShowChartSettings] = useState<boolean>(false);
 
   const chartHeight = Math.max(0, height - insets.top - insets.bottom - 60); // Account for header
 
@@ -40,47 +52,60 @@ export default function ChartFullScreen() {
     hydrate();
   }, [symbol]);
 
-  function mapExtendedToTradingView(
-    tf: ExtendedTimeframe
-  ): "1" | "5" | "15" | "30" | "60" | "120" | "240" | "D" | "W" | "M" {
-    switch (tf) {
-      case "1m":
-        return "1";
-      case "2m":
-      case "3m":
-      case "4m":
-        return "1"; // Nearest supported
-      case "5m":
-      case "10m":
-        return "5";
-      case "15m":
-        return "15";
-      case "30m":
-      case "45m":
-        return "30";
-      case "1h":
-        return "60";
-      case "2h":
-        return "120";
-      case "4h":
-        return "240";
-      case "1D":
-        return "D";
-      case "1W":
-        return "W";
-      case "1M":
-      case "3M":
-      case "6M":
-        return "M";
-      case "1Y":
-      case "2Y":
-      case "5Y":
-      case "ALL":
-        return "W";
-      default:
-        return "D";
+  useEffect(() => {
+    let isMounted = true;
+    async function load() {
+      try {
+        setLoading(true);
+        const candles = await fetchCandlesForTimeframe(symbol, extendedTf);
+        if (!isMounted) return;
+        setData(
+          candles.map((c: any) => ({
+            time: c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+          }))
+        );
+      } catch (e) {
+        console.warn("Failed to load candles:", e);
+        if (isMounted) setData([]);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     }
-  }
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, [symbol, extendedTf]);
+
+  const effectiveLevels = useMemo(() => {
+    if (
+      levels &&
+      (levels.entry ||
+        levels.exit ||
+        levels.entryExtended ||
+        levels.exitExtended)
+    ) {
+      return levels;
+    }
+    if (data && data.length > 0) {
+      const last = data[data.length - 1];
+      const close = Number(last.close) || 0;
+      if (!close) return undefined;
+      const delta = close * 0.01; // 1% bands default
+      return {
+        entry: close + delta * 0.5,
+        entryExtended: close + delta * 1.0,
+        exit: Math.max(0, close - delta * 0.5),
+        exitExtended: Math.max(0, close - delta * 1.0),
+      };
+    }
+    return undefined;
+  }, [levels, data]);
 
   async function loadStockName() {
     try {
@@ -114,13 +139,29 @@ export default function ChartFullScreen() {
 
       {/* Chart */}
       <View style={{ flex: 1 }}>
-        <TradingViewChart
-          symbol={symbol}
-          height={chartHeight}
-          interval={mapExtendedToTradingView(extendedTf)}
-          showExpand={false}
-          levels={levels}
-        />
+        {loading ? (
+          <View
+            style={{
+              height: chartHeight,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ color: "#888" }}>Loading...</Text>
+          </View>
+        ) : (
+          <LightweightCandles
+            data={data}
+            height={chartHeight}
+            type={chartType}
+            theme={scheme === "dark" ? "dark" : "light"}
+            showVolume={false}
+            showMA={false}
+            showGrid={true}
+            showCrosshair={true}
+            levels={effectiveLevels}
+          />
+        )}
         <View
           style={[
             styles.rangeSwitcherContainer,
@@ -158,6 +199,13 @@ export default function ChartFullScreen() {
             >
               <Text style={[styles.tfChipText, styles.tfMoreText]}>⋯</Text>
             </Pressable>
+            <Pressable
+              onPress={() => setShowChartSettings(true)}
+              style={[styles.tfChip, styles.tfMoreChip]}
+              hitSlop={10}
+            >
+              <Ionicons name="options" size={16} color="#fff" />
+            </Pressable>
           </ScrollView>
         </View>
         {/* Removed left quick row to avoid duplicate controls; modal picker handles timeframe switching */}
@@ -168,6 +216,12 @@ export default function ChartFullScreen() {
         onClose={() => setTfModalVisible(false)}
         selected={extendedTf}
         onSelect={(tf) => setExtendedTf(tf)}
+      />
+      <ChartSettingsModal
+        visible={showChartSettings}
+        onClose={() => setShowChartSettings(false)}
+        currentChartType={chartType}
+        onChartTypeChange={setChartType}
       />
     </View>
   );
