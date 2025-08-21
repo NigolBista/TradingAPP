@@ -7,6 +7,9 @@ import {
 } from "./aiAnalytics";
 import { detectPatterns } from "./patternDetection";
 import { buildTradePlan, TradePlan } from "./riskManager";
+import { buildDayTradePlan } from "../logic/dayTrade";
+import { buildSwingTradePlan } from "../logic/swingTrade";
+import { TradePlanOverlay, StrategyContext } from "../logic/types";
 
 export interface SignalContext {
   symbol: string;
@@ -29,6 +32,7 @@ export interface DecalpXData {
 export interface EnhancedSignal extends TradingSignal {
   patterns: string[];
   tradePlan: TradePlan;
+  overlay?: TradePlanOverlay;
   decalpX?: DecalpXData;
 }
 
@@ -165,6 +169,7 @@ export function enrichSignalsWithPatternsAndRisk(
   );
   const signals = context.analysis.signals || [];
   const decalpXData = getDecalpXDataFromContext(context);
+  const currentPrice = context.analysis.currentPrice;
 
   const enhanced: EnhancedSignal[] = signals.map((s) => {
     const tradePlan = buildTradePlan(
@@ -174,6 +179,24 @@ export function enrichSignalsWithPatternsAndRisk(
       accountSize,
       riskPct
     );
+
+    // Generate TradePlanOverlay with extended entry/exit data
+    const recentCloses = daily.slice(-20).map((candle) => candle.close);
+    const strategyContext: StrategyContext = {
+      currentPrice,
+      recentCloses,
+      momentumPct: s.action === "buy" ? 5 : -5, // Simple momentum based on signal action
+    };
+
+    let overlay: TradePlanOverlay;
+    if (s.type === "intraday") {
+      overlay = buildDayTradePlan(strategyContext);
+    } else if (s.type === "swing") {
+      overlay = buildSwingTradePlan(strategyContext);
+    } else {
+      // For longterm, use swing logic but with wider ranges
+      overlay = buildSwingTradePlan(strategyContext);
+    }
 
     // Enhance signal confidence based on DecalpX data
     let enhancedConfidence = s.confidence;
@@ -204,6 +227,7 @@ export function enrichSignalsWithPatternsAndRisk(
       confidence: enhancedConfidence,
       patterns,
       tradePlan,
+      overlay,
       decalpX: decalpXData || undefined,
     };
   });

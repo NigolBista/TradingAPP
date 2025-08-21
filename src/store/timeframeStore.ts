@@ -4,14 +4,17 @@ import type { ExtendedTimeframe } from "../services/marketProviders";
 
 type TimeframeState = {
   pinned: ExtendedTimeframe[];
+  defaultTimeframe: ExtendedTimeframe;
   isHydrated: boolean;
   hydrate: () => Promise<void>;
   pin: (tf: ExtendedTimeframe) => Promise<void>;
   unpin: (tf: ExtendedTimeframe) => Promise<void>;
   toggle: (tf: ExtendedTimeframe) => Promise<void>;
+  setDefaultTimeframe: (tf: ExtendedTimeframe) => Promise<void>;
 };
 
 const STORAGE_KEY = "pinned_timeframes_v1";
+const DEFAULT_TIMEFRAME_KEY = "default_timeframe_v1";
 const DEFAULT_PINNED: ExtendedTimeframe[] = [
   "1m",
   "5m",
@@ -20,21 +23,39 @@ const DEFAULT_PINNED: ExtendedTimeframe[] = [
   "1D",
   "1W",
 ];
+const INITIAL_DEFAULT_TIMEFRAME: ExtendedTimeframe = "1m";
 
 export const useTimeframeStore = create<TimeframeState>((set, get) => ({
   pinned: DEFAULT_PINNED,
+  defaultTimeframe: INITIAL_DEFAULT_TIMEFRAME,
   isHydrated: false,
   hydrate: async () => {
     if (get().isHydrated) return;
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const arr = JSON.parse(raw) as ExtendedTimeframe[];
-        set({ pinned: arr, isHydrated: true });
+      const [pinnedRaw, defaultRaw] = await Promise.all([
+        AsyncStorage.getItem(STORAGE_KEY),
+        AsyncStorage.getItem(DEFAULT_TIMEFRAME_KEY),
+      ]);
+
+      let pinned = DEFAULT_PINNED;
+      let defaultTimeframe = INITIAL_DEFAULT_TIMEFRAME;
+
+      if (pinnedRaw) {
+        pinned = JSON.parse(pinnedRaw) as ExtendedTimeframe[];
       } else {
-        set({ pinned: DEFAULT_PINNED, isHydrated: true });
         await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(DEFAULT_PINNED));
       }
+
+      if (defaultRaw) {
+        defaultTimeframe = JSON.parse(defaultRaw) as ExtendedTimeframe;
+      } else {
+        await AsyncStorage.setItem(
+          DEFAULT_TIMEFRAME_KEY,
+          JSON.stringify(INITIAL_DEFAULT_TIMEFRAME)
+        );
+      }
+
+      set({ pinned, defaultTimeframe, isHydrated: true });
     } catch {
       set({ isHydrated: true });
     }
@@ -59,5 +80,9 @@ export const useTimeframeStore = create<TimeframeState>((set, get) => ({
     } else {
       await get().pin(tf);
     }
+  },
+  setDefaultTimeframe: async (tf) => {
+    set({ defaultTimeframe: tf });
+    await AsyncStorage.setItem(DEFAULT_TIMEFRAME_KEY, JSON.stringify(tf));
   },
 }));

@@ -59,15 +59,44 @@ export default function ChatScreen() {
               {new Date(item.timestamp).toLocaleString()} · {item.symbol}
             </Text>
             {item.strategy ? (
-              <Text
+              <Pressable
+                onPress={() => {
+                  // Navigate back to chart with full context
+                  navigation.navigate("ChartFullScreen", {
+                    symbol: item.symbol,
+                    tradePlan: item.tradePlan,
+                    ai: item.aiMeta,
+                    analysisContext: item.analysisContext,
+                  });
+                }}
                 style={{
-                  color: theme.colors.text,
-                  fontWeight: "600",
+                  backgroundColor: "rgba(37, 99, 235, 0.1)",
+                  borderRadius: 8,
+                  padding: 8,
                   marginBottom: 6,
+                  borderWidth: 1,
+                  borderColor: "rgba(37, 99, 235, 0.2)",
                 }}
               >
-                Strategy: {item.strategy} {item.side ? `· ${item.side}` : ""}
-              </Text>
+                <Text
+                  style={{
+                    color: "#2563EB",
+                    fontWeight: "600",
+                    fontSize: 14,
+                  }}
+                >
+                  📊 {item.strategy} {item.side ? `· ${item.side}` : ""}
+                </Text>
+                <Text
+                  style={{
+                    color: theme.colors.textSecondary,
+                    fontSize: 11,
+                    marginTop: 2,
+                  }}
+                >
+                  Tap to view on chart with entry/exit lines
+                </Text>
+              </Pressable>
             ) : null}
             {item.entry != null || item.stop != null ? (
               <Text style={{ color: theme.colors.text, marginBottom: 6 }}>

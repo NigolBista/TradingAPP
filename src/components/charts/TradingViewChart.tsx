@@ -271,7 +271,7 @@ export default function TradingViewChart({
         style={{
           position: "absolute",
           right: 12,
-          top: showExpand ? 56 : 20,
+          bottom: 20,
           backgroundColor: "rgba(0,0,0,0.6)",
           borderRadius: 20,
           paddingVertical: 8,
