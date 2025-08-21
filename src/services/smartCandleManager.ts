@@ -181,9 +181,12 @@ class SmartCandleManager {
     const now = Date.now();
     const timeSinceUpdate = now - cached.lastUpdate;
 
-    // If cache is fresh, skip update
-    if (timeSinceUpdate < 5 * 60 * 1000) {
-      // 5 minutes
+    // If cache was updated very recently, skip to avoid redundant API calls
+    // Previously this threshold was 5 minutes which prevented the chart from
+    // receiving timely updates. Reduce to 5 seconds so the real-time refresh
+    // interval in `realtimeDataManager` can fetch new candles on each cycle.
+    if (timeSinceUpdate < 5 * 1000) {
+      // 5 seconds
       return;
     }
 
