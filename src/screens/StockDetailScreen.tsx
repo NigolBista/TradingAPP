@@ -557,7 +557,7 @@ export default function StockDetailScreen() {
         symbol,
         extendedTf,
         async () => {
-          // Refresh callback - reload chart data from smart cache
+          // Refresh callback - incrementally update chart data
           try {
             const candles = await smartCandleManager.getCandles(
               symbol,
@@ -565,7 +565,21 @@ export default function StockDetailScreen() {
               500
             );
             if (candles && candles.length > 0) {
-              setDailySeries(toLWC(candles));
+              const lwc = toLWC(candles);
+              setDailySeries((prev) => {
+                if (prev.length === 0) return lwc;
+                const prevLast = prev[prev.length - 1].time;
+                const latest = lwc[lwc.length - 1];
+                // Update in-progress bar
+                if (latest.time === prevLast) {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = latest;
+                  return updated;
+                }
+                // Append new bars without resetting existing data
+                const newBars = lwc.filter((c) => c.time > prevLast);
+                return newBars.length > 0 ? [...prev, ...newBars] : prev;
+              });
             }
           } catch (error) {
             console.error("Failed to refresh chart from smart cache:", error);
