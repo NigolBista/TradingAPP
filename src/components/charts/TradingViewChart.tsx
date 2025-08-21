@@ -137,7 +137,7 @@ export default function TradingViewChart({
   }, [levels, data]);
 
   return (
-    <View style={{ height, width: "100%" }}>
+    <View style={{ height, width: "100%", backgroundColor: "transparent" }}>
       {loading ? (
         <View
           style={{

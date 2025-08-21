@@ -121,7 +121,12 @@ export default function ChartFullScreen() {
           showExpand={false}
           levels={levels}
         />
-        <View style={styles.rangeSwitcherContainer}>
+        <View
+          style={[
+            styles.rangeSwitcherContainer,
+            { bottom: insets.bottom + 12 },
+          ]}
+        >
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -200,15 +205,20 @@ const styles = StyleSheet.create({
   },
   rangeSwitcherContainer: {
     position: "absolute",
+    left: 12,
     right: 12,
-    top: 72,
+    bottom: 12,
     backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 16,
-    paddingVertical: 6,
+    borderRadius: 24,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingVertical: 8,
     paddingHorizontal: 6,
   },
   rangeSwitcherScroll: {
     alignItems: "center",
+    justifyContent: "center",
+    flexGrow: 1,
   },
   tfChip: {
     paddingHorizontal: 10,
