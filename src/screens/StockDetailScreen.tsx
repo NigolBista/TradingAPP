@@ -1022,6 +1022,10 @@ export default function StockDetailScreen() {
   const priceChange = currentPrice - prev;
   const priceChangePercent = prev > 0 ? (priceChange / prev) * 100 : 0;
 
+  // Mock after-hours data - replace with real data when available
+  const afterHoursChange = 0.06;
+  const afterHoursPercent = 0.02;
+
   function toLWC(candles: Candle[]): LWCDatum[] {
     return (candles || []).map((c) => ({
       time: c.time,
@@ -1120,7 +1124,15 @@ export default function StockDetailScreen() {
             {priceChangePercent.toFixed(2)}%) Today
           </Text>
           {/* After Hours - Mock data for now */}
-          <Text style={styles.afterHours}>+$0.06 (0.02%) After hours</Text>
+          <Text
+            style={[
+              styles.afterHours,
+              { color: afterHoursChange >= 0 ? "#16a34a" : "#dc2626" },
+            ]}
+          >
+            {afterHoursChange >= 0 ? "+" : ""}${afterHoursChange.toFixed(2)} (
+            {afterHoursPercent.toFixed(2)}%) After hours
+          </Text>
         </View>
       </View>
 
@@ -1189,7 +1201,7 @@ export default function StockDetailScreen() {
                 (navigation as any).navigate("ChartFullScreen", {
                   symbol,
                   chartType,
-                  timeframe: selectedTimeframe,
+                  timeframe: extendedTf, // Use extendedTf instead of selectedTimeframe for consistency
                   // Pass cached signal data if available
                   ...(cachedSignal && {
                     tradePlan: cachedSignal.tradePlan,

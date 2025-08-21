@@ -94,7 +94,9 @@ export default function PerformanceCard({
         <SimpleLineChart
           data={chartSeries}
           height={120}
-          color={COLORS.BLUE_BASE}
+          color={
+            safeNetWorthChangePercent >= 0 ? COLORS.POSITIVE : COLORS.NEGATIVE
+          }
           strokeWidth={2}
           showFill={false}
         />

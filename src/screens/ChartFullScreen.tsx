@@ -69,7 +69,7 @@ export default function ChartFullScreen() {
     useTimeframeStore();
 
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    defaultTimeframe || "1m"
+    (timeframe as ExtendedTimeframe) || defaultTimeframe || "1m"
   );
   const [stockName, setStockName] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
@@ -145,7 +145,7 @@ export default function ChartFullScreen() {
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
 
   // Reasoning box visibility control
-  const [showReasoning, setShowReasoning] = useState<boolean>(!!initialAiMeta);
+  const [showReasoning, setShowReasoning] = useState<boolean>(false);
   const [hasExistingReasoning, setHasExistingReasoning] = useState<boolean>(
     !!initialAiMeta
   );

@@ -151,7 +151,8 @@ export default function LightweightCandles({
           textColor: dark ? '#e5e7eb' : '#374151', 
           background: { type: 'solid', color: 'transparent' },
           fontSize: 12,
-          fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif'
+          fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+          attributionLogo: false
         },
         rightPriceScale: { 
           borderVisible: false,
@@ -245,17 +246,28 @@ export default function LightweightCandles({
 
       let mainSeries;
       const type = ${JSON.stringify(type)};
+      const raw = ${JSON.stringify(series)};
+      
+      // Determine if price is up or down based on first and last prices
+      // Use a more robust approach: if we have enough data, compare recent vs earlier prices
+      let isPositive = true;
+      if (raw.length > 1) {
+        const firstPrice = raw[0].close;
+        const lastPrice = raw[raw.length - 1].close;
+        isPositive = lastPrice >= firstPrice;
+      }
+      const lineColor = isPositive ? '#16a34a' : '#dc2626'; // Green for up, red for down
       
       if (type === 'area') {
         mainSeries = addSeriesCompat('area', { 
-          lineColor: '#2563eb', 
-          topColor: 'rgba(37,99,235,0.4)', 
-          bottomColor: 'rgba(37,99,235,0.05)',
+          lineColor: lineColor, 
+          topColor: isPositive ? 'rgba(22,163,74,0.4)' : 'rgba(220,38,38,0.4)', 
+          bottomColor: isPositive ? 'rgba(22,163,74,0.05)' : 'rgba(220,38,38,0.05)',
           lineWidth: 2
         });
       } else if (type === 'line') {
         mainSeries = addSeriesCompat('line', { 
-          color: '#2563eb', 
+          color: lineColor, 
           lineWidth: 3,
           crosshairMarkerVisible: true,
           crosshairMarkerRadius: 6
@@ -277,7 +289,6 @@ export default function LightweightCandles({
         });
       }
       
-      const raw = ${JSON.stringify(series)};
       log('Raw data length: ' + raw.length);
       const seriesData = (type === 'area' || type === 'line') 
         ? raw.map(d => ({ time: d.time, value: d.close }))

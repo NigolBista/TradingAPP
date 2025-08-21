@@ -87,43 +87,98 @@ export async function runAIStrategy(
 
   for (const p of promptsToTry) {
     try {
+      const systemContent = p.system;
+      const userContent = buildUserContent(p, input);
+
+      // Console log the entire prompt being sent
+      console.log("🤖 AI STRATEGY ANALYSIS PROMPT");
+      console.log("=====================================");
+      console.log("📊 Symbol:", input.symbol);
+      console.log("🎯 Mode:", input.mode || "auto");
+      console.log("🔧 Strategy:", p.key || "unknown");
+      console.log("=====================================");
+      console.log("💬 SYSTEM PROMPT:");
+      console.log(systemContent);
+      console.log("=====================================");
+      console.log("👤 USER PROMPT:");
+      console.log(userContent);
+      console.log("=====================================");
+      console.log("⚙️  MODEL CONFIG:");
+      console.log("Model:", model);
+      console.log("Temperature:", 0.2);
+      console.log("Max Tokens:", 750);
+      console.log("Response Format: JSON");
+      console.log("=====================================");
+
       const response = await client.chat.completions.create({
         model,
         messages: [
-          { role: "system", content: p.system },
-          { role: "user", content: buildUserContent(p, input) },
+          { role: "system", content: systemContent },
+          { role: "user", content: userContent },
         ],
         temperature: 0.2,
         max_tokens: 750,
         response_format: { type: "json_object" } as any,
       });
       const text = response.choices?.[0]?.message?.content?.trim();
+
+      // Log the response
+      console.log("🤖 AI RESPONSE:");
+      console.log("Raw Response:", text);
+      console.log("=====================================");
+
       if (!text) continue;
       let parsed: AIStrategyOutput | null = null;
       try {
         parsed = JSON.parse(text);
-      } catch {
+        console.log("✅ PARSED RESPONSE:");
+        console.log(JSON.stringify(parsed, null, 2));
+        console.log("=====================================");
+      } catch (parseError) {
+        console.log("❌ JSON PARSE ERROR:", parseError);
         // try to extract JSON object heuristically
         const m = text.match(/\{[\s\S]*\}/);
         if (m) {
           try {
             parsed = JSON.parse(m[0]);
-          } catch {}
+            console.log("✅ HEURISTIC PARSE SUCCESS:");
+            console.log(JSON.stringify(parsed, null, 2));
+          } catch (heuristicError) {
+            console.log("❌ HEURISTIC PARSE FAILED:", heuristicError);
+          }
         }
       }
-      if (!parsed) continue;
+      if (!parsed) {
+        console.log("❌ NO VALID PARSED RESULT - CONTINUING TO NEXT STRATEGY");
+        continue;
+      }
       if (
         !Number.isFinite(parsed.entry) ||
         !Number.isFinite(parsed.exit) ||
         !Number.isFinite(parsed.stop)
       ) {
+        console.log("❌ INVALID NUMERIC VALUES - CONTINUING TO NEXT STRATEGY");
+        console.log(
+          "Entry:",
+          parsed.entry,
+          "Exit:",
+          parsed.exit,
+          "Stop:",
+          parsed.stop
+        );
         continue;
       }
+      console.log("🎉 FINAL SUCCESSFUL RESULT:");
+      console.log(JSON.stringify(parsed, null, 2));
+      console.log("=====================================");
       return parsed;
     } catch (err) {
-      console.warn("AI strategy call failed for", p.key, err);
+      console.log("❌ AI STRATEGY CALL FAILED for", p.key || "unknown");
+      console.error("Error details:", err);
     }
   }
+  console.log("❌ ALL STRATEGIES FAILED - RETURNING NULL");
+  console.log("=====================================");
   return null;
 }
 

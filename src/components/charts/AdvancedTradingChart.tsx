@@ -327,7 +327,8 @@ export default function AdvancedTradingChart({
               textColor: '#d1d4dc', 
               background: { type: 'solid', color: '#0a0a0a' },
               fontSize: 11,
-              fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif'
+              fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+              attributionLogo: false
             },
             rightPriceScale: { 
               borderVisible: false,
@@ -439,7 +440,8 @@ export default function AdvancedTradingChart({
               layout: { 
                 textColor: '#d1d4dc', 
                 background: { type: 'solid', color: '#0a0a0a' },
-                fontSize: 10
+                fontSize: 10,
+                attributionLogo: false
               },
               rightPriceScale: { 
                 borderVisible: false,
@@ -484,7 +486,8 @@ export default function AdvancedTradingChart({
               layout: { 
                 textColor: '#d1d4dc', 
                 background: { type: 'solid', color: '#0a0a0a' },
-                fontSize: 10
+                fontSize: 10,
+                attributionLogo: false
               },
               rightPriceScale: { 
                 borderVisible: false,
@@ -539,7 +542,8 @@ export default function AdvancedTradingChart({
               layout: { 
                 textColor: '#d1d4dc', 
                 background: { type: 'solid', color: '#0a0a0a' },
-                fontSize: 10
+                fontSize: 10,
+                attributionLogo: false
               },
               rightPriceScale: { 
                 borderVisible: false,
