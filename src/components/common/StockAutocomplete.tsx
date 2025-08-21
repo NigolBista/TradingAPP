@@ -16,6 +16,7 @@ import {
   preloadStocksData,
   getLoadingStatus,
 } from "../../services/stockData";
+import { useTheme } from "../../providers/ThemeProvider";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -30,117 +31,118 @@ interface StockAutocompleteProps {
   containerStyle?: any;
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  inputContainer: {
-    position: "relative",
-  },
-  input: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    color: "#ffffff",
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: "#333333",
-  },
-  inputFocused: {
-    borderColor: "#00D4AA",
-  },
-  clearButton: {
-    position: "absolute",
-    right: 12,
-    top: "50%",
-    marginTop: -10,
-  },
-  resultsContainer: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    marginTop: 4,
-    maxHeight: 200,
-    borderWidth: 1,
-    borderColor: "#333333",
-  },
-  resultItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
-  },
-  lastResultItem: {
-    borderBottomWidth: 0,
-  },
-  resultSelected: {
-    backgroundColor: "#00D4AA20",
-  },
-  resultInfo: {
-    flex: 1,
-  },
-  resultSymbol: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ffffff",
-  },
-  resultName: {
-    fontSize: 14,
-    color: "#cccccc",
-    marginTop: 2,
-  },
-  resultMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  resultType: {
-    fontSize: 12,
-    color: "#00D4AA",
-    textTransform: "uppercase",
-    fontWeight: "600",
-    marginRight: 8,
-  },
-  resultSector: {
-    fontSize: 12,
-    color: "#888888",
-  },
-  resultMarketCap: {
-    fontSize: 12,
-    color: "#888888",
-    marginLeft: 8,
-  },
-  loadingContainer: {
-    paddingVertical: 20,
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "#888888",
-    marginTop: 8,
-  },
-  noResultsContainer: {
-    paddingVertical: 20,
-    alignItems: "center",
-  },
-  noResultsText: {
-    color: "#888888",
-    fontSize: 14,
-  },
-  selectedBadge: {
-    backgroundColor: "#00D4AA",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginLeft: 8,
-  },
-  selectedBadgeText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+    },
+    inputContainer: {
+      position: "relative",
+    },
+    input: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      color: theme.colors.text,
+      fontSize: 16,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    inputFocused: {
+      borderColor: theme.colors.primary,
+    },
+    clearButton: {
+      position: "absolute",
+      right: 12,
+      top: "50%",
+      marginTop: -10,
+    },
+    resultsContainer: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+      marginTop: 4,
+      maxHeight: 200,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    resultItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    lastResultItem: {
+      borderBottomWidth: 0,
+    },
+    resultSelected: {
+      backgroundColor: theme.colors.primary + "20",
+    },
+    resultInfo: {
+      flex: 1,
+    },
+    resultSymbol: {
+      fontSize: 16,
+      fontWeight: "600",
+      color: theme.colors.text,
+    },
+    resultName: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    resultMeta: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: 4,
+    },
+    resultType: {
+      fontSize: 12,
+      color: theme.colors.primary,
+      textTransform: "uppercase",
+      fontWeight: "600",
+      marginRight: 8,
+    },
+    resultSector: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+    },
+    resultMarketCap: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginLeft: 8,
+    },
+    loadingContainer: {
+      paddingVertical: 20,
+      alignItems: "center",
+    },
+    loadingText: {
+      color: theme.colors.textSecondary,
+      marginTop: 8,
+    },
+    noResultsContainer: {
+      paddingVertical: 20,
+      alignItems: "center",
+    },
+    noResultsText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+    },
+    selectedBadge: {
+      backgroundColor: theme.colors.primary,
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      marginLeft: 8,
+    },
+    selectedBadgeText: {
+      color: "#ffffff",
+      fontSize: 10,
+      fontWeight: "600",
+    },
+  });
 
 export default function StockAutocomplete({
   onStockSelect,
@@ -152,6 +154,8 @@ export default function StockAutocomplete({
   inputStyle,
   containerStyle,
 }: StockAutocompleteProps) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<StockSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -255,7 +259,7 @@ export default function StockAutocomplete({
         <TextInput
           style={[styles.input, focused && styles.inputFocused, inputStyle]}
           placeholder={dataReady ? placeholder : "Loading stock data..."}
-          placeholderTextColor="#888888"
+          placeholderTextColor={theme.colors.textSecondary}
           value={query}
           onChangeText={setQuery}
           onFocus={() => setFocused(true)}
@@ -271,7 +275,11 @@ export default function StockAutocomplete({
         />
         {query.length > 0 && (
           <Pressable style={styles.clearButton} onPress={clearInput}>
-            <Ionicons name="close-circle" size={20} color="#888888" />
+            <Ionicons
+              name="close-circle"
+              size={20}
+              color={theme.colors.textSecondary}
+            />
           </Pressable>
         )}
       </View>
@@ -284,14 +292,14 @@ export default function StockAutocomplete({
           >
             {!dataReady ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#00D4AA" />
+                <ActivityIndicator size="small" color={theme.colors.primary} />
                 <Text style={styles.loadingText}>
                   Loading stock database...
                 </Text>
               </View>
             ) : loading ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" color="#00D4AA" />
+                <ActivityIndicator size="small" color={theme.colors.primary} />
                 <Text style={styles.loadingText}>Searching...</Text>
               </View>
             ) : results.length === 0 ? (

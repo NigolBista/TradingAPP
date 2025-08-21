@@ -1,6 +1,8 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { WebView } from "react-native-webview";
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system";
 
 export type LWCDatum = {
   time: number; // epoch ms
@@ -13,6 +15,18 @@ export type LWCDatum = {
 
 type ChartType = "candlestick" | "area" | "line" | "bar";
 
+type TradeSide = "long" | "short";
+
+export type TradePlanOverlay = {
+  side: TradeSide;
+  entry?: number;
+  lateEntry?: number; // optional secondary/late entry
+  exit?: number;
+  lateExit?: number; // optional secondary/late exit
+  stop?: number;
+  targets?: number[];
+};
+
 interface Props {
   data: LWCDatum[];
   height?: number;
@@ -23,6 +37,17 @@ interface Props {
   maPeriods?: number[];
   showGrid?: boolean;
   showCrosshair?: boolean;
+  // If provided, override chart up/down color choice
+  forcePositive?: boolean;
+  // Optional trade levels - used to render zones/lines
+  levels?: {
+    entry?: number;
+    entryExtended?: number;
+    exit?: number;
+    exitExtended?: number;
+  };
+  // New: richer trade overlay input. If provided, takes precedence over `levels`.
+  tradePlan?: TradePlanOverlay;
 }
 
 export default function LightweightCandles({
@@ -35,6 +60,9 @@ export default function LightweightCandles({
   maPeriods = [20, 50],
   showGrid = true,
   showCrosshair = true,
+  forcePositive,
+  levels,
+  tradePlan,
 }: Props) {
   const series = useMemo(
     () =>
@@ -68,34 +96,79 @@ export default function LightweightCandles({
   const ma20 = calculateMA(series, maPeriods[0] || 20);
   const ma50 = calculateMA(series, maPeriods[1] || 50);
 
+  // Resolve local lightweight-charts asset stored as .txt (so Metro treats as asset)
+  const [inlineLibText, setInlineLibText] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        console.log("LightweightCandles: Starting to load local asset...");
+        const lib = Asset.fromModule(
+          require("../../../assets/js/lightweight-charts.txt")
+        );
+        await lib.downloadAsync();
+        const uri = lib.localUri || lib.uri;
+        console.log("LightweightCandles: Asset URI:", uri);
+        if (uri) {
+          const content = await FileSystem.readAsStringAsync(uri, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+          console.log("LightweightCandles: Content length:", content?.length);
+          console.log(
+            "LightweightCandles: Contains LightweightCharts:",
+            content?.includes("LightweightCharts")
+          );
+          if (content && content.includes("LightweightCharts")) {
+            console.log("LightweightCandles: Using local asset");
+            setInlineLibText(content);
+          } else {
+            console.log(
+              "LightweightCandles: Local asset invalid, falling back to CDN"
+            );
+            setInlineLibText(null);
+          }
+        }
+      } catch (e) {
+        console.log("LightweightCandles: Error loading local asset:", e);
+        setInlineLibText(null);
+      }
+    })();
+  }, []);
+  // Only use CDN as fallback; local is injected inline from .txt asset
+  const libSrc =
+    "https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js";
+  const scriptLoader = inlineLibText
+    ? `<script>console.log('LightweightCandles: Using inline script');(function(){try{var s=document.createElement('script');s.type='text/javascript';s.text=${JSON.stringify(
+        inlineLibText
+      )};document.head.appendChild(s);}catch(e){console.log('LightweightCandles: Error injecting inline script:', e);}})();</script>`
+    : `<script>console.log('LightweightCandles: Using CDN script');</script><script src="${libSrc}"></script>`;
+
   const html = `<!doctype html><html><head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
     <style>
-      html,body,#wrap{margin:0;padding:0;height:100%;width:100%;}
-      #c{position:relative;height:100%;width:100%;}
+      html,body,#wrap{margin:0;padding:0;height:100%;width:100%;background:transparent;overscroll-behavior:none;-webkit-text-size-adjust:100%;}
+      body{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;}
+      #wrap{overflow:hidden;}
+      #c{position:relative;height:100%;width:100%;overflow:hidden;}
       #t{position:absolute;left:12px;top:12px;padding:8px 12px;border-radius:12px;font:13px -apple-system,Segoe UI,Roboto,Helvetica,Arial;background:rgba(17,24,39,.9);color:#ffffff;z-index:10;box-shadow:0 8px 25px rgba(0,0,0,0.15);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,0.1);}
-      #controls{position:absolute;right:12px;top:12px;z-index:10;display:flex;gap:8px;}
-      .btn{padding:6px 12px;border:none;border-radius:8px;font:12px -apple-system,Segoe UI,Roboto,Helvetica,Arial;cursor:pointer;background:rgba(17,24,39,.8);color:#ffffff;transition:all 0.2s;}
-      .btn:hover{background:rgba(37,99,235,.8);}
-      .btn.active{background:#2563eb;}
-      #debug{position:absolute;bottom:10px;left:10px;background:rgba(255,0,0,0.8);color:white;padding:5px;font-size:10px;z-index:100;}
+      
     </style>
     </head><body>
     <div id="wrap">
       <div id="c">
         <div id="t" style="display:none"></div>
-        <div id="controls">
-          <button class="btn" onclick="chart.timeScale().fitContent()">Fit</button>
-          <button class="btn" onclick="resetZoom()">Reset</button>
-        </div>
       </div>
-      <div id="debug">Loading...</div>
     </div>
-    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+    ${scriptLoader}
     <script>
-      const debugEl = document.getElementById('debug');
+      // Prevent page-level pinch-zoom while allowing chart pinch
+      (function(){
+        try {
+          document.addEventListener('gesturestart', function(e){ e.preventDefault(); }, { passive: false });
+          document.addEventListener('gesturechange', function(e){ e.preventDefault(); }, { passive: false });
+          document.addEventListener('gestureend', function(e){ e.preventDefault(); }, { passive: false });
+        } catch(_) {}
+      })();
       function log(msg) {
-        debugEl.textContent = msg;
         try {
           window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ debug: msg }));
         } catch(e) {}
@@ -127,14 +200,15 @@ export default function LightweightCandles({
         height: ${height},
         layout: { 
           textColor: dark ? '#e5e7eb' : '#374151', 
-          background: { type: 'solid', color: dark ? '#111827' : '#ffffff' },
+          background: { type: 'solid', color: 'transparent' },
           fontSize: 12,
-          fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif'
+          fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif',
+          attributionLogo: false
         },
         rightPriceScale: { 
           borderVisible: false,
           entireTextOnly: true,
-          scaleMargins: { top: 0.1, bottom: showVolume ? 0.3 : 0.1 }
+          scaleMargins: { top: 0.1, bottom: 0.1 }
         },
         timeScale: { 
           borderVisible: false, 
@@ -183,32 +257,84 @@ export default function LightweightCandles({
       
       log('Chart created successfully');
       
+      // Compatibility layer for Lightweight Charts v5 (addSeries) and v4 (addXSeries)
+      function addSeriesCompat(kind, options){
+        const hasNewApi = typeof chart.addSeries === 'function' && window.LightweightCharts && (
+          window.LightweightCharts.CandlestickSeries || window.LightweightCharts.LineSeries
+        );
+        if (hasNewApi) {
+          switch(kind){
+            case 'area':
+              return chart.addSeries(window.LightweightCharts.AreaSeries, options);
+            case 'line':
+              return chart.addSeries(window.LightweightCharts.LineSeries, options);
+            case 'bar':
+              return chart.addSeries(window.LightweightCharts.BarSeries, options);
+            case 'candlestick':
+              return chart.addSeries(window.LightweightCharts.CandlestickSeries, options);
+            case 'histogram':
+              return chart.addSeries(window.LightweightCharts.HistogramSeries, options);
+            default:
+              return chart.addSeries(window.LightweightCharts.LineSeries, options);
+          }
+        }
+        // Fallback to legacy methods
+        switch(kind){
+          case 'area':
+            return chart.addAreaSeries(options);
+          case 'line':
+            return chart.addLineSeries(options);
+          case 'bar':
+            return chart.addBarSeries(options);
+          case 'candlestick':
+            return chart.addCandlestickSeries(options);
+          case 'histogram':
+            return chart.addHistogramSeries(options);
+          default:
+            return chart.addLineSeries(options);
+        }
+      }
+
       let mainSeries;
       const type = ${JSON.stringify(type)};
+      const forced = ${JSON.stringify(forcePositive)};
+      const raw = ${JSON.stringify(series)};
+      
+      // Determine if price is up or down based on first and last prices
+      // Use a more robust approach: if we have enough data, compare recent vs earlier prices
+      let isPositive = true;
+      if (typeof forced === 'boolean') {
+        isPositive = forced;
+      } else if (raw.length > 1) {
+        const firstPrice = raw[0].close;
+        const lastPrice = raw[raw.length - 1].close;
+        isPositive = lastPrice >= firstPrice;
+      }
+      const lineColor = isPositive ? '#16a34a' : '#dc2626'; // Green for up, red for down
       
       if (type === 'area') {
-        mainSeries = chart.addAreaSeries({ 
-          lineColor: '#2563eb', 
-          topColor: 'rgba(37,99,235,0.4)', 
-          bottomColor: 'rgba(37,99,235,0.05)',
+        mainSeries = addSeriesCompat('area', { 
+          lineColor: lineColor, 
+          topColor: isPositive ? 'rgba(22,163,74,0.4)' : 'rgba(220,38,38,0.4)', 
+          bottomColor: isPositive ? 'rgba(22,163,74,0.05)' : 'rgba(220,38,38,0.05)',
           lineWidth: 2
         });
       } else if (type === 'line') {
-        mainSeries = chart.addLineSeries({ 
-          color: '#2563eb', 
+        mainSeries = addSeriesCompat('line', { 
+          color: lineColor, 
           lineWidth: 3,
           crosshairMarkerVisible: true,
           crosshairMarkerRadius: 6
         });
       } else if (type === 'bar') {
-        mainSeries = chart.addBarSeries({ 
+        mainSeries = addSeriesCompat('bar', { 
           upColor: '#16a34a', 
           downColor: '#dc2626',
           openVisible: true,
           thinBars: false
         });
       } else {
-        mainSeries = chart.addCandlestickSeries({ 
+        mainSeries = addSeriesCompat('candlestick', { 
           upColor: '#16a34a', 
           downColor: '#dc2626', 
           wickUpColor: '#16a34a', 
@@ -217,7 +343,6 @@ export default function LightweightCandles({
         });
       }
       
-      const raw = ${JSON.stringify(series)};
       log('Raw data length: ' + raw.length);
       const seriesData = (type === 'area' || type === 'line') 
         ? raw.map(d => ({ time: d.time, value: d.close }))
@@ -225,6 +350,23 @@ export default function LightweightCandles({
       log('Setting data on main series');
       mainSeries.setData(seriesData);
       log('Data set on main series');
+      
+      // Add price lines as a fallback so levels are always visible
+      function addPriceLine(price, color, title){
+        if (price == null || !isFinite(price)) return;
+        try { 
+          mainSeries.createPriceLine({
+            price: Number(price),
+            color: color,
+            lineWidth: 2,
+            lineStyle: LightweightCharts.LineStyle.Dotted,
+            axisLabelVisible: true,
+            title
+          });
+        } catch(e) {}
+      }
+      
+      // Level lines are added after initial fit via addLevelLines()
 
       // Add Moving Averages
       ${
@@ -258,11 +400,11 @@ export default function LightweightCandles({
           : ""
       }
 
-      // Volume histogram
+      // Volume histogram (use forced up/down for consistency)
       ${
         showVolume
           ? `
-        const volumeSeries = chart.addHistogramSeries({
+        const volumeSeries = addSeriesCompat('histogram', {
           color: '#94a3b8',
           priceFormat: { type: 'volume' },
           priceScaleId: '',
@@ -282,15 +424,20 @@ export default function LightweightCandles({
 
       // Enhanced crosshair tooltip
       const tooltip = document.getElementById('t');
-      chart.subscribeCrosshairMove(param => {
+      let crosshairRaf = null;
+      let lastParam = null;
+      function renderTooltip(){
+        const param = lastParam;
         if (!param || !param.time || !param.point) { 
           tooltip.style.display = 'none'; 
+          crosshairRaf = null;
           return; 
         }
         
         const price = param.seriesPrices.get(mainSeries);
         if (price == null) { 
           tooltip.style.display = 'none'; 
+          crosshairRaf = null;
           return; 
         }
         
@@ -334,12 +481,48 @@ export default function LightweightCandles({
         
         tooltip.innerHTML = content;
         tooltip.style.display = 'block';
+        crosshairRaf = null;
+      }
+      chart.subscribeCrosshairMove(param => {
+        lastParam = param;
+        if (!crosshairRaf) crosshairRaf = requestAnimationFrame(renderTooltip);
+        if (!param || !param.time || !param.point) { 
+          tooltip.style.display = 'none'; 
+          return; 
+        }
+        
       });
 
-      // Utility functions
-      function resetZoom() {
-        chart.timeScale().resetTimeScale();
+      // Trade levels as native price lines (keeps them pinned in-canvas)
+      const levels = ${JSON.stringify(levels || {})};
+      const trade = ${JSON.stringify(tradePlan || null)};
+      function computeEffective() {
+        try {
+          if (trade && typeof trade === 'object') {
+            const lv = {};
+            if (trade.entry != null) lv.entry = Number(trade.entry);
+            if (trade.lateEntry != null) lv.entryExtended = Number(trade.lateEntry);
+            if (trade.exit != null) lv.exit = Number(trade.exit);
+            if (trade.lateExit != null) lv.exitExtended = Number(trade.lateExit);
+            return { levels: lv, side: (trade.side === 'short' ? 'short' : 'long') };
+          }
+        } catch(_) {}
+        return { levels: levels || {}, side: 'long' };
       }
+      function addLevelLines() {
+        try {
+          const eff = computeEffective();
+          const lv = eff.levels || {};
+          // Titles are consistent regardless of side for clarity
+          if (lv.entry != null) addPriceLine(lv.entry, '#10B981', 'Entry');
+          if (lv.entryExtended != null) addPriceLine(lv.entryExtended, '#14b8a6', 'Late Entry');
+          if (lv.exit != null) addPriceLine(lv.exit, '#EF4444', 'Exit');
+          if (lv.exitExtended != null) addPriceLine(lv.exitExtended, '#F97316', 'Late Exit');
+        } catch(_) {}
+      }
+
+      // Placeholder for any future overlays (no-op)
+      function updateZones(){}
 
       // Ensure width and fit on load
       setTimeout(() => {
@@ -347,6 +530,7 @@ export default function LightweightCandles({
         chart.applyOptions({ width: container.clientWidth });
         chart.timeScale().fitContent();
         log('Chart fitted and ready');
+        addLevelLines();
       }, 100);
 
       // Handle window resize
@@ -355,6 +539,13 @@ export default function LightweightCandles({
       }
       
       window.addEventListener('resize', handleResize);
+      
+      // No overlay sync needed for price lines
+      
+      // Initial draw and a couple of delayed retries in case scale isn't ready yet
+      updateZones();
+      setTimeout(updateZones, 250);
+      setTimeout(updateZones, 800);
       
       // Post ready message
       try {
@@ -399,14 +590,24 @@ export default function LightweightCandles({
 
   return (
     <View
-      style={{ height, width: "100%", borderRadius: 12, overflow: "hidden" }}
+      style={{
+        height,
+        width: "100%",
+        overflow: "hidden",
+        backgroundColor: "transparent",
+      }}
     >
       <WebView
         originWhitelist={["*"]}
         source={{ html }}
-        style={{ height, width: "100%" }}
+        style={{ height, width: "100%", backgroundColor: "transparent" }}
+        containerStyle={{ backgroundColor: "transparent" }}
+        opaque={false}
         javaScriptEnabled={true}
         domStorageEnabled={true}
+        bounces={false}
+        overScrollMode="never"
+        decelerationRate="normal"
         startInLoadingState={false}
         scalesPageToFit={false}
         scrollEnabled={false}

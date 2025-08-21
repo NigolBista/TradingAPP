@@ -1,0 +1,124 @@
+{
+  "accounts": [
+    {
+      "account_id": "acc_001_chase_checking",
+      "balances": {
+        "available": 15420.5,
+        "current": 15420.5,
+        "iso_currency_code": "USD",
+        "limit": null,
+        "unofficial_currency_code": null
+      },
+      "mask": "0000",
+      "name": "Chase Total Checking",
+      "official_name": "Chase Total Checking®",
+      "subtype": "checking",
+      "type": "depository"
+    },
+    {
+      "account_id": "acc_002_chase_savings",
+      "balances": {
+        "available": 45780.25,
+        "current": 45780.25,
+        "iso_currency_code": "USD",
+        "limit": null,
+        "unofficial_currency_code": null
+      },
+      "mask": "1111",
+      "name": "Chase Savings",
+      "official_name": "Chase Savings℠",
+      "subtype": "savings",
+      "type": "depository"
+    },
+    {
+      "account_id": "acc_003_schwab_brokerage",
+      "balances": {
+        "available": 125340.75,
+        "current": 125340.75,
+        "iso_currency_code": "USD",
+        "limit": null,
+        "unofficial_currency_code": null
+      },
+      "mask": "2222",
+      "name": "Schwab One Brokerage",
+      "official_name": "Charles Schwab One® Brokerage Account",
+      "subtype": "brokerage",
+      "type": "investment"
+    },
+    {
+      "account_id": "acc_004_fidelity_401k",
+      "balances": {
+        "available": 89650.0,
+        "current": 89650.0,
+        "iso_currency_code": "USD",
+        "limit": null,
+        "unofficial_currency_code": null
+      },
+      "mask": "3333",
+      "name": "Fidelity 401(k)",
+      "official_name": "Fidelity 401(k) Plan",
+      "subtype": "401k",
+      "type": "investment"
+    },
+    {
+      "account_id": "acc_005_robinhood_brokerage",
+      "balances": {
+        "available": 34567.89,
+        "current": 34567.89,
+        "iso_currency_code": "USD",
+        "limit": null,
+        "unofficial_currency_code": null
+      },
+      "mask": "4444",
+      "name": "Robinhood Individual",
+      "official_name": "Robinhood Individual Brokerage Account",
+      "subtype": "brokerage",
+      "type": "investment"
+    },
+    {
+      "account_id": "acc_006_chase_credit",
+      "balances": {
+        "available": 8500.0,
+        "current": -2340.67,
+        "iso_currency_code": "USD",
+        "limit": 10000.0,
+        "unofficial_currency_code": null
+      },
+      "mask": "5555",
+      "name": "Chase Freedom Unlimited",
+      "official_name": "Chase Freedom Unlimited®",
+      "subtype": "credit card",
+      "type": "credit"
+    },
+    {
+      "account_id": "acc_007_vanguard_ira",
+      "balances": {
+        "available": 67890.12,
+        "current": 67890.12,
+        "iso_currency_code": "USD",
+        "limit": null,
+        "unofficial_currency_code": null
+      },
+      "mask": "6666",
+      "name": "Vanguard Roth IRA",
+      "official_name": "Vanguard Roth IRA",
+      "subtype": "roth",
+      "type": "investment"
+    },
+    {
+      "account_id": "acc_008_webull_brokerage",
+      "balances": {
+        "available": 12450.33,
+        "current": 12450.33,
+        "iso_currency_code": "USD",
+        "limit": null,
+        "unofficial_currency_code": null
+      },
+      "mask": "7777",
+      "name": "Webull Individual",
+      "official_name": "Webull Individual Brokerage Account",
+      "subtype": "brokerage",
+      "type": "investment"
+    }
+  ]
+}

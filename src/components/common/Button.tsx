@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useTheme } from "../../providers/ThemeProvider";
 
 interface ButtonProps {
   title: string;
@@ -20,78 +21,79 @@ interface ButtonProps {
   style?: any;
 }
 
-const styles = StyleSheet.create({
-  base: {
-    borderRadius: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // Variants
-  primary: {
-    backgroundColor: "#6366f1",
-    borderWidth: 1,
-    borderColor: "#6366f1",
-  },
-  secondary: {
-    backgroundColor: "#6b7280",
-    borderWidth: 1,
-    borderColor: "#6b7280",
-  },
-  outline: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "#6366f1",
-  },
-  ghost: {
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  // Sizes
-  sm: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  md: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  lg: {
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-  },
-  // Text variants
-  textPrimary: {
-    color: "#ffffff",
-    fontWeight: "600",
-  },
-  textSecondary: {
-    color: "#ffffff",
-    fontWeight: "600",
-  },
-  textOutline: {
-    color: "#6366f1",
-    fontWeight: "600",
-  },
-  textGhost: {
-    color: "#6366f1",
-    fontWeight: "600",
-  },
-  // Text sizes
-  textSm: {
-    fontSize: 14,
-  },
-  textMd: {
-    fontSize: 16,
-  },
-  textLg: {
-    fontSize: 18,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    base: {
+      borderRadius: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    // Variants
+    primary: {
+      backgroundColor: theme.colors.primary,
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
+    },
+    secondary: {
+      backgroundColor: theme.colors.textSecondary,
+      borderWidth: 1,
+      borderColor: theme.colors.textSecondary,
+    },
+    outline: {
+      backgroundColor: "transparent",
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
+    },
+    ghost: {
+      backgroundColor: "transparent",
+      borderWidth: 1,
+      borderColor: "transparent",
+    },
+    // Sizes
+    sm: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    md: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    lg: {
+      paddingHorizontal: 24,
+      paddingVertical: 16,
+    },
+    // Text variants
+    textPrimary: {
+      color: "#ffffff",
+      fontWeight: "600",
+    },
+    textSecondary: {
+      color: "#ffffff",
+      fontWeight: "600",
+    },
+    textOutline: {
+      color: theme.colors.primary,
+      fontWeight: "600",
+    },
+    textGhost: {
+      color: theme.colors.primary,
+      fontWeight: "600",
+    },
+    // Text sizes
+    textSm: {
+      fontSize: 14,
+    },
+    textMd: {
+      fontSize: 16,
+    },
+    textLg: {
+      fontSize: 18,
+    },
+    disabled: {
+      opacity: 0.5,
+    },
+  });
 
 export default function Button({
   title,
@@ -104,11 +106,13 @@ export default function Button({
   iconPosition = "left",
   style,
 }: ButtonProps) {
+  const { theme } = useTheme();
+  const styles = createStyles(theme);
   const isDisabled = disabled || loading;
 
   const getIconColor = () => {
     if (variant === "primary" || variant === "secondary") return "#ffffff";
-    return "#6366f1";
+    return theme.colors.primary;
   };
 
   const getIconSize = () => {
@@ -139,7 +143,7 @@ export default function Button({
       {loading ? (
         <ActivityIndicator size="small" color={getIconColor()} />
       ) : (
-        <View style={styles.base}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
           {icon && iconPosition === "left" && (
             <Ionicons
               name={icon}

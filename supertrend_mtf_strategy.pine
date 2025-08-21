@@ -1,0 +1,196 @@
+//@version=6
+strategy("Supertrend MTF Inducement Strategy (with 2m filter)",
+     overlay = true,
+     initial_capital = 100000,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.01,
+     process_orders_on_close = true,
+     pyramiding = 0)
+
+// ——— Supertrend base settings
+atrLen   = input.int(10,  "ATR Length", minval = 1)
+stFactor = input.float(3, "Supertrend Factor", minval = 0.01, step = 0.01)
+
+// ——— Timeframe grid (intraday focus)
+tf2m  = input.timeframe("2",  "TF 0 (very fast 2m)")
+tf5   = input.timeframe("5",  "TF 1 (fast)")
+tf15  = input.timeframe("15", "TF 2")
+tf30  = input.timeframe("30", "TF 3")
+tf60  = input.timeframe("60", "TF 4 (HTF filter)")
+
+minAlign = input.int(2, "Min higher TFs aligned (of TF2/TF3/TF4)", minval = 1, maxval = 3)
+
+// ——— 2m confirmation controls
+use2mConfirm        = input.bool(true,  "Use 2m Supertrend agreement")
+require2mInducement = input.bool(true,  "Require 2m inducement confluence")
+
+// ——— Inducement filters (volume + candle shape/size)
+volLen      = input.int(50, "Volume SMA Length", minval = 1)
+volMult     = input.float(1.5, "Volume Spike x SMA", step = 0.1)
+bodyAtrMult = input.float(0.9, "Impulsive Body ≥ ATR x", step = 0.1)
+hammerWickX = input.float(2.5, "Hammer/Shooting-Star Wick ≥ Body x", step = 0.1)
+hammerOppX  = input.float(0.5, "Opposite Wick ≤ Body x", step = 0.1)
+
+// ——— Chop / momentum gates
+adxLen     = input.int(14, "ADX Length", minval = 1)
+adxMin     = input.float(18, "Min ADX", step = 0.5)
+atrPctMin  = input.float(0.25, "Min ATR% of Price", step = 0.01)
+useBreakout = input.bool(true, "Require Breakout (reduce consolidation whipsaws)")
+brkLookback = input.int(10, "Breakout Lookback (bars)", minval = 1)
+
+// ——— Session filter
+sess      = input.session("0930-1600", "Session (exchange time)")
+inSession = not na(time(timeframe.period, sess))
+
+// ——— Risk / exits
+riskPct       = input.float(1, "Risk % of Equity per Trade", step = 0.1)
+takeProfitATR = input.float(2.5, "Take Profit (ATR x)", step = 0.1)
+stopATR       = input.float(1.5, "Initial Stop (ATR x)", step = 0.1)
+trailWithST   = input.bool(true, "Trail Stop with Supertrend")
+
+// ——— Cooldown to avoid rapid re-entries in chop
+cooldownBars  = input.int(5, "Cooldown Bars After Exit", minval = 0)
+
+// ——— Base-timeframe Supertrend (chart TF)
+[stBase, dirBase] = ta.supertrend(stFactor, atrLen)
+isUp(_d) => _d < 0
+isDn(_d) => _d > 0
+
+// ——— MTF Supertrends
+[st2, d2]    = request.security(syminfo.tickerid, tf2m, ta.supertrend(stFactor, atrLen), barmerge.gaps_off, barmerge.lookahead_off)
+[st5_, d5]   = request.security(syminfo.tickerid, tf5,  ta.supertrend(stFactor, atrLen), barmerge.gaps_off, barmerge.lookahead_off)
+[st15_, d15] = request.security(syminfo.tickerid, tf15, ta.supertrend(stFactor, atrLen), barmerge.gaps_off, barmerge.lookahead_off)
+[st30_, d30] = request.security(syminfo.tickerid, tf30, ta.supertrend(stFactor, atrLen), barmerge.gaps_off, barmerge.lookahead_off)
+[st60_, d60] = request.security(syminfo.tickerid, tf60, ta.supertrend(stFactor, atrLen), barmerge.gaps_off, barmerge.lookahead_off)
+
+// ——— Alignment count
+alignedUp   = (isUp(d15) ? 1 : 0) + (isUp(d30) ? 1 : 0) + (isUp(d60) ? 1 : 0)
+alignedDown = (isDn(d15) ? 1 : 0) + (isDn(d30) ? 1 : 0) + (isDn(d60) ? 1 : 0)
+
+// ——— Inducement detection on current bar
+atr   = ta.atr(atrLen)
+volMA = ta.sma(volume, volLen)
+volOK = volume > volMA * volMult
+
+body     = math.abs(close - open)
+barRange = high - low
+upW      = high - math.max(open, close)
+dnW      = math.min(open, close) - low
+
+impulseUp   = close > open and (body >= bodyAtrMult * atr) and volOK
+impulseDown = close < open and (body >= bodyAtrMult * atr) and volOK
+
+bullHammer  = (dnW >= hammerWickX * body) and (upW <= hammerOppX * body) and volOK
+bearHammer  = (upW >= hammerWickX * body) and (dnW <= hammerOppX * body) and volOK
+
+induceLong  = impulseUp or bullHammer
+induceShort = impulseDown or bearHammer
+
+// ——— 2m inducement
+impulseUp2 = request.security(
+     syminfo.tickerid, tf2m,
+     close > open and (math.abs(close - open) >= bodyAtrMult * ta.atr(atrLen)) and (volume > ta.sma(volume, volLen) * volMult),
+     barmerge.gaps_off, barmerge.lookahead_off)
+
+impulseDown2 = request.security(
+     syminfo.tickerid, tf2m,
+     close < open and (math.abs(close - open) >= bodyAtrMult * ta.atr(atrLen)) and (volume > ta.sma(volume, volLen) * volMult),
+     barmerge.gaps_off, barmerge.lookahead_off)
+
+bullHammer2 = request.security(
+     syminfo.tickerid, tf2m,
+     ((math.min(open, close) - low) >= hammerWickX * math.abs(close - open)) and ((high - math.max(open, close)) <= hammerOppX * math.abs(close - open)) and (volume > ta.sma(volume, volLen) * volMult),
+     barmerge.gaps_off, barmerge.lookahead_off)
+
+bearHammer2 = request.security(
+     syminfo.tickerid, tf2m,
+     ((high - math.max(open, close)) >= hammerWickX * math.abs(close - open)) and ((math.min(open, close) - low) <= hammerOppX * math.abs(close - open)) and (volume > ta.sma(volume, volLen) * volMult),
+     barmerge.gaps_off, barmerge.lookahead_off)
+
+induceLong2  = impulseUp2 or bullHammer2
+induceShort2 = impulseDown2 or bearHammer2
+
+fastAgreeOK =
+     not use2mConfirm or
+     (isUp(dirBase) and isUp(d2)) or
+     (isDn(dirBase) and isDn(d2))
+
+// ——— Chop filters
+// ADX calculation using DI+ and DI-
+[diPlus, diMinus, adx] = ta.dmi(adxLen, adxLen)
+atrPct = atr / close * 100
+momentumOK = (adx >= adxMin) and (atrPct >= atrPctMin)
+
+brkLong  = close > ta.highest(high,  brkLookback)[1]
+brkShort = close < ta.lowest(low, brkLookback)[1]
+breakoutOK(dirLong) =>
+    not useBreakout or (dirLong ? brkLong : brkShort)
+
+// ——— Flip logic
+flipUp   = dirBase[1] > dirBase
+flipDown = dirBase[1] < dirBase
+
+// ——— Cooldown tracking
+var int lastExitBar = na
+cooldownOK = na(lastExitBar) or (bar_index - lastExitBar >= cooldownBars)
+
+// ——— Entry conditions
+longAlignOK  = isUp(dirBase)   and alignedUp   >= minAlign
+shortAlignOK = isDn(dirBase)   and alignedDown >= minAlign
+
+induceLongAll  = induceLong  and (not require2mInducement or induceLong2)
+induceShortAll = induceShort and (not require2mInducement or induceShort2)
+
+longCond  = inSession and cooldownOK and flipUp   and longAlignOK  and fastAgreeOK and induceLongAll  and momentumOK and breakoutOK(true)
+shortCond = inSession and cooldownOK and flipDown and shortAlignOK and fastAgreeOK and induceShortAll and momentumOK and breakoutOK(false)
+
+// ——— Sizing
+equity    = strategy.equity
+stopDist  = math.max(atr * stopATR, syminfo.mintick)
+posValue  = equity * (riskPct / 100.0)
+qtyFloat  = posValue / stopDist
+qty       = qtyFloat
+
+// ——— Orders
+if (longCond) and strategy.position_size <= 0
+    strategy.entry("L", strategy.long, qty = qty)
+
+if (shortCond) and strategy.position_size >= 0
+    strategy.entry("S", strategy.short, qty = qty)
+
+// ——— Exits
+tpPriceLong  = strategy.position_avg_price + takeProfitATR * atr
+slPriceLong  = strategy.position_avg_price - stopDist
+tpPriceShort = strategy.position_avg_price - takeProfitATR * atr
+slPriceShort = strategy.position_avg_price + stopDist
+
+stStopLong  = trailWithST and isUp(dirBase) ? stBase : na
+stStopShort = trailWithST and isDn(dirBase) ? stBase : na
+
+finalSLLong  = na(stStopLong)  ? slPriceLong  : math.max(stStopLong,  slPriceLong)
+finalSLShort = na(stStopShort) ? slPriceShort : math.min(stStopShort, slPriceShort)
+
+if strategy.position_size > 0
+    strategy.exit("L-Exit", from_entry = "L", stop = finalSLLong,  limit = tpPriceLong, alert_message = "Long exit filled")
+if strategy.position_size < 0
+    strategy.exit("S-Exit", from_entry = "S", stop = finalSLShort, limit = tpPriceShort, alert_message = "Short exit filled")
+
+// Mark bar of exit for cooldown
+justClosed = strategy.position_size[1] != 0 and strategy.position_size == 0
+if justClosed
+    lastExitBar := bar_index
+
+// ——— Visuals
+upPlot   = plot(isUp(dirBase) ? stBase : na,  "Up Trend",   color = color.new(color.green, 0), style = plot.style_linebr)
+downPlot = plot(isDn(dirBase) ? stBase : na,  "Down Trend", color = color.new(color.red,   0), style = plot.style_linebr)
+bodyMid  = plot(barstate.isfirst ? na : (open + close) / 2, display = display.none)
+fill(bodyMid, upPlot,   color = color.new(color.green, 90))
+fill(bodyMid, downPlot, color = color.new(color.red,   90))
+
+// ——— Debug markers
+plotshape(longCond,  title="Long Entry",  style=shape.triangleup,   color=color.new(color.green, 0), location=location.belowbar, size=size.tiny, text="L")
+plotshape(shortCond, title="Short Entry", style=shape.triangledown, color=color.new(color.red,   0), location=location.abovebar, size=size.tiny, text="S")
+
+// ——— Alerts
+alertcondition(longCond,  title="Long Entry",  message="Long entry signal (ST flip + MTF align + 2m confirm + inducement + momentum).")
+alertcondition(shortCond, title="Short Entry", message="Short entry signal (ST flip + MTF align + 2m confirm + inducement + momentum).")

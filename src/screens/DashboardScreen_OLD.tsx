@@ -19,12 +19,6 @@ import {
   performComprehensiveAnalysis,
   MarketAnalysis,
 } from "../services/aiAnalytics";
-// import { MarketScanner } from "../services/marketScanner";
-import {
-  analyzeNewsWithEnhancedSentiment,
-  getNewsAlerts,
-  SentimentAnalysis,
-} from "../services/sentiment";
 import { generateSignalSummary, SignalSummary } from "../services/signalEngine";
 import { useUserStore, type Watchlist } from "../store/userStore";
 import { useNavigation } from "@react-navigation/native";
@@ -388,7 +382,9 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [marketBrief, setMarketBrief] = useState<string>("");
   const [indices, setIndices] = useState<any[]>([]);
-  const [watchlistAnalytics, setWatchlistAnalytics] = useState<WatchlistAnalytics[]>([]);
+  const [watchlistAnalytics, setWatchlistAnalytics] = useState<
+    WatchlistAnalytics[]
+  >([]);
   const { profile, getActiveWatchlist } = useUserStore();
 
   const stockSymbols = [
@@ -419,11 +415,6 @@ export default function DashboardScreen() {
   useEffect(() => {
     loadData();
   }, [symbol]);
-
-  // Avoid heavy market-wide scans on dashboard mount
-  // useEffect(() => {
-  //   loadMarketOverview();
-  // }, []);
 
   useEffect(() => {
     loadFocusSignals();
@@ -1088,7 +1079,6 @@ export default function DashboardScreen() {
         {news.length > 0 && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Latest News</Text>
               <Text style={styles.sectionSubtitle}>{symbol}</Text>
             </View>
             <NewsList items={news.slice(0, 5)} />

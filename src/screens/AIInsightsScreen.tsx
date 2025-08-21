@@ -16,10 +16,7 @@ import {
   MarketAnalysis,
   TradingSignal,
 } from "../services/aiAnalytics";
-import {
-  analyzeNewsWithEnhancedSentiment,
-  SentimentAnalysis,
-} from "../services/sentiment";
+// Removed sentiment analysis - using Stock News API sentiment directly
 import { fetchCandles } from "../services/marketProviders";
 import { fetchNews } from "../services/newsProviders";
 import { generateSignalSummary } from "../services/signalEngine";
@@ -273,12 +270,12 @@ interface AIInsight {
 
 export default function AIInsightsScreen() {
   const [activeTab, setActiveTab] = useState<
-    "insights" | "sentiment" | "signals" | "planner" | "alerts" | "events"
+    "insights" | "signals" | "planner" | "alerts" | "events"
   >("insights");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [insights, setInsights] = useState<AIInsight[]>([]);
-  const [sentiment, setSentiment] = useState<SentimentAnalysis | null>(null);
+  // Removed sentiment analysis - using Stock News API sentiment directly
   const [topSignals, setTopSignals] = useState<
     { symbol: string; analysis: MarketAnalysis }[]
   >([]);
@@ -299,7 +296,7 @@ export default function AIInsightsScreen() {
       setLoading(true);
       await Promise.all([
         loadInsights(),
-        loadSentiment(),
+        // Removed sentiment loading - using Stock News API sentiment directly
         loadTopSignals(),
         loadPlanner(),
         loadAlerts(),
@@ -425,15 +422,7 @@ export default function AIInsightsScreen() {
     }
   }
 
-  async function loadSentiment() {
-    try {
-      const news = await fetchNews("market");
-      const sentimentAnalysis = await analyzeNewsWithEnhancedSentiment(news);
-      setSentiment(sentimentAnalysis);
-    } catch (error) {
-      console.error("Error loading sentiment:", error);
-    }
-  }
+  // Removed loadSentiment function - using Stock News API sentiment directly
 
   async function loadTopSignals() {
     try {
@@ -732,25 +721,6 @@ export default function AIInsightsScreen() {
         <Pressable
           style={[
             styles.tab,
-            activeTab === "sentiment" ? styles.tabActive : styles.tabInactive,
-          ]}
-          onPress={() => setActiveTab("sentiment")}
-        >
-          <Text
-            style={[
-              styles.tabText,
-              activeTab === "sentiment"
-                ? styles.tabTextActive
-                : styles.tabTextInactive,
-            ]}
-          >
-            Sentiment
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[
-            styles.tab,
             activeTab === "signals" ? styles.tabActive : styles.tabInactive,
           ]}
           onPress={() => setActiveTab("signals")}
@@ -902,136 +872,6 @@ export default function AIInsightsScreen() {
                 </View>
               ))
             )}
-          </View>
-        )}
-
-        {activeTab === "sentiment" && sentiment && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Market Sentiment Analysis</Text>
-
-            <View style={styles.sentimentContainer}>
-              <View style={styles.sentimentCircle}>
-                <Text style={styles.sentimentScore}>
-                  {(sentiment.score * 100).toFixed(0)}
-                </Text>
-                <Ionicons
-                  name={
-                    sentiment.score > 0
-                      ? "trending-up"
-                      : sentiment.score < 0
-                      ? "trending-down"
-                      : "remove"
-                  }
-                  size={24}
-                  color="#888888"
-                />
-              </View>
-
-              <Text
-                style={[
-                  styles.sentimentLabel,
-                  {
-                    color:
-                      sentiment.score > 0.3
-                        ? "#00D4AA"
-                        : sentiment.score < -0.3
-                        ? "#FF5722"
-                        : "#FFB020",
-                  },
-                ]}
-              >
-                {sentiment.label}
-              </Text>
-
-              <Text style={styles.sentimentDescription}>
-                {sentiment.summary}
-              </Text>
-            </View>
-
-            <View style={{ marginTop: 24 }}>
-              <Text
-                style={{
-                  color: "#ffffff",
-                  fontSize: 16,
-                  fontWeight: "600",
-                  marginBottom: 12,
-                }}
-              >
-                Key Factors
-              </Text>
-
-              {sentiment.keywords.positive.length > 0 && (
-                <View style={{ marginBottom: 12 }}>
-                  <Text
-                    style={{
-                      color: "#00D4AA",
-                      fontSize: 14,
-                      fontWeight: "500",
-                      marginBottom: 4,
-                    }}
-                  >
-                    Positive Indicators
-                  </Text>
-                  <View
-                    style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}
-                  >
-                    {sentiment.keywords.positive
-                      .slice(0, 6)
-                      .map((keyword, i) => (
-                        <View
-                          key={i}
-                          style={[
-                            styles.targetChip,
-                            { backgroundColor: "#00D4AA20" },
-                          ]}
-                        >
-                          <Text
-                            style={[styles.targetText, { color: "#00D4AA" }]}
-                          >
-                            {keyword}
-                          </Text>
-                        </View>
-                      ))}
-                  </View>
-                </View>
-              )}
-
-              {sentiment.keywords.negative.length > 0 && (
-                <View>
-                  <Text
-                    style={{
-                      color: "#FF5722",
-                      fontSize: 14,
-                      fontWeight: "500",
-                      marginBottom: 4,
-                    }}
-                  >
-                    Risk Factors
-                  </Text>
-                  <View
-                    style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}
-                  >
-                    {sentiment.keywords.negative
-                      .slice(0, 6)
-                      .map((keyword, i) => (
-                        <View
-                          key={i}
-                          style={[
-                            styles.targetChip,
-                            { backgroundColor: "#FF572220" },
-                          ]}
-                        >
-                          <Text
-                            style={[styles.targetText, { color: "#FF5722" }]}
-                          >
-                            {keyword}
-                          </Text>
-                        </View>
-                      ))}
-                  </View>
-                </View>
-              )}
-            </View>
           </View>
         )}
 

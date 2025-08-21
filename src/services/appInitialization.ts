@@ -1,4 +1,8 @@
 import { preloadStocksData } from "./stockData";
+import { initializeAppDataStore } from "../store/appDataStore";
+import { useEarningsStore } from "../store/earningsStore";
+import { realtimeDataManager } from "./realtimeDataManager";
+import { useUserStore } from "../store/userStore";
 
 /**
  * App initialization service
@@ -27,12 +31,22 @@ export async function initializeApp(): Promise<void> {
       // Start preloading stocks data in the background
       const stocksPromise = preloadStocksData();
 
-      // Add other initialization tasks here if needed
-      // const otherPromise = someOtherInitFunction();
+      // Initialize the centralized app data store
+      const storePromise = initializeAppDataStore();
 
-      // Wait for stocks data to load
-      await stocksPromise;
+      // Hydrate earnings data at app launch
+      const earningsPromise = useEarningsStore.getState().hydrateEarningsData();
+
+      // Wait for core initialization to complete first
+      await Promise.all([stocksPromise, storePromise, earningsPromise]);
       console.log("✅ Stocks database loaded successfully");
+      console.log("✅ App data store initialized successfully");
+      console.log("✅ Earnings data hydrated successfully");
+
+      // Pre-load watchlist data in background (non-blocking)
+      preloadWatchlistData().catch((error) => {
+        console.error("❌ Watchlist pre-loading failed:", error);
+      });
 
       isInitialized = true;
       resolve();
@@ -45,6 +59,67 @@ export async function initializeApp(): Promise<void> {
   });
 
   return initPromise;
+}
+
+/**
+ * Pre-load watchlist data for instant access
+ */
+async function preloadWatchlistData(): Promise<void> {
+  try {
+    const userState = useUserStore.getState();
+    const profile = userState.profile;
+
+    // Get all unique symbols from all watchlists and favorites
+    const allSymbols = new Set<string>();
+
+    // Add symbols from legacy watchlist (backward compatibility)
+    if (profile.watchlist && profile.watchlist.length > 0) {
+      profile.watchlist.forEach((symbol) => allSymbols.add(symbol));
+    }
+
+    // Add symbols from new watchlists
+    if (profile.watchlists && profile.watchlists.length > 0) {
+      profile.watchlists.forEach((watchlist) => {
+        watchlist.items.forEach((item) => allSymbols.add(item.symbol));
+      });
+    }
+
+    // Add global favorites
+    if (profile.favorites && profile.favorites.length > 0) {
+      profile.favorites.forEach((symbol) => allSymbols.add(symbol));
+    }
+
+    // Add some default popular stocks if watchlist is empty
+    if (allSymbols.size === 0) {
+      const defaultStocks = [
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "TSLA",
+        "NVDA",
+        "META",
+        "NFLX",
+      ];
+      defaultStocks.forEach((symbol) => allSymbols.add(symbol));
+    }
+
+    const symbolsArray = Array.from(allSymbols);
+    console.log(
+      "🚀 Pre-loading data for",
+      symbolsArray.length,
+      "watchlist stocks:",
+      symbolsArray
+    );
+
+    // Pre-load all watchlist data
+    await realtimeDataManager.preloadWatchlistData(symbolsArray);
+
+    console.log("✅ Watchlist data pre-loaded successfully");
+  } catch (error) {
+    console.error("❌ Failed to pre-load watchlist data:", error);
+    throw error;
+  }
 }
 
 /**

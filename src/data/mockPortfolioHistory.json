@@ -1,0 +1,394 @@
+{
+  "1D": [
+    {
+      "date": "2024-01-15T09:30:00Z",
+      "totalValue": 330000,
+      "dayChange": 0,
+      "dayChangePercent": 0
+    },
+    {
+      "date": "2024-01-15T10:00:00Z",
+      "totalValue": 331200,
+      "dayChange": 1200,
+      "dayChangePercent": 0.36
+    },
+    {
+      "date": "2024-01-15T11:00:00Z",
+      "totalValue": 329800,
+      "dayChange": -200,
+      "dayChangePercent": -0.06
+    },
+    {
+      "date": "2024-01-15T12:00:00Z",
+      "totalValue": 332100,
+      "dayChange": 2100,
+      "dayChangePercent": 0.64
+    },
+    {
+      "date": "2024-01-15T13:00:00Z",
+      "totalValue": 333500,
+      "dayChange": 3500,
+      "dayChangePercent": 1.06
+    },
+    {
+      "date": "2024-01-15T14:00:00Z",
+      "totalValue": 332800,
+      "dayChange": 2800,
+      "dayChangePercent": 0.85
+    },
+    {
+      "date": "2024-01-15T15:00:00Z",
+      "totalValue": 334200,
+      "dayChange": 4200,
+      "dayChangePercent": 1.27
+    },
+    {
+      "date": "2024-01-15T16:00:00Z",
+      "totalValue": 335600,
+      "dayChange": 5600,
+      "dayChangePercent": 1.7
+    }
+  ],
+  "1W": [
+    {
+      "date": "2024-01-08",
+      "totalValue": 325000,
+      "dayChange": -2000,
+      "dayChangePercent": -0.61
+    },
+    {
+      "date": "2024-01-09",
+      "totalValue": 327500,
+      "dayChange": 2500,
+      "dayChangePercent": 0.77
+    },
+    {
+      "date": "2024-01-10",
+      "totalValue": 326800,
+      "dayChange": -700,
+      "dayChangePercent": -0.21
+    },
+    {
+      "date": "2024-01-11",
+      "totalValue": 329200,
+      "dayChange": 2400,
+      "dayChangePercent": 0.73
+    },
+    {
+      "date": "2024-01-12",
+      "totalValue": 331000,
+      "dayChange": 1800,
+      "dayChangePercent": 0.55
+    },
+    {
+      "date": "2024-01-15",
+      "totalValue": 335600,
+      "dayChange": 4600,
+      "dayChangePercent": 1.39
+    }
+  ],
+  "1M": [
+    {
+      "date": "2024-01-01",
+      "totalValue": 315000,
+      "dayChange": 0,
+      "dayChangePercent": 0
+    },
+    {
+      "date": "2024-01-02",
+      "totalValue": 317200,
+      "dayChange": 2200,
+      "dayChangePercent": 0.7
+    },
+    {
+      "date": "2024-01-03",
+      "totalValue": 316500,
+      "dayChange": -700,
+      "dayChangePercent": -0.22
+    },
+    {
+      "date": "2024-01-04",
+      "totalValue": 319800,
+      "dayChange": 3300,
+      "dayChangePercent": 1.04
+    },
+    {
+      "date": "2024-01-05",
+      "totalValue": 321200,
+      "dayChange": 1400,
+      "dayChangePercent": 0.44
+    },
+    {
+      "date": "2024-01-08",
+      "totalValue": 325000,
+      "dayChange": 3800,
+      "dayChangePercent": 1.18
+    },
+    {
+      "date": "2024-01-09",
+      "totalValue": 327500,
+      "dayChange": 2500,
+      "dayChangePercent": 0.77
+    },
+    {
+      "date": "2024-01-10",
+      "totalValue": 326800,
+      "dayChange": -700,
+      "dayChangePercent": -0.21
+    },
+    {
+      "date": "2024-01-11",
+      "totalValue": 329200,
+      "dayChange": 2400,
+      "dayChangePercent": 0.73
+    },
+    {
+      "date": "2024-01-12",
+      "totalValue": 331000,
+      "dayChange": 1800,
+      "dayChangePercent": 0.55
+    },
+    {
+      "date": "2024-01-15",
+      "totalValue": 335600,
+      "dayChange": 4600,
+      "dayChangePercent": 1.39
+    }
+  ],
+  "3M": [
+    {
+      "date": "2023-10-15",
+      "totalValue": 295000,
+      "dayChange": 0,
+      "dayChangePercent": 0
+    },
+    {
+      "date": "2023-10-30",
+      "totalValue": 298500,
+      "dayChange": 3500,
+      "dayChangePercent": 1.19
+    },
+    {
+      "date": "2023-11-15",
+      "totalValue": 302000,
+      "dayChange": 3500,
+      "dayChangePercent": 1.17
+    },
+    {
+      "date": "2023-11-30",
+      "totalValue": 305800,
+      "dayChange": 3800,
+      "dayChangePercent": 1.26
+    },
+    {
+      "date": "2023-12-15",
+      "totalValue": 310200,
+      "dayChange": 4400,
+      "dayChangePercent": 1.44
+    },
+    {
+      "date": "2023-12-31",
+      "totalValue": 314500,
+      "dayChange": 4300,
+      "dayChangePercent": 1.39
+    },
+    {
+      "date": "2024-01-15",
+      "totalValue": 335600,
+      "dayChange": 21100,
+      "dayChangePercent": 6.71
+    }
+  ],
+  "1Y": [
+    {
+      "date": "2023-01-15",
+      "totalValue": 250000,
+      "dayChange": 0,
+      "dayChangePercent": 0
+    },
+    {
+      "date": "2023-02-15",
+      "totalValue": 255000,
+      "dayChange": 5000,
+      "dayChangePercent": 2.0
+    },
+    {
+      "date": "2023-03-15",
+      "totalValue": 248000,
+      "dayChange": -7000,
+      "dayChangePercent": -2.75
+    },
+    {
+      "date": "2023-04-15",
+      "totalValue": 262000,
+      "dayChange": 14000,
+      "dayChangePercent": 5.65
+    },
+    {
+      "date": "2023-05-15",
+      "totalValue": 270000,
+      "dayChange": 8000,
+      "dayChangePercent": 3.05
+    },
+    {
+      "date": "2023-06-15",
+      "totalValue": 275000,
+      "dayChange": 5000,
+      "dayChangePercent": 1.85
+    },
+    {
+      "date": "2023-07-15",
+      "totalValue": 282000,
+      "dayChange": 7000,
+      "dayChangePercent": 2.55
+    },
+    {
+      "date": "2023-08-15",
+      "totalValue": 278000,
+      "dayChange": -4000,
+      "dayChangePercent": -1.42
+    },
+    {
+      "date": "2023-09-15",
+      "totalValue": 285000,
+      "dayChange": 7000,
+      "dayChangePercent": 2.52
+    },
+    {
+      "date": "2023-10-15",
+      "totalValue": 295000,
+      "dayChange": 10000,
+      "dayChangePercent": 3.51
+    },
+    {
+      "date": "2023-11-15",
+      "totalValue": 302000,
+      "dayChange": 7000,
+      "dayChangePercent": 2.37
+    },
+    {
+      "date": "2023-12-15",
+      "totalValue": 310200,
+      "dayChange": 8200,
+      "dayChangePercent": 2.72
+    },
+    {
+      "date": "2024-01-15",
+      "totalValue": 335600,
+      "dayChange": 25400,
+      "dayChangePercent": 8.19
+    }
+  ],
+  "YTD": [
+    {
+      "date": "2024-01-01",
+      "totalValue": 320000,
+      "dayChange": 0,
+      "dayChangePercent": 0
+    },
+    {
+      "date": "2024-01-15",
+      "totalValue": 325800,
+      "dayChange": 5800,
+      "dayChangePercent": 1.81
+    },
+    {
+      "date": "2024-02-01",
+      "totalValue": 328400,
+      "dayChange": 2600,
+      "dayChangePercent": 0.8
+    },
+    {
+      "date": "2024-02-15",
+      "totalValue": 331200,
+      "dayChange": 2800,
+      "dayChangePercent": 0.85
+    },
+    {
+      "date": "2024-03-01",
+      "totalValue": 329800,
+      "dayChange": -1400,
+      "dayChangePercent": -0.42
+    },
+    {
+      "date": "2024-03-15",
+      "totalValue": 334600,
+      "dayChange": 4800,
+      "dayChangePercent": 1.46
+    },
+    {
+      "date": "2024-04-01",
+      "totalValue": 337200,
+      "dayChange": 2600,
+      "dayChangePercent": 0.78
+    },
+    {
+      "date": "2024-04-15",
+      "totalValue": 335600,
+      "dayChange": -1600,
+      "dayChangePercent": -0.47
+    }
+  ],
+  "ALL": [
+    {
+      "date": "2020-01-01",
+      "totalValue": 150000,
+      "dayChange": 0,
+      "dayChangePercent": 0
+    },
+    {
+      "date": "2020-06-01",
+      "totalValue": 165000,
+      "dayChange": 15000,
+      "dayChangePercent": 10.0
+    },
+    {
+      "date": "2021-01-01",
+      "totalValue": 180000,
+      "dayChange": 15000,
+      "dayChangePercent": 9.09
+    },
+    {
+      "date": "2021-06-01",
+      "totalValue": 220000,
+      "dayChange": 40000,
+      "dayChangePercent": 22.22
+    },
+    {
+      "date": "2022-01-01",
+      "totalValue": 280000,
+      "dayChange": 60000,
+      "dayChangePercent": 27.27
+    },
+    {
+      "date": "2022-06-01",
+      "totalValue": 260000,
+      "dayChange": -20000,
+      "dayChangePercent": -7.14
+    },
+    {
+      "date": "2023-01-01",
+      "totalValue": 290000,
+      "dayChange": 30000,
+      "dayChangePercent": 11.54
+    },
+    {
+      "date": "2023-06-01",
+      "totalValue": 310000,
+      "dayChange": 20000,
+      "dayChangePercent": 6.9
+    },
+    {
+      "date": "2024-01-01",
+      "totalValue": 320000,
+      "dayChange": 10000,
+      "dayChangePercent": 3.23
+    },
+    {
+      "date": "2024-04-15",
+      "totalValue": 335600,
+      "dayChange": 15600,
+      "dayChangePercent": 4.88
+    }
+  ]
+}

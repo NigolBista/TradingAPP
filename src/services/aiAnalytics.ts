@@ -79,64 +79,82 @@ export interface MarketAnalysis {
     score: number; // 0-100
     recommendation: "strong_buy" | "buy" | "hold" | "sell" | "strong_sell";
   };
+  // Optional zones for buy/sell confluence areas
+  zones?: {
+    buy: TradingZone[];
+    sell: TradingZone[];
+  };
+}
+
+export interface TradingZone {
+  type: "buy" | "sell";
+  range: { low: number; high: number };
+  midpoint: number;
+  confidence: number; // 0-100
+  confluenceFactors: string[];
+  rationale: string;
 }
 
 // Technical Indicator Calculations
 export class TechnicalAnalysis {
   static calculateSMA(candles: Candle[], period: number): number {
     if (candles.length < period) return 0;
-    const prices = candles.slice(-period).map(c => c.close);
+    const prices = candles.slice(-period).map((c) => c.close);
     return prices.reduce((sum, price) => sum + price, 0) / period;
   }
 
   static calculateEMA(candles: Candle[], period: number): number {
     if (candles.length < period) return 0;
-    
+
     const multiplier = 2 / (period + 1);
-    const prices = candles.map(c => c.close);
-    
+    const prices = candles.map((c) => c.close);
+
     let ema = prices[0];
     for (let i = 1; i < prices.length; i++) {
-      ema = (prices[i] * multiplier) + (ema * (1 - multiplier));
+      ema = prices[i] * multiplier + ema * (1 - multiplier);
     }
     return ema;
   }
 
   static calculateRSI(candles: Candle[], period: number = 14): number {
     if (candles.length < period + 1) return 50;
-    
-    const prices = candles.map(c => c.close);
+
+    const prices = candles.map((c) => c.close);
     let gains = 0;
     let losses = 0;
-    
+
     for (let i = 1; i <= period; i++) {
       const change = prices[i] - prices[i - 1];
       if (change > 0) gains += change;
       else losses -= change;
     }
-    
+
     let avgGain = gains / period;
     let avgLoss = losses / period;
-    
+
     for (let i = period + 1; i < prices.length; i++) {
       const change = prices[i] - prices[i - 1];
       const gain = change > 0 ? change : 0;
       const loss = change < 0 ? -change : 0;
-      
-      avgGain = ((avgGain * (period - 1)) + gain) / period;
-      avgLoss = ((avgLoss * (period - 1)) + loss) / period;
+
+      avgGain = (avgGain * (period - 1) + gain) / period;
+      avgLoss = (avgLoss * (period - 1) + loss) / period;
     }
-    
+
     if (avgLoss === 0) return 100;
     const rs = avgGain / avgLoss;
-    return 100 - (100 / (1 + rs));
+    return 100 - 100 / (1 + rs);
   }
 
-  static calculateMACD(candles: Candle[]): { macd: number; signal: number; histogram: number } {
+  static calculateMACD(candles: Candle[]): {
+    macd: number;
+    signal: number;
+    histogram: number;
+  } {
     const ema12 = this.calculateEMA(candles, 12);
     const ema26 = this.calculateEMA(candles, 26);
     const macd = ema12 - ema26;
-    
+
     // Calculate signal line (9-period EMA of MACD)
     const macdValues = [];
     for (let i = 26; i <= candles.length; i++) {
@@ -145,73 +163,83 @@ export class TechnicalAnalysis {
       const ema26Slice = this.calculateEMA(slice, 26);
       macdValues.push(ema12Slice - ema26Slice);
     }
-    
+
     const signal = this.calculateEMAFromValues(macdValues, 9);
     const histogram = macd - signal;
-    
+
     return { macd, signal, histogram };
   }
 
   static calculateEMAFromValues(values: number[], period: number): number {
     if (values.length < period) return 0;
-    
+
     const multiplier = 2 / (period + 1);
     let ema = values[0];
-    
+
     for (let i = 1; i < values.length; i++) {
-      ema = (values[i] * multiplier) + (ema * (1 - multiplier));
+      ema = values[i] * multiplier + ema * (1 - multiplier);
     }
     return ema;
   }
 
-  static calculateBollingerBands(candles: Candle[], period: number = 20, multiplier: number = 2): { upper: number; middle: number; lower: number } {
+  static calculateBollingerBands(
+    candles: Candle[],
+    period: number = 20,
+    multiplier: number = 2
+  ): { upper: number; middle: number; lower: number } {
     const sma = this.calculateSMA(candles, period);
-    const prices = candles.slice(-period).map(c => c.close);
-    
-    const variance = prices.reduce((sum, price) => sum + Math.pow(price - sma, 2), 0) / period;
+    const prices = candles.slice(-period).map((c) => c.close);
+
+    const variance =
+      prices.reduce((sum, price) => sum + Math.pow(price - sma, 2), 0) / period;
     const stdDev = Math.sqrt(variance);
-    
+
     return {
-      upper: sma + (stdDev * multiplier),
+      upper: sma + stdDev * multiplier,
       middle: sma,
-      lower: sma - (stdDev * multiplier)
+      lower: sma - stdDev * multiplier,
     };
   }
 
-  static calculateStochastic(candles: Candle[], period: number = 14): { k: number; d: number } {
+  static calculateStochastic(
+    candles: Candle[],
+    period: number = 14
+  ): { k: number; d: number } {
     if (candles.length < period) return { k: 50, d: 50 };
-    
+
     const slice = candles.slice(-period);
-    const high = Math.max(...slice.map(c => c.high));
-    const low = Math.min(...slice.map(c => c.low));
+    const high = Math.max(...slice.map((c) => c.high));
+    const low = Math.min(...slice.map((c) => c.low));
     const close = candles[candles.length - 1].close;
-    
+
     const k = ((close - low) / (high - low)) * 100;
-    
+
     // Calculate %D (3-period SMA of %K)
     const kValues = [];
     for (let i = period - 1; i < candles.length; i++) {
       const periodSlice = candles.slice(i - period + 1, i + 1);
-      const periodHigh = Math.max(...periodSlice.map(c => c.high));
-      const periodLow = Math.min(...periodSlice.map(c => c.low));
+      const periodHigh = Math.max(...periodSlice.map((c) => c.high));
+      const periodLow = Math.min(...periodSlice.map((c) => c.low));
       const periodClose = candles[i].close;
-      kValues.push(((periodClose - periodLow) / (periodHigh - periodLow)) * 100);
+      kValues.push(
+        ((periodClose - periodLow) / (periodHigh - periodLow)) * 100
+      );
     }
-    
+
     const d = kValues.slice(-3).reduce((sum, val) => sum + val, 0) / 3;
-    
+
     return { k, d };
   }
 
   static calculateATR(candles: Candle[], period: number = 14): number {
     if (candles.length < period + 1) return 0;
-    
+
     const trueRanges = [];
     for (let i = 1; i < candles.length; i++) {
       const high = candles[i].high;
       const low = candles[i].low;
       const prevClose = candles[i - 1].close;
-      
+
       const tr = Math.max(
         high - low,
         Math.abs(high - prevClose),
@@ -219,16 +247,20 @@ export class TechnicalAnalysis {
       );
       trueRanges.push(tr);
     }
-    
+
     return trueRanges.slice(-period).reduce((sum, tr) => sum + tr, 0) / period;
   }
 
-  static calculateVolumeAnalysis(candles: Candle[]): { sma20: number; current: number; ratio: number } {
-    const volumes = candles.map(c => c.volume || 0);
+  static calculateVolumeAnalysis(candles: Candle[]): {
+    sma20: number;
+    current: number;
+    ratio: number;
+  } {
+    const volumes = candles.map((c) => c.volume || 0);
     const sma20 = volumes.slice(-20).reduce((sum, vol) => sum + vol, 0) / 20;
     const current = volumes[volumes.length - 1];
     const ratio = current / sma20;
-    
+
     return { sma20, current, ratio };
   }
 
@@ -244,31 +276,37 @@ export class TechnicalAnalysis {
       bollingerBands: this.calculateBollingerBands(candles),
       stochastic: this.calculateStochastic(candles),
       atr: this.calculateATR(candles),
-      volume: this.calculateVolumeAnalysis(candles)
+      volume: this.calculateVolumeAnalysis(candles),
     };
   }
 
-  static analyzeMomentum(candles: Candle[], timeframe: string): MomentumAnalysis {
+  static analyzeMomentum(
+    candles: Candle[],
+    timeframe: string
+  ): MomentumAnalysis {
     const indicators = this.analyzeIndicators(candles);
     const currentPrice = candles[candles.length - 1].close;
-    
+
     let direction: "bullish" | "bearish" | "neutral" = "neutral";
     let strength = 50;
     let confidence = 50;
     const signals: string[] = [];
     const warnings: string[] = [];
-    
+
     // Price vs Moving Averages
     if (currentPrice > indicators.sma20 && currentPrice > indicators.sma50) {
       signals.push("Price above key moving averages");
       strength += 15;
       direction = "bullish";
-    } else if (currentPrice < indicators.sma20 && currentPrice < indicators.sma50) {
+    } else if (
+      currentPrice < indicators.sma20 &&
+      currentPrice < indicators.sma50
+    ) {
       signals.push("Price below key moving averages");
       strength -= 15;
       direction = "bearish";
     }
-    
+
     // RSI Analysis
     if (indicators.rsi > 70) {
       warnings.push("RSI overbought (>70)");
@@ -283,7 +321,7 @@ export class TechnicalAnalysis {
       signals.push("RSI bearish momentum");
       strength -= 10;
     }
-    
+
     // MACD Analysis
     if (indicators.macd.macd > indicators.macd.signal) {
       signals.push("MACD bullish crossover");
@@ -294,7 +332,7 @@ export class TechnicalAnalysis {
       strength -= 10;
       if (direction === "neutral") direction = "bearish";
     }
-    
+
     // Volume Analysis
     if (indicators.volume.ratio > 1.5) {
       signals.push("High volume confirmation");
@@ -303,7 +341,7 @@ export class TechnicalAnalysis {
       warnings.push("Low volume - weak confirmation");
       confidence -= 10;
     }
-    
+
     // Bollinger Bands
     if (currentPrice > indicators.bollingerBands.upper) {
       warnings.push("Price above Bollinger upper band");
@@ -312,54 +350,69 @@ export class TechnicalAnalysis {
       warnings.push("Price below Bollinger lower band");
       confidence -= 5;
     }
-    
+
     // Stochastic
-    if (indicators.stochastic.k > indicators.stochastic.d && indicators.stochastic.k > 20) {
+    if (
+      indicators.stochastic.k > indicators.stochastic.d &&
+      indicators.stochastic.k > 20
+    ) {
       signals.push("Stochastic bullish momentum");
       strength += 5;
-    } else if (indicators.stochastic.k < indicators.stochastic.d && indicators.stochastic.k < 80) {
+    } else if (
+      indicators.stochastic.k < indicators.stochastic.d &&
+      indicators.stochastic.k < 80
+    ) {
       signals.push("Stochastic bearish momentum");
       strength -= 5;
     }
-    
+
     // Normalize values
     strength = Math.max(0, Math.min(100, strength));
     confidence = Math.max(0, Math.min(100, confidence));
-    
+
     return {
       timeframe,
       direction,
       strength,
       confidence,
       signals,
-      warnings
+      warnings,
     };
   }
 
-  static generateTradingSignals(candles: Candle[], indicators: TechnicalIndicators): TradingSignal[] {
+  static generateTradingSignals(
+    candles: Candle[],
+    indicators: TechnicalIndicators
+  ): TradingSignal[] {
     const signals: TradingSignal[] = [];
     const currentPrice = candles[candles.length - 1].close;
     const atr = indicators.atr;
-    
+
     // Intraday Signal
     let intradayConfluence = 0;
     const intradayReasons: string[] = [];
-    
+
     if (indicators.rsi < 30 && indicators.macd.macd > indicators.macd.signal) {
       intradayConfluence += 2;
       intradayReasons.push("RSI oversold with MACD bullish cross");
     }
-    
-    if (currentPrice < indicators.bollingerBands.lower && indicators.volume.ratio > 1.2) {
+
+    if (
+      currentPrice < indicators.bollingerBands.lower &&
+      indicators.volume.ratio > 1.2
+    ) {
       intradayConfluence += 2;
       intradayReasons.push("Price below BB lower band with volume spike");
     }
-    
-    if (indicators.stochastic.k < 20 && indicators.stochastic.k > indicators.stochastic.d) {
+
+    if (
+      indicators.stochastic.k < 20 &&
+      indicators.stochastic.k > indicators.stochastic.d
+    ) {
       intradayConfluence += 1;
       intradayReasons.push("Stochastic oversold reversal");
     }
-    
+
     if (intradayConfluence >= 2) {
       signals.push({
         type: "intraday",
@@ -367,36 +420,43 @@ export class TechnicalAnalysis {
         confidence: Math.min(90, intradayConfluence * 20),
         entry: currentPrice,
         targets: [
-          currentPrice + (atr * 1),
-          currentPrice + (atr * 2),
-          currentPrice + (atr * 3)
+          currentPrice + atr * 1,
+          currentPrice + atr * 2,
+          currentPrice + atr * 3,
         ],
-        stopLoss: currentPrice - (atr * 1.5),
+        stopLoss: currentPrice - atr * 1.5,
         riskReward: 2.0,
         reasoning: intradayReasons,
-        confluence: intradayConfluence
+        confluence: intradayConfluence,
       });
     }
-    
+
     // Swing Trading Signal
     let swingConfluence = 0;
     const swingReasons: string[] = [];
-    
-    if (currentPrice > indicators.sma20 && indicators.sma20 > indicators.sma50) {
+
+    if (
+      currentPrice > indicators.sma20 &&
+      indicators.sma20 > indicators.sma50
+    ) {
       swingConfluence += 2;
       swingReasons.push("Bullish moving average alignment");
     }
-    
-    if (indicators.macd.histogram > 0 && indicators.rsi > 50 && indicators.rsi < 70) {
+
+    if (
+      indicators.macd.histogram > 0 &&
+      indicators.rsi > 50 &&
+      indicators.rsi < 70
+    ) {
       swingConfluence += 2;
       swingReasons.push("MACD momentum with healthy RSI");
     }
-    
+
     if (indicators.volume.ratio > 1.0) {
       swingConfluence += 1;
       swingReasons.push("Above average volume");
     }
-    
+
     if (swingConfluence >= 2) {
       signals.push({
         type: "swing",
@@ -404,36 +464,39 @@ export class TechnicalAnalysis {
         confidence: Math.min(85, swingConfluence * 18),
         entry: currentPrice,
         targets: [
-          currentPrice + (atr * 3),
-          currentPrice + (atr * 5),
-          currentPrice + (atr * 8)
+          currentPrice + atr * 3,
+          currentPrice + atr * 5,
+          currentPrice + atr * 8,
         ],
-        stopLoss: currentPrice - (atr * 2),
+        stopLoss: currentPrice - atr * 2,
         riskReward: 2.5,
         reasoning: swingReasons,
-        confluence: swingConfluence
+        confluence: swingConfluence,
       });
     }
-    
+
     // Long-term Signal
     let longtermConfluence = 0;
     const longtermReasons: string[] = [];
-    
-    if (indicators.sma50 > indicators.sma200 && currentPrice > indicators.sma200) {
+
+    if (
+      indicators.sma50 > indicators.sma200 &&
+      currentPrice > indicators.sma200
+    ) {
       longtermConfluence += 3;
       longtermReasons.push("Golden cross formation with price above 200 SMA");
     }
-    
+
     if (indicators.rsi > 40 && indicators.rsi < 80) {
       longtermConfluence += 1;
       longtermReasons.push("RSI in healthy bullish range");
     }
-    
+
     if (indicators.macd.macd > 0) {
       longtermConfluence += 1;
       longtermReasons.push("MACD above zero line");
     }
-    
+
     if (longtermConfluence >= 3) {
       signals.push({
         type: "longterm",
@@ -441,24 +504,27 @@ export class TechnicalAnalysis {
         confidence: Math.min(80, longtermConfluence * 15),
         entry: currentPrice,
         targets: [
-          currentPrice + (atr * 10),
-          currentPrice + (atr * 20),
-          currentPrice + (atr * 30)
+          currentPrice + atr * 10,
+          currentPrice + atr * 20,
+          currentPrice + atr * 30,
         ],
-        stopLoss: currentPrice - (atr * 5),
+        stopLoss: currentPrice - atr * 5,
         riskReward: 3.0,
         reasoning: longtermReasons,
-        confluence: longtermConfluence
+        confluence: longtermConfluence,
       });
     }
-    
+
     return signals;
   }
 
-  static findSupportResistance(candles: Candle[]): { support: number[]; resistance: number[] } {
+  static findSupportResistance(candles: Candle[]): {
+    support: number[];
+    resistance: number[];
+  } {
     const support: number[] = [];
     const resistance: number[] = [];
-    
+
     // Find pivot points
     for (let i = 2; i < candles.length - 2; i++) {
       const current = candles[i];
@@ -466,49 +532,212 @@ export class TechnicalAnalysis {
       const prev1 = candles[i - 1];
       const next1 = candles[i + 1];
       const next2 = candles[i + 2];
-      
+
       // Resistance (pivot high)
-      if (current.high > prev2.high && current.high > prev1.high && 
-          current.high > next1.high && current.high > next2.high) {
+      if (
+        current.high > prev2.high &&
+        current.high > prev1.high &&
+        current.high > next1.high &&
+        current.high > next2.high
+      ) {
         resistance.push(current.high);
       }
-      
+
       // Support (pivot low)
-      if (current.low < prev2.low && current.low < prev1.low && 
-          current.low < next1.low && current.low < next2.low) {
+      if (
+        current.low < prev2.low &&
+        current.low < prev1.low &&
+        current.low < next1.low &&
+        current.low < next2.low
+      ) {
         support.push(current.low);
       }
     }
-    
+
     // Sort and get most recent levels
     support.sort((a, b) => b - a);
     resistance.sort((a, b) => a - b);
-    
+
     return {
       support: support.slice(0, 3),
-      resistance: resistance.slice(0, 3)
+      resistance: resistance.slice(0, 3),
     };
   }
 
-  static analyzeMarketStructure(candles: Candle[]): { trend: "uptrend" | "downtrend" | "sideways"; trendStrength: number; phase: "accumulation" | "markup" | "distribution" | "markdown" } {
+  // Identify confluence-based buy/sell zones using multiple factors
+  static identifyConfluenceZones(
+    candles: Candle[],
+    indicators: TechnicalIndicators,
+    supportResistance: { support: number[]; resistance: number[] },
+    marketStructure: {
+      trend: "uptrend" | "downtrend" | "sideways";
+      trendStrength: number;
+    }
+  ): { buy: TradingZone[]; sell: TradingZone[] } {
+    const zonesBuy: TradingZone[] = [];
+    const zonesSell: TradingZone[] = [];
+
+    if (candles.length === 0) return { buy: zonesBuy, sell: zonesSell };
+
+    const last = candles[candles.length - 1];
+    const atr = indicators.atr || Math.max(1, (last.high - last.low) * 1.5);
+
+    // Helper to compute confluence and confidence
+    const computeConfidence = (
+      midpoint: number,
+      type: "buy" | "sell"
+    ): { score: number; factors: string[] } => {
+      const factors: string[] = [];
+      let score = 0;
+
+      // Proximity to S/R
+      const nearSRArray =
+        type === "buy"
+          ? supportResistance.support
+          : supportResistance.resistance;
+      const nearest = nearSRArray
+        .map((lvl) => ({ lvl, dist: Math.abs(midpoint - lvl) / midpoint }))
+        .sort((a, b) => a.dist - b.dist)[0];
+      if (nearest && nearest.dist < 0.01) {
+        score += 20;
+        factors.push(
+          `Near ${
+            type === "buy" ? "support" : "resistance"
+          } (${nearest.lvl.toFixed(2)})`
+        );
+      }
+
+      // RSI context
+      if (type === "buy" && indicators.rsi < 40) {
+        score += indicators.rsi < 30 ? 20 : 10;
+        factors.push("RSI favorable for buy");
+      }
+      if (type === "sell" && indicators.rsi > 60) {
+        score += indicators.rsi > 70 ? 20 : 10;
+        factors.push("RSI favorable for sell");
+      }
+
+      // MACD momentum
+      const macd = indicators.macd;
+      if (type === "buy" && macd.macd > macd.signal) {
+        score += 10;
+        factors.push("MACD bullish crossover");
+      }
+      if (type === "sell" && macd.macd < macd.signal) {
+        score += 10;
+        factors.push("MACD bearish crossover");
+      }
+
+      // Bollinger proximity
+      const bb = indicators.bollingerBands;
+      if (type === "buy" && midpoint <= bb.lower * 1.01) {
+        score += 10;
+        factors.push("Near Bollinger lower band");
+      }
+      if (type === "sell" && midpoint >= bb.upper * 0.99) {
+        score += 10;
+        factors.push("Near Bollinger upper band");
+      }
+
+      // Volume confirmation
+      if (indicators.volume.ratio > 1.2) {
+        score += 10;
+        factors.push("Elevated volume");
+      }
+
+      // Trend alignment
+      if (marketStructure.trend === "uptrend" && type === "buy") {
+        score += Math.min(15, Math.round(marketStructure.trendStrength * 0.15));
+        factors.push("Aligned with uptrend");
+      }
+      if (marketStructure.trend === "downtrend" && type === "sell") {
+        score += Math.min(15, Math.round(marketStructure.trendStrength * 0.15));
+        factors.push("Aligned with downtrend");
+      }
+
+      return { score: Math.max(0, Math.min(100, score)), factors };
+    };
+
+    // Build zones around nearest S/R with ATR-based width
+    const srBuyCandidates = supportResistance.support.slice(0, 3);
+    const srSellCandidates = supportResistance.resistance.slice(0, 3);
+
+    srBuyCandidates.forEach((lvl) => {
+      const width = atr * 0.6;
+      const low = Math.max(0, lvl - width);
+      const high = lvl + width;
+      const midpoint = (low + high) / 2;
+      const { score, factors } = computeConfidence(midpoint, "buy");
+      zonesBuy.push({
+        type: "buy",
+        range: { low, high },
+        midpoint,
+        confidence: score,
+        confluenceFactors: factors,
+        rationale: `Buy zone around support ${lvl.toFixed(2)} ± ${width.toFixed(
+          2
+        )} (ATR-based)`,
+      });
+    });
+
+    srSellCandidates.forEach((lvl) => {
+      const width = atr * 0.6;
+      const low = Math.max(0, lvl - width);
+      const high = lvl + width;
+      const midpoint = (low + high) / 2;
+      const { score, factors } = computeConfidence(midpoint, "sell");
+      zonesSell.push({
+        type: "sell",
+        range: { low, high },
+        midpoint,
+        confidence: score,
+        confluenceFactors: factors,
+        rationale: `Sell zone around resistance ${lvl.toFixed(
+          2
+        )} ± ${width.toFixed(2)} (ATR-based)`,
+      });
+    });
+
+    // Sort by confidence and trim
+    zonesBuy.sort((a, b) => b.confidence - a.confidence);
+    zonesSell.sort((a, b) => b.confidence - a.confidence);
+
+    return {
+      buy: zonesBuy.slice(0, 3),
+      sell: zonesSell.slice(0, 3),
+    };
+  }
+
+  static analyzeMarketStructure(candles: Candle[]): {
+    trend: "uptrend" | "downtrend" | "sideways";
+    trendStrength: number;
+    phase: "accumulation" | "markup" | "distribution" | "markdown";
+  } {
     const indicators = this.analyzeIndicators(candles);
     const currentPrice = candles[candles.length - 1].close;
-    
+
     let trend: "uptrend" | "downtrend" | "sideways" = "sideways";
     let trendStrength = 50;
-    
+
     // Determine trend based on moving averages
-    if (indicators.sma20 > indicators.sma50 && indicators.sma50 > indicators.sma200) {
+    if (
+      indicators.sma20 > indicators.sma50 &&
+      indicators.sma50 > indicators.sma200
+    ) {
       trend = "uptrend";
       trendStrength = 75;
-    } else if (indicators.sma20 < indicators.sma50 && indicators.sma50 < indicators.sma200) {
+    } else if (
+      indicators.sma20 < indicators.sma50 &&
+      indicators.sma50 < indicators.sma200
+    ) {
       trend = "downtrend";
       trendStrength = 75;
     }
-    
+
     // Determine market phase
-    let phase: "accumulation" | "markup" | "distribution" | "markdown" = "accumulation";
-    
+    let phase: "accumulation" | "markup" | "distribution" | "markdown" =
+      "accumulation";
+
     if (trend === "uptrend" && indicators.volume.ratio > 1.2) {
       phase = "markup";
     } else if (trend === "downtrend" && indicators.volume.ratio > 1.2) {
@@ -516,16 +745,19 @@ export class TechnicalAnalysis {
     } else if (trend === "sideways" && indicators.rsi > 70) {
       phase = "distribution";
     }
-    
+
     return { trend, trendStrength, phase };
   }
 
-  static generateOverallRating(analysis: Partial<MarketAnalysis>): { score: number; recommendation: "strong_buy" | "buy" | "hold" | "sell" | "strong_sell" } {
+  static generateOverallRating(analysis: Partial<MarketAnalysis>): {
+    score: number;
+    recommendation: "strong_buy" | "buy" | "hold" | "sell" | "strong_sell";
+  } {
     let score = 50;
-    
+
     // Factor in signals
     if (analysis.signals) {
-      analysis.signals.forEach(signal => {
+      analysis.signals.forEach((signal) => {
         if (signal.action === "buy") {
           score += signal.confidence * 0.3;
         } else if (signal.action === "sell") {
@@ -533,10 +765,10 @@ export class TechnicalAnalysis {
         }
       });
     }
-    
+
     // Factor in momentum
     if (analysis.momentum) {
-      Object.values(analysis.momentum).forEach(momentum => {
+      Object.values(analysis.momentum).forEach((momentum) => {
         if (momentum.direction === "bullish") {
           score += momentum.strength * 0.1;
         } else if (momentum.direction === "bearish") {
@@ -544,7 +776,7 @@ export class TechnicalAnalysis {
         }
       });
     }
-    
+
     // Factor in market structure
     if (analysis.marketStructure) {
       if (analysis.marketStructure.trend === "uptrend") {
@@ -553,16 +785,16 @@ export class TechnicalAnalysis {
         score -= analysis.marketStructure.trendStrength * 0.2;
       }
     }
-    
+
     score = Math.max(0, Math.min(100, score));
-    
+
     let recommendation: "strong_buy" | "buy" | "hold" | "sell" | "strong_sell";
     if (score >= 80) recommendation = "strong_buy";
     else if (score >= 65) recommendation = "buy";
     else if (score >= 35) recommendation = "hold";
     else if (score >= 20) recommendation = "sell";
     else recommendation = "strong_sell";
-    
+
     return { score, recommendation };
   }
 }
@@ -573,43 +805,59 @@ export async function performComprehensiveAnalysis(
 ): Promise<MarketAnalysis> {
   const dailyCandles = candleData["1d"] || [];
   const currentPrice = dailyCandles[dailyCandles.length - 1]?.close || 0;
-  
+
   // Calculate indicators based on daily data
   const indicators = TechnicalAnalysis.analyzeIndicators(dailyCandles);
-  
+
   // Analyze momentum for each timeframe
   const momentum = {} as MarketAnalysis["momentum"];
   Object.entries(candleData).forEach(([timeframe, candles]) => {
     if (candles.length > 0) {
-      momentum[timeframe as keyof typeof momentum] = TechnicalAnalysis.analyzeMomentum(candles, timeframe);
+      momentum[timeframe as keyof typeof momentum] =
+        TechnicalAnalysis.analyzeMomentum(candles, timeframe);
     }
   });
-  
+
   // Generate trading signals
-  const signals = TechnicalAnalysis.generateTradingSignals(dailyCandles, indicators);
-  
+  const signals = TechnicalAnalysis.generateTradingSignals(
+    dailyCandles,
+    indicators
+  );
+
   // Find support and resistance
-  const supportResistance = TechnicalAnalysis.findSupportResistance(dailyCandles);
-  
+  const supportResistance =
+    TechnicalAnalysis.findSupportResistance(dailyCandles);
+
   // Analyze market structure
-  const marketStructure = TechnicalAnalysis.analyzeMarketStructure(dailyCandles);
-  
+  const marketStructure =
+    TechnicalAnalysis.analyzeMarketStructure(dailyCandles);
+
   // Identify risk factors
   const riskFactors: string[] = [];
   if (indicators.rsi > 80) riskFactors.push("Extreme overbought conditions");
   if (indicators.rsi < 20) riskFactors.push("Extreme oversold conditions");
   if (indicators.volume.ratio < 0.5) riskFactors.push("Unusually low volume");
-  if (marketStructure.trend === "sideways") riskFactors.push("Choppy market conditions");
-  
+  if (marketStructure.trend === "sideways")
+    riskFactors.push("Choppy market conditions");
+
+  // Confluence zones
+  const zones = TechnicalAnalysis.identifyConfluenceZones(
+    dailyCandles,
+    indicators,
+    supportResistance,
+    marketStructure
+  );
+
   // Create partial analysis for rating calculation
   const partialAnalysis = {
     signals,
     momentum,
-    marketStructure
+    marketStructure,
   };
-  
-  const overallRating = TechnicalAnalysis.generateOverallRating(partialAnalysis);
-  
+
+  const overallRating =
+    TechnicalAnalysis.generateOverallRating(partialAnalysis);
+
   return {
     symbol,
     currentPrice,
@@ -620,6 +868,7 @@ export async function performComprehensiveAnalysis(
     marketStructure,
     riskFactors,
     newsImpact: "neutral", // Will be updated with news analysis
-    overallRating
+    overallRating,
+    zones,
   };
 }

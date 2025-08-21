@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { useColorScheme } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { COLORS } from "../constants/colors";
 
 export type ThemeMode = "system" | "light" | "dark";
 
@@ -16,36 +17,39 @@ interface Theme {
     success: string;
     error: string;
     border: string;
+    blueTransparent: string;
   };
 }
 
 const lightTheme: Theme = {
   mode: "light",
   colors: {
-    background: "#ffffff",
-    surface: "#f8f9fa",
-    card: "#ffffff",
-    text: "#000000",
-    textSecondary: "#6b7280",
-    primary: "#00D4AA",
-    success: "#00D4AA",
-    error: "#FF5722",
-    border: "#e5e7eb",
+    background: COLORS.LIGHT.BACKGROUND,
+    surface: COLORS.LIGHT.SURFACE,
+    card: COLORS.LIGHT.CARD,
+    text: COLORS.LIGHT.TEXT,
+    textSecondary: COLORS.LIGHT.TEXT_SECONDARY,
+    primary: COLORS.PRIMARY,
+    success: COLORS.SUCCESS,
+    error: COLORS.ERROR_LIGHT,
+    border: COLORS.LIGHT.BORDER,
+    blueTransparent: COLORS.BLUE_TRANSPARENT_50,
   },
 };
 
 const darkTheme: Theme = {
   mode: "dark",
   colors: {
-    background: "#0a0a0a",
-    surface: "#1a1a1a",
-    card: "#2a2a2a",
-    text: "#ffffff",
-    textSecondary: "#888888",
-    primary: "#00D4AA",
-    success: "#00D4AA",
-    error: "#FF6B6B",
-    border: "#333333",
+    background: COLORS.DARK.BACKGROUND,
+    surface: COLORS.DARK.SURFACE,
+    card: COLORS.DARK.CARD,
+    text: COLORS.DARK.TEXT,
+    textSecondary: COLORS.DARK.TEXT_SECONDARY,
+    primary: COLORS.PRIMARY,
+    success: COLORS.SUCCESS,
+    error: COLORS.ERROR_DARK,
+    border: COLORS.DARK.BORDER,
+    blueTransparent: COLORS.BLUE_TRANSPARENT_50,
   },
 };
 
