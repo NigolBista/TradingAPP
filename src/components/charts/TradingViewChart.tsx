@@ -7,7 +7,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import LightweightCandles from "./LightweightCandles";
+import LightweightCandles, { TradePlanOverlay } from "./LightweightCandles";
 import {
   fetchCandles,
   MarketDataResolution,
@@ -28,6 +28,7 @@ type Props = {
   theme?: "light" | "dark";
   showExpand?: boolean;
   levels?: TradeLevels;
+  tradePlan?: TradePlanOverlay; // optional richer levels, overrides `levels`
 };
 
 export default function TradingViewChart({
@@ -37,6 +38,7 @@ export default function TradingViewChart({
   theme,
   showExpand = true,
   levels,
+  tradePlan,
 }: Props) {
   const scheme = useColorScheme();
   const resolvedTheme = theme || (scheme === "dark" ? "dark" : "light");
@@ -159,6 +161,7 @@ export default function TradingViewChart({
           showGrid={true}
           showCrosshair={true}
           levels={effectiveLevels}
+          tradePlan={tradePlan}
         />
       )}
       {showExpand && (
@@ -166,7 +169,7 @@ export default function TradingViewChart({
           onPress={() =>
             navigation.navigate("ChartFullScreen", {
               symbol: normalizedSymbol,
-              levels,
+              tradePlan,
             })
           }
           style={{

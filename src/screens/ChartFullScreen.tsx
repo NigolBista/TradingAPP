@@ -13,6 +13,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LightweightCandles, {
   type LWCDatum,
+  TradePlanOverlay,
 } from "../components/charts/LightweightCandles";
 import ChartSettingsModal, {
   type ChartType,
@@ -37,6 +38,7 @@ export default function ChartFullScreen() {
   );
   const timeframe: string = route.params?.timeframe || "1D";
   const levels = route.params?.levels;
+  const tradePlan: TradePlanOverlay | undefined = route.params?.tradePlan;
   const [tfModalVisible, setTfModalVisible] = useState(false);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>("1D");
   const [stockName, setStockName] = useState<string>("");
@@ -160,6 +162,7 @@ export default function ChartFullScreen() {
             showGrid={true}
             showCrosshair={true}
             levels={effectiveLevels}
+            tradePlan={tradePlan}
           />
         )}
         <View

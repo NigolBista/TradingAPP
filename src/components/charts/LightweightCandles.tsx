@@ -13,6 +13,18 @@ export type LWCDatum = {
 
 type ChartType = "candlestick" | "area" | "line" | "bar";
 
+type TradeSide = "long" | "short";
+
+export type TradePlanOverlay = {
+  side: TradeSide;
+  entry?: number;
+  lateEntry?: number; // optional secondary/late entry
+  exit?: number;
+  lateExit?: number; // optional secondary/late exit
+  stop?: number;
+  targets?: number[];
+};
+
 interface Props {
   data: LWCDatum[];
   height?: number;
@@ -30,6 +42,8 @@ interface Props {
     exit?: number;
     exitExtended?: number;
   };
+  // New: richer trade overlay input. If provided, takes precedence over `levels`.
+  tradePlan?: TradePlanOverlay;
 }
 
 export default function LightweightCandles({
@@ -43,6 +57,7 @@ export default function LightweightCandles({
   showGrid = true,
   showCrosshair = true,
   levels,
+  tradePlan,
 }: Props) {
   const series = useMemo(
     () =>
@@ -415,15 +430,34 @@ export default function LightweightCandles({
 
       // Trade levels as native price lines (keeps them pinned in-canvas)
       const levels = ${JSON.stringify(levels || {})};
+      const trade = ${JSON.stringify(tradePlan || null)};
+      function computeEffective() {
+        try {
+          if (trade && typeof trade === 'object') {
+            const lv = {};
+            if (trade.entry != null) lv.entry = Number(trade.entry);
+            if (trade.lateEntry != null) lv.entryExtended = Number(trade.lateEntry);
+            if (trade.exit != null) lv.exit = Number(trade.exit);
+            if (trade.lateExit != null) lv.exitExtended = Number(trade.lateExit);
+            return { levels: lv, side: (trade.side === 'short' ? 'short' : 'long') };
+          }
+        } catch(_) {}
+        return { levels: levels || {}, side: 'long' };
+      }
       function addLevelLines() {
         try {
-          if (!levels) return;
-          if (levels.entry) addPriceLine(levels.entry, '#10B981', 'Take Profit');
-          if (levels.entryExtended) addPriceLine(levels.entryExtended, '#14b8a6', 'TP Ext');
-          if (levels.exit) addPriceLine(levels.exit, '#EF4444', 'Stop Loss');
-          if (levels.exitExtended) addPriceLine(levels.exitExtended, '#F97316', 'SL Ext');
+          const eff = computeEffective();
+          const lv = eff.levels || {};
+          // Titles are consistent regardless of side for clarity
+          if (lv.entry != null) addPriceLine(lv.entry, '#10B981', 'Entry');
+          if (lv.entryExtended != null) addPriceLine(lv.entryExtended, '#14b8a6', 'Late Entry');
+          if (lv.exit != null) addPriceLine(lv.exit, '#EF4444', 'Exit');
+          if (lv.exitExtended != null) addPriceLine(lv.exitExtended, '#F97316', 'Late Exit');
         } catch(_) {}
       }
+
+      // Placeholder for any future overlays (no-op)
+      function updateZones(){}
 
       // Ensure width and fit on load
       setTimeout(() => {
@@ -441,7 +475,7 @@ export default function LightweightCandles({
       
       window.addEventListener('resize', handleResize);
       
-      // No overlay sync needed since lines are native to the series
+      // No overlay sync needed for price lines
       
       // Initial draw and a couple of delayed retries in case scale isn't ready yet
       updateZones();

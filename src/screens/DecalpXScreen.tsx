@@ -201,23 +201,40 @@ export default function DecalpXScreen() {
   const { entryPrice, exitPrice } = useMemo(() => {
     const momentum = symbolMetrics?.momentumPct ?? (priceChangePercent || 0);
     const biasLong = momentum >= 0;
-    const baseMove = Math.max(
-      Math.abs(priceChange) || currentPrice * 0.005,
-      currentPrice * 0.004
-    );
-    const k = tradeMode === "day" ? 1.2 : tradeMode === "swing" ? 2.2 : 3.5;
-    const delta = baseMove * k;
+
+    // Use recent average absolute move to avoid pegging entries to current
+    const startIdx = Math.max(1, chartData.length - 30);
+    let sumAbsMove = 0;
+    let countMoves = 0;
+    for (let i = startIdx; i < chartData.length; i++) {
+      const prev = chartData[i - 1]?.close;
+      const cur = chartData[i]?.close;
+      if (Number.isFinite(prev) && Number.isFinite(cur)) {
+        sumAbsMove += Math.abs(cur - prev);
+        countMoves++;
+      }
+    }
+    const avgAbsMove =
+      countMoves > 0 ? sumAbsMove / countMoves : currentPrice * 0.005;
+
+    const baseMove = Math.max(avgAbsMove, currentPrice * 0.004);
+    const k = tradeMode === "day" ? 1.2 : tradeMode === "swing" ? 2.0 : 3.0;
+    const minSepPct =
+      tradeMode === "day" ? 0.0025 : tradeMode === "swing" ? 0.006 : 0.01;
+    const minSeparation = currentPrice * minSepPct;
+    const delta = Math.max(baseMove * k, minSeparation);
+
     if (biasLong) {
       return {
-        entryPrice: Math.max(0, currentPrice - delta * 0.5),
-        exitPrice: currentPrice + delta,
+        entryPrice: Math.max(0, currentPrice - delta), // pullback entry
+        exitPrice: currentPrice + delta, // target above
       };
     }
     return {
-      entryPrice: currentPrice + delta * 0.5,
-      exitPrice: Math.max(0, currentPrice - delta),
+      entryPrice: currentPrice + delta, // bounce entry for short
+      exitPrice: Math.max(0, currentPrice - delta), // target below
     };
-  }, [currentPrice, priceChange, priceChangePercent, tradeMode, symbolMetrics]);
+  }, [currentPrice, priceChangePercent, tradeMode, symbolMetrics, chartData]);
   const extendedLevels = useMemo(() => {
     const delta = Math.abs(entryPrice - exitPrice);
     const halfR = delta * 0.5;
@@ -265,11 +282,12 @@ export default function DecalpXScreen() {
     const sym = selected?.symbol || "SPY";
     navigation.navigate("ChartFullScreen", {
       symbol: sym,
-      levels: {
+      tradePlan: {
+        side: exitPrice > entryPrice ? "long" : "short",
         entry: entryPrice,
-        entryExtended: extendedLevels.entryExtended,
+        lateEntry: extendedLevels.entryExtended,
         exit: exitPrice,
-        exitExtended: extendedLevels.exitExtended,
+        lateExit: extendedLevels.exitExtended,
       },
     });
   };
