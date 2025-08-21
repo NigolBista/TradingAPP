@@ -1,7 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
+import { Asset } from "expo-asset";
 import { Ionicons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system";
 
 export type LWCDatum = {
   time: number; // epoch ms
@@ -279,6 +281,51 @@ export default function AdvancedTradingChart({
 
   const isPositive = priceChange >= 0;
 
+  // Prefer local Expo asset stored as .txt; inject inline; CDN fallback
+  const [inlineLibText, setInlineLibText] = useState<string | null>(null);
+  React.useEffect(() => {
+    (async () => {
+      try {
+        console.log("AdvancedTradingChart: Starting to load local asset...");
+        const lib = Asset.fromModule(
+          require("../../../assets/js/lightweight-charts.txt")
+        );
+        await lib.downloadAsync();
+        const uri = lib.localUri || lib.uri;
+        console.log("AdvancedTradingChart: Asset URI:", uri);
+        if (uri) {
+          const content = await FileSystem.readAsStringAsync(uri, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+          console.log("AdvancedTradingChart: Content length:", content?.length);
+          console.log(
+            "AdvancedTradingChart: Contains LightweightCharts:",
+            content?.includes("LightweightCharts")
+          );
+          if (content && content.includes("LightweightCharts")) {
+            console.log("AdvancedTradingChart: Using local asset");
+            setInlineLibText(content);
+          } else {
+            console.log(
+              "AdvancedTradingChart: Local asset invalid, falling back to CDN"
+            );
+            setInlineLibText(null);
+          }
+        }
+      } catch (e) {
+        console.log("AdvancedTradingChart: Error loading local asset:", e);
+        setInlineLibText(null);
+      }
+    })();
+  }, []);
+  const libSrc =
+    "https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js";
+  const scriptLoader = inlineLibText
+    ? `<script>console.log('AdvancedTradingChart: Using inline script');(function(){try{var s=document.createElement('script');s.type='text/javascript';s.text=${JSON.stringify(
+        inlineLibText
+      )};document.head.appendChild(s);}catch(e){console.log('AdvancedTradingChart: Error injecting inline script:', e);}})();</script>`
+    : `<script>console.log('AdvancedTradingChart: Using CDN script');</script><script src="${libSrc}"></script>`;
+
   const html = `<!doctype html><html><head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
@@ -306,7 +353,7 @@ export default function AdvancedTradingChart({
         activeIndicators.RSI ? '<div id="rsi" class="chart-section"></div>' : ""
       }
     </div>
-    <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+    ${scriptLoader}
     <script>
       function initChart() {
         try {

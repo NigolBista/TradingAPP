@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -283,11 +283,134 @@ export default function WatchlistScreen() {
   // Stock search states
   const [selectedStocks, setSelectedStocks] = useState<StockSearchResult[]>([]);
   const [favoriteStocks, setFavoriteStocks] = useState<Set<string>>(new Set());
+  const quotesSignatureRef = useRef<string | null>(null);
+  const companyNamesRef = useRef<Record<string, string>>({});
+  const stockDataRef = useRef<StockData[]>([]);
+  useEffect(() => {
+    stockDataRef.current = stockData;
+  }, [stockData]);
 
   const activeWatchlist = getActiveWatchlist();
 
   useEffect(() => {
     loadDisplayData();
+  }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists]);
+
+  // Poll cached quotes periodically so UI reflects background quote refreshes
+  useEffect(() => {
+    let isMounted = true;
+    quotesSignatureRef.current = null; // reset when dependencies change
+
+    const computeSymbols = (): string[] => {
+      if (viewMode === "favorites") return profile.favorites;
+      if (selectedWatchlistId) {
+        const watchlist = profile.watchlists.find(
+          (w) => w.id === selectedWatchlistId
+        );
+        return watchlist?.items.map((item) => item.symbol) || [];
+      }
+      return [];
+    };
+
+    const tick = async () => {
+      if (!isMounted) return;
+      const symbols = computeSymbols();
+      if (!symbols || symbols.length === 0) return;
+
+      try {
+        const cached = await getCachedQuotes(symbols);
+        if (!isMounted) return;
+
+        const signature = symbols
+          .map((s) => {
+            const q = cached[s];
+            return `${s}:${q?.last ?? 0}:${q?.change ?? 0}:${
+              q?.changePercent ?? 0
+            }`;
+          })
+          .join("|");
+
+        if (signature === quotesSignatureRef.current) return;
+        quotesSignatureRef.current = signature;
+
+        // Build updated display data using existing company names when available
+        const existingNameMap = new Map<string, string>();
+        for (const sd of stockDataRef.current) {
+          existingNameMap.set(sd.symbol, sd.companyName || sd.symbol);
+        }
+
+        const updated: StockData[] = symbols.map((symbol) => {
+          const q = cached[symbol] as SimpleQuote | undefined;
+          const price = q?.last ?? 0;
+          const change = q?.change ?? 0;
+          const pct = q?.changePercent ?? 0;
+          return {
+            symbol,
+            analysis: {} as any,
+            alerts: [],
+            score: 0,
+            currentPrice: price,
+            change,
+            changePercent: pct,
+            companyName:
+              companyNamesRef.current[symbol] ||
+              existingNameMap.get(symbol) ||
+              symbol,
+          };
+        });
+        updated.sort((a, b) => b.changePercent - a.changePercent);
+        setStockData(updated);
+
+        // Backfill any missing names asynchronously and update list once
+        const missingSymbols = symbols.filter(
+          (s) =>
+            !companyNamesRef.current[s] &&
+            (!existingNameMap.get(s) || existingNameMap.get(s) === s)
+        );
+        if (missingSymbols.length > 0) {
+          Promise.all(
+            missingSymbols.map(async (s) => {
+              try {
+                const info = await getStockBySymbol(s);
+                if (info?.name) companyNamesRef.current[s] = info.name;
+              } catch {}
+            })
+          ).then(() => {
+            const refreshed: StockData[] = symbols.map((symbol) => {
+              const q = cached[symbol] as SimpleQuote | undefined;
+              const price = q?.last ?? 0;
+              const change = q?.change ?? 0;
+              const pct = q?.changePercent ?? 0;
+              return {
+                symbol,
+                analysis: {} as any,
+                alerts: [],
+                score: 0,
+                currentPrice: price,
+                change,
+                changePercent: pct,
+                companyName:
+                  companyNamesRef.current[symbol] ||
+                  existingNameMap.get(symbol) ||
+                  symbol,
+              };
+            });
+            refreshed.sort((a, b) => b.changePercent - a.changePercent);
+            setStockData(refreshed);
+          });
+        }
+      } catch {
+        // ignore cache polling errors
+      }
+    };
+
+    // Initial tick and interval
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => {
+      isMounted = false;
+      clearInterval(id);
+    };
   }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists]);
 
   useEffect(() => {
@@ -347,6 +470,7 @@ export default function WatchlistScreen() {
           } catch {}
         })
       );
+      Object.assign(companyNamesRef.current, nameMap);
 
       // Show cached quotes immediately if available
       const cached = await getCachedQuotes(symbols);
@@ -365,7 +489,8 @@ export default function WatchlistScreen() {
             currentPrice: price,
             change,
             changePercent: pct,
-            companyName: nameMap[symbol] || symbol,
+            companyName:
+              companyNamesRef.current[symbol] || nameMap[symbol] || symbol,
           };
         });
         immediate.sort((a, b) => b.changePercent - a.changePercent);
@@ -388,7 +513,8 @@ export default function WatchlistScreen() {
           currentPrice: price,
           change,
           changePercent: pct,
-          companyName: nameMap[symbol] || symbol,
+          companyName:
+            companyNamesRef.current[symbol] || nameMap[symbol] || symbol,
         };
       });
       updated.sort((a, b) => b.changePercent - a.changePercent);

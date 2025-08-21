@@ -35,7 +35,6 @@ import {
   fetchCandles,
   type Candle,
   fetchCandlesForTimeframe,
-  fetchNews,
 } from "../services/marketProviders";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import {
@@ -45,7 +44,11 @@ import {
 import {
   fetchNews as fetchSymbolNews,
   fetchStockNewsApi,
+  fetchSentimentStats,
+  getCachedChartData,
+  setCachedChartData,
   type NewsItem,
+  type SentimentStats,
 } from "../services/newsProviders";
 
 import { type SignalSummary } from "../services/signalEngine";
@@ -354,7 +357,7 @@ export default function StockDetailScreen() {
     | SimpleQuote
     | undefined;
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
   const [dailySeries, setDailySeries] = useState<LWCDatum[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
@@ -379,7 +382,7 @@ export default function StockDetailScreen() {
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
   const [activeTab, setActiveTab] = useState<"overview" | "signals" | "news">(
-    "overview"
+    "signals"
   );
   const [signalLoading, setSignalLoading] = useState(false);
   const [cachedSignal, setCachedSignal] = useState<CachedSignal | null>(null);
@@ -392,8 +395,22 @@ export default function StockDetailScreen() {
     "timeframe" | "chartType"
   >("timeframe");
   const [bottomSheetAnim] = useState(new Animated.Value(0));
+  const [sentimentStats, setSentimentStats] = useState<SentimentStats | null>(
+    null
+  );
+  const [sentimentLoading, setSentimentLoading] = useState(false);
 
   const symbolSentimentCounts = useMemo(() => {
+    // Use aggregated sentiment stats if available, otherwise fall back to individual news counting
+    if (sentimentStats) {
+      return {
+        positive: sentimentStats.totalPositive,
+        negative: sentimentStats.totalNegative,
+        neutral: sentimentStats.totalNeutral,
+      };
+    }
+
+    // Fallback to counting individual news items
     if (!news || news.length === 0) return null;
     let positive = 0;
     let negative = 0;
@@ -405,7 +422,7 @@ export default function StockDetailScreen() {
       else neutral++;
     }
     return { positive, negative, neutral };
-  }, [news]);
+  }, [sentimentStats, news]);
 
   // Filter signals for current symbol
   const symbolSignals = useMemo(() => {
@@ -475,7 +492,10 @@ export default function StockDetailScreen() {
 
   useEffect(() => {
     load();
-    loadStockName();
+    // Load stock name in background (non-blocking)
+    loadStockName().catch((error) => {
+      console.error("Stock name loading failed:", error);
+    });
     hydrate();
   }, [symbol]);
 
@@ -532,12 +552,49 @@ export default function StockDetailScreen() {
     }, [symbol, getCachedSignal, cachedSignal])
   );
 
-  // Lazy-trigger auto analysis when user opens the Signals tab
+  // Remove automatic analysis - only trigger when user explicitly requests it
+
+  // Lazy-load market overview analysis when user switches to Overview tab
   useEffect(() => {
-    if (activeTab === "signals" && !signalLoading && !cachedSignal) {
-      performAutoAnalysis();
+    if (activeTab === "overview" && !analysis) {
+      loadMarketOverview();
     }
   }, [activeTab]);
+
+  // Load news and sentiment in parallel when user switches to Signals tab
+  useEffect(() => {
+    if (activeTab === "signals") {
+      // Load news if not already loaded or loading (caching handles freshness)
+      if (!newsLoading && news.length === 0) {
+        loadNewsInBackground().catch((error) => {
+          console.error("News loading failed:", error);
+        });
+      }
+
+      // Load sentiment stats if not already loaded or loading (caching handles freshness)
+      if (!sentimentLoading && !sentimentStats) {
+        loadSentimentStats().catch((error) => {
+          console.error("Sentiment stats loading failed:", error);
+        });
+      }
+    }
+  }, [activeTab, newsLoading, news.length, sentimentLoading, sentimentStats]);
+
+  // Separate function for loading market overview data
+  async function loadMarketOverview() {
+    try {
+      // Lightweight overview: daily-only for initial analysis
+      const d = await fetchCandles(symbol, {
+        resolution: "D",
+        limit: 365,
+      });
+      const candleData = { "1d": d } as const;
+      const a = await performComprehensiveAnalysis(symbol, candleData as any);
+      setAnalysis(a);
+    } catch (error) {
+      console.warn("Market overview analysis loading failed:", error);
+    }
+  }
 
   async function loadStockName() {
     try {
@@ -580,7 +637,6 @@ export default function StockDetailScreen() {
           return await fetchCandles(symbol, {
             resolution: res,
             limit: limits[res],
-            providerOverride: "yahoo",
           });
         }
       };
@@ -598,17 +654,46 @@ export default function StockDetailScreen() {
       let fedBrief: any[] | undefined = undefined;
 
       try {
-        // Fetch symbol news
-        const news = await fetchNews(symbol);
-        newsBrief = (news || []).slice(0, 5).map((n: any) => ({
+        // Use already loaded news with sentiment if available, otherwise fetch fresh
+        let newsData =
+          news.length > 0 ? news : await fetchStockNewsApi(symbol, 25);
+        if (newsData.length === 0) {
+          // Fallback to default provider if Stock News API fails
+          newsData = await fetchSymbolNews(symbol);
+        }
+
+        newsBrief = (newsData || []).slice(0, 5).map((n: any) => ({
           title: n.title,
           summary: (n.summary || "").slice(0, 180),
           source: n.source,
           publishedAt: n.publishedAt,
+          sentiment: n.sentiment, // Include sentiment from Stock News API
         }));
 
+        // Add aggregated sentiment stats if available
+        if (sentimentStats) {
+          newsBrief.push({
+            title: "Market Sentiment Analysis",
+            summary: `30-day sentiment: ${
+              sentimentStats.totalPositive
+            } positive, ${sentimentStats.totalNegative} negative, ${
+              sentimentStats.totalNeutral
+            } neutral articles. Overall sentiment score: ${sentimentStats.sentimentScore.toFixed(
+              3
+            )}`,
+            source: "Stock News API",
+            publishedAt: new Date().toISOString(),
+            sentiment:
+              sentimentStats.sentimentScore > 0.3
+                ? "Positive"
+                : sentimentStats.sentimentScore < -0.1
+                ? "Negative"
+                : "Neutral",
+          });
+        }
+
         // Fetch market news
-        const marketNews = await fetchNews("SPY"); // Use SPY as market proxy
+        const marketNews = await fetchSymbolNews("SPY"); // Use SPY as market proxy
         marketNewsBrief = (marketNews || []).slice(0, 3).map((n: any) => ({
           title: n.title,
           summary: (n.summary || "").slice(0, 120),
@@ -729,60 +814,117 @@ export default function StockDetailScreen() {
   }
 
   async function load() {
-    try {
-      setLoading(true);
-      // Fetch initial timeframe (1m by default) for fast initial render with optimized limit
-      const initialCandles = await fetchCandlesForTimeframe(symbol, extendedTf);
-      setDailySeries(toLWC(initialCandles));
+    // Show chart immediately - no loading state
+    setLoading(false);
 
-      // Defer secondary data (analysis, news, summary) to not block UI
-      Promise.allSettled([
-        (async () => {
-          try {
-            // Lightweight overview: daily-only for initial analysis
-            const d = await fetchCandles(symbol, {
-              resolution: "D",
-              limit: 365,
-            });
-            const candleData = { "1d": d } as const;
-            const a = await performComprehensiveAnalysis(
-              symbol,
-              candleData as any
-            );
-            setAnalysis(a);
-          } catch {}
-        })(),
-        (async () => {
-          setNewsLoading(true);
-          try {
-            // Try Stock News API first for enhanced features (sentiment, images, etc.)
-            let items: NewsItem[] = [];
-            try {
-              items = await fetchStockNewsApi(symbol, 25);
-            } catch (stockNewsError) {
-              console.log(
-                "Stock News API failed, falling back to default provider:",
-                stockNewsError
-              );
-              // Fallback to default news provider
-              items = await fetchSymbolNews(symbol);
-            }
-            setNews(items);
-          } catch (error) {
-            console.error("All news providers failed:", error);
-            setNews([]);
-          } finally {
-            setNewsLoading(false);
-          }
-        })(),
+    // Check for cached chart data first
+    const cachedData = getCachedChartData(symbol, extendedTf);
+    if (cachedData && cachedData.length > 0) {
+      console.log("📈 Loading cached chart data for", symbol);
+      setDailySeries(toLWC(cachedData));
+    } else if (dailySeries.length === 0) {
+      // Set placeholder data if we don't have cached data or current data
+      const now = Math.floor(Date.now() / 1000);
+      const placeholderPrice = initialQuote?.last || 100;
+      setDailySeries([
+        {
+          time: now,
+          open: placeholderPrice,
+          high: placeholderPrice,
+          low: placeholderPrice,
+          close: placeholderPrice,
+          volume: 0,
+        },
       ]);
-    } catch (e) {
-      Alert.alert(
-        "Error",
-        e instanceof Error ? e.message : "Failed to load symbol data"
+    }
+
+    // Load fresh chart data in background and update when ready
+    fetchCandlesForTimeframe(symbol, extendedTf)
+      .then((initialCandles) => {
+        const lwcData = toLWC(initialCandles);
+        setDailySeries(lwcData);
+        // Cache the fresh data
+        setCachedChartData(symbol, extendedTf, initialCandles);
+      })
+      .catch((e) => {
+        console.error("Chart data loading failed:", e);
+        // Only show error if we don't have cached data
+        if (!cachedData || cachedData.length === 0) {
+          Alert.alert(
+            "Error",
+            e instanceof Error ? e.message : "Failed to load chart data"
+          );
+        }
+      });
+
+    // Load news and sentiment stats in parallel (truly non-blocking - fire and forget)
+    loadNewsInBackground().catch((error) => {
+      console.error("News loading failed:", error);
+    });
+
+    loadSentimentStats().catch((error) => {
+      console.error("Sentiment stats loading failed:", error);
+    });
+  }
+
+  // Load sentiment stats in background
+  async function loadSentimentStats() {
+    setSentimentLoading(true);
+    try {
+      console.log(`Loading sentiment stats for ${symbol}...`);
+      const stats = await fetchSentimentStats(symbol, "last30days");
+      setSentimentStats(stats);
+      console.log(
+        `Sentiment stats loaded for ${symbol}:`,
+        stats.sentimentScore
       );
+    } catch (error) {
+      console.error("Failed to load sentiment stats:", error);
+      setSentimentStats(null);
     } finally {
-      setLoading(false);
+      setSentimentLoading(false);
+    }
+  }
+
+  // Separate function for background news loading
+  async function loadNewsInBackground() {
+    setNewsLoading(true);
+
+    try {
+      // Try Stock News API first for enhanced features (sentiment, images, etc.)
+      let items: NewsItem[] = [];
+
+      try {
+        console.log(`Loading news for ${symbol} using Stock News API...`);
+        items = await fetchStockNewsApi(symbol, 25);
+        console.log(
+          `Stock News API returned ${items.length} articles for ${symbol}`
+        );
+      } catch (stockNewsError) {
+        console.log(
+          "Stock News API failed, falling back to default provider:",
+          stockNewsError
+        );
+
+        try {
+          // Fallback to default news provider
+          console.log(`Falling back to default news provider for ${symbol}...`);
+          items = await fetchSymbolNews(symbol);
+          console.log(
+            `Default provider returned ${items.length} articles for ${symbol}`
+          );
+        } catch (fallbackError) {
+          console.error("Default news provider also failed:", fallbackError);
+          items = [];
+        }
+      }
+
+      setNews(items);
+    } catch (error) {
+      console.error("All news providers failed:", error);
+      setNews([]);
+    } finally {
+      setNewsLoading(false);
     }
   }
 
@@ -814,20 +956,33 @@ export default function StockDetailScreen() {
       ALL: "ALL",
     };
     setSelectedTimeframe(map[tf]);
+
+    // Check for cached data first
+    const cachedData = getCachedChartData(symbol, tf);
+    if (cachedData && cachedData.length > 0) {
+      console.log("📈 Using cached chart data for timeframe", tf);
+      setDailySeries(toLWC(cachedData));
+    }
+
     try {
       const candles = await fetchCandlesForTimeframe(symbol, tf);
-      setDailySeries(
-        candles.map((c) => ({
-          time: c.time,
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
-          volume: c.volume,
-        }))
-      );
+      const lwcData = candles.map((c) => ({
+        time: c.time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume,
+      }));
+      setDailySeries(lwcData);
+      // Cache the fresh data
+      setCachedChartData(symbol, tf, candles);
     } catch (e) {
       console.warn("Failed to load timeframe candles:", e);
+      // If we have cached data, don't show error
+      if (!cachedData || cachedData.length === 0) {
+        console.error("No cached data available for", symbol, tf);
+      }
     }
   }
 
@@ -867,8 +1022,8 @@ export default function StockDetailScreen() {
     );
   }
 
-  // Analyze again function - performs new analysis and adds to chat store
-  async function analyzeAgain() {
+  // Perform analysis function - performs new analysis and adds to chat store
+  async function performAnalysis() {
     try {
       setSignalLoading(true);
 
@@ -889,7 +1044,6 @@ export default function StockDetailScreen() {
           return await fetchCandles(symbol, {
             resolution: res,
             limit: limits[res],
-            providerOverride: "yahoo",
           });
         }
       };
@@ -907,17 +1061,46 @@ export default function StockDetailScreen() {
       let fedBrief: any[] | undefined = undefined;
 
       try {
-        // Fetch symbol news
-        const news = await fetchNews(symbol);
-        newsBrief = (news || []).slice(0, 5).map((n: any) => ({
+        // Use already loaded news with sentiment if available, otherwise fetch fresh
+        let newsData =
+          news.length > 0 ? news : await fetchStockNewsApi(symbol, 25);
+        if (newsData.length === 0) {
+          // Fallback to default provider if Stock News API fails
+          newsData = await fetchSymbolNews(symbol);
+        }
+
+        newsBrief = (newsData || []).slice(0, 5).map((n: any) => ({
           title: n.title,
           summary: (n.summary || "").slice(0, 180),
           source: n.source,
           publishedAt: n.publishedAt,
+          sentiment: n.sentiment, // Include sentiment from Stock News API
         }));
 
+        // Add aggregated sentiment stats if available
+        if (sentimentStats) {
+          newsBrief.push({
+            title: "Market Sentiment Analysis",
+            summary: `30-day sentiment: ${
+              sentimentStats.totalPositive
+            } positive, ${sentimentStats.totalNegative} negative, ${
+              sentimentStats.totalNeutral
+            } neutral articles. Overall sentiment score: ${sentimentStats.sentimentScore.toFixed(
+              3
+            )}`,
+            source: "Stock News API",
+            publishedAt: new Date().toISOString(),
+            sentiment:
+              sentimentStats.sentimentScore > 0.3
+                ? "Positive"
+                : sentimentStats.sentimentScore < -0.1
+                ? "Negative"
+                : "Neutral",
+          });
+        }
+
         // Fetch market news
-        const marketNews = await fetchNews("SPY"); // Use SPY as market proxy
+        const marketNews = await fetchSymbolNews("SPY"); // Use SPY as market proxy
         marketNewsBrief = (marketNews || []).slice(0, 3).map((n: any) => ({
           title: n.title,
           summary: (n.summary || "").slice(0, 120),
@@ -1324,26 +1507,6 @@ export default function StockDetailScreen() {
               }}
             >
               <Pressable
-                onPress={() => setActiveTab("overview")}
-                style={{
-                  flex: 1,
-                  paddingVertical: 10,
-                  alignItems: "center",
-                  borderRadius: 10,
-                  backgroundColor:
-                    activeTab === "overview" ? "#00D4AA" : "transparent",
-                }}
-              >
-                <Text
-                  style={{
-                    color: activeTab === "overview" ? "#000" : "#aaa",
-                    fontWeight: "700",
-                  }}
-                >
-                  Overview
-                </Text>
-              </Pressable>
-              <Pressable
                 onPress={() => setActiveTab("signals")}
                 style={{
                   flex: 1,
@@ -1364,6 +1527,26 @@ export default function StockDetailScreen() {
                 </Text>
               </Pressable>
               <Pressable
+                onPress={() => setActiveTab("overview")}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  alignItems: "center",
+                  borderRadius: 10,
+                  backgroundColor:
+                    activeTab === "overview" ? "#00D4AA" : "transparent",
+                }}
+              >
+                <Text
+                  style={{
+                    color: activeTab === "overview" ? "#000" : "#aaa",
+                    fontWeight: "700",
+                  }}
+                >
+                  Overview
+                </Text>
+              </Pressable>
+              <Pressable
                 onPress={() => setActiveTab("news")}
                 style={{
                   flex: 1,
@@ -1372,6 +1555,8 @@ export default function StockDetailScreen() {
                   borderRadius: 10,
                   backgroundColor:
                     activeTab === "news" ? "#00D4AA" : "transparent",
+                  flexDirection: "row",
+                  justifyContent: "center",
                 }}
               >
                 <Text
@@ -1382,10 +1567,379 @@ export default function StockDetailScreen() {
                 >
                   News
                 </Text>
+                {newsLoading && activeTab === "news" && (
+                  <ActivityIndicator
+                    size="small"
+                    color={activeTab === "news" ? "#000" : "#00D4AA"}
+                    style={{ marginLeft: 6 }}
+                  />
+                )}
               </Pressable>
             </View>
           </View>
         </View>
+
+        {/* AI Signals */}
+        {activeTab === "signals" && (
+          <View style={styles.section}>
+            {/* Only show header when we have signals or are loading */}
+            {(cachedSignal || symbolSignals.length > 0 || signalLoading) && (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>AI Signals</Text>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <Text style={{ color: "#666", fontSize: 12 }}>
+                    {(cachedSignal ? 1 : 0) + symbolSignals.length} signals
+                  </Text>
+                  {/* Clear Button - show when we have any signals */}
+                  {(cachedSignal || symbolSignals.length > 0) && (
+                    <Pressable
+                      onPress={clearAllSignals}
+                      disabled={signalLoading}
+                      style={{
+                        paddingHorizontal: 10,
+                        paddingVertical: 6,
+                        borderRadius: 8,
+                        backgroundColor: "#EF4444",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontSize: 11,
+                          fontWeight: "600",
+                        }}
+                      >
+                        Clear
+                      </Text>
+                    </Pressable>
+                  )}
+                  {/* Analyze Button */}
+                  <Pressable
+                    onPress={performAnalysis}
+                    disabled={signalLoading}
+                    style={{
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 8,
+                      backgroundColor: signalLoading ? "#374151" : "#00D4AA",
+                      opacity: signalLoading ? 0.6 : 1,
+                    }}
+                  >
+                    {signalLoading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text
+                        style={{
+                          color: "#000",
+                          fontSize: 12,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {cachedSignal || symbolSignals.length > 0
+                          ? "Analyze Again"
+                          : "Analyze"}
+                      </Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+            )}
+
+            {/* Current Signal as first item in unified list */}
+            {cachedSignal && !signalLoading && (
+              <Pressable
+                onPress={() =>
+                  (navigation as any).navigate("ChartFullScreen", {
+                    symbol,
+                    chartType,
+                    timeframe: selectedTimeframe,
+                    tradePlan: cachedSignal.tradePlan,
+                    ai: cachedSignal.aiMeta,
+                    analysisContext: cachedSignal.analysisContext,
+                  })
+                }
+                style={{
+                  backgroundColor: "#1F2937",
+                  marginBottom: 12,
+                  borderRadius: 12,
+                  padding: 16,
+                  borderWidth: 1,
+                  borderColor: "rgba(0, 212, 170, 0.3)", // Subtle green border to indicate it's most recent
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    {/* Signal Type Pill */}
+                    <View
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 12,
+                        backgroundColor:
+                          cachedSignal.aiMeta?.side === "long"
+                            ? "rgba(16, 185, 129, 0.2)"
+                            : "rgba(239, 68, 68, 0.2)",
+                        borderWidth: 1,
+                        borderColor:
+                          cachedSignal.aiMeta?.side === "long"
+                            ? "rgba(16, 185, 129, 0.3)"
+                            : "rgba(239, 68, 68, 0.3)",
+                        marginRight: 8,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color:
+                            cachedSignal.aiMeta?.side === "long"
+                              ? "#10B981"
+                              : "#EF4444",
+                          fontSize: 11,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {cachedSignal.aiMeta?.side === "long" ? "BUY" : "SHORT"}
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        color: "#E5E7EB",
+                        fontWeight: "600",
+                        fontSize: 14,
+                      }}
+                    >
+                      {cachedSignal.aiMeta?.strategyChosen || "AI Strategy"}
+                    </Text>
+                  </View>
+                  <Text style={{ color: "#9CA3AF", fontSize: 11 }}>
+                    {new Date().toLocaleDateString()}
+                  </Text>
+                </View>
+
+                {/* Entry/Exit/Stop Info */}
+                {cachedSignal.tradePlan && (
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ color: "#D1D5DB", fontSize: 12 }}>
+                      {cachedSignal.tradePlan.entry &&
+                        `Entry: $${cachedSignal.tradePlan.entry.toFixed(2)}  `}
+                      {cachedSignal.tradePlan.stop &&
+                        `Stop: $${cachedSignal.tradePlan.stop.toFixed(2)}  `}
+                      {cachedSignal.aiMeta?.targets &&
+                        cachedSignal.aiMeta.targets.length > 0 &&
+                        `Target: $${cachedSignal.aiMeta.targets[0].toFixed(2)}`}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Confidence and Risk/Reward */}
+                {(cachedSignal.aiMeta?.confidence ||
+                  cachedSignal.aiMeta?.riskReward) && (
+                  <View style={{ marginBottom: 8 }}>
+                    <Text style={{ color: "#9CA3AF", fontSize: 11 }}>
+                      {cachedSignal.aiMeta.confidence &&
+                        `Confidence: ${Math.round(
+                          cachedSignal.aiMeta.confidence
+                        )}%  `}
+                      {cachedSignal.aiMeta.riskReward &&
+                        `R/R: ${cachedSignal.aiMeta.riskReward.toFixed(2)}`}
+                    </Text>
+                  </View>
+                )}
+
+                <View style={{ marginTop: 8, alignItems: "flex-end" }}>
+                  <Text style={{ color: "#6B7280", fontSize: 10 }}>
+                    Tap to view on chart
+                  </Text>
+                </View>
+              </Pressable>
+            )}
+
+            {/* Show loading state when analyzing and no cached signal */}
+            {signalLoading && !cachedSignal && (
+              <View
+                style={{
+                  backgroundColor: "#1F2937",
+                  borderRadius: 12,
+                  padding: 16,
+                  marginBottom: 16,
+                  alignItems: "center",
+                }}
+              >
+                <ActivityIndicator size="small" color="#00D4AA" />
+                <Text style={{ color: "#9CA3AF", fontSize: 12, marginTop: 8 }}>
+                  Analyzing {symbol}...
+                </Text>
+              </View>
+            )}
+
+            {/* Show empty state when no signals and not loading */}
+            {!signalLoading && !cachedSignal && symbolSignals.length === 0 ? (
+              <View style={{ alignItems: "center", marginTop: 40 }}>
+                <Text
+                  style={{
+                    color: "#888",
+                    textAlign: "center",
+                    fontSize: 16,
+                    fontWeight: "600",
+                  }}
+                >
+                  Ready to analyze {symbol}?
+                </Text>
+                <Text
+                  style={{
+                    color: "#666",
+                    textAlign: "center",
+                    fontSize: 14,
+                    marginTop: 8,
+                    marginBottom: 24,
+                    lineHeight: 20,
+                    paddingHorizontal: 20,
+                  }}
+                >
+                  Get AI-powered trading signals with entry points, targets, and
+                  risk analysis
+                </Text>
+                {/* Analyze Button for empty state */}
+                <Pressable
+                  onPress={performAnalysis}
+                  disabled={signalLoading}
+                  style={{
+                    paddingHorizontal: 32,
+                    paddingVertical: 16,
+                    borderRadius: 12,
+                    backgroundColor: "#00D4AA",
+                    shadowColor: "#00D4AA",
+                    shadowOffset: { width: 0, height: 4 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 8,
+                    elevation: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: "#000",
+                      fontSize: 16,
+                      fontWeight: "700",
+                    }}
+                  >
+                    Analyze {symbol}
+                  </Text>
+                </Pressable>
+              </View>
+            ) : (
+              symbolSignals.map((signal) => (
+                <Pressable
+                  key={signal.id}
+                  onPress={() => navigateToChartWithSignal(signal)}
+                  style={{
+                    backgroundColor: "#1F2937",
+                    marginBottom: 12,
+                    borderRadius: 12,
+                    padding: 16,
+                    borderWidth: 1,
+                    borderColor: "rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: 8,
+                    }}
+                  >
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
+                      {/* Signal Type Pill */}
+                      <View
+                        style={{
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 12,
+                          backgroundColor:
+                            signal.side === "long"
+                              ? "rgba(16, 185, 129, 0.2)"
+                              : "rgba(239, 68, 68, 0.2)",
+                          borderWidth: 1,
+                          borderColor:
+                            signal.side === "long"
+                              ? "rgba(16, 185, 129, 0.3)"
+                              : "rgba(239, 68, 68, 0.3)",
+                          marginRight: 8,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color:
+                              signal.side === "long" ? "#10B981" : "#EF4444",
+                            fontSize: 11,
+                            fontWeight: "600",
+                          }}
+                        >
+                          {signal.side === "long" ? "BUY" : "SHORT"}
+                        </Text>
+                      </View>
+                      <Text
+                        style={{
+                          color: "#E5E7EB",
+                          fontWeight: "600",
+                          fontSize: 14,
+                        }}
+                      >
+                        {signal.strategy || "AI Strategy"}
+                      </Text>
+                    </View>
+                    <Text style={{ color: "#9CA3AF", fontSize: 11 }}>
+                      {new Date(signal.timestamp).toLocaleDateString()}
+                    </Text>
+                  </View>
+
+                  {/* Entry/Exit/Stop Info */}
+                  {(signal.entry ||
+                    signal.stop ||
+                    (signal.targets && signal.targets.length > 0)) && (
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={{ color: "#D1D5DB", fontSize: 12 }}>
+                        {signal.entry && `Entry: $${signal.entry.toFixed(2)}  `}
+                        {signal.stop && `Stop: $${signal.stop.toFixed(2)}  `}
+                        {signal.targets &&
+                          signal.targets.length > 0 &&
+                          `Target: $${signal.targets[0].toFixed(2)}`}
+                      </Text>
+                    </View>
+                  )}
+
+                  {/* Confidence and Risk/Reward */}
+                  {(signal.confidence || signal.riskReward) && (
+                    <View style={{ marginBottom: 8 }}>
+                      <Text style={{ color: "#9CA3AF", fontSize: 11 }}>
+                        {signal.confidence &&
+                          `Confidence: ${Math.round(signal.confidence)}%  `}
+                        {signal.riskReward &&
+                          `R/R: ${signal.riskReward.toFixed(2)}`}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={{ marginTop: 8, alignItems: "flex-end" }}>
+                    <Text style={{ color: "#6B7280", fontSize: 10 }}>
+                      Tap to view on chart
+                    </Text>
+                  </View>
+                </Pressable>
+              ))
+            )}
+          </View>
+        )}
 
         {/* Overview Tab */}
         {activeTab === "overview" && (
@@ -1574,353 +2128,6 @@ export default function StockDetailScreen() {
           </View>
         )}
 
-        {/* AI Signals */}
-        {activeTab === "signals" && (
-          <View style={styles.section}>
-            {/* Only show header when we have signals or are loading */}
-            {(cachedSignal || symbolSignals.length > 0 || signalLoading) && (
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>AI Signals</Text>
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-                >
-                  <Text style={{ color: "#666", fontSize: 12 }}>
-                    {(cachedSignal ? 1 : 0) + symbolSignals.length} signals
-                  </Text>
-                  {/* Clear Button - show when we have any signals */}
-                  {(cachedSignal || symbolSignals.length > 0) && (
-                    <Pressable
-                      onPress={clearAllSignals}
-                      disabled={signalLoading}
-                      style={{
-                        paddingHorizontal: 10,
-                        paddingVertical: 6,
-                        borderRadius: 8,
-                        backgroundColor: "#EF4444",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: "#fff",
-                          fontSize: 11,
-                          fontWeight: "600",
-                        }}
-                      >
-                        Clear
-                      </Text>
-                    </Pressable>
-                  )}
-                  {/* Analyze Again Button */}
-                  <Pressable
-                    onPress={analyzeAgain}
-                    disabled={signalLoading}
-                    style={{
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      borderRadius: 8,
-                      backgroundColor: signalLoading ? "#374151" : "#00D4AA",
-                      opacity: signalLoading ? 0.6 : 1,
-                    }}
-                  >
-                    {signalLoading ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Text
-                        style={{
-                          color: "#000",
-                          fontSize: 12,
-                          fontWeight: "600",
-                        }}
-                      >
-                        Analyze Again
-                      </Text>
-                    )}
-                  </Pressable>
-                </View>
-              </View>
-            )}
-
-            {/* Current Signal as first item in unified list */}
-            {cachedSignal && !signalLoading && (
-              <Pressable
-                onPress={() =>
-                  (navigation as any).navigate("ChartFullScreen", {
-                    symbol,
-                    chartType,
-                    timeframe: selectedTimeframe,
-                    tradePlan: cachedSignal.tradePlan,
-                    ai: cachedSignal.aiMeta,
-                    analysisContext: cachedSignal.analysisContext,
-                  })
-                }
-                style={{
-                  backgroundColor: "#1F2937",
-                  marginBottom: 12,
-                  borderRadius: 12,
-                  padding: 16,
-                  borderWidth: 1,
-                  borderColor: "rgba(0, 212, 170, 0.3)", // Subtle green border to indicate it's most recent
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 8,
-                  }}
-                >
-                  <View style={{ flexDirection: "row", alignItems: "center" }}>
-                    {/* Signal Type Pill */}
-                    <View
-                      style={{
-                        paddingHorizontal: 8,
-                        paddingVertical: 4,
-                        borderRadius: 12,
-                        backgroundColor:
-                          cachedSignal.aiMeta?.side === "long"
-                            ? "rgba(16, 185, 129, 0.2)"
-                            : "rgba(239, 68, 68, 0.2)",
-                        borderWidth: 1,
-                        borderColor:
-                          cachedSignal.aiMeta?.side === "long"
-                            ? "rgba(16, 185, 129, 0.3)"
-                            : "rgba(239, 68, 68, 0.3)",
-                        marginRight: 8,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color:
-                            cachedSignal.aiMeta?.side === "long"
-                              ? "#10B981"
-                              : "#EF4444",
-                          fontSize: 11,
-                          fontWeight: "600",
-                        }}
-                      >
-                        {cachedSignal.aiMeta?.side === "long" ? "BUY" : "SHORT"}
-                      </Text>
-                    </View>
-                    <Text
-                      style={{
-                        color: "#E5E7EB",
-                        fontWeight: "600",
-                        fontSize: 14,
-                      }}
-                    >
-                      {cachedSignal.aiMeta?.strategyChosen || "AI Strategy"}
-                    </Text>
-                  </View>
-                  <Text style={{ color: "#9CA3AF", fontSize: 11 }}>
-                    {new Date().toLocaleDateString()}
-                  </Text>
-                </View>
-
-                {/* Entry/Exit/Stop Info */}
-                {cachedSignal.tradePlan && (
-                  <View style={{ marginBottom: 8 }}>
-                    <Text style={{ color: "#D1D5DB", fontSize: 12 }}>
-                      {cachedSignal.tradePlan.entry &&
-                        `Entry: $${cachedSignal.tradePlan.entry.toFixed(2)}  `}
-                      {cachedSignal.tradePlan.stop &&
-                        `Stop: $${cachedSignal.tradePlan.stop.toFixed(2)}  `}
-                      {cachedSignal.aiMeta?.targets &&
-                        cachedSignal.aiMeta.targets.length > 0 &&
-                        `Target: $${cachedSignal.aiMeta.targets[0].toFixed(2)}`}
-                    </Text>
-                  </View>
-                )}
-
-                {/* Confidence and Risk/Reward */}
-                {(cachedSignal.aiMeta?.confidence ||
-                  cachedSignal.aiMeta?.riskReward) && (
-                  <View style={{ marginBottom: 8 }}>
-                    <Text style={{ color: "#9CA3AF", fontSize: 11 }}>
-                      {cachedSignal.aiMeta.confidence &&
-                        `Confidence: ${Math.round(
-                          cachedSignal.aiMeta.confidence
-                        )}%  `}
-                      {cachedSignal.aiMeta.riskReward &&
-                        `R/R: ${cachedSignal.aiMeta.riskReward.toFixed(2)}`}
-                    </Text>
-                  </View>
-                )}
-
-                <View style={{ marginTop: 8, alignItems: "flex-end" }}>
-                  <Text style={{ color: "#6B7280", fontSize: 10 }}>
-                    Tap to view on chart
-                  </Text>
-                </View>
-              </Pressable>
-            )}
-
-            {/* Show loading state when analyzing and no cached signal */}
-            {signalLoading && !cachedSignal && (
-              <View
-                style={{
-                  backgroundColor: "#1F2937",
-                  borderRadius: 12,
-                  padding: 16,
-                  marginBottom: 16,
-                  alignItems: "center",
-                }}
-              >
-                <ActivityIndicator size="small" color="#00D4AA" />
-                <Text style={{ color: "#9CA3AF", fontSize: 12, marginTop: 8 }}>
-                  Analyzing {symbol}...
-                </Text>
-              </View>
-            )}
-
-            {/* Show empty state when no signals and not loading */}
-            {!signalLoading && !cachedSignal && symbolSignals.length === 0 ? (
-              <View style={{ alignItems: "center", marginTop: 40 }}>
-                <Text
-                  style={{ color: "#888", textAlign: "center", fontSize: 14 }}
-                >
-                  No AI signals found for {symbol}
-                </Text>
-                <Text
-                  style={{
-                    color: "#666",
-                    textAlign: "center",
-                    fontSize: 12,
-                    marginTop: 8,
-                    marginBottom: 20,
-                  }}
-                >
-                  Generate your first signal to get started
-                </Text>
-                {/* Analyze Again Button for empty state */}
-                <Pressable
-                  onPress={analyzeAgain}
-                  disabled={signalLoading}
-                  style={{
-                    paddingHorizontal: 24,
-                    paddingVertical: 12,
-                    borderRadius: 8,
-                    backgroundColor: "#00D4AA",
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: "#000",
-                      fontSize: 14,
-                      fontWeight: "600",
-                    }}
-                  >
-                    Analyze {symbol}
-                  </Text>
-                </Pressable>
-              </View>
-            ) : (
-              symbolSignals.map((signal) => (
-                <Pressable
-                  key={signal.id}
-                  onPress={() => navigateToChartWithSignal(signal)}
-                  style={{
-                    backgroundColor: "#1F2937",
-                    marginBottom: 12,
-                    borderRadius: 12,
-                    padding: 16,
-                    borderWidth: 1,
-                    borderColor: "rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <View
-                      style={{ flexDirection: "row", alignItems: "center" }}
-                    >
-                      {/* Signal Type Pill */}
-                      <View
-                        style={{
-                          paddingHorizontal: 8,
-                          paddingVertical: 4,
-                          borderRadius: 12,
-                          backgroundColor:
-                            signal.side === "long"
-                              ? "rgba(16, 185, 129, 0.2)"
-                              : "rgba(239, 68, 68, 0.2)",
-                          borderWidth: 1,
-                          borderColor:
-                            signal.side === "long"
-                              ? "rgba(16, 185, 129, 0.3)"
-                              : "rgba(239, 68, 68, 0.3)",
-                          marginRight: 8,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color:
-                              signal.side === "long" ? "#10B981" : "#EF4444",
-                            fontSize: 11,
-                            fontWeight: "600",
-                          }}
-                        >
-                          {signal.side === "long" ? "BUY" : "SHORT"}
-                        </Text>
-                      </View>
-                      <Text
-                        style={{
-                          color: "#E5E7EB",
-                          fontWeight: "600",
-                          fontSize: 14,
-                        }}
-                      >
-                        {signal.strategy || "AI Strategy"}
-                      </Text>
-                    </View>
-                    <Text style={{ color: "#9CA3AF", fontSize: 11 }}>
-                      {new Date(signal.timestamp).toLocaleDateString()}
-                    </Text>
-                  </View>
-
-                  {/* Entry/Exit/Stop Info */}
-                  {(signal.entry ||
-                    signal.stop ||
-                    (signal.targets && signal.targets.length > 0)) && (
-                    <View style={{ marginBottom: 8 }}>
-                      <Text style={{ color: "#D1D5DB", fontSize: 12 }}>
-                        {signal.entry && `Entry: $${signal.entry.toFixed(2)}  `}
-                        {signal.stop && `Stop: $${signal.stop.toFixed(2)}  `}
-                        {signal.targets &&
-                          signal.targets.length > 0 &&
-                          `Target: $${signal.targets[0].toFixed(2)}`}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Confidence and Risk/Reward */}
-                  {(signal.confidence || signal.riskReward) && (
-                    <View style={{ marginBottom: 8 }}>
-                      <Text style={{ color: "#9CA3AF", fontSize: 11 }}>
-                        {signal.confidence &&
-                          `Confidence: ${Math.round(signal.confidence)}%  `}
-                        {signal.riskReward &&
-                          `R/R: ${signal.riskReward.toFixed(2)}`}
-                      </Text>
-                    </View>
-                  )}
-
-                  <View style={{ marginTop: 8, alignItems: "flex-end" }}>
-                    <Text style={{ color: "#6B7280", fontSize: 10 }}>
-                      Tap to view on chart
-                    </Text>
-                  </View>
-                </Pressable>
-              ))
-            )}
-          </View>
-        )}
-
         {/* Timeframe modal */}
         <TimeframePickerModal
           visible={tfModalVisible}
@@ -1930,26 +2137,58 @@ export default function StockDetailScreen() {
         />
 
         {/* News */}
-        {activeTab === "news" && news.length > 0 && (
+        {activeTab === "news" && (
           <View style={styles.newsSection}>
-            <NewsList items={news.slice(0, 20)} fullScreen={true} />
-          </View>
-        )}
-        {activeTab === "news" && news.length === 0 && (
-          <View style={styles.newsSection}>
-            <View style={styles.newsSectionHeader}>
-              <Text style={styles.newsSectionTitle}>Latest News</Text>
-            </View>
-            <Text
-              style={{
-                color: "#888",
-                textAlign: "center",
-                paddingHorizontal: 16,
-              }}
-            >
-              No recent news found for {symbol}. Pull to refresh or try again
-              shortly.
-            </Text>
+            {newsLoading ? (
+              <View style={styles.newsSectionHeader}>
+                <View style={{ alignItems: "center", paddingVertical: 20 }}>
+                  <ActivityIndicator size="small" color="#00D4AA" />
+                  <Text style={{ color: "#888", fontSize: 14, marginTop: 8 }}>
+                    Loading latest news for {symbol}...
+                  </Text>
+                </View>
+              </View>
+            ) : news.length > 0 ? (
+              <NewsList items={news.slice(0, 20)} fullScreen={true} />
+            ) : (
+              <>
+                <View style={styles.newsSectionHeader}>
+                  <Text style={styles.newsSectionTitle}>Latest News</Text>
+                </View>
+                <View style={{ paddingHorizontal: 16, paddingVertical: 20 }}>
+                  <Text
+                    style={{
+                      color: "#888",
+                      textAlign: "center",
+                      fontSize: 14,
+                      marginBottom: 12,
+                    }}
+                  >
+                    No recent news found for {symbol}
+                  </Text>
+                  <Pressable
+                    onPress={loadNewsInBackground}
+                    style={{
+                      backgroundColor: "#1a1a1a",
+                      paddingHorizontal: 16,
+                      paddingVertical: 10,
+                      borderRadius: 8,
+                      alignSelf: "center",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#00D4AA",
+                        fontSize: 14,
+                        fontWeight: "600",
+                      }}
+                    >
+                      Retry Loading News
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
           </View>
         )}
 

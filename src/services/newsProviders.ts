@@ -18,12 +18,46 @@ export type NewsItem = {
 // caching to avoid repeated calls
 type CacheKey = string;
 const newsCache: Map<CacheKey, { ts: number; items: NewsItem[] }> = new Map();
+const sentimentCache: Map<CacheKey, { ts: number; stats: SentimentStats }> =
+  new Map();
+const chartCache: Map<CacheKey, { ts: number; data: any[] }> = new Map();
 const inflight: Map<CacheKey, Promise<NewsItem[]>> = new Map();
-const TTL_MS = 120_000; // 2 minutes
+const sentimentInflight: Map<CacheKey, Promise<SentimentStats>> = new Map();
+const chartInflight: Map<CacheKey, Promise<any[]>> = new Map();
+const TTL_MS = 30 * 60 * 1000; // 30 minutes
 
 function key(provider: string, symbol: string): string {
   return `${provider}|${symbol}`;
 }
+
+// Clean up expired cache entries
+function cleanupCache() {
+  const now = Date.now();
+
+  // Clean news cache
+  for (const [key, value] of newsCache.entries()) {
+    if (now - value.ts > TTL_MS) {
+      newsCache.delete(key);
+    }
+  }
+
+  // Clean sentiment cache
+  for (const [key, value] of sentimentCache.entries()) {
+    if (now - value.ts > TTL_MS) {
+      sentimentCache.delete(key);
+    }
+  }
+
+  // Clean chart cache
+  for (const [key, value] of chartCache.entries()) {
+    if (now - value.ts > TTL_MS) {
+      chartCache.delete(key);
+    }
+  }
+}
+
+// Run cleanup every 10 minutes
+setInterval(cleanupCache, 10 * 60 * 1000);
 
 async function fetchJson(url: string, headers: Record<string, string> = {}) {
   const res = await fetch(url, { headers });
@@ -95,7 +129,110 @@ export interface MarketEvent {
   tickers?: string[];
 }
 
-// Basic news fetching for single or multiple tickers
+export interface SentimentStats {
+  symbol: string;
+  totalPositive: number;
+  totalNegative: number;
+  totalNeutral: number;
+  sentimentScore: number;
+  dailyData?: Record<
+    string,
+    {
+      positive: number;
+      negative: number;
+      neutral: number;
+      sentimentScore: number;
+    }
+  >;
+}
+
+// Fetch sentiment statistics for a ticker with caching
+async function fetchSentimentStats(
+  symbol: string,
+  dateRange: string = "last30days"
+): Promise<SentimentStats> {
+  const cacheKey = `sentiment|${symbol}|${dateRange}`;
+  const now = Date.now();
+
+  // Check cache first
+  const cached = sentimentCache.get(cacheKey);
+  if (cached && now - cached.ts < TTL_MS) {
+    console.log("📊 Using cached sentiment stats for", symbol);
+    return cached.stats;
+  }
+
+  // Check if request is already in flight
+  const existing = sentimentInflight.get(cacheKey);
+  if (existing) {
+    console.log("📊 Sentiment stats request already in flight for", symbol);
+    return existing;
+  }
+
+  const apiKey = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
+
+  if (!apiKey) {
+    throw new Error("STOCK_NEWS_API_KEY missing for StockNewsAPI provider");
+  }
+
+  const endpoint = `https://stocknewsapi.com/api/v1/stat?tickers=${encodeURIComponent(
+    symbol
+  )}&date=${dateRange}&token=${apiKey}`;
+
+  console.log("📊 Fetching fresh sentiment stats for", symbol);
+
+  const promise = (async () => {
+    try {
+      const json = await fetchJson(endpoint);
+
+      const symbolData = json?.total?.[symbol];
+      if (!symbolData) {
+        throw new Error(`No sentiment data found for ${symbol}`);
+      }
+
+      const dailyData: Record<string, any> = {};
+      if (json.data) {
+        Object.entries(json.data).forEach(([date, dateData]: [string, any]) => {
+          const symbolDayData = dateData[symbol];
+          if (symbolDayData) {
+            dailyData[date] = {
+              positive: symbolDayData.Positive || 0,
+              negative: symbolDayData.Negative || 0,
+              neutral: symbolDayData.Neutral || 0,
+              sentimentScore: symbolDayData.sentiment_score || 0,
+            };
+          }
+        });
+      }
+
+      const stats: SentimentStats = {
+        symbol,
+        totalPositive: symbolData["Total Positive"] || 0,
+        totalNegative: symbolData["Total Negative"] || 0,
+        totalNeutral: symbolData["Total Neutral"] || 0,
+        sentimentScore: symbolData["Sentiment Score"] || 0,
+        dailyData: Object.keys(dailyData).length > 0 ? dailyData : undefined,
+      };
+
+      // Cache the result
+      sentimentCache.set(cacheKey, { ts: now, stats });
+
+      return stats;
+    } catch (error) {
+      console.error("❌ Sentiment Stats API Error:", error);
+      throw error;
+    } finally {
+      // Remove from inflight
+      sentimentInflight.delete(cacheKey);
+    }
+  })();
+
+  // Add to inflight
+  sentimentInflight.set(cacheKey, promise);
+
+  return promise;
+}
+
+// Basic news fetching for single or multiple tickers with caching
 async function fetchStockNewsApi(
   symbol: string,
   items: number = 20,
@@ -107,6 +244,25 @@ async function fetchStockNewsApi(
     dateTo?: string;
   } = {}
 ): Promise<NewsItem[]> {
+  // Create cache key including options for proper caching
+  const optionsKey = JSON.stringify(options);
+  const cacheKey = `stocknews|${symbol}|${items}|${optionsKey}`;
+  const now = Date.now();
+
+  // Check cache first
+  const cached = newsCache.get(cacheKey);
+  if (cached && now - cached.ts < TTL_MS) {
+    console.log("📰 Using cached news for", symbol);
+    return cached.items;
+  }
+
+  // Check if request is already in flight
+  const existing = inflight.get(cacheKey);
+  if (existing) {
+    console.log("📰 News request already in flight for", symbol);
+    return existing;
+  }
+
   const apiKey = (Constants.expoConfig?.extra as any)?.stockNewsApiKey;
 
   console.log(
@@ -146,34 +302,49 @@ async function fetchStockNewsApi(
 
   console.log("📡 Stock News API URL:", endpoint.replace(apiKey, "***"));
 
-  try {
-    const json: StockNewsApiResponse = await fetchJson(endpoint);
-    console.log(
-      "✅ Stock News API Response:",
-      json?.data?.length || 0,
-      "items"
-    );
-    const data = json?.data || [];
+  const promise = (async () => {
+    try {
+      const json: StockNewsApiResponse = await fetchJson(endpoint);
+      console.log(
+        "✅ Stock News API Response:",
+        json?.data?.length || 0,
+        "items"
+      );
+      const data = json?.data || [];
 
-    return data.map((n: StockNewsApiItem, idx: number) => ({
-      id: n.news_url || `${symbol}-${idx}`,
-      title: n.title,
-      url: n.news_url,
-      source: n.source_name,
-      publishedAt: n.date,
-      summary: n.text,
-      symbol: isMarket ? "market" : symbol,
-      sentiment: n.sentiment,
-      type: n.type,
-      imageUrl: n.image_url,
-      topics: n.topics,
-      tickers: n.tickers,
-    }));
-  } catch (error) {
-    console.error("❌ Stock News API Error:", error);
-    console.error("📡 Failed URL:", endpoint.replace(apiKey, "***"));
-    throw error;
-  }
+      const items = data.map((n: StockNewsApiItem, idx: number) => ({
+        id: n.news_url || `${symbol}-${idx}`,
+        title: n.title,
+        url: n.news_url,
+        source: n.source_name,
+        publishedAt: n.date,
+        summary: n.text,
+        symbol: isMarket ? "market" : symbol,
+        sentiment: n.sentiment,
+        type: n.type,
+        imageUrl: n.image_url,
+        topics: n.topics,
+        tickers: n.tickers,
+      }));
+
+      // Cache the result
+      newsCache.set(cacheKey, { ts: now, items });
+
+      return items;
+    } catch (error) {
+      console.error("❌ Stock News API Error:", error);
+      console.error("📡 Failed URL:", endpoint.replace(apiKey, "***"));
+      throw error;
+    } finally {
+      // Remove from inflight
+      inflight.delete(cacheKey);
+    }
+  })();
+
+  // Add to inflight
+  inflight.set(cacheKey, promise);
+
+  return promise;
 }
 
 // Fetch news for multiple tickers
@@ -479,8 +650,35 @@ export async function fetchNews(symbol: string): Promise<NewsItem[]> {
 }
 
 // Export advanced Stock News API functions
+// Chart data caching functions
+export function getCachedChartData(
+  symbol: string,
+  timeframe: string
+): any[] | null {
+  const cacheKey = `chart|${symbol}|${timeframe}`;
+  const cached = chartCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.ts < TTL_MS) {
+    console.log("📈 Using cached chart data for", symbol, timeframe);
+    return cached.data;
+  }
+
+  return null;
+}
+
+export function setCachedChartData(
+  symbol: string,
+  timeframe: string,
+  data: any[]
+): void {
+  const cacheKey = `chart|${symbol}|${timeframe}`;
+  chartCache.set(cacheKey, { ts: Date.now(), data });
+  console.log("📈 Cached chart data for", symbol, timeframe);
+}
+
 export {
   fetchStockNewsApi,
+  fetchSentimentStats,
   fetchMultipleTickersNews,
   fetchTrendingStocks,
   fetchMarketEvents,

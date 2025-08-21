@@ -294,7 +294,7 @@ export async function fetchUpcomingEarningsFromStockNewsAPI(
     }
 
     const json = await response.json();
-    console.log(`📊 Stock News API earnings response:`, json);
+    // console.log(`📊 Stock News API earnings response:`, json);
 
     // Check if earnings calendar is available with current subscription
     if (

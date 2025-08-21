@@ -4,6 +4,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { plaidIntegrationService } from "../services/plaidIntegration";
 import { plaidPortfolioService } from "../services/portfolioAggregationService_NEW";
 import { MockDataInitializer } from "../services/mockDataInitializer";
+import { fetchAndCacheBulkQuotes } from "../services/quotes";
+import { useUserStore } from "./userStore";
 
 // Import mock data for immediate hydration (portfolio data only)
 import mockAccountsData from "../data/mockPlaidAccounts.json";
@@ -198,6 +200,56 @@ const getAccountCategory = (type: string, subtype?: string): string => {
   }
 
   return "Other";
+};
+
+// Collect all unique symbols from all watchlists (and legacy fields)
+const getAllWatchlistSymbols = (): string[] => {
+  try {
+    const { profile } = useUserStore.getState();
+    const unique = new Set<string>();
+
+    // Legacy single watchlist array
+    if (Array.isArray(profile.watchlist)) {
+      profile.watchlist.forEach(
+        (s) => s && unique.add(String(s).toUpperCase())
+      );
+    }
+
+    // New multi-watchlist structure
+    if (Array.isArray(profile.watchlists)) {
+      for (const wl of profile.watchlists) {
+        for (const item of wl.items || []) {
+          if (item?.symbol) unique.add(String(item.symbol).toUpperCase());
+        }
+      }
+    }
+
+    // Include global favorites to ensure they refresh as well
+    if (Array.isArray(profile.favorites)) {
+      profile.favorites.forEach(
+        (s) => s && unique.add(String(s).toUpperCase())
+      );
+    }
+
+    return Array.from(unique);
+  } catch (err) {
+    console.warn("⚠️ Failed to collect watchlist symbols:", err);
+    return [];
+  }
+};
+
+// Prefetch quotes in safe chunks and cache them for immediate use by all watchlists
+const prefetchWatchlistQuotes = async (symbols: string[]): Promise<void> => {
+  if (!symbols || symbols.length === 0) return;
+  const CHUNK_SIZE = 150; // avoid URL length limits
+  for (let i = 0; i < symbols.length; i += CHUNK_SIZE) {
+    const chunk = symbols.slice(i, i + CHUNK_SIZE);
+    try {
+      await fetchAndCacheBulkQuotes(chunk);
+    } catch (e) {
+      console.error("❌ Watchlist quotes fetch failed for chunk:", e);
+    }
+  }
 };
 
 const formatAccountType = (type: string, subtype?: string): string => {
@@ -482,6 +534,16 @@ export const useAppDataStore = create<AppDataState>()(
             .catch((error) => {
               console.error("❌ Background market data fetch failed:", error);
             });
+
+          // In parallel, prefetch and cache watchlist quotes across all watchlists
+          const allSymbols = getAllWatchlistSymbols();
+          prefetchWatchlistQuotes(allSymbols)
+            .then(() =>
+              console.log("✅ Prefetched watchlist quotes in background")
+            )
+            .catch((e) =>
+              console.error("❌ Failed to prefetch watchlist quotes:", e)
+            );
         } catch (error) {
           console.error("❌ Failed to hydrate app data store:", error);
           // Keep existing data if hydration fails
@@ -503,6 +565,15 @@ export const useAppDataStore = create<AppDataState>()(
         try {
           // Refresh portfolio data (mock for now)
           const portfolioData = createInitialMockData();
+
+          // Start watchlist quotes prefetch in parallel
+          const allSymbols = getAllWatchlistSymbols();
+          prefetchWatchlistQuotes(allSymbols).catch((e) =>
+            console.error(
+              "❌ Watchlist quotes prefetch during refresh failed:",
+              e
+            )
+          );
 
           // Fetch fresh market data from APIs
           const { marketOverview, news } = await fetchRealMarketData();
@@ -678,6 +749,49 @@ export const stopBackgroundRefresh = () => {
   }
 };
 
+// Watchlist quotes auto-refresh (more frequent than full refresh)
+let watchlistQuotesInterval: NodeJS.Timeout | null = null;
+let watchlistQuotesFrequencyMs = 5000; // default 5s
+
+export const startWatchlistQuotesAutoRefresh = (frequencyMs?: number) => {
+  if (typeof frequencyMs === "number" && frequencyMs > 0) {
+    watchlistQuotesFrequencyMs = frequencyMs;
+  }
+
+  if (watchlistQuotesInterval) {
+    clearInterval(watchlistQuotesInterval);
+    watchlistQuotesInterval = null;
+  }
+
+  console.log(
+    `🔄 Starting watchlist quotes auto-refresh (every ${Math.round(
+      watchlistQuotesFrequencyMs / 1000
+    )}s)`
+  );
+
+  watchlistQuotesInterval = setInterval(() => {
+    const symbols = getAllWatchlistSymbols();
+    prefetchWatchlistQuotes(symbols).catch((e) =>
+      console.error("❌ Watchlist quotes auto-refresh failed:", e)
+    );
+  }, watchlistQuotesFrequencyMs);
+};
+
+export const stopWatchlistQuotesAutoRefresh = () => {
+  if (watchlistQuotesInterval) {
+    clearInterval(watchlistQuotesInterval);
+    watchlistQuotesInterval = null;
+    console.log("⏹️ Stopped watchlist quotes auto-refresh");
+  }
+};
+
+export const setWatchlistQuotesFrequency = (ms: number) => {
+  if (!ms || ms <= 0) return;
+  watchlistQuotesFrequencyMs = ms;
+  // restart with new frequency
+  startWatchlistQuotesAutoRefresh(ms);
+};
+
 // Initialize store on app start
 export const initializeAppDataStore = async () => {
   console.log("🚀 Initializing app data store...");
@@ -689,6 +803,9 @@ export const initializeAppDataStore = async () => {
 
   // Start background refresh
   startBackgroundRefresh();
+
+  // Start frequent watchlist quotes auto-refresh so UI can read fresh cache
+  startWatchlistQuotesAutoRefresh();
 
   console.log("✅ App data store initialized");
 };
