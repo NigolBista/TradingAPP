@@ -3,6 +3,7 @@ import { initializeAppDataStore } from "../store/appDataStore";
 import { useEarningsStore } from "../store/earningsStore";
 import { realtimeDataManager } from "./realtimeDataManager";
 import { useUserStore } from "../store/userStore";
+import { getGlobalMarketData } from "./marketDataCache";
 
 /**
  * App initialization service
@@ -37,11 +38,20 @@ export async function initializeApp(): Promise<void> {
       // Hydrate earnings data at app launch
       const earningsPromise = useEarningsStore.getState().hydrateEarningsData();
 
+      // Warm global market cache (news, events, Fed data)
+      const marketDataPromise = getGlobalMarketData();
+
       // Wait for core initialization to complete first
-      await Promise.all([stocksPromise, storePromise, earningsPromise]);
+      await Promise.all([
+        stocksPromise,
+        storePromise,
+        earningsPromise,
+        marketDataPromise,
+      ]);
       console.log("✅ Stocks database loaded successfully");
       console.log("✅ App data store initialized successfully");
       console.log("✅ Earnings data hydrated successfully");
+      console.log("✅ Global market data cached successfully");
 
       // Pre-load watchlist data in background (non-blocking)
       preloadWatchlistData().catch((error) => {
