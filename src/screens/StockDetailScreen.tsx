@@ -565,6 +565,23 @@ export default function StockDetailScreen() {
               500
             );
             if (candles && candles.length > 0) {
+              // Merge latest quote into the last candle to reflect after-hours price
+              try {
+                const qMap = await getCachedQuotes([symbol]);
+                const q = qMap[symbol];
+                if (q && typeof q.last === "number" && candles.length) {
+                  const lastIdx = candles.length - 1;
+                  const last = candles[lastIdx];
+                  const patched = {
+                    ...last,
+                    close: q.last,
+                    high: Math.max(last.high, q.last),
+                    low: Math.min(last.low, q.last),
+                  } as typeof last;
+                  candles[lastIdx] = patched;
+                }
+              } catch (_) {}
+
               const lwc = toLWC(candles);
               setDailySeries((prev) => {
                 if (prev.length === 0) return lwc;

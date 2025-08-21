@@ -373,10 +373,13 @@ class SmartCandleManager {
     }
 
     // Fetch only recent candles (small limit for efficiency)
-    const recentLimit = Math.min(
-      100,
-      Math.ceil(timeSinceLastCandle / (5 * 60 * 1000))
-    ); // 5min intervals
+    const baseMinutes = TIMEFRAME_HIERARCHY[cached.baseTimeframe]?.minutes || 1;
+    const perBarMs = baseMinutes * 60 * 1000;
+    const recentBarsNeeded = Math.max(
+      1,
+      Math.ceil(timeSinceLastCandle / perBarMs) + 1
+    );
+    const recentLimit = Math.min(100, recentBarsNeeded);
     return this.doFetch(symbol, cached.baseTimeframe, recentLimit);
   }
 
@@ -427,7 +430,12 @@ class SmartCandleManager {
   ): Promise<BaseCandle[]> {
     console.log(`📡 Fetching ${symbol} ${timeframe} (limit: ${limit})`);
 
-    const candles = await fetchCandlesForTimeframe(symbol, timeframe as any);
+    // Respect the requested output bar count to avoid large payloads
+    const outBars = Math.max(1, Math.min(1200, Math.floor(limit || 1)));
+    const candles = await fetchCandlesForTimeframe(symbol, timeframe as any, {
+      outBars,
+      baseCushion: 1.05,
+    });
 
     return candles.map((c) => ({
       time: c.time,

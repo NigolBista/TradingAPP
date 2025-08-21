@@ -110,6 +110,11 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
 
     // Track last pushed bar time to prefer append over full set
     const lastPushedTimeRef = useRef<number | null>(null);
+    // Track last dataset spacing and length to detect timeframe changes
+    const lastSpacingRef = useRef<number | null>(null);
+    const lastLengthRef = useRef<number>(0);
+    // Track first time seen to detect left-side extensions
+    const lastFirstTimeRef = useRef<number | null>(null);
 
     // Resolve local lightweight-charts asset stored as .txt (so Metro treats as asset)
     const [inlineLibText, setInlineLibText] = useState<string | null>(null);
@@ -214,6 +219,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       const showCrosshair = ${JSON.stringify(showCrosshair)};
       const chartOptions = {
         height: ${height},
+        autoSize: true,
         layout: { 
           textColor: dark ? '#e5e7eb' : '#374151', 
           background: { type: 'solid', color: 'transparent' },
@@ -313,7 +319,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
 
       let mainSeries;
       const type = ${JSON.stringify(type)};
-      const forced = undefined;
+      const forced = ${JSON.stringify(forcePositive ?? null)};
       let raw = [];
       
       // Determine if price is up or down based on first and last prices
@@ -366,6 +372,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
             ? raw.map(d => ({ time: d.time, value: d.close }))
             : raw;
           mainSeries.setData(seriesData);
+          try { updateSeriesColorByData(); } catch(_) {}
         } catch(e) { log('applySeriesData error: ' + e.message); }
       }
       applySeriesData(raw);
@@ -564,21 +571,36 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       // Placeholder for any future overlays (no-op)
       function updateZones(){}
 
-      // Ensure width and fit on load
+      // Update line/area colors based on data or forced flag
+      function updateSeriesColorByData(){
+        try {
+          if (!(type === 'area' || type === 'line')) return;
+          let positive = true;
+          if (typeof forced === 'boolean') {
+            positive = forced;
+          } else if (Array.isArray(raw) && raw.length > 1) {
+            const firstPrice = Number(raw[0]?.close || 0);
+            const lastPrice = Number(raw[raw.length - 1]?.close || 0);
+            positive = lastPrice >= firstPrice;
+          }
+          const lc = positive ? '#16a34a' : '#dc2626';
+          if (type === 'area') {
+            mainSeries.applyOptions({
+              lineColor: lc,
+              topColor: positive ? 'rgba(22,163,74,0.4)' : 'rgba(220,38,38,0.4)',
+              bottomColor: positive ? 'rgba(22,163,74,0.05)' : 'rgba(220,38,38,0.05)'
+            });
+          } else if (type === 'line') {
+            mainSeries.applyOptions({ color: lc });
+          }
+        } catch(_) {}
+      }
+
+      // Initial fit on load
       setTimeout(() => {
-        log('Applying width: ' + container.clientWidth);
-        chart.applyOptions({ width: container.clientWidth });
-        chart.timeScale().fitContent();
-        log('Chart fitted and ready');
+        try { chart.timeScale().fitContent(); } catch(_) {}
         addLevelLines();
       }, 100);
-
-      // Handle window resize
-      function handleResize() {
-        chart.applyOptions({ width: container.clientWidth });
-      }
-      
-      window.addEventListener('resize', handleResize);
       
       // No overlay sync needed for price lines
       
@@ -594,6 +616,22 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           for (var i=0;i<items.length;i++) {
             var d = items[i];
             if (!d) continue;
+            // Maintain raw cache
+            if (!Array.isArray(raw) || raw.length === 0) {
+              raw = [d];
+            } else {
+              var last = raw[raw.length - 1];
+              if (d.time > last.time) {
+                raw.push(d);
+              } else if (d.time === last.time) {
+                raw[raw.length - 1] = d;
+              } else {
+                // Rare: out-of-order — find/replace by time
+                var idx = raw.findIndex(function(x){ return x && x.time === d.time; });
+                if (idx >= 0) raw[idx] = d; else raw.push(d);
+                raw.sort(function(a,b){ return a.time - b.time; });
+              }
+            }
             if (type === 'area' || type === 'line') {
               mainSeries.update({ time: d.time, value: d.close });
             } else {
@@ -602,6 +640,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           }
           try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
           try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
+          try { updateSeriesColorByData(); } catch(_) {}
         } catch(e) { log('appendSeriesData error: ' + e.message); }
       }
       window.addEventListener('message', function(event){
@@ -685,6 +724,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
     useEffect(() => {
       setIsReady(false);
       lastPushedTimeRef.current = null;
+      lastFirstTimeRef.current = null;
     }, [html]);
 
     // Prefer incremental appends to avoid viewport resets
@@ -697,6 +737,33 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
         const lastTime = lastPushedTimeRef.current as number;
         const latest = series[series.length - 1];
         if (!latest) return;
+        // Detect spacing change or shrink (e.g., timeframe switch)
+        const prevLen = lastLengthRef.current || 0;
+        const prevSpacing = lastSpacingRef.current;
+        const prevFirst = lastFirstTimeRef.current;
+        const newFirst = series[0]?.time ?? null;
+        const newSpacing =
+          series.length >= 2
+            ? series[series.length - 1].time - series[series.length - 2].time
+            : null;
+        const spacingChanged =
+          prevSpacing != null &&
+          newSpacing != null &&
+          Math.abs(newSpacing - prevSpacing) > Math.max(1, prevSpacing * 0.2);
+        const lengthShrank = series.length < prevLen;
+        const extendedLeft =
+          newFirst != null && prevFirst != null && newFirst < prevFirst;
+
+        if (spacingChanged || lengthShrank || extendedLeft) {
+          (webRef.current as any)?.postMessage?.(
+            JSON.stringify({ cmd: "setData", data: series })
+          );
+          lastPushedTimeRef.current = latest.time;
+          lastSpacingRef.current = newSpacing ?? null;
+          lastLengthRef.current = series.length;
+          lastFirstTimeRef.current = newFirst;
+          return;
+        }
 
         // Case 1: same candle is being updated (e.g., in-progress bar)
         if (latest.time === lastTime) {
@@ -719,6 +786,9 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
             );
           }
           lastPushedTimeRef.current = latest.time;
+          lastSpacingRef.current = newSpacing ?? lastSpacingRef.current;
+          lastLengthRef.current = series.length;
+          lastFirstTimeRef.current = newFirst ?? lastFirstTimeRef.current;
           return;
         }
 
@@ -766,8 +836,16 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                   // Initialize last pushed time from the dataset we just sent
                   if (Array.isArray(series) && series.length > 0) {
                     lastPushedTimeRef.current = series[series.length - 1].time;
+                    lastSpacingRef.current =
+                      series.length >= 2
+                        ? series[series.length - 1].time -
+                          series[series.length - 2].time
+                        : null;
+                    lastLengthRef.current = series.length;
                   } else {
                     lastPushedTimeRef.current = null;
+                    lastSpacingRef.current = null;
+                    lastLengthRef.current = 0;
                   }
                 } catch (_) {}
               } else if (msg?.visibleRange && onVisibleRangeChange) {
