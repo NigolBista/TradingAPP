@@ -45,11 +45,11 @@ import {
   fetchNews as fetchSymbolNews,
   fetchStockNewsApi,
   fetchSentimentStats,
-  getCachedChartData,
-  setCachedChartData,
   type NewsItem,
   type SentimentStats,
 } from "../services/newsProviders";
+import { realtimeDataManager } from "../services/realtimeDataManager";
+import { smartCandleManager } from "../services/smartCandleManager";
 
 import { type SignalSummary } from "../services/signalEngine";
 import NewsList from "../components/insights/NewsList";
@@ -545,11 +545,35 @@ export default function StockDetailScreen() {
       // Set up periodic refresh while screen is focused (reduced frequency)
       const interval = setInterval(refreshCachedSignal, 2500);
 
+      // Start real-time chart refresh
+      console.log("🔄 Starting stock detail refresh for", symbol, extendedTf);
+      realtimeDataManager.startStockDetailRefresh(
+        symbol,
+        extendedTf,
+        async () => {
+          // Refresh callback - reload chart data from smart cache
+          try {
+            const candles = await smartCandleManager.getCandles(
+              symbol,
+              extendedTf,
+              500
+            );
+            if (candles && candles.length > 0) {
+              setDailySeries(toLWC(candles));
+            }
+          } catch (error) {
+            console.error("Failed to refresh chart from smart cache:", error);
+          }
+        }
+      );
+
       // Return cleanup function
       return () => {
         clearInterval(interval);
+        console.log("⏹️ Stopping stock detail refresh");
+        realtimeDataManager.stopStockDetailRefresh();
       };
-    }, [symbol, getCachedSignal, cachedSignal])
+    }, [symbol, getCachedSignal, cachedSignal, extendedTf])
   );
 
   // Remove automatic analysis - only trigger when user explicitly requests it
@@ -817,45 +841,53 @@ export default function StockDetailScreen() {
     // Show chart immediately - no loading state
     setLoading(false);
 
-    // Check for cached chart data first
-    const cachedData = getCachedChartData(symbol, extendedTf);
-    if (cachedData && cachedData.length > 0) {
-      console.log("📈 Loading cached chart data for", symbol);
-      setDailySeries(toLWC(cachedData));
-    } else if (dailySeries.length === 0) {
-      // Set placeholder data if we don't have cached data or current data
-      const now = Math.floor(Date.now() / 1000);
-      const placeholderPrice = initialQuote?.last || 100;
-      setDailySeries([
-        {
-          time: now,
-          open: placeholderPrice,
-          high: placeholderPrice,
-          low: placeholderPrice,
-          close: placeholderPrice,
-          volume: 0,
-        },
-      ]);
+    // Try to get cached data from smart candle manager
+    try {
+      const cachedCandles = await smartCandleManager.getCandles(
+        symbol,
+        extendedTf,
+        500
+      );
+      if (cachedCandles && cachedCandles.length > 0) {
+        console.log(
+          "📈 Loading smart cached chart data for",
+          symbol,
+          extendedTf
+        );
+        setDailySeries(toLWC(cachedCandles));
+      } else if (dailySeries.length === 0) {
+        // Set placeholder data if we don't have cached data
+        const now = Math.floor(Date.now() / 1000);
+        const placeholderPrice = initialQuote?.last || 100;
+        setDailySeries([
+          {
+            time: now,
+            open: placeholderPrice,
+            high: placeholderPrice,
+            low: placeholderPrice,
+            close: placeholderPrice,
+            volume: 0,
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error("Smart cache failed, using placeholder:", error);
+      // Set placeholder data on error
+      if (dailySeries.length === 0) {
+        const now = Math.floor(Date.now() / 1000);
+        const placeholderPrice = initialQuote?.last || 100;
+        setDailySeries([
+          {
+            time: now,
+            open: placeholderPrice,
+            high: placeholderPrice,
+            low: placeholderPrice,
+            close: placeholderPrice,
+            volume: 0,
+          },
+        ]);
+      }
     }
-
-    // Load fresh chart data in background and update when ready
-    fetchCandlesForTimeframe(symbol, extendedTf)
-      .then((initialCandles) => {
-        const lwcData = toLWC(initialCandles);
-        setDailySeries(lwcData);
-        // Cache the fresh data
-        setCachedChartData(symbol, extendedTf, initialCandles);
-      })
-      .catch((e) => {
-        console.error("Chart data loading failed:", e);
-        // Only show error if we don't have cached data
-        if (!cachedData || cachedData.length === 0) {
-          Alert.alert(
-            "Error",
-            e instanceof Error ? e.message : "Failed to load chart data"
-          );
-        }
-      });
 
     // Load news and sentiment stats in parallel (truly non-blocking - fire and forget)
     loadNewsInBackground().catch((error) => {
@@ -931,6 +963,9 @@ export default function StockDetailScreen() {
   async function applyExtendedTimeframe(tf: ExtendedTimeframe) {
     setExtendedTf(tf);
     setDefaultTimeframe(tf); // Save as user's preferred default
+
+    // Update the real-time manager with new timeframe
+    realtimeDataManager.updateTimeframe(tf);
     // Map extended to simple header pills if applicable
     const map: Record<string, Timeframe> = {
       "1m": "1D",
@@ -957,32 +992,15 @@ export default function StockDetailScreen() {
     };
     setSelectedTimeframe(map[tf]);
 
-    // Check for cached data first
-    const cachedData = getCachedChartData(symbol, tf);
-    if (cachedData && cachedData.length > 0) {
-      console.log("📈 Using cached chart data for timeframe", tf);
-      setDailySeries(toLWC(cachedData));
-    }
-
+    // Use smart candle manager for instant timeframe switching
     try {
-      const candles = await fetchCandlesForTimeframe(symbol, tf);
-      const lwcData = candles.map((c) => ({
-        time: c.time,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
-        volume: c.volume,
-      }));
-      setDailySeries(lwcData);
-      // Cache the fresh data
-      setCachedChartData(symbol, tf, candles);
+      const candles = await smartCandleManager.getCandles(symbol, tf, 500);
+      if (candles && candles.length > 0) {
+        console.log("📈 Smart timeframe switch for", symbol, tf);
+        setDailySeries(toLWC(candles));
+      }
     } catch (e) {
       console.warn("Failed to load timeframe candles:", e);
-      // If we have cached data, don't show error
-      if (!cachedData || cachedData.length === 0) {
-        console.error("No cached data available for", symbol, tf);
-      }
     }
   }
 

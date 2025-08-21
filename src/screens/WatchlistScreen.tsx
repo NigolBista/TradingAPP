@@ -40,6 +40,8 @@ import {
   fetchAndCacheBulkQuotes,
   type SimpleQuote,
 } from "../services/quotes";
+import { realtimeDataManager } from "../services/realtimeDataManager";
+import { useFocusEffect } from "@react-navigation/native";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -295,6 +297,40 @@ export default function WatchlistScreen() {
   useEffect(() => {
     loadDisplayData();
   }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists]);
+
+  // Start/stop real-time refresh when screen is focused/unfocused
+  useFocusEffect(
+    React.useCallback(() => {
+      const computeSymbols = (): string[] => {
+        if (viewMode === "favorites") return profile.favorites;
+        if (selectedWatchlistId) {
+          const watchlist = profile.watchlists.find(
+            (w) => w.id === selectedWatchlistId
+          );
+          return watchlist?.items.map((item) => item.symbol) || [];
+        }
+        return [];
+      };
+
+      const symbols = computeSymbols();
+      if (symbols && symbols.length > 0) {
+        console.log(
+          "🔄 Starting watchlist refresh for",
+          symbols.length,
+          "stocks"
+        );
+        realtimeDataManager.startWatchlistRefresh(symbols, () => {
+          // Refresh callback - update the UI when new data arrives
+          setRefreshing(false); // Ensure refresh indicator is off
+        });
+      }
+
+      return () => {
+        console.log("⏹️ Stopping watchlist refresh");
+        realtimeDataManager.stopWatchlistRefresh();
+      };
+    }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists])
+  );
 
   // Poll cached quotes periodically so UI reflects background quote refreshes
   useEffect(() => {

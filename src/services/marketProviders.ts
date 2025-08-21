@@ -266,15 +266,16 @@ export async function fetchMarketDataCandles(
 /** Public entry that your UI should call for timeframe-based charts */
 export async function fetchCandlesForTimeframe(
   symbol: string,
-  timeframe: ExtendedTimeframe
+  timeframe: ExtendedTimeframe,
+  opts?: { outBars?: number; baseCushion?: number }
 ): Promise<Candle[]> {
   const { base, group } = mapExtendedTimeframe(timeframe);
 
   // How many *output* bars we want after grouping
-  const outBars = desiredOutputBars(timeframe);
+  const outBars = opts?.outBars ?? desiredOutputBars(timeframe);
 
   // Fetch enough *base* bars to build those output bars, with small cushion
-  const BASE_CUSHION = 1.2;
+  const BASE_CUSHION = opts?.baseCushion ?? 1.2;
   const MAX_BASE = 1200; // hard cap to keep payloads snappy
   const baseLimit = Math.min(
     Math.ceil(outBars * group * BASE_CUSHION),
