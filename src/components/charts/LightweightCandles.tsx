@@ -58,15 +58,8 @@ interface Props {
   initialPosition?: "start" | "end" | "fit";
   // Notify RN when visible time range changes (ms)
   onVisibleRangeChange?: (range: { fromMs: number; toMs: number }) => void;
-  // Notify RN when user nears data edges during pan/zoom (for seamless loading)
-  onEdgeRequest?: (payload: {
-    visible: { fromMs: number; toMs: number };
-    dataset: { minMs: number; maxMs: number };
-    requests: Array<{
-      side: "left" | "right";
-      requestWindow: { fromMs: number; toMs: number };
-    }>;
-  }) => void;
+  // Infinite history callback: called when more data is needed
+  onLoadMoreData?: (numberOfBars: number) => Promise<LWCDatum[]>;
   // Notify when the web chart is ready
   onReady?: () => void;
 }
@@ -94,13 +87,14 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       tradePlan,
       initialPosition = "start",
       onVisibleRangeChange,
-      onEdgeRequest,
+      onLoadMoreData,
       onReady,
     }: Props,
     ref
   ) {
     const webRef = useRef<WebView>(null);
     const [isReady, setIsReady] = useState(false);
+
     useImperativeHandle(ref, () => ({
       scrollToRealTime: () => {
         try {
@@ -1022,58 +1016,34 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
 
       // Forward visible range changes to RN
       try {
-        let lastEdgeSentAt = 0;
-        let lastEdgeMask = 0; // 1=left,2=right
-        function maybeSendEdge(range){
-          try {
-            if (!range || range.from == null || range.to == null) return;
-            if (!Array.isArray(raw) || raw.length === 0) return;
-            const now = Date.now();
-            if (now - lastEdgeSentAt < 100) return; // Fast response for seamless experience
-            const visibleSpan = Math.max(1, range.to - range.from);
-            const threshold = Math.round(visibleSpan * 0.4); // TradingView-style early trigger for seamless loading
-            const datasetMin = raw[0].time;
-            const datasetMax = raw[raw.length - 1].time;
-            const nearLeft = range.from <= (datasetMin + threshold);
-            const nearRight = range.to >= (datasetMax - threshold);
-            const mask = (nearLeft ? 1 : 0) | (nearRight ? 2 : 0);
-            // If we are no longer near any edge, reset mask so future edge entries fire
-            if (mask === 0) { lastEdgeMask = 0; return; }
-            if (mask === lastEdgeMask) return;
-            lastEdgeMask = mask;
-            lastEdgeSentAt = now;
-            const requests = [];
-            if (nearLeft) {
-              // TradingView-style: Request larger chunks for seamless experience
-              const reqTo = (datasetMin * 1000) - 1;
-              const reqFrom = Math.max(0, Math.round(reqTo - visibleSpan * 1000 * 5)); // 5x viewport for large buffers
-              requests.push({ side: 'left', requestWindow: { fromMs: reqFrom, toMs: Math.round(reqTo) } });
-            }
-            if (nearRight) {
-              // TradingView-style: Request larger chunks for seamless experience
-              const reqFrom = (datasetMax * 1000) + 1;
-              const reqTo = Math.round(reqFrom + visibleSpan * 1000 * 5); // 5x viewport for large buffers
-              requests.push({ side: 'right', requestWindow: { fromMs: Math.round(reqFrom), toMs: reqTo } });
-            }
-            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
-              edgeRequest: {
-                visible: { fromMs: Math.round(range.from * 1000), toMs: Math.round(range.to * 1000) },
-                dataset: { minMs: datasetMin * 1000, maxMs: datasetMax * 1000 },
-                requests
-              }
-            }));
-          } catch(_) {}
-        }
         chart.timeScale().subscribeVisibleTimeRangeChange((range) => {
           if (!range || range.from == null || range.to == null) return;
           const fromMs = Math.round(range.from * 1000);
           const toMs = Math.round(range.to * 1000);
           try {
-            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
-              visibleRange: { fromMs, toMs }
-            }));
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
+              JSON.stringify({ visibleRange: { fromMs, toMs } })
+            );
           } catch(_) {}
-          maybeSendEdge(range);
+        });
+      } catch(_) {}
+
+      // Infinite history - exactly like TradingView example
+      try {
+        chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
+          if (!logicalRange || !raw || raw.length === 0) return;
+          
+          if (logicalRange.from < 10) {
+            // Load more data - calculate how many bars we need
+            const numberBarsToLoad = 50 - logicalRange.from;
+            try {
+              window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
+                JSON.stringify({
+                  loadMoreData: { numberOfBars: numberBarsToLoad }
+                })
+              );
+            } catch(_) {}
+          }
         });
       } catch(_) {}
 
@@ -1132,7 +1102,30 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
     useEffect(() => {
       if (!isReady || !webRef.current) return;
       if (!series || series.length === 0) return;
-      if (lastPushedTimeRef.current == null) return;
+
+      // Initial data load (when no data has been pushed yet)
+      if (lastPushedTimeRef.current == null) {
+        console.log("📊 Initial chart data load:", series.length, "bars");
+        (webRef.current as any)?.postMessage?.(
+          JSON.stringify({ cmd: "setData", data: series, autoFit: true })
+        );
+
+        if (series.length > 0) {
+          const latest = series[series.length - 1];
+          const newFirst = series[0]?.time ?? null;
+          const newSpacing =
+            series.length >= 2
+              ? series[series.length - 1].time - series[series.length - 2].time
+              : null;
+
+          lastPushedTimeRef.current = latest.time;
+          lastSpacingRef.current = newSpacing;
+          lastLengthRef.current = series.length;
+          lastFirstTimeRef.current = newFirst;
+          lastUpdateTimeRef.current = Date.now();
+        }
+        return;
+      }
 
       // Clear any pending updates
       if (pendingUpdateRef.current) {
@@ -1154,6 +1147,25 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
             series.length >= 2
               ? series[series.length - 1].time - series[series.length - 2].time
               : null;
+
+          // Check if this is completely new data (symbol change)
+          const isCompletelyNewData =
+            prevFirst != null &&
+            newFirst != null &&
+            Math.abs(newFirst - prevFirst) > 86400; // More than 1 day difference
+
+          if (isCompletelyNewData) {
+            console.log("🔄 Detected symbol change - full chart reset");
+            (webRef.current as any)?.postMessage?.(
+              JSON.stringify({ cmd: "setData", data: series, autoFit: true })
+            );
+            lastPushedTimeRef.current = latest.time;
+            lastSpacingRef.current = newSpacing;
+            lastLengthRef.current = series.length;
+            lastFirstTimeRef.current = newFirst;
+            lastUpdateTimeRef.current = Date.now();
+            return;
+          }
 
           const spacingChanged =
             prevSpacing != null &&
@@ -1335,13 +1347,33 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                 } catch (_) {}
               } else if (msg?.visibleRange && onVisibleRangeChange) {
                 onVisibleRangeChange(msg.visibleRange);
-              } else if (
-                msg?.edgeRequest &&
-                typeof onEdgeRequest === "function"
-              ) {
-                try {
-                  onEdgeRequest(msg.edgeRequest);
-                } catch (_) {}
+              } else if (msg?.loadMoreData && onLoadMoreData) {
+                // Handle infinite history - exactly like TradingView example
+                onLoadMoreData(msg.loadMoreData.numberOfBars)
+                  .then((newData) => {
+                    if (newData?.length) {
+                      // Convert to chart format and send back with delay (like TradingView example)
+                      const chartData = newData.map((d) => ({
+                        time: Math.floor(d.time / 1000),
+                        open: d.open,
+                        high: d.high,
+                        low: d.low,
+                        close: d.close,
+                        volume: d.volume ?? 0,
+                      }));
+
+                      setTimeout(() => {
+                        (webRef.current as any)?.postMessage?.(
+                          JSON.stringify({
+                            cmd: "setData",
+                            data: chartData,
+                            autoFit: false,
+                          })
+                        );
+                      }, 250); // Add loading delay like TradingView example
+                    }
+                  })
+                  .catch((e) => console.warn("Load more data failed:", e));
               } else {
                 console.log("LightweightCandles WebView message:", msg);
               }

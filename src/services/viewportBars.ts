@@ -107,6 +107,29 @@ function clampRange(r: Range): Range {
   return { min: Math.min(r.min, r.max), max: Math.max(r.min, r.max) };
 }
 
+// Choose an effective timeframe for a given visible/window span (TradingView-like)
+// This lets us automatically step up/down resolution for long/short ranges.
+function pickEffectiveTimeframeForSpan(
+  requestedTf: ExtendedTimeframe,
+  spanMs: number
+): ExtendedTimeframe {
+  const hour = 60 * 60 * 1000;
+  const day = 24 * hour;
+
+  // When zooming/panning far, fetch coarser frames to keep performance snappy
+  if (spanMs <= 3 * hour) return "1m";
+  if (spanMs <= 12 * hour) return "3m";
+  if (spanMs <= 2 * day) return "5m";
+  if (spanMs <= 7 * day) return "15m";
+  if (spanMs <= 21 * day) return "30m";
+  if (spanMs <= 90 * day) return "1h";
+  if (spanMs <= 180 * day) return "2h";
+  if (spanMs <= 365 * day) return "4h";
+  if (spanMs <= 2 * 365 * day) return "1D";
+  if (spanMs <= 5 * 365 * day) return "1W";
+  return "1M";
+}
+
 // Calculate pan velocity for predictive loading
 function calculatePanVelocity(entry: Entry, currentRange: Range): PanVelocity {
   const now = Date.now();
@@ -273,18 +296,42 @@ export function planSeamlessViewport(
     },
   });
 
-  // Initial load: load viewport + both buffers
+  // Initial load: load viewport + reasonable buffers (don't request massive ranges)
   if (!e.loadedRange) {
-    plan.backfillFrom = idealBuffers.left.start;
-    plan.backfillTo = idealBuffers.right.end;
+    const now = Date.now();
+
+    // For initial load, use the original buffer calculation but cap the range
+    // This prevents requesting months/years of data at once
+    let fromTime = idealBuffers.left.start;
+    let toTime = idealBuffers.right.end;
+
+    // Cap the initial load to a reasonable timeframe based on the timeframe type
+    const { base, group } = mapExtendedTimeframe(tf);
+    const baseMs = resolutionToMs(base);
+    const maxInitialBars = 2000; // Reasonable limit for initial load
+    const maxInitialSpanMs = baseMs * group * maxInitialBars;
+
+    // If the calculated range is too large, focus on recent data
+    if (toTime - fromTime > maxInitialSpanMs) {
+      // For large ranges, load recent data + some history
+      toTime = Math.max(r.max, now + 60 * 60 * 1000); // Viewport max or current time + 1 hour
+      fromTime = toTime - maxInitialSpanMs; // Go back by max span
+    }
+
+    plan.backfillFrom = fromTime;
+    plan.backfillTo = toTime;
     plan.priority = "both";
 
-    console.log(`🚀 Initial seamless load planned:`, {
+    console.log(`🚀 Initial seamless load planned (capped range):`, {
       from: new Date(plan.backfillFrom).toISOString(),
       to: new Date(plan.backfillTo).toISOString(),
+      currentTime: new Date(now).toISOString(),
       spanDays: Math.round(
         (plan.backfillTo - plan.backfillFrom) / (24 * 60 * 60 * 1000)
       ),
+      maxBars: maxInitialBars,
+      wasRangeCapped:
+        idealBuffers.right.end - idealBuffers.left.start > maxInitialSpanMs,
     });
 
     return plan;
@@ -300,9 +347,32 @@ export function planSeamlessViewport(
   const rightProximity =
     (e.loadedRange.max - r.max) / (e.loadedRange.max - e.loadedRange.min);
 
+  // Debug logging for edge detection
+  console.log(`🔍 Edge detection debug for ${symbol}:${tf}:`, {
+    viewport: {
+      min: new Date(r.min).toISOString(),
+      max: new Date(r.max).toISOString(),
+    },
+    loadedRange: {
+      min: new Date(e.loadedRange.min).toISOString(),
+      max: new Date(e.loadedRange.max).toISOString(),
+    },
+    idealBuffers: {
+      leftStart: new Date(idealBuffers.left.start).toISOString(),
+      rightEnd: new Date(idealBuffers.right.end).toISOString(),
+    },
+    needsLeftExtension,
+    needsRightExtension,
+    leftProximity: leftProximity.toFixed(3),
+    rightProximity: rightProximity.toFixed(3),
+    panDirection: panVelocity.direction,
+    panSpeed: panVelocity.speed.toFixed(2),
+  });
+
+  // Very aggressive left extension to ensure historical data is accessible
   if (
     needsLeftExtension &&
-    (panVelocity.direction === "left" || leftProximity < 0.3)
+    (panVelocity.direction === "left" || leftProximity < 0.8) // Much more aggressive: 0.8 instead of 0.5
   ) {
     const requestId = `left-${idealBuffers.left.start}-${e.loadedRange.min}`;
     if (!e.pendingRequests.has(requestId)) {
@@ -315,7 +385,48 @@ export function planSeamlessViewport(
         to: new Date(plan.backfillTo).toISOString(),
         reason:
           panVelocity.direction === "left" ? "pan-direction" : "proximity",
-        proximity: leftProximity.toFixed(2),
+        proximity: leftProximity.toFixed(3),
+        trigger: "aggressive-left-extension",
+      });
+    } else {
+      console.log(`🚀 Left extension skipped - already pending:`, requestId);
+    }
+  }
+
+  // Additional check: If user is viewing historical data, be more aggressive about loading older data
+  const now = Date.now();
+  const isViewingHistoricalData = r.max < now - 7 * 24 * 60 * 60 * 1000; // More than 7 days old
+
+  if (isViewingHistoricalData && needsLeftExtension && !plan.backfillFrom) {
+    const historicalRequestId = `historical-${idealBuffers.left.start}-${e.loadedRange.min}`;
+    if (!e.pendingRequests.has(historicalRequestId)) {
+      plan.backfillFrom = idealBuffers.left.start;
+      plan.backfillTo = e.loadedRange.min - 1;
+      plan.priority = "left";
+
+      console.log(`🚀 Historical data extension planned:`, {
+        from: new Date(plan.backfillFrom).toISOString(),
+        to: new Date(plan.backfillTo).toISOString(),
+        reason: "viewing-historical-data",
+        daysFromNow: Math.round((now - r.max) / (24 * 60 * 60 * 1000)),
+      });
+    }
+  }
+
+  // Fallback: If we're very close to the left edge and no plan yet, force load older data
+  if (!plan.backfillFrom && needsLeftExtension && leftProximity < 0.9) {
+    const fallbackRequestId = `fallback-left-${idealBuffers.left.start}-${e.loadedRange.min}`;
+    if (!e.pendingRequests.has(fallbackRequestId)) {
+      plan.backfillFrom = idealBuffers.left.start;
+      plan.backfillTo = e.loadedRange.min - 1;
+      plan.priority = "left";
+
+      console.log(`🚀 FALLBACK left extension (force load):`, {
+        from: new Date(plan.backfillFrom).toISOString(),
+        to: new Date(plan.backfillTo).toISOString(),
+        reason: "fallback-force-load",
+        proximity: leftProximity.toFixed(3),
+        message: "Forcing historical data load to prevent getting stuck",
       });
     }
   }
@@ -341,6 +452,29 @@ export function planSeamlessViewport(
     }
   }
 
+  // Special case: Always try to extend to current time if we're close to the right edge
+  // This ensures we don't get stuck with old data
+  // (reuse 'now' variable from above)
+  const isNearCurrentTime =
+    e.loadedRange && now - e.loadedRange.max < 24 * 60 * 60 * 1000; // Within 24 hours
+
+  if (isNearCurrentTime && rightProximity < 0.5 && !plan.prefetchFrom) {
+    const currentTimeRequestId = `current-time-${e.loadedRange.max}-${now}`;
+    if (!e.pendingRequests.has(currentTimeRequestId)) {
+      plan.prefetchFrom = e.loadedRange.max + 1;
+      plan.prefetchTo = now + 60 * 60 * 1000; // Extend 1 hour into future
+      plan.priority = "right";
+
+      console.log(`🚀 Current time extension planned:`, {
+        from: new Date(plan.prefetchFrom).toISOString(),
+        to: new Date(plan.prefetchTo).toISOString(),
+        reason: "ensure-current-data",
+        timeSinceLastData:
+          Math.round((now - e.loadedRange.max) / (60 * 1000)) + " minutes",
+      });
+    }
+  }
+
   return plan;
 }
 
@@ -351,23 +485,28 @@ export async function fetchWindow(
   toMs: number,
   signal?: AbortSignal
 ): Promise<Candle[]> {
+  const spanMs = Math.abs(toMs - fromMs);
+  const effectiveTf = pickEffectiveTimeframeForSpan(tf, spanMs);
+
   console.log(`🚀 Seamless fetch for ${symbol}:${tf}`, {
     from: new Date(fromMs).toISOString(),
     to: new Date(toMs).toISOString(),
     spanDays: Math.round(Math.abs(toMs - fromMs) / (24 * 60 * 60 * 1000)),
+    effectiveTf,
   });
 
   try {
+    // Fetch using an effective timeframe based on the requested window span
     const candles = await fetchCandlesForTimeframeWindow(
       symbol,
-      tf,
+      effectiveTf,
       fromMs,
       toMs,
       undefined,
       signal
     );
 
-    console.log(`✅ Seamless fetch successful for ${symbol}:${tf}`, {
+    console.log(`✅ Seamless fetch successful for ${symbol}:${effectiveTf}`, {
       candlesReceived: candles.length,
       firstCandle:
         candles.length > 0 ? new Date(candles[0].time).toISOString() : null,
@@ -439,17 +578,78 @@ export async function ensureSeamlessRange(
       end: Math.max(fetchFrom, fetchTo),
       data: data.sort((a, b) => a.time - b.time),
     };
+
+    // Log data gaps for debugging
+    if (data.length === 0) {
+      console.warn(`🚀 No data returned for range:`, {
+        symbol,
+        tf,
+        from: new Date(fetchFrom).toISOString(),
+        to: new Date(fetchTo).toISOString(),
+        message: "This might be a weekend/holiday or data gap",
+      });
+    } else {
+      const dataStart = data[0].time;
+      const dataEnd = data[data.length - 1].time;
+      const requestedStart = Math.min(fetchFrom, fetchTo);
+      const requestedEnd = Math.max(fetchFrom, fetchTo);
+
+      if (
+        dataStart > requestedStart + 60 * 60 * 1000 ||
+        dataEnd < requestedEnd - 60 * 60 * 1000
+      ) {
+        console.warn(`🚀 Data gap detected:`, {
+          symbol,
+          tf,
+          requested: {
+            from: new Date(requestedStart).toISOString(),
+            to: new Date(requestedEnd).toISOString(),
+          },
+          received: {
+            from: new Date(dataStart).toISOString(),
+            to: new Date(dataEnd).toISOString(),
+            count: data.length,
+          },
+        });
+      }
+    }
+
     entry.chunks = mergeChunks(entry.chunks, chunk);
 
-    // Update loaded range based on actual data boundaries
+    // Update loaded range based on requested range, not just data boundaries
+    // This ensures we track what we've attempted to fetch, even if there are data gaps
     const allData = getSeries(symbol, tf);
-    if (allData.length > 0) {
+    if (entry.loadedRange) {
+      // Extend existing loaded range to include the newly fetched range
       entry.loadedRange = {
-        min: allData[0].time,
-        max: allData[allData.length - 1].time,
+        min: Math.min(entry.loadedRange.min, fetchFrom),
+        max: Math.max(entry.loadedRange.max, fetchTo),
       };
     } else {
-      entry.loadedRange = { min: chunk.start, max: chunk.end };
+      // Initial load - set to the requested range
+      entry.loadedRange = {
+        min: fetchFrom,
+        max: fetchTo,
+      };
+    }
+
+    // Log the actual data vs requested range for debugging
+    if (allData.length > 0) {
+      console.log(`🚀 Data vs Range comparison:`, {
+        requested: {
+          min: new Date(fetchFrom).toISOString(),
+          max: new Date(fetchTo).toISOString(),
+        },
+        actualData: {
+          min: new Date(allData[0].time).toISOString(),
+          max: new Date(allData[allData.length - 1].time).toISOString(),
+          count: allData.length,
+        },
+        loadedRange: {
+          min: new Date(entry.loadedRange.min).toISOString(),
+          max: new Date(entry.loadedRange.max).toISOString(),
+        },
+      });
     }
 
     entry.status = "idle";
@@ -523,6 +723,7 @@ export function clearViewportCache(
       }
     }
     store.clear();
+    console.log("🚀 Cleared all viewport cache");
     return;
   }
 
@@ -537,11 +738,13 @@ export function clearViewportCache(
         } catch {}
       }
       store.delete(key);
+      console.log(`🚀 Cleared viewport cache for ${symbol}:${timeframe}`);
     }
     return;
   }
 
   // Clear all entries for this symbol
+  let cleared = 0;
   for (const k of Array.from(store.keys())) {
     if (k.startsWith(`${symbol}:`)) {
       const entry = store.get(k as BarsKey);
@@ -551,8 +754,21 @@ export function clearViewportCache(
         } catch {}
       }
       store.delete(k as BarsKey);
+      cleared++;
     }
   }
+  if (cleared > 0) {
+    console.log(`🚀 Cleared ${cleared} viewport cache entries for ${symbol}`);
+  }
+}
+
+// New function to force reload historical data
+export function forceHistoricalReload(
+  symbol: string,
+  timeframe: ExtendedTimeframe
+) {
+  console.log(`🚀 Forcing historical reload for ${symbol}:${timeframe}`);
+  clearViewportCache(symbol, timeframe);
 }
 
 export function getLoadedRange(

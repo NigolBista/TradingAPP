@@ -36,6 +36,7 @@ import {
   fetchCandles,
   type Candle,
   fetchCandlesForTimeframe,
+  fetchCandlesForTimeframeWindow,
 } from "../services/marketProviders";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import realtimeRouter from "../services/realtimeRouter";
@@ -52,13 +53,7 @@ import {
 } from "../services/newsProviders";
 import { realtimeDataManager } from "../services/realtimeDataManager";
 import { smartCandleManager } from "../services/smartCandleManager";
-import {
-  ensureSeamlessRange,
-  getLoadedRange,
-  getSeries,
-  planSeamlessViewport,
-  clearViewportCache,
-} from "../services/viewportBars";
+// Removed viewportBars dependency; using simple lazy loading on visible range change
 
 import { type SignalSummary } from "../services/signalEngine";
 import NewsList from "../components/insights/NewsList";
@@ -400,6 +395,46 @@ export default function StockDetailScreen() {
     useState(false);
   const [showChartTypeBottomSheet, setShowChartTypeBottomSheet] =
     useState(false);
+
+  // Clear cache and reset chart when symbol changes
+  useEffect(() => {
+    console.log("🔄 Symbol changed to:", symbol, "- clearing viewport cache");
+
+    // Reset any local caches if needed (viewport cache removed)
+
+    // Also clear the smart candle manager cache to ensure fresh data
+    try {
+      // Force a complete reset
+      smartCandleManager.clearCache?.(symbol);
+    } catch (e) {
+      console.warn("Could not clear smart candle cache:", e);
+    }
+
+    // Reset chart data to prevent stale data from previous symbol
+    setDailySeries([]);
+
+    // Clear other symbol-specific state
+    setAnalysis(null);
+    setNews([]);
+    setSummary(null);
+    setCachedSignal(null);
+
+    // Load new data
+    load();
+  }, [symbol]);
+
+  // Clear cache and reload chart when timeframe changes
+  useEffect(() => {
+    console.log("🔄 Timeframe changed to:", extendedTf, "for symbol:", symbol);
+
+    // Reset local view state
+
+    // Reset chart data to force reload
+    setDailySeries([]);
+
+    // Load new timeframe data
+    load();
+  }, [extendedTf]);
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
   const [unifiedBottomSheetTab, setUnifiedBottomSheetTab] = useState<
     "timeframe" | "chartType"
@@ -409,25 +444,10 @@ export default function StockDetailScreen() {
     null
   );
   const [sentimentLoading, setSentimentLoading] = useState(false);
-  const visibleDomainRef = React.useRef<{
-    fromMs: number;
-    toMs: number;
-  } | null>(null);
-
   const barSpacingRef = React.useRef<number>(60_000);
 
   // Batch edge requests from WebView to avoid excessive API calls while panning
-  const edgeBatchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
-    null
-  );
-  const lastEdgePayloadRef = React.useRef<{
-    visible: { fromMs: number; toMs: number };
-    dataset: { minMs: number; maxMs: number };
-    requests: Array<{
-      side: "left" | "right";
-      requestWindow: { fromMs: number; toMs: number };
-    }>;
-  } | null>(null);
+  // Removed edge batching state; no longer needed with simple lazy loading
 
   function timeframeSpacingMs(tf: ExtendedTimeframe): number {
     switch (tf) {
@@ -1115,174 +1135,37 @@ export default function StockDetailScreen() {
     });
   }
 
-  // Debounced viewport-driven fetching
-  const handleVisibleRangeChange = useMemo(() => {
-    let t: any;
-    return (range: { fromMs: number; toMs: number }) => {
-      if (!range || !range.fromMs || !range.toMs) return;
-      visibleDomainRef.current = { fromMs: range.fromMs, toMs: range.toMs };
-      if (t) clearTimeout(t);
-      t = setTimeout(async () => {
-        try {
-          const domain = {
-            min: Math.min(range.fromMs, range.toMs),
-            max: Math.max(range.fromMs, range.toMs),
-          };
-          const plan = planSeamlessViewport(symbol, extendedTf, domain);
-          const leftNeed = plan.backfillFrom != null && plan.backfillTo != null;
-          const rightNeed =
-            plan.prefetchFrom != null && plan.prefetchTo != null;
+  // Infinite history handler - TradingView style
+  const handleLoadMoreData = useCallback(
+    async (numberOfBars: number) => {
+      if (!dailySeries.length) return [];
 
-          // Prioritize left (historical) data over right (future) data
-          if (leftNeed) {
-            const viewportSpanMs = Math.max(1, domain.max - domain.min);
-            const to = plan.backfillTo!;
-            const from = Math.max(plan.backfillFrom!, to - viewportSpanMs);
-            const leftData = await ensureSeamlessRange(
-              symbol,
-              extendedTf,
-              from,
-              to,
-              "left"
-            );
-            if (leftData && leftData.length) {
-              const older = toLWC(leftData);
-              setDailySeries((prev) => {
-                if (!prev || prev.length === 0) return older;
-                const prevFirst = prev[0]?.time ?? Number.POSITIVE_INFINITY;
-                const delta = older.filter(
-                  (c) => typeof c.time === "number" && c.time < prevFirst
-                );
-                return delta.length > 0 ? [...delta, ...prev] : prev;
-              });
-            }
-          }
+      // Get the earliest date from current data
+      const earliestTime = dailySeries[0].time;
+      const to = earliestTime - 1;
 
-          if (rightNeed) {
-            const viewportSpanMs = Math.max(1, domain.max - domain.min);
-            const from = plan.prefetchFrom!;
-            const to = Math.min(plan.prefetchTo!, from + viewportSpanMs);
-            const rightData = await ensureSeamlessRange(
-              symbol,
-              extendedTf,
-              from,
-              to,
-              "right"
-            );
-            if (rightData && rightData.length) {
-              const newer = toLWC(rightData);
-              setDailySeries((prev) => {
-                if (!prev || prev.length === 0) return newer;
-                const prevLast =
-                  prev[prev.length - 1]?.time ?? Number.NEGATIVE_INFINITY;
-                const delta = newer.filter(
-                  (c) => typeof c.time === "number" && c.time > prevLast
-                );
-                return delta.length > 0 ? [...prev, ...delta] : prev;
-              });
-            }
-          }
-        } catch (e) {
-          console.warn("Viewport fetch failed:", e);
-          // Try to get existing data on error
-          const existing = getSeries(symbol, extendedTf);
-          if (existing && existing.length) setDailySeries(toLWC(existing));
-        }
-      }, 50); // Fast response for TradingView-style seamless experience
-    };
-  }, [symbol, extendedTf]);
+      // Calculate how much historical data to fetch based on timeframe
+      const timeframeMs = timeframeSpacingMs(extendedTf);
+      const from = Math.max(0, to - numberOfBars * timeframeMs);
 
-  // Edge request handler from the chart for seamless pan/zoom loading
-  const handleEdgeRequest = useCallback(
-    async (payload: {
-      visible: { fromMs: number; toMs: number };
-      dataset: { minMs: number; maxMs: number };
-      requests: Array<{
-        side: "left" | "right";
-        requestWindow: { fromMs: number; toMs: number };
-      }>;
-    }) => {
-      try {
-        // Save the latest payload and schedule a single batched execution
-        lastEdgePayloadRef.current = payload;
-        if (edgeBatchTimerRef.current) {
-          clearTimeout(edgeBatchTimerRef.current);
-        }
-        edgeBatchTimerRef.current = setTimeout(async () => {
-          const p = lastEdgePayloadRef.current;
-          lastEdgePayloadRef.current = null;
-          edgeBatchTimerRef.current = null;
-          try {
-            if (!p || !p.requests || p.requests.length === 0) return;
-            // Prefer processing one side to avoid overlapping ranges; the WebView
-            // already sends a prioritized list (usually left first when near both)
-            const req = p.requests[0];
-            const domain = {
-              min: Math.min(p.visible.fromMs, p.visible.toMs),
-              max: Math.max(p.visible.fromMs, p.visible.toMs),
-            };
-            const viewportSpanMs = Math.max(1, domain.max - domain.min);
-            let fetchFrom = req.requestWindow.fromMs;
-            let fetchTo = req.requestWindow.toMs;
-            if (req.side === "left") {
-              const to = fetchTo;
-              const from = Math.max(fetchFrom, to - viewportSpanMs);
-              fetchFrom = from;
-              fetchTo = to;
-            } else if (req.side === "right") {
-              const from = fetchFrom;
-              const to = Math.min(fetchTo, from + viewportSpanMs);
-              fetchFrom = from;
-              fetchTo = to;
-            }
-
-            const range = await ensureSeamlessRange(
-              symbol,
-              extendedTf,
-              fetchFrom,
-              fetchTo,
-              req.side === "left" ? "left" : "right"
-            );
-            if (range && range.length) {
-              const lwcRange = toLWC(range);
-              if (req.side === "left") {
-                // Delta-prepend older candles only
-                setDailySeries((prev) => {
-                  if (!prev || prev.length === 0) return lwcRange;
-                  const prevFirst = prev[0]?.time ?? Number.POSITIVE_INFINITY;
-                  const delta = lwcRange.filter(
-                    (c) => typeof c.time === "number" && c.time < prevFirst
-                  );
-                  return delta.length > 0 ? [...delta, ...prev] : prev;
-                });
-              } else if (req.side === "right") {
-                // Delta-append newer candles only
-                setDailySeries((prev) => {
-                  if (!prev || prev.length === 0) return lwcRange;
-                  const prevLast =
-                    prev[prev.length - 1]?.time ?? Number.NEGATIVE_INFINITY;
-                  const delta = lwcRange.filter(
-                    (c) => typeof c.time === "number" && c.time > prevLast
-                  );
-                  return delta.length > 0 ? [...prev, ...delta] : prev;
-                });
-              } else {
-                // Fallback: stitch full range
-                const stitched = getSeries(symbol, extendedTf);
-                if (stitched && stitched.length)
-                  setDailySeries(toLWC(stitched));
-              }
-            }
-          } catch (e) {
-            console.warn("Edge fetch failed:", e);
-          }
-        }, 50); // Ultra-fast response for seamless TradingView-style experience
-      } catch (e) {
-        console.warn("Edge fetch schedule failed:", e);
+      const olderData = await fetchCandlesForTimeframeWindow(
+        symbol,
+        extendedTf,
+        from,
+        to
+      );
+      if (olderData?.length) {
+        // Prepend to existing data and return the full dataset (like TradingView example)
+        const updatedData = [...toLWC(olderData), ...dailySeries];
+        setDailySeries(updatedData);
+        return updatedData;
       }
+      return dailySeries;
     },
-    [symbol, extendedTf]
+    [symbol, extendedTf, dailySeries]
   );
+
+  // Removed custom edge request logic; lazy loading handled in visible range handler
 
   // Load sentiment stats in background
   async function loadSentimentStats() {
@@ -1349,8 +1232,7 @@ export default function StockDetailScreen() {
     setExtendedTf(tf);
     setDefaultTimeframe(tf); // Save as user's preferred default
 
-    // Clear viewport cache for the old timeframe to prevent stale data
-    clearViewportCache(symbol);
+    // Reset view state for new timeframe
 
     // Update the real-time manager with new timeframe
     realtimeDataManager.updateTimeframe(tf);
@@ -1835,8 +1717,7 @@ export default function StockDetailScreen() {
                   ? todayChange >= 0
                   : undefined
               }
-              onVisibleRangeChange={handleVisibleRangeChange}
-              onEdgeRequest={handleEdgeRequest}
+              onLoadMoreData={handleLoadMoreData}
             />
           </View>
 

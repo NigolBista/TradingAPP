@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
   View,
   Pressable,
@@ -19,12 +19,7 @@ import LightweightCandles, {
   TradePlanOverlay,
   type LightweightCandlesHandle,
 } from "../components/charts/LightweightCandles";
-import {
-  ensureSeamlessRange,
-  getSeries,
-  planSeamlessViewport,
-  clearViewportCache,
-} from "../services/viewportBars";
+// Removed viewportBars usage; we'll lazy-load via timeRangeChange
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
@@ -37,6 +32,7 @@ import { useTimeframeStore } from "../store/timeframeStore";
 import {
   fetchCandlesForTimeframe,
   fetchCandles,
+  fetchCandlesForTimeframeWindow,
 } from "../services/marketProviders";
 import { fetchNews as fetchSymbolNews } from "../services/newsProviders";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
@@ -83,6 +79,14 @@ export default function ChartFullScreen() {
     useTimeframeStore();
   const chartRef = React.useRef<LightweightCandlesHandle>(null);
   const barSpacingRef = React.useRef<number>(60_000);
+
+  // State variables
+  const [data, setData] = useState<LWCDatum[]>(initialDataParam || []);
+  const [loading, setLoading] = useState(false);
+  const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
+    (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
+  );
+  const [stockName, setStockName] = useState<string>("");
   function timeframeSpacingMs(tf: ExtendedTimeframe): number {
     switch (tf) {
       case "1m":
@@ -204,6 +208,7 @@ export default function ChartFullScreen() {
     };
   }, [symbol, extendedTf]);
 
+  // Additional state variables
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
   const [bottomSheetAnim] = useState(new Animated.Value(0));
   const [analyzing, setAnalyzing] = useState<boolean>(false);
@@ -428,13 +433,42 @@ export default function ChartFullScreen() {
     }
   }
 
+  // Infinite history handler - TradingView style
+  const handleLoadMoreData = useCallback(
+    async (numberOfBars: number) => {
+      if (!data.length) return [];
+
+      // Get the earliest date from current data
+      const earliestTime = data[0].time;
+      const to = earliestTime - 1;
+
+      // Calculate how much historical data to fetch based on timeframe
+      const timeframeMs = timeframeSpacingMs(extendedTf);
+      const from = Math.max(0, to - numberOfBars * timeframeMs);
+
+      const olderData = await fetchCandlesForTimeframeWindow(
+        symbol,
+        extendedTf,
+        from,
+        to
+      );
+      if (olderData?.length) {
+        // Prepend to existing data and return the full dataset (like TradingView example)
+        const updatedData = [...olderData, ...data];
+        setData(updatedData);
+        return updatedData;
+      }
+      return data;
+    },
+    [symbol, extendedTf, data]
+  );
+
   // Handle timeframe change and save as default
   async function handleTimeframeChange(tf: ExtendedTimeframe) {
     setExtendedTf(tf);
     setDefaultTimeframe(tf); // Save as user's preferred default
 
-    // Clear viewport cache for the old timeframe to prevent stale data
-    clearViewportCache(symbol);
+    // Reset view state for new timeframe
 
     // Immediately fetch data for the new timeframe using smart candle manager
     try {
@@ -1036,7 +1070,7 @@ export default function ChartFullScreen() {
             forcePositive={typeof dayUp === "boolean" ? dayUp : undefined}
             levels={effectiveLevels}
             tradePlan={currentTradePlan}
-            onVisibleRangeChange={handleVisibleRangeChange}
+            onLoadMoreData={handleLoadMoreData}
           />
         )}
         <Pressable
