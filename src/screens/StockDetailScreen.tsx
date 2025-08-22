@@ -53,10 +53,10 @@ import {
 import { realtimeDataManager } from "../services/realtimeDataManager";
 import { smartCandleManager } from "../services/smartCandleManager";
 import {
-  ensureRange,
+  ensureSeamlessRange,
   getLoadedRange,
   getSeries,
-  planViewportFetch,
+  planSeamlessViewport,
   clearViewportCache,
 } from "../services/viewportBars";
 
@@ -415,6 +415,19 @@ export default function StockDetailScreen() {
   } | null>(null);
 
   const barSpacingRef = React.useRef<number>(60_000);
+
+  // Batch edge requests from WebView to avoid excessive API calls while panning
+  const edgeBatchTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+  const lastEdgePayloadRef = React.useRef<{
+    visible: { fromMs: number; toMs: number };
+    dataset: { minMs: number; maxMs: number };
+    requests: Array<{
+      side: "left" | "right";
+      requestWindow: { fromMs: number; toMs: number };
+    }>;
+  } | null>(null);
 
   function timeframeSpacingMs(tf: ExtendedTimeframe): number {
     switch (tf) {
@@ -1115,48 +1128,67 @@ export default function StockDetailScreen() {
             min: Math.min(range.fromMs, range.toMs),
             max: Math.max(range.fromMs, range.toMs),
           };
-          const plan = planViewportFetch(symbol, extendedTf, domain);
+          const plan = planSeamlessViewport(symbol, extendedTf, domain);
           const leftNeed = plan.backfillFrom != null && plan.backfillTo != null;
           const rightNeed =
             plan.prefetchFrom != null && plan.prefetchTo != null;
 
           // Prioritize left (historical) data over right (future) data
           if (leftNeed) {
-            const leftData = await ensureRange(
+            const viewportSpanMs = Math.max(1, domain.max - domain.min);
+            const to = plan.backfillTo!;
+            const from = Math.max(plan.backfillFrom!, to - viewportSpanMs);
+            const leftData = await ensureSeamlessRange(
               symbol,
               extendedTf,
-              plan.backfillFrom!,
-              plan.backfillTo!,
-              domain
+              from,
+              to,
+              "left"
             );
             if (leftData && leftData.length) {
-              setDailySeries(toLWC(leftData));
+              const older = toLWC(leftData);
+              setDailySeries((prev) => {
+                if (!prev || prev.length === 0) return older;
+                const prevFirst = prev[0]?.time ?? Number.POSITIVE_INFINITY;
+                const delta = older.filter(
+                  (c) => typeof c.time === "number" && c.time < prevFirst
+                );
+                return delta.length > 0 ? [...delta, ...prev] : prev;
+              });
             }
           }
 
           if (rightNeed) {
-            const rightData = await ensureRange(
+            const viewportSpanMs = Math.max(1, domain.max - domain.min);
+            const from = plan.prefetchFrom!;
+            const to = Math.min(plan.prefetchTo!, from + viewportSpanMs);
+            const rightData = await ensureSeamlessRange(
               symbol,
               extendedTf,
-              plan.prefetchFrom!,
-              plan.prefetchTo!,
-              domain
+              from,
+              to,
+              "right"
             );
             if (rightData && rightData.length) {
-              setDailySeries(toLWC(rightData));
+              const newer = toLWC(rightData);
+              setDailySeries((prev) => {
+                if (!prev || prev.length === 0) return newer;
+                const prevLast =
+                  prev[prev.length - 1]?.time ?? Number.NEGATIVE_INFINITY;
+                const delta = newer.filter(
+                  (c) => typeof c.time === "number" && c.time > prevLast
+                );
+                return delta.length > 0 ? [...prev, ...delta] : prev;
+              });
             }
           }
-
-          // Always update with complete stitched series
-          const stitched = getSeries(symbol, extendedTf);
-          if (stitched && stitched.length) setDailySeries(toLWC(stitched));
         } catch (e) {
           console.warn("Viewport fetch failed:", e);
           // Try to get existing data on error
           const existing = getSeries(symbol, extendedTf);
           if (existing && existing.length) setDailySeries(toLWC(existing));
         }
-      }, 300); // Increased debounce to reduce API calls during viewport changes
+      }, 50); // Fast response for TradingView-style seamless experience
     };
   }, [symbol, extendedTf]);
 
@@ -1171,25 +1203,82 @@ export default function StockDetailScreen() {
       }>;
     }) => {
       try {
-        if (!payload || !payload.requests || payload.requests.length === 0)
-          return;
-        // Prefer processing one side per tick to avoid cancelation in ensureRange
-        const req = payload.requests[0];
-        const domain = {
-          min: Math.min(payload.visible.fromMs, payload.visible.toMs),
-          max: Math.max(payload.visible.fromMs, payload.visible.toMs),
-        };
-        await ensureRange(
-          symbol,
-          extendedTf,
-          req.requestWindow.fromMs,
-          req.requestWindow.toMs,
-          domain
-        );
-        const stitched = getSeries(symbol, extendedTf);
-        if (stitched && stitched.length) setDailySeries(toLWC(stitched));
+        // Save the latest payload and schedule a single batched execution
+        lastEdgePayloadRef.current = payload;
+        if (edgeBatchTimerRef.current) {
+          clearTimeout(edgeBatchTimerRef.current);
+        }
+        edgeBatchTimerRef.current = setTimeout(async () => {
+          const p = lastEdgePayloadRef.current;
+          lastEdgePayloadRef.current = null;
+          edgeBatchTimerRef.current = null;
+          try {
+            if (!p || !p.requests || p.requests.length === 0) return;
+            // Prefer processing one side to avoid overlapping ranges; the WebView
+            // already sends a prioritized list (usually left first when near both)
+            const req = p.requests[0];
+            const domain = {
+              min: Math.min(p.visible.fromMs, p.visible.toMs),
+              max: Math.max(p.visible.fromMs, p.visible.toMs),
+            };
+            const viewportSpanMs = Math.max(1, domain.max - domain.min);
+            let fetchFrom = req.requestWindow.fromMs;
+            let fetchTo = req.requestWindow.toMs;
+            if (req.side === "left") {
+              const to = fetchTo;
+              const from = Math.max(fetchFrom, to - viewportSpanMs);
+              fetchFrom = from;
+              fetchTo = to;
+            } else if (req.side === "right") {
+              const from = fetchFrom;
+              const to = Math.min(fetchTo, from + viewportSpanMs);
+              fetchFrom = from;
+              fetchTo = to;
+            }
+
+            const range = await ensureSeamlessRange(
+              symbol,
+              extendedTf,
+              fetchFrom,
+              fetchTo,
+              req.side === "left" ? "left" : "right"
+            );
+            if (range && range.length) {
+              const lwcRange = toLWC(range);
+              if (req.side === "left") {
+                // Delta-prepend older candles only
+                setDailySeries((prev) => {
+                  if (!prev || prev.length === 0) return lwcRange;
+                  const prevFirst = prev[0]?.time ?? Number.POSITIVE_INFINITY;
+                  const delta = lwcRange.filter(
+                    (c) => typeof c.time === "number" && c.time < prevFirst
+                  );
+                  return delta.length > 0 ? [...delta, ...prev] : prev;
+                });
+              } else if (req.side === "right") {
+                // Delta-append newer candles only
+                setDailySeries((prev) => {
+                  if (!prev || prev.length === 0) return lwcRange;
+                  const prevLast =
+                    prev[prev.length - 1]?.time ?? Number.NEGATIVE_INFINITY;
+                  const delta = lwcRange.filter(
+                    (c) => typeof c.time === "number" && c.time > prevLast
+                  );
+                  return delta.length > 0 ? [...prev, ...delta] : prev;
+                });
+              } else {
+                // Fallback: stitch full range
+                const stitched = getSeries(symbol, extendedTf);
+                if (stitched && stitched.length)
+                  setDailySeries(toLWC(stitched));
+              }
+            }
+          } catch (e) {
+            console.warn("Edge fetch failed:", e);
+          }
+        }, 50); // Ultra-fast response for seamless TradingView-style experience
       } catch (e) {
-        console.warn("Edge fetch failed:", e);
+        console.warn("Edge fetch schedule failed:", e);
       }
     },
     [symbol, extendedTf]

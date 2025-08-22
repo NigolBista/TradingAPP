@@ -60,7 +60,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
       openaiApiKey: process.env.OPENAI_API_KEY,
       fredApiKey: process.env.FRED_API_KEY,
-      marketProvider: process.env.MARKET_PROVIDER || "marketData",
+      marketProvider: process.env.MARKET_PROVIDER || "polygon",
       stockNewsApiKey: process.env.STOCK_NEWS_API_KEY,
       newsProvider: process.env.NEWS_PROVIDER || "stocknewsapi",
       plaidClientId: process.env.PLAID_CLIENT_ID,

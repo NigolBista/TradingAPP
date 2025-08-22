@@ -13,6 +13,12 @@ type Range = { min: number; max: number };
 
 type Chunk = { start: number; end: number; data: Candle[] };
 
+type PanVelocity = {
+  direction: "left" | "right" | "none";
+  speed: number; // pixels per second
+  timestamp: number;
+};
+
 type Entry = {
   key: BarsKey;
   loadedRange: Range | null;
@@ -20,8 +26,27 @@ type Entry = {
   status: "idle" | "fetching" | "live";
   abort?: AbortController | null;
   lastFetchTime?: number;
-  recentFetchRanges?: Array<{ start: number; end: number; timestamp: number }>;
+
+  // TradingView-style predictive loading
+  bufferZones: {
+    left: {
+      start: number;
+      end: number;
+      status: "loaded" | "loading" | "needed";
+    };
+    right: {
+      start: number;
+      end: number;
+      status: "loaded" | "loading" | "needed";
+    };
+  } | null;
+
+  // Pan velocity tracking for predictive loading
+  panHistory: PanVelocity[];
   lastViewportRange?: Range;
+
+  // Seamless loading state
+  pendingRequests: Set<string>;
 };
 
 const store = new Map<BarsKey, Entry>();
@@ -82,37 +107,86 @@ function clampRange(r: Range): Range {
   return { min: Math.min(r.min, r.max), max: Math.max(r.min, r.max) };
 }
 
-// Check if a range was recently fetched (within last 30 seconds)
-function wasRecentlyFetched(entry: Entry, start: number, end: number): boolean {
-  if (!entry.recentFetchRanges) return false;
-
+// Calculate pan velocity for predictive loading
+function calculatePanVelocity(entry: Entry, currentRange: Range): PanVelocity {
   const now = Date.now();
-  const recentThreshold = 30000; // 30 seconds
 
-  // Clean up old entries
-  entry.recentFetchRanges = entry.recentFetchRanges.filter(
-    (range) => now - range.timestamp < recentThreshold
-  );
+  if (!entry.lastViewportRange) {
+    return { direction: "none", speed: 0, timestamp: now };
+  }
 
-  // Check if requested range overlaps with any recent fetch
-  return entry.recentFetchRanges.some((range) => {
-    const overlapStart = Math.max(start, range.start);
-    const overlapEnd = Math.min(end, range.end);
-    return overlapStart < overlapEnd; // Has overlap
-  });
+  const lastRange = entry.lastViewportRange;
+  const timeDelta =
+    now - (entry.panHistory[entry.panHistory.length - 1]?.timestamp || now);
+
+  if (timeDelta === 0) {
+    return { direction: "none", speed: 0, timestamp: now };
+  }
+
+  const leftMovement = currentRange.min - lastRange.min;
+  const rightMovement = currentRange.max - lastRange.max;
+
+  // Determine primary direction and speed
+  let direction: "left" | "right" | "none" = "none";
+  let speed = 0;
+
+  if (Math.abs(leftMovement) > Math.abs(rightMovement)) {
+    direction = leftMovement < 0 ? "left" : "right";
+    speed = Math.abs(leftMovement) / timeDelta;
+  } else if (Math.abs(rightMovement) > 0) {
+    direction = rightMovement > 0 ? "right" : "left";
+    speed = Math.abs(rightMovement) / timeDelta;
+  }
+
+  return { direction, speed, timestamp: now };
 }
 
-// Record a fetch attempt
-function recordFetchAttempt(entry: Entry, start: number, end: number): void {
-  if (!entry.recentFetchRanges) entry.recentFetchRanges = [];
+// TradingView-style buffer zone calculation
+function calculateBufferZones(
+  symbol: string,
+  tf: ExtendedTimeframe,
+  viewportRange: Range,
+  panVelocity: PanVelocity
+) {
+  const { base, group } = mapExtendedTimeframe(tf);
+  const baseMs = resolutionToMs(base);
+  const viewportSpanMs = Math.max(1, viewportRange.max - viewportRange.min);
 
-  entry.recentFetchRanges.push({
-    start,
-    end,
-    timestamp: Date.now(),
-  });
+  // Base buffer size: 3x viewport span (TradingView uses large buffers)
+  let baseBufferSize = viewportSpanMs * 3;
 
-  entry.lastFetchTime = Date.now();
+  // Velocity-based adjustments (more aggressive loading in pan direction)
+  let leftBufferSize = baseBufferSize;
+  let rightBufferSize = baseBufferSize;
+
+  if (panVelocity.speed > 0) {
+    const velocityMultiplier = Math.min(3, 1 + panVelocity.speed / 1000); // Cap at 3x
+
+    if (panVelocity.direction === "left") {
+      leftBufferSize *= velocityMultiplier;
+    } else if (panVelocity.direction === "right") {
+      rightBufferSize *= velocityMultiplier;
+    }
+  }
+
+  // Ensure minimum buffer sizes based on timeframe
+  const minBufferBars = 500; // Minimum bars to buffer
+  const minBufferMs = baseMs * group * minBufferBars;
+  leftBufferSize = Math.max(leftBufferSize, minBufferMs);
+  rightBufferSize = Math.max(rightBufferSize, minBufferMs);
+
+  return {
+    left: {
+      start: viewportRange.min - leftBufferSize,
+      end: viewportRange.min,
+      status: "needed" as const,
+    },
+    right: {
+      start: viewportRange.max,
+      end: viewportRange.max + rightBufferSize,
+      status: "needed" as const,
+    },
+  };
 }
 
 export type ViewportFetchPlan = {
@@ -120,6 +194,7 @@ export type ViewportFetchPlan = {
   backfillTo?: number;
   prefetchFrom?: number;
   prefetchTo?: number;
+  priority?: "left" | "right" | "both";
 };
 
 export function getEntry(symbol: string, tf: ExtendedTimeframe): Entry {
@@ -133,8 +208,10 @@ export function getEntry(symbol: string, tf: ExtendedTimeframe): Entry {
       status: "idle",
       abort: null,
       lastFetchTime: 0,
-      recentFetchRanges: [],
+      bufferZones: null,
+      panHistory: [],
       lastViewportRange: undefined,
+      pendingRequests: new Set(),
     };
     store.set(k, e);
   }
@@ -147,115 +224,120 @@ export function getSeries(symbol: string, tf: ExtendedTimeframe): Candle[] {
   return all;
 }
 
-export function planViewportFetch(
+// TradingView-style seamless viewport management
+export function planSeamlessViewport(
   symbol: string,
   tf: ExtendedTimeframe,
-  domain: Range,
-  viewportBarsTarget = 1000 // Increased from 350 to 1000 for larger chunks
+  domain: Range
 ): ViewportFetchPlan {
   const e = getEntry(symbol, tf);
-
-  // Early exit if already fetching
-  if (e.status === "fetching") {
-    console.log(
-      `📊 Skipping fetch planning - already fetching for ${symbol}:${tf}`
-    );
-    return {};
-  }
-
   const r = clampRange(domain);
 
-  // Check if viewport has changed significantly (more than 5% of span)
-  if (e.lastViewportRange) {
-    const lastSpan = e.lastViewportRange.max - e.lastViewportRange.min;
-    const currentSpan = r.max - r.min;
-    const minChange = Math.max(lastSpan, currentSpan) * 0.05; // 5% threshold
+  // Calculate pan velocity for predictive loading
+  const panVelocity = calculatePanVelocity(e, r);
 
-    const minDiff = Math.abs(r.min - e.lastViewportRange.min);
-    const maxDiff = Math.abs(r.max - e.lastViewportRange.max);
-
-    if (minDiff < minChange && maxDiff < minChange) {
-      console.log(
-        `📊 Skipping fetch planning - viewport change too small for ${symbol}:${tf}`
-      );
-      return {};
-    }
+  // Update pan history (keep last 5 entries for trend analysis)
+  e.panHistory.push(panVelocity);
+  if (e.panHistory.length > 5) {
+    e.panHistory.shift();
   }
 
   // Update last viewport range
   e.lastViewportRange = { min: r.min, max: r.max };
-  const { base, group } = mapExtendedTimeframe(tf);
-  const baseMs = resolutionToMs(base);
-  const approxViewportSpanMs = Math.max(1, r.max - r.min);
 
-  // Choose much larger chunk span ~ 5x viewport span for fewer API calls
-  const chunkSpanMs = Math.max(
-    baseMs * group * viewportBarsTarget,
-    Math.round(approxViewportSpanMs * 5.0) // Increased from 2.5x to 5x
-  );
-
-  // Less aggressive threshold - only trigger when much closer to edge
-  const thresh = Math.round(approxViewportSpanMs * 0.25); // Increased from 0.1 to 0.25
+  // Calculate ideal buffer zones
+  const idealBuffers = calculateBufferZones(symbol, tf, r, panVelocity);
 
   const plan: ViewportFetchPlan = {};
 
-  console.log(`📊 Planning viewport fetch for ${symbol}:${tf}`, {
+  console.log(`🚀 TradingView-style viewport planning for ${symbol}:${tf}`, {
     viewport: {
       min: new Date(r.min).toISOString(),
       max: new Date(r.max).toISOString(),
     },
-    loadedRange: e.loadedRange
-      ? {
-          min: new Date(e.loadedRange.min).toISOString(),
-          max: new Date(e.loadedRange.max).toISOString(),
-        }
-      : null,
-    threshold: thresh,
+    panVelocity: {
+      direction: panVelocity.direction,
+      speed: panVelocity.speed.toFixed(2),
+    },
+    bufferSizes: {
+      left:
+        Math.round(
+          (idealBuffers.left.end - idealBuffers.left.start) /
+            (24 * 60 * 60 * 1000)
+        ) + " days",
+      right:
+        Math.round(
+          (idealBuffers.right.end - idealBuffers.right.start) /
+            (24 * 60 * 60 * 1000)
+        ) + " days",
+    },
   });
 
+  // Initial load: load viewport + both buffers
   if (!e.loadedRange) {
-    plan.backfillFrom = r.min - chunkSpanMs;
-    plan.backfillTo = r.max + chunkSpanMs; // Extend to the right as well for initial load
-    console.log(`📊 Initial load planned:`, {
+    plan.backfillFrom = idealBuffers.left.start;
+    plan.backfillTo = idealBuffers.right.end;
+    plan.priority = "both";
+
+    console.log(`🚀 Initial seamless load planned:`, {
       from: new Date(plan.backfillFrom).toISOString(),
       to: new Date(plan.backfillTo).toISOString(),
+      spanDays: Math.round(
+        (plan.backfillTo - plan.backfillFrom) / (24 * 60 * 60 * 1000)
+      ),
     });
+
     return plan;
   }
 
-  // Backfill left - trigger when viewport approaches left edge
-  if (r.min < e.loadedRange.min + thresh) {
-    const backfillFrom = e.loadedRange.min - chunkSpanMs;
-    const backfillTo = e.loadedRange.min - 1;
+  // Check if we need to extend buffers
+  const needsLeftExtension = idealBuffers.left.start < e.loadedRange.min;
+  const needsRightExtension = idealBuffers.right.end > e.loadedRange.max;
 
-    // Check if this range was recently fetched
-    if (!wasRecentlyFetched(e, backfillFrom, backfillTo)) {
-      plan.backfillFrom = backfillFrom;
-      plan.backfillTo = backfillTo;
-      console.log(`📊 Left backfill planned:`, {
+  // Prioritize based on pan direction and proximity to edges
+  const leftProximity =
+    (r.min - e.loadedRange.min) / (e.loadedRange.max - e.loadedRange.min);
+  const rightProximity =
+    (e.loadedRange.max - r.max) / (e.loadedRange.max - e.loadedRange.min);
+
+  if (
+    needsLeftExtension &&
+    (panVelocity.direction === "left" || leftProximity < 0.3)
+  ) {
+    const requestId = `left-${idealBuffers.left.start}-${e.loadedRange.min}`;
+    if (!e.pendingRequests.has(requestId)) {
+      plan.backfillFrom = idealBuffers.left.start;
+      plan.backfillTo = e.loadedRange.min - 1;
+      plan.priority = "left";
+
+      console.log(`🚀 Left buffer extension planned:`, {
         from: new Date(plan.backfillFrom).toISOString(),
         to: new Date(plan.backfillTo).toISOString(),
+        reason:
+          panVelocity.direction === "left" ? "pan-direction" : "proximity",
+        proximity: leftProximity.toFixed(2),
       });
-    } else {
-      console.log(`📊 Left backfill skipped - recently fetched`);
     }
   }
 
-  // Prefetch right - trigger when viewport approaches right edge
-  if (r.max > e.loadedRange.max - thresh) {
-    const prefetchFrom = e.loadedRange.max + 1;
-    const prefetchTo = e.loadedRange.max + chunkSpanMs;
+  if (
+    needsRightExtension &&
+    (panVelocity.direction === "right" || rightProximity < 0.3)
+  ) {
+    const requestId = `right-${e.loadedRange.max}-${idealBuffers.right.end}`;
+    if (!e.pendingRequests.has(requestId) && !plan.backfillFrom) {
+      // Don't overlap requests
+      plan.prefetchFrom = e.loadedRange.max + 1;
+      plan.prefetchTo = idealBuffers.right.end;
+      plan.priority = plan.priority === "left" ? "both" : "right";
 
-    // Check if this range was recently fetched
-    if (!wasRecentlyFetched(e, prefetchFrom, prefetchTo)) {
-      plan.prefetchFrom = prefetchFrom;
-      plan.prefetchTo = prefetchTo;
-      console.log(`📊 Right prefetch planned:`, {
+      console.log(`🚀 Right buffer extension planned:`, {
         from: new Date(plan.prefetchFrom).toISOString(),
         to: new Date(plan.prefetchTo).toISOString(),
+        reason:
+          panVelocity.direction === "right" ? "pan-direction" : "proximity",
+        proximity: rightProximity.toFixed(2),
       });
-    } else {
-      console.log(`📊 Right prefetch skipped - recently fetched`);
     }
   }
 
@@ -269,7 +351,7 @@ export async function fetchWindow(
   toMs: number,
   signal?: AbortSignal
 ): Promise<Candle[]> {
-  console.log(`📡 Fetching viewport window for ${symbol}:${tf}`, {
+  console.log(`🚀 Seamless fetch for ${symbol}:${tf}`, {
     from: new Date(fromMs).toISOString(),
     to: new Date(toMs).toISOString(),
     spanDays: Math.round(Math.abs(toMs - fromMs) / (24 * 60 * 60 * 1000)),
@@ -285,7 +367,7 @@ export async function fetchWindow(
       signal
     );
 
-    console.log(`✅ Viewport fetch successful for ${symbol}:${tf}`, {
+    console.log(`✅ Seamless fetch successful for ${symbol}:${tf}`, {
       candlesReceived: candles.length,
       firstCandle:
         candles.length > 0 ? new Date(candles[0].time).toISOString() : null,
@@ -297,7 +379,7 @@ export async function fetchWindow(
 
     return candles;
   } catch (error) {
-    console.error(`❌ Viewport fetch failed for ${symbol}:${tf}`, {
+    console.error(`❌ Seamless fetch failed for ${symbol}:${tf}`, {
       from: new Date(fromMs).toISOString(),
       to: new Date(toMs).toISOString(),
       error: error instanceof Error ? error.message : String(error),
@@ -306,17 +388,27 @@ export async function fetchWindow(
   }
 }
 
-export async function ensureRange(
+export async function ensureSeamlessRange(
   symbol: string,
   tf: ExtendedTimeframe,
   fetchFrom: number,
   fetchTo: number,
-  viewportDomain?: Range
+  priority: "left" | "right" | "both" = "both"
 ): Promise<Candle[]> {
   const entry = getEntry(symbol, tf);
 
-  // Abort any existing request for this entry
-  if (entry.abort) {
+  // Create request ID for deduplication
+  const requestId = `${priority}-${fetchFrom}-${fetchTo}`;
+
+  if (entry.pendingRequests.has(requestId)) {
+    console.log(`🚀 Skipping duplicate seamless request:`, requestId);
+    return getSeries(symbol, tf);
+  }
+
+  entry.pendingRequests.add(requestId);
+
+  // Abort any conflicting requests (not all requests, just conflicting ones)
+  if (entry.abort && entry.status === "fetching") {
     try {
       entry.abort.abort();
     } catch {}
@@ -325,9 +417,7 @@ export async function ensureRange(
   const controller = new AbortController();
   entry.abort = controller;
   entry.status = "fetching";
-
-  // Record this fetch attempt to prevent duplicate requests
-  recordFetchAttempt(entry, fetchFrom, fetchTo);
+  entry.lastFetchTime = Date.now();
 
   try {
     const data = await fetchWindow(
@@ -340,7 +430,7 @@ export async function ensureRange(
 
     // Check if request was aborted
     if (controller.signal.aborted) {
-      console.log("📊 Viewport fetch aborted for", symbol, tf);
+      console.log("🚀 Seamless fetch aborted for", symbol, tf);
       return getSeries(symbol, tf);
     }
 
@@ -361,31 +451,62 @@ export async function ensureRange(
     } else {
       entry.loadedRange = { min: chunk.start, max: chunk.end };
     }
-    entry.status = "idle";
 
-    // Return a stitched series limited to viewport if provided
-    const all = getSeries(symbol, tf);
-    if (!viewportDomain) return all;
-    const { min, max } = clampRange(viewportDomain);
-    return all.filter((c) => c.time >= min && c.time <= max);
+    entry.status = "idle";
+    entry.pendingRequests.delete(requestId);
+
+    console.log(`🚀 Seamless range updated:`, {
+      symbol,
+      tf,
+      totalBars: allData.length,
+      loadedRange: entry.loadedRange
+        ? {
+            min: new Date(entry.loadedRange.min).toISOString(),
+            max: new Date(entry.loadedRange.max).toISOString(),
+          }
+        : null,
+    });
+
+    return allData;
   } catch (error) {
     entry.status = "idle";
     entry.abort = null;
+    entry.pendingRequests.delete(requestId);
 
     // If aborted, return existing data
     if (controller.signal.aborted) {
       console.log(
-        "📊 Viewport fetch aborted, returning cached data for",
+        "🚀 Seamless fetch aborted, returning cached data for",
         symbol,
         tf
       );
       return getSeries(symbol, tf);
     }
 
-    console.warn("📊 Viewport fetch failed for", symbol, tf, error);
+    console.warn("🚀 Seamless fetch failed for", symbol, tf, error);
     // Return existing data on error
     return getSeries(symbol, tf);
   }
+}
+
+// Legacy compatibility functions
+export function planViewportFetch(
+  symbol: string,
+  tf: ExtendedTimeframe,
+  domain: Range,
+  viewportBarsTarget = 1000
+): ViewportFetchPlan {
+  return planSeamlessViewport(symbol, tf, domain);
+}
+
+export async function ensureRange(
+  symbol: string,
+  tf: ExtendedTimeframe,
+  fetchFrom: number,
+  fetchTo: number,
+  viewportDomain?: Range
+): Promise<Candle[]> {
+  return ensureSeamlessRange(symbol, tf, fetchFrom, fetchTo, "both");
 }
 
 export function clearViewportCache(

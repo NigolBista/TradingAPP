@@ -20,9 +20,9 @@ import LightweightCandles, {
   type LightweightCandlesHandle,
 } from "../components/charts/LightweightCandles";
 import {
-  ensureRange,
+  ensureSeamlessRange,
   getSeries,
-  planViewportFetch,
+  planSeamlessViewport,
   clearViewportCache,
 } from "../services/viewportBars";
 import ChartSettingsModal, {

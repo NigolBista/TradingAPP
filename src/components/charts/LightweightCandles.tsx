@@ -879,6 +879,50 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                 }
               }
             } catch(_) {}
+          } else if (msg.cmd === 'appendLeft') {
+            try {
+              const older = Array.isArray(msg.data) ? msg.data : [];
+              if (!older || older.length === 0) return;
+              // Preserve current visible range to avoid jumping after prepend
+              let preserveTime = null;
+              let preserveLogical = null;
+              try { preserveTime = chart.timeScale().getVisibleRange && chart.timeScale().getVisibleRange(); } catch(_) {}
+              if (!preserveTime) { try { preserveLogical = chart.timeScale().getVisibleLogicalRange && chart.timeScale().getVisibleLogicalRange(); } catch(_) {} }
+              const merged = ([]).concat(older, Array.isArray(raw) ? raw : []);
+              merged.sort(function(a,b){ return (a && a.time || 0) - (b && b.time || 0); });
+              const dedup = [];
+              for (var i=0;i<merged.length;i++) {
+                var it = merged[i];
+                if (!it || typeof it.time !== 'number') continue;
+                if (dedup.length === 0 || it.time !== dedup[dedup.length - 1].time) {
+                  dedup.push(it);
+                } else {
+                  dedup[dedup.length - 1] = it;
+                }
+              }
+              raw = dedup;
+              let seriesData;
+              if (type === 'area' || type === 'line') {
+                seriesData = new Array(raw.length);
+                for (let i = 0; i < raw.length; i++) {
+                  seriesData[i] = { time: raw[i].time, value: raw[i].close };
+                }
+              } else {
+                seriesData = raw;
+              }
+              mainSeries.setData(seriesData);
+              // Restore previous visible range
+              try {
+                if (preserveTime && chart.timeScale().setVisibleRange) {
+                  chart.timeScale().setVisibleRange(preserveTime);
+                } else if (preserveLogical && chart.timeScale().setVisibleLogicalRange) {
+                  chart.timeScale().setVisibleLogicalRange(preserveLogical);
+                }
+              } catch(_) {}
+              try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
+              try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
+              try { updateSeriesColorByData(); } catch(_) {}
+            } catch(e) { log('appendLeft error: ' + e.message); }
           } else if (msg.cmd === 'appendData') {
             appendSeriesData(msg.data || []);
           } else if (msg.cmd === 'scrollToRealTime') {
@@ -939,26 +983,30 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
             if (!range || range.from == null || range.to == null) return;
             if (!Array.isArray(raw) || raw.length === 0) return;
             const now = Date.now();
-            if (now - lastEdgeSentAt < 200) return; // throttle
+            if (now - lastEdgeSentAt < 100) return; // Fast response for seamless experience
             const visibleSpan = Math.max(1, range.to - range.from);
-            const threshold = Math.round(visibleSpan * 0.15);
+            const threshold = Math.round(visibleSpan * 0.4); // TradingView-style early trigger for seamless loading
             const datasetMin = raw[0].time;
             const datasetMax = raw[raw.length - 1].time;
             const nearLeft = range.from <= (datasetMin + threshold);
             const nearRight = range.to >= (datasetMax - threshold);
             const mask = (nearLeft ? 1 : 0) | (nearRight ? 2 : 0);
-            if (mask === 0 || mask === lastEdgeMask) return;
+            // If we are no longer near any edge, reset mask so future edge entries fire
+            if (mask === 0) { lastEdgeMask = 0; return; }
+            if (mask === lastEdgeMask) return;
             lastEdgeMask = mask;
             lastEdgeSentAt = now;
             const requests = [];
             if (nearLeft) {
+              // TradingView-style: Request larger chunks for seamless experience
               const reqTo = (datasetMin * 1000) - 1;
-              const reqFrom = Math.max(0, Math.round(reqTo - visibleSpan * 1000 * 2));
+              const reqFrom = Math.max(0, Math.round(reqTo - visibleSpan * 1000 * 5)); // 5x viewport for large buffers
               requests.push({ side: 'left', requestWindow: { fromMs: reqFrom, toMs: Math.round(reqTo) } });
             }
             if (nearRight) {
+              // TradingView-style: Request larger chunks for seamless experience
               const reqFrom = (datasetMax * 1000) + 1;
-              const reqTo = Math.round(reqFrom + visibleSpan * 1000 * 2);
+              const reqTo = Math.round(reqFrom + visibleSpan * 1000 * 5); // 5x viewport for large buffers
               requests.push({ side: 'right', requestWindow: { fromMs: Math.round(reqFrom), toMs: reqTo } });
             }
             window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -1070,8 +1118,8 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
             newFirst != null && prevFirst != null && newFirst < prevFirst;
 
           // Handle timeframe changes with full refresh
-          if (spacingChanged || lengthShrank || extendedLeft) {
-            const shouldAutoFit = spacingChanged || lengthShrank;
+          if (spacingChanged || lengthShrank) {
+            const shouldAutoFit = true;
             (webRef.current as any)?.postMessage?.(
               JSON.stringify({
                 cmd: "setData",
@@ -1085,6 +1133,35 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
             lastFirstTimeRef.current = newFirst;
             lastUpdateTimeRef.current = Date.now();
             return;
+          }
+
+          // Handle left-extensions by prepending only the new older bars
+          if (extendedLeft && prevFirst != null && newFirst != null) {
+            const olderBars = series.filter(
+              (b) => b.time < (prevFirst as number)
+            );
+            if (olderBars.length > 0) {
+              (webRef.current as any)?.postMessage?.(
+                JSON.stringify({ cmd: "appendLeft", data: olderBars })
+              );
+              // Do not change lastPushedTimeRef since the latest bar didn't change here
+              lastSpacingRef.current = newSpacing ?? lastSpacingRef.current;
+              lastLengthRef.current = series.length;
+              lastFirstTimeRef.current = newFirst;
+              lastUpdateTimeRef.current = Date.now();
+              return;
+            } else {
+              // Fallback to full refresh if diff couldn't be computed
+              (webRef.current as any)?.postMessage?.(
+                JSON.stringify({ cmd: "setData", data: series, autoFit: false })
+              );
+              lastPushedTimeRef.current = latest.time;
+              lastSpacingRef.current = newSpacing ?? null;
+              lastLengthRef.current = series.length;
+              lastFirstTimeRef.current = newFirst;
+              lastUpdateTimeRef.current = Date.now();
+              return;
+            }
           }
 
           // Handle incremental updates
@@ -1134,8 +1211,8 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       ) {
         performUpdate();
       } else {
-        // Debounce minor updates for smoother performance
-        pendingUpdateRef.current = setTimeout(performUpdate, 16); // ~60fps
+        // Debounce minor updates for smoother performance and reduced bridge overhead
+        pendingUpdateRef.current = setTimeout(performUpdate, 200);
       }
 
       return () => {
