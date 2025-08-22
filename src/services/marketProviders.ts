@@ -314,13 +314,39 @@ export async function fetchMarketDataCandlesWindow(
     );
   }
 
-  const from = new Date(Math.min(fromMs, toMs));
-  const to = new Date(Math.max(fromMs, toMs));
+  // Validate date range
+  const minMs = Math.min(fromMs, toMs);
+  const maxMs = Math.max(fromMs, toMs);
+  const now = Date.now();
 
-  const formatDate = (d: Date) => d.toISOString().split("T")[0];
+  // Ensure dates are reasonable (not too far in the past or future)
+  const fiveYearsAgo = now - 5 * 365 * 24 * 60 * 60 * 1000;
+  const oneWeekFromNow = now + 7 * 24 * 60 * 60 * 1000;
+
+  const validFromMs = Math.max(minMs, fiveYearsAgo);
+  const validToMs = Math.min(maxMs, oneWeekFromNow);
+
+  const from = new Date(validFromMs);
+  const to = new Date(validToMs);
+
+  // Ensure proper date formatting for API - use UTC to avoid timezone issues
+  const formatDate = (d: Date) => {
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const fromStr = formatDate(from);
+  const toStr = formatDate(to);
+
   const url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
     symbol
-  )}/?from=${formatDate(from)}&to=${formatDate(to)}&limit=${limit}`;
+  )}/?from=${fromStr}&to=${toStr}&limit=${limit}`;
+
+  console.log(
+    `📡 API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit})`
+  );
 
   const headers = {
     Authorization: `Bearer ${apiToken}`,
@@ -331,6 +357,7 @@ export async function fetchMarketDataCandlesWindow(
 
   if (json?.s !== "ok") {
     const errorMsg = json?.errmsg || "Unknown MarketData error";
+    console.error(`❌ API Error for ${symbol}:`, errorMsg, { url });
     throw new Error(errorMsg);
   }
 
@@ -352,6 +379,10 @@ export async function fetchMarketDataCandlesWindow(
     }))
     .filter((k: Candle) => Number.isFinite(k.open) && Number.isFinite(k.close))
     .sort((a: Candle, b: Candle) => a.time - b.time);
+
+  console.log(
+    `✅ API Response: ${symbol} ${resolution} returned ${candles.length} candles`
+  );
 
   // Extra safety — server respects limit, but trim if needed
   return candles.length > limit ? candles.slice(-limit) : candles;

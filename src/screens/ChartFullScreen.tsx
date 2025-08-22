@@ -22,6 +22,7 @@ import {
   ensureRange,
   getSeries,
   planViewportFetch,
+  clearViewportCache,
 } from "../services/viewportBars";
 import ChartSettingsModal, {
   type ChartType,
@@ -42,6 +43,7 @@ import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import { getCachedQuotes, type SimpleQuote } from "../services/quotes";
+import { smartCandleManager } from "../services/smartCandleManager";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -101,25 +103,55 @@ export default function ChartFullScreen() {
           const leftNeed = plan.backfillFrom != null && plan.backfillTo != null;
           const rightNeed =
             plan.prefetchFrom != null && plan.prefetchTo != null;
+
+          // Prioritize left (historical) data over right (future) data
           if (leftNeed) {
-            await ensureRange(
+            const leftData = await ensureRange(
               symbol,
               extendedTf,
               plan.backfillFrom!,
               plan.backfillTo!,
               domain
             );
-          } else if (rightNeed) {
-            await ensureRange(
+            if (leftData && leftData.length) {
+              setData(
+                leftData.map((c) => ({
+                  time: c.time,
+                  open: c.open,
+                  high: c.high,
+                  low: c.low,
+                  close: c.close,
+                  volume: c.volume,
+                }))
+              );
+            }
+          }
+
+          if (rightNeed) {
+            const rightData = await ensureRange(
               symbol,
               extendedTf,
               plan.prefetchFrom!,
               plan.prefetchTo!,
               domain
             );
+            if (rightData && rightData.length) {
+              setData(
+                rightData.map((c) => ({
+                  time: c.time,
+                  open: c.open,
+                  high: c.high,
+                  low: c.low,
+                  close: c.close,
+                  volume: c.volume,
+                }))
+              );
+            }
           }
+
+          // Always update with complete stitched series
           const stitched = getSeries(symbol, extendedTf);
-          if (stitched && stitched.length)
+          if (stitched && stitched.length) {
             setData(
               stitched.map((c) => ({
                 time: c.time,
@@ -130,8 +162,25 @@ export default function ChartFullScreen() {
                 volume: c.volume,
               }))
             );
-        } catch (e) {}
-      }, 160);
+          }
+        } catch (e) {
+          console.warn("Viewport fetch failed:", e);
+          // Try to get existing data on error
+          const existing = getSeries(symbol, extendedTf);
+          if (existing && existing.length) {
+            setData(
+              existing.map((c) => ({
+                time: c.time,
+                open: c.open,
+                high: c.high,
+                low: c.low,
+                close: c.close,
+                volume: c.volume,
+              }))
+            );
+          }
+        }
+      }, 100); // Reduced debounce for faster response
     };
   }, [symbol, extendedTf]);
 
@@ -360,9 +409,35 @@ export default function ChartFullScreen() {
   }
 
   // Handle timeframe change and save as default
-  function handleTimeframeChange(tf: ExtendedTimeframe) {
+  async function handleTimeframeChange(tf: ExtendedTimeframe) {
     setExtendedTf(tf);
     setDefaultTimeframe(tf); // Save as user's preferred default
+
+    // Clear viewport cache for the old timeframe to prevent stale data
+    clearViewportCache(symbol);
+
+    // Immediately fetch data for the new timeframe using smart candle manager
+    try {
+      setLoading(true);
+      const candles = await smartCandleManager.getCandles(symbol, tf, 500);
+      if (candles && candles.length > 0) {
+        console.log("📈 Smart timeframe switch for", symbol, tf);
+        setData(
+          candles.map((c) => ({
+            time: c.time,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+            volume: c.volume,
+          }))
+        );
+      }
+    } catch (e) {
+      console.warn("Failed to load timeframe candles:", e);
+    } finally {
+      setLoading(false);
+    }
   }
 
   // Simulate streaming text output

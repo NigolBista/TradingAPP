@@ -120,25 +120,55 @@ export function planViewportFetch(
     Math.round(approxViewportSpanMs * 2.5)
   );
 
-  const thresh = Math.round(approxViewportSpanMs * 0.2);
+  // More conservative threshold - trigger fetch when closer to edge
+  const thresh = Math.round(approxViewportSpanMs * 0.1); // Reduced from 0.2 to 0.1
 
   const plan: ViewportFetchPlan = {};
+
+  console.log(`📊 Planning viewport fetch for ${symbol}:${tf}`, {
+    viewport: {
+      min: new Date(r.min).toISOString(),
+      max: new Date(r.max).toISOString(),
+    },
+    loadedRange: e.loadedRange
+      ? {
+          min: new Date(e.loadedRange.min).toISOString(),
+          max: new Date(e.loadedRange.max).toISOString(),
+        }
+      : null,
+    threshold: thresh,
+  });
+
   if (!e.loadedRange) {
     plan.backfillFrom = r.min - chunkSpanMs;
-    plan.backfillTo = r.max;
+    plan.backfillTo = r.max + chunkSpanMs; // Extend to the right as well for initial load
+    console.log(`📊 Initial load planned:`, {
+      from: new Date(plan.backfillFrom).toISOString(),
+      to: new Date(plan.backfillTo).toISOString(),
+    });
     return plan;
   }
 
-  // Backfill left
+  // Backfill left - trigger when viewport approaches left edge
   if (r.min < e.loadedRange.min + thresh) {
     plan.backfillFrom = e.loadedRange.min - chunkSpanMs;
     plan.backfillTo = e.loadedRange.min - 1;
+    console.log(`📊 Left backfill planned:`, {
+      from: new Date(plan.backfillFrom).toISOString(),
+      to: new Date(plan.backfillTo).toISOString(),
+    });
   }
-  // Prefetch right
+
+  // Prefetch right - trigger when viewport approaches right edge
   if (r.max > e.loadedRange.max - thresh) {
     plan.prefetchFrom = e.loadedRange.max + 1;
     plan.prefetchTo = e.loadedRange.max + chunkSpanMs;
+    console.log(`📊 Right prefetch planned:`, {
+      from: new Date(plan.prefetchFrom).toISOString(),
+      to: new Date(plan.prefetchTo).toISOString(),
+    });
   }
+
   return plan;
 }
 
@@ -149,15 +179,41 @@ export async function fetchWindow(
   toMs: number,
   signal?: AbortSignal
 ): Promise<Candle[]> {
-  // Delegate to provider; it internally aggregates from base resolution
-  return fetchCandlesForTimeframeWindow(
-    symbol,
-    tf,
-    fromMs,
-    toMs,
-    undefined,
-    signal
-  );
+  console.log(`📡 Fetching viewport window for ${symbol}:${tf}`, {
+    from: new Date(fromMs).toISOString(),
+    to: new Date(toMs).toISOString(),
+    spanDays: Math.round(Math.abs(toMs - fromMs) / (24 * 60 * 60 * 1000)),
+  });
+
+  try {
+    const candles = await fetchCandlesForTimeframeWindow(
+      symbol,
+      tf,
+      fromMs,
+      toMs,
+      undefined,
+      signal
+    );
+
+    console.log(`✅ Viewport fetch successful for ${symbol}:${tf}`, {
+      candlesReceived: candles.length,
+      firstCandle:
+        candles.length > 0 ? new Date(candles[0].time).toISOString() : null,
+      lastCandle:
+        candles.length > 0
+          ? new Date(candles[candles.length - 1].time).toISOString()
+          : null,
+    });
+
+    return candles;
+  } catch (error) {
+    console.error(`❌ Viewport fetch failed for ${symbol}:${tf}`, {
+      from: new Date(fromMs).toISOString(),
+      to: new Date(toMs).toISOString(),
+      error: error.message,
+    });
+    throw error;
+  }
 }
 
 export async function ensureRange(
@@ -168,50 +224,120 @@ export async function ensureRange(
   viewportDomain?: Range
 ): Promise<Candle[]> {
   const entry = getEntry(symbol, tf);
+
+  // Abort any existing request for this entry
   if (entry.abort) {
     try {
       entry.abort.abort();
     } catch {}
   }
+
   const controller = new AbortController();
   entry.abort = controller;
   entry.status = "fetching";
 
-  const data = await fetchWindow(
-    symbol,
-    tf,
-    fetchFrom,
-    fetchTo,
-    controller.signal
-  );
-  const chunk: Chunk = {
-    start: Math.min(fetchFrom, fetchTo),
-    end: Math.max(fetchFrom, fetchTo),
-    data: data.sort((a, b) => a.time - b.time),
-  };
-  entry.chunks = mergeChunks(entry.chunks, chunk);
+  try {
+    const data = await fetchWindow(
+      symbol,
+      tf,
+      fetchFrom,
+      fetchTo,
+      controller.signal
+    );
 
-  // Update loaded range
-  const first = entry.chunks[0];
-  const last = entry.chunks[entry.chunks.length - 1];
-  entry.loadedRange =
-    first && last ? { min: first.start, max: last.end } : chunk;
-  entry.status = "idle";
+    // Check if request was aborted
+    if (controller.signal.aborted) {
+      console.log("📊 Viewport fetch aborted for", symbol, tf);
+      return getSeries(symbol, tf);
+    }
 
-  // Return a stitched series limited to viewport if provided
-  const all = getSeries(symbol, tf);
-  if (!viewportDomain) return all;
-  const { min, max } = clampRange(viewportDomain);
-  return all.filter((c) => c.time >= min && c.time <= max);
+    const chunk: Chunk = {
+      start: Math.min(fetchFrom, fetchTo),
+      end: Math.max(fetchFrom, fetchTo),
+      data: data.sort((a, b) => a.time - b.time),
+    };
+    entry.chunks = mergeChunks(entry.chunks, chunk);
+
+    // Update loaded range based on actual data boundaries
+    const allData = getSeries(symbol, tf);
+    if (allData.length > 0) {
+      entry.loadedRange = {
+        min: allData[0].time,
+        max: allData[allData.length - 1].time,
+      };
+    } else {
+      entry.loadedRange = { min: chunk.start, max: chunk.end };
+    }
+    entry.status = "idle";
+
+    // Return a stitched series limited to viewport if provided
+    const all = getSeries(symbol, tf);
+    if (!viewportDomain) return all;
+    const { min, max } = clampRange(viewportDomain);
+    return all.filter((c) => c.time >= min && c.time <= max);
+  } catch (error) {
+    entry.status = "idle";
+    entry.abort = null;
+
+    // If aborted, return existing data
+    if (controller.signal.aborted) {
+      console.log(
+        "📊 Viewport fetch aborted, returning cached data for",
+        symbol,
+        tf
+      );
+      return getSeries(symbol, tf);
+    }
+
+    console.warn("📊 Viewport fetch failed for", symbol, tf, error);
+    // Return existing data on error
+    return getSeries(symbol, tf);
+  }
 }
 
-export function clearViewportCache(symbol?: string) {
+export function clearViewportCache(
+  symbol?: string,
+  timeframe?: ExtendedTimeframe
+) {
   if (!symbol) {
+    // Clear all entries and abort ongoing requests
+    for (const [key, entry] of store.entries()) {
+      if (entry.abort) {
+        try {
+          entry.abort.abort();
+        } catch {}
+      }
+    }
     store.clear();
     return;
   }
+
+  if (timeframe) {
+    // Clear specific symbol:timeframe entry
+    const key = keyFor(symbol, timeframe);
+    const entry = store.get(key);
+    if (entry) {
+      if (entry.abort) {
+        try {
+          entry.abort.abort();
+        } catch {}
+      }
+      store.delete(key);
+    }
+    return;
+  }
+
+  // Clear all entries for this symbol
   for (const k of Array.from(store.keys())) {
-    if (k.startsWith(`${symbol}:`)) store.delete(k as BarsKey);
+    if (k.startsWith(`${symbol}:`)) {
+      const entry = store.get(k as BarsKey);
+      if (entry?.abort) {
+        try {
+          entry.abort.abort();
+        } catch {}
+      }
+      store.delete(k as BarsKey);
+    }
   }
 }
 

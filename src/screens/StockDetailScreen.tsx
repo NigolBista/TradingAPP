@@ -55,6 +55,7 @@ import {
   getLoadedRange,
   getSeries,
   planViewportFetch,
+  clearViewportCache,
 } from "../services/viewportBars";
 
 import { type SignalSummary } from "../services/signalEngine";
@@ -996,31 +997,43 @@ export default function StockDetailScreen() {
           const rightNeed =
             plan.prefetchFrom != null && plan.prefetchTo != null;
 
-          // Fetch only one side per tick to avoid canceling ourselves
+          // Prioritize left (historical) data over right (future) data
           if (leftNeed) {
-            await ensureRange(
+            const leftData = await ensureRange(
               symbol,
               extendedTf,
               plan.backfillFrom!,
               plan.backfillTo!,
               domain
             );
-          } else if (rightNeed) {
-            await ensureRange(
+            if (leftData && leftData.length) {
+              setDailySeries(toLWC(leftData));
+            }
+          }
+
+          if (rightNeed) {
+            const rightData = await ensureRange(
               symbol,
               extendedTf,
               plan.prefetchFrom!,
               plan.prefetchTo!,
               domain
             );
+            if (rightData && rightData.length) {
+              setDailySeries(toLWC(rightData));
+            }
           }
-          // Update series from stitched cache
+
+          // Always update with complete stitched series
           const stitched = getSeries(symbol, extendedTf);
           if (stitched && stitched.length) setDailySeries(toLWC(stitched));
         } catch (e) {
           console.warn("Viewport fetch failed:", e);
+          // Try to get existing data on error
+          const existing = getSeries(symbol, extendedTf);
+          if (existing && existing.length) setDailySeries(toLWC(existing));
         }
-      }, 160);
+      }, 100); // Reduced debounce for faster response
     };
   }, [symbol, extendedTf]);
 
@@ -1123,6 +1136,9 @@ export default function StockDetailScreen() {
   async function applyExtendedTimeframe(tf: ExtendedTimeframe) {
     setExtendedTf(tf);
     setDefaultTimeframe(tf); // Save as user's preferred default
+
+    // Clear viewport cache for the old timeframe to prevent stale data
+    clearViewportCache(symbol);
 
     // Update the real-time manager with new timeframe
     realtimeDataManager.updateTimeframe(tf);

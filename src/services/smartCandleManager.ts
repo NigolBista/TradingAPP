@@ -523,6 +523,55 @@ class SmartCandleManager {
   }
 
   /**
+   * Clear cache for a symbol or all symbols
+   */
+  clearCache(symbol?: string): void {
+    if (symbol) {
+      this.cache.delete(symbol);
+      AsyncStorage.removeItem(this.STORAGE_PREFIX + symbol).catch(() => {});
+    } else {
+      this.cache.clear();
+      // Clear all stored candle caches
+      AsyncStorage.getAllKeys().then((keys) => {
+        const candleKeys = keys.filter((k) =>
+          k.startsWith(this.STORAGE_PREFIX)
+        );
+        AsyncStorage.multiRemove(candleKeys);
+      });
+    }
+  }
+
+  /**
+   * Preload data for a symbol with optimal timeframe for fast switching
+   */
+  async preloadForTimeframeSwitching(symbol: string): Promise<void> {
+    console.log(`🚀 Preloading ${symbol} for fast timeframe switching`);
+
+    try {
+      // Load base 1m data for maximum derivation flexibility
+      await this.fetchAndCache(symbol, "1m", 1440); // 24 hours of 1m data
+      console.log(
+        `✅ Preloaded ${symbol} with 1m base data for timeframe switching`
+      );
+    } catch (error) {
+      console.warn(
+        `⚠️ Failed to preload ${symbol} for timeframe switching:`,
+        error
+      );
+      // Fallback to 5m if 1m fails
+      try {
+        await this.fetchAndCache(symbol, "5m", 2000);
+        console.log(`✅ Preloaded ${symbol} with 5m fallback data`);
+      } catch (fallbackError) {
+        console.error(
+          `❌ Failed to preload ${symbol} even with fallback:`,
+          fallbackError
+        );
+      }
+    }
+  }
+
+  /**
    * Get cache statistics
    */
   getStats(): { symbols: number; totalCandles: number; memoryUsage: string } {
