@@ -35,7 +35,7 @@ const DecalpXMini = React.memo(function DecalpXMini({
 }) {
   const navigation = useNavigation();
   const { theme } = useTheme();
-  const { profile } = useUserStore();
+  const profile = useUserStore((s) => s.profile);
 
   // Memoize the navigation function to prevent re-renders
   const handlePress = useCallback(() => {

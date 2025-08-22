@@ -154,34 +154,42 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
     useEffect(() => {
       (async () => {
         try {
-          console.log("LightweightCandles: Starting to load local asset...");
+          if (__DEV__)
+            console.log("LightweightCandles: Starting to load local asset...");
           const lib = Asset.fromModule(
             require("../../../assets/js/lightweight-charts.txt")
           );
           await lib.downloadAsync();
           const uri = lib.localUri || lib.uri;
-          console.log("LightweightCandles: Asset URI:", uri);
+          if (__DEV__) console.log("LightweightCandles: Asset URI:", uri);
           if (uri) {
             const content = await FileSystem.readAsStringAsync(uri, {
               encoding: FileSystem.EncodingType.UTF8,
             });
-            console.log("LightweightCandles: Content length:", content?.length);
-            console.log(
-              "LightweightCandles: Contains LightweightCharts:",
-              content?.includes("LightweightCharts")
-            );
+            if (__DEV__)
+              console.log(
+                "LightweightCandles: Content length:",
+                content?.length
+              );
+            if (__DEV__)
+              console.log(
+                "LightweightCandles: Contains LightweightCharts:",
+                content?.includes("LightweightCharts")
+              );
             if (content && content.includes("LightweightCharts")) {
-              console.log("LightweightCandles: Using local asset");
+              if (__DEV__) console.log("LightweightCandles: Using local asset");
               setInlineLibText(content);
             } else {
-              console.log(
-                "LightweightCandles: Local asset invalid, falling back to CDN"
-              );
+              if (__DEV__)
+                console.log(
+                  "LightweightCandles: Local asset invalid, falling back to CDN"
+                );
               setInlineLibText(null);
             }
           }
         } catch (e) {
-          console.log("LightweightCandles: Error loading local asset:", e);
+          if (__DEV__)
+            console.log("LightweightCandles: Error loading local asset:", e);
           setInlineLibText(null);
         }
       })();
@@ -214,6 +222,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
     </div>
     ${scriptLoader}
     <script>
+      const DEBUG = ${__DEV__ ? "true" : "false"};
       // Prevent page-level pinch-zoom while allowing chart pinch
       (function(){
         try {
@@ -224,7 +233,9 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       })();
       function log(msg) {
         try {
-          window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ debug: msg }));
+          if (DEBUG) {
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({ debug: msg }));
+          }
         } catch(e) {}
       }
       

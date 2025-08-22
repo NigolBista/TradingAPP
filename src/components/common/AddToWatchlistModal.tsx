@@ -165,8 +165,10 @@ export default function AddToWatchlistModal({
 }: AddToWatchlistModalProps) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { profile, addToWatchlist, toggleGlobalFavorite, isGlobalFavorite } =
-    useUserStore();
+  const profile = useUserStore((s) => s.profile);
+  const addToWatchlist = useUserStore((s) => s.addToWatchlist);
+  const toggleGlobalFavorite = useUserStore((s) => s.toggleGlobalFavorite);
+  const isGlobalFavorite = useUserStore((s) => s.isGlobalFavorite);
 
   const [currentStock, setCurrentStock] = useState<StockSearchResult | null>(
     selectedStock || null

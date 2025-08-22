@@ -207,7 +207,8 @@ export default function RecentEarningsCard({
 }: Props) {
   const { theme } = useTheme();
   const styles = createStyles(theme);
-  const { profile, getActiveWatchlist } = useUserStore();
+  const profile = useUserStore((s) => s.profile);
+  const getActiveWatchlist = useUserStore((s) => s.getActiveWatchlist);
   const [earnings, setEarnings] = useState<RecentEarningsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -593,9 +593,14 @@ class SmartCandleManager {
 // Export singleton
 export const smartCandleManager = new SmartCandleManager();
 
-// Cleanup every 10 minutes
-setInterval(() => {
-  void smartCandleManager.cleanup();
-}, 10 * 60 * 1000);
+// Cleanup every 10 minutes (singleton guard for dev/HMR)
+let __SMART_CANDLE_CLEANUP__: any = (globalThis as any)
+  .__SMART_CANDLE_CLEANUP__;
+if (!__SMART_CANDLE_CLEANUP__) {
+  __SMART_CANDLE_CLEANUP__ = setInterval(() => {
+    void smartCandleManager.cleanup();
+  }, 10 * 60 * 1000);
+  (globalThis as any).__SMART_CANDLE_CLEANUP__ = __SMART_CANDLE_CLEANUP__;
+}
 
 export default smartCandleManager;

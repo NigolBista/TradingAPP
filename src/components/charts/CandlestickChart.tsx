@@ -41,15 +41,22 @@ export default function CandlestickChart({
   const [width, setWidth] = useState(0);
   const height = 280;
 
-  console.log("CandlestickChart render:", { dataLength: data?.length, width });
-
   if (!data || data.length === 0)
     return <View className="h-72 bg-gray-100 dark:bg-gray-900 rounded-xl" />;
 
   const margin = 16;
-  const prices = data.flatMap((d) => [d.low, d.high]);
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
+  const { minPrice, maxPrice } = useMemo(() => {
+    let min = Number.POSITIVE_INFINITY;
+    let max = Number.NEGATIVE_INFINITY;
+    for (let i = 0; i < data.length; i++) {
+      const d = data[i];
+      if (d.low < min) min = d.low;
+      if (d.high > max) max = d.high;
+    }
+    if (!Number.isFinite(min)) min = 0;
+    if (!Number.isFinite(max)) max = 0;
+    return { minPrice: min, maxPrice: max };
+  }, [data]);
   const xStep = (width - margin * 2) / Math.max(1, data.length - 1);
   const candleW = Math.max(4, xStep * 0.6);
 
@@ -59,31 +66,40 @@ export default function CandlestickChart({
   };
 
   const closes = useMemo(() => data.map((d) => d.close), [data]);
-  const seriesByWindow: Record<number, { x: number; y: number }[]> = {};
-  movingAverageWindows.forEach((w) => {
-    const sma = computeSMA(closes, w);
-    seriesByWindow[w] = data.map((d, i) => ({ x: i, y: sma[i] }));
-  });
+  const seriesByWindow = useMemo(() => {
+    const map: Record<number, { x: number; y: number }[]> = {};
+    for (let wi = 0; wi < movingAverageWindows.length; wi++) {
+      const w = movingAverageWindows[wi];
+      const sma = computeSMA(closes, w);
+      const series = new Array(data.length);
+      for (let i = 0; i < data.length; i++) {
+        series[i] = { x: i, y: sma[i] };
+      }
+      map[w] = series as { x: number; y: number }[];
+    }
+    return map;
+  }, [closes, data, movingAverageWindows]);
 
-  const maPaths = movingAverageWindows.map((w) => {
-    const pts = seriesByWindow[w]
-      .map((p, i) => {
-        const y = yScale(p.y);
-        if (!Number.isFinite(y)) return null;
-        const x = margin + i * xStep;
-        return `${i === 0 ? "M" : "L"}${x},${y}`;
-      })
-      .filter(Boolean)
-      .join(" ");
-    return pts;
-  });
+  const maPaths = useMemo(() => {
+    return movingAverageWindows.map((w) => {
+      const pts = seriesByWindow[w]
+        .map((p, i) => {
+          const y = yScale(p.y);
+          if (!Number.isFinite(y)) return null as any;
+          const x = margin + i * xStep;
+          return `${i === 0 ? "M" : "L"}${x},${y}`;
+        })
+        .filter(Boolean)
+        .join(" ");
+      return pts;
+    });
+  }, [movingAverageWindows, seriesByWindow, xStep, minPrice, maxPrice]);
 
   return (
     <View
       className="w-full"
       onLayout={(e) => {
         const newWidth = e.nativeEvent.layout.width;
-        console.log("Chart onLayout:", { newWidth });
         setWidth(newWidth);
       }}
     >

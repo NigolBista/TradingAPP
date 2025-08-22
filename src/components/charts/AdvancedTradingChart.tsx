@@ -286,34 +286,42 @@ export default function AdvancedTradingChart({
   React.useEffect(() => {
     (async () => {
       try {
-        console.log("AdvancedTradingChart: Starting to load local asset...");
+        if (__DEV__)
+          console.log("AdvancedTradingChart: Starting to load local asset...");
         const lib = Asset.fromModule(
           require("../../../assets/js/lightweight-charts.txt")
         );
         await lib.downloadAsync();
         const uri = lib.localUri || lib.uri;
-        console.log("AdvancedTradingChart: Asset URI:", uri);
+        if (__DEV__) console.log("AdvancedTradingChart: Asset URI:", uri);
         if (uri) {
           const content = await FileSystem.readAsStringAsync(uri, {
             encoding: FileSystem.EncodingType.UTF8,
           });
-          console.log("AdvancedTradingChart: Content length:", content?.length);
-          console.log(
-            "AdvancedTradingChart: Contains LightweightCharts:",
-            content?.includes("LightweightCharts")
-          );
+          if (__DEV__)
+            console.log(
+              "AdvancedTradingChart: Content length:",
+              content?.length
+            );
+          if (__DEV__)
+            console.log(
+              "AdvancedTradingChart: Contains LightweightCharts:",
+              content?.includes("LightweightCharts")
+            );
           if (content && content.includes("LightweightCharts")) {
-            console.log("AdvancedTradingChart: Using local asset");
+            if (__DEV__) console.log("AdvancedTradingChart: Using local asset");
             setInlineLibText(content);
           } else {
-            console.log(
-              "AdvancedTradingChart: Local asset invalid, falling back to CDN"
-            );
+            if (__DEV__)
+              console.log(
+                "AdvancedTradingChart: Local asset invalid, falling back to CDN"
+              );
             setInlineLibText(null);
           }
         }
       } catch (e) {
-        console.log("AdvancedTradingChart: Error loading local asset:", e);
+        if (__DEV__)
+          console.log("AdvancedTradingChart: Error loading local asset:", e);
         setInlineLibText(null);
       }
     })();
@@ -321,10 +329,20 @@ export default function AdvancedTradingChart({
   const libSrc =
     "https://unpkg.com/lightweight-charts@5.0.0/dist/lightweight-charts.standalone.production.js";
   const scriptLoader = inlineLibText
-    ? `<script>console.log('AdvancedTradingChart: Using inline script');(function(){try{var s=document.createElement('script');s.type='text/javascript';s.text=${JSON.stringify(
+    ? `<script>${
+        __DEV__
+          ? "console.log('AdvancedTradingChart: Using inline script');"
+          : ""
+      }(function(){try{var s=document.createElement('script');s.type='text/javascript';s.text=${JSON.stringify(
         inlineLibText
-      )};document.head.appendChild(s);}catch(e){console.log('AdvancedTradingChart: Error injecting inline script:', e);}})();</script>`
-    : `<script>console.log('AdvancedTradingChart: Using CDN script');</script><script src="${libSrc}"></script>`;
+      )};document.head.appendChild(s);}catch(e){${
+        __DEV__
+          ? "console.log('AdvancedTradingChart: Error injecting inline script:', e);"
+          : ""
+      }})();</script>`
+    : `<script>${
+        __DEV__ ? "console.log('AdvancedTradingChart: Using CDN script');" : ""
+      }</script><script src="${libSrc}"></script>`;
 
   const html = `<!doctype html><html><head>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -797,9 +815,13 @@ export default function AdvancedTradingChart({
           onMessage={(e) => {
             try {
               const msg = JSON.parse(e.nativeEvent.data);
-              console.log("AdvancedTradingChart message:", msg);
+              if (__DEV__) console.log("AdvancedTradingChart message:", msg);
             } catch {
-              console.log("AdvancedTradingChart message:", e.nativeEvent.data);
+              if (__DEV__)
+                console.log(
+                  "AdvancedTradingChart message:",
+                  e.nativeEvent.data
+                );
             }
           }}
           onError={(e) => {

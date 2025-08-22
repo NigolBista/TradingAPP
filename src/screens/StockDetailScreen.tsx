@@ -557,7 +557,8 @@ export default function StockDetailScreen() {
       const interval = setInterval(refreshCachedSignal, 2500);
 
       // Start real-time chart refresh
-      console.log("🔄 Starting stock detail refresh for", symbol, extendedTf);
+      if (__DEV__)
+        console.log("🔄 Starting stock detail refresh for", symbol, extendedTf);
       realtimeDataManager.startStockDetailRefresh(
         symbol,
         extendedTf,
@@ -612,7 +613,7 @@ export default function StockDetailScreen() {
       // Return cleanup function
       return () => {
         clearInterval(interval);
-        console.log("⏹️ Stopping stock detail refresh");
+        if (__DEV__) console.log("⏹️ Stopping stock detail refresh");
         realtimeDataManager.stopStockDetailRefresh();
       };
     }, [symbol, getCachedSignal, cachedSignal, extendedTf])
@@ -1172,7 +1173,7 @@ export default function StockDetailScreen() {
     try {
       const candles = await smartCandleManager.getCandles(symbol, tf, 500);
       if (candles && candles.length > 0) {
-        console.log("📈 Smart timeframe switch for", symbol, tf);
+        if (__DEV__) console.log("📈 Smart timeframe switch for", symbol, tf);
         // Set data with auto-fit enabled for smooth timeframe transitions
         setDailySeries(toLWC(candles));
       }
