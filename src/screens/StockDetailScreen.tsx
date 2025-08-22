@@ -1829,6 +1829,7 @@ export default function StockDetailScreen() {
               showMA={false}
               showGrid={true}
               showCrosshair={true}
+              initialPosition="end"
               forcePositive={
                 todayChange !== null && todayChangePercent !== null
                   ? todayChange >= 0

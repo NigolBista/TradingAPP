@@ -54,6 +54,8 @@ interface Props {
   };
   // New: richer trade overlay input. If provided, takes precedence over `levels`.
   tradePlan?: TradePlanOverlay;
+  // Control initial viewport positioning
+  initialPosition?: "start" | "end" | "fit";
   // Notify RN when visible time range changes (ms)
   onVisibleRangeChange?: (range: { fromMs: number; toMs: number }) => void;
   // Notify RN when user nears data edges during pan/zoom (for seamless loading)
@@ -90,6 +92,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       forcePositive,
       levels,
       tradePlan,
+      initialPosition = "start",
       onVisibleRangeChange,
       onEdgeRequest,
       onReady,
@@ -400,6 +403,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       let mainSeries;
       const type = ${JSON.stringify(type)};
       const forced = ${JSON.stringify(forcePositive ?? null)};
+      const initialPos = ${JSON.stringify(initialPosition)};
       let raw = [];
       
       // Determine if price is up or down based on first and last prices
@@ -690,9 +694,16 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
         } catch(_) {}
       }
 
-      // Initial fit on load
+      // Initial positioning on load
       setTimeout(() => {
-        try { chart.timeScale().fitContent(); } catch(_) {}
+        try { 
+          // For "end" position, scroll to real time to show current data
+          if (initialPos === "end") {
+            chart.timeScale().scrollToRealTime();
+          } else {
+            chart.timeScale().fitContent();
+          }
+        } catch(_) {}
         addLevelLines();
       }, 100);
       
@@ -769,35 +780,35 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
               let optimalSpacing, rightOffsetBars;
               
               if (avgTimeSpacing <= 120) {
-                // 1-2 minute data: Show ~4-6 hours worth (240-360 bars)
-                optimalSpacing = 4;
-                rightOffsetBars = 20;
-              } else if (avgTimeSpacing <= 300) {
-                // 3-5 minute data: Show ~6-8 hours worth (120-160 bars)  
-                optimalSpacing = 6;
-                rightOffsetBars = 15;
-              } else if (avgTimeSpacing <= 900) {
-                // 10-15 minute data: Show ~1-2 days worth (96-192 bars)
+                // 1-2 minute data: Readable spacing for intraday
                 optimalSpacing = 8;
-                rightOffsetBars = 12;
-              } else if (avgTimeSpacing <= 1800) {
-                // 30 minute data: Show ~3-5 days worth (144-240 bars)
-                optimalSpacing = 10;
                 rightOffsetBars = 10;
-              } else if (avgTimeSpacing <= 3600) {
-                // 1 hour data: Show ~1-2 weeks worth (168-336 bars)
-                optimalSpacing = 12;
+              } else if (avgTimeSpacing <= 300) {
+                // 3-5 minute data: Good readability
+                optimalSpacing = 10;
                 rightOffsetBars = 8;
-              } else if (avgTimeSpacing <= 14400) {
-                // 2-4 hour data: Show ~1-2 months worth
-                optimalSpacing = 15;
+              } else if (avgTimeSpacing <= 900) {
+                // 10-15 minute data: Clear bar separation
+                optimalSpacing = 12;
                 rightOffsetBars = 6;
-              } else if (avgTimeSpacing <= 86400) {
-                // Daily data: Show ~3-6 months worth
+              } else if (avgTimeSpacing <= 1800) {
+                // 30 minute data: Well-spaced bars
+                optimalSpacing = 15;
+                rightOffsetBars = 5;
+              } else if (avgTimeSpacing <= 3600) {
+                // 1 hour data: Professional spacing
                 optimalSpacing = 18;
                 rightOffsetBars = 5;
+              } else if (avgTimeSpacing <= 14400) {
+                // 2-4 hour data: Clear daily patterns
+                optimalSpacing = 20;
+                rightOffsetBars = 4;
+              } else if (avgTimeSpacing <= 86400) {
+                // Daily data: Monthly/quarterly view
+                optimalSpacing = 22;
+                rightOffsetBars = 3;
               } else {
-                // Weekly/Monthly data: Show years worth
+                // Weekly/Monthly data: Yearly view
                 optimalSpacing = 25;
                 rightOffsetBars = 3;
               }
@@ -829,33 +840,53 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                   avgTimeSpacing = totalSpacing / Math.max(1, dataCount - 1);
                 }
                 
-                // Calculate optimal visible bars target based on timeframe
+                // Calculate optimal visible bars for immediate readability
                 let visibleBarsTarget;
                 if (avgTimeSpacing <= 120) {
-                  visibleBarsTarget = Math.min(300, dataCount);
-                } else if (avgTimeSpacing <= 300) {
-                  visibleBarsTarget = Math.min(150, dataCount);
-                } else if (avgTimeSpacing <= 900) {
+                  // 1-2 minute: Show ~2-3 hours (80-120 bars) for readability
                   visibleBarsTarget = Math.min(100, dataCount);
+                } else if (avgTimeSpacing <= 300) {
+                  // 3-5 minute: Show ~3-4 hours (50-80 bars)
+                  visibleBarsTarget = Math.min(70, dataCount);
+                } else if (avgTimeSpacing <= 900) {
+                  // 10-15 minute: Show ~6-8 hours (30-50 bars)
+                  visibleBarsTarget = Math.min(40, dataCount);
                 } else if (avgTimeSpacing <= 1800) {
-                  visibleBarsTarget = Math.min(80, dataCount);
+                  // 30 minute: Show ~1 day (30-50 bars)
+                  visibleBarsTarget = Math.min(50, dataCount);
                 } else if (avgTimeSpacing <= 3600) {
-                  visibleBarsTarget = Math.min(120, dataCount);
+                  // 1 hour: Show ~3-5 days (70-120 bars)
+                  visibleBarsTarget = Math.min(100, dataCount);
                 } else if (avgTimeSpacing <= 14400) {
-                  visibleBarsTarget = Math.min(80, dataCount);
+                  // 2-4 hour: Show ~2-3 weeks (80-120 bars)
+                  visibleBarsTarget = Math.min(100, dataCount);
                 } else if (avgTimeSpacing <= 86400) {
+                  // Daily: Show ~3-4 months (90-120 bars)
                   visibleBarsTarget = Math.min(120, dataCount);
                 } else {
-                  visibleBarsTarget = Math.min(100, dataCount);
+                  // Weekly/Monthly: Show ~2-3 years (100-150 bars)
+                  visibleBarsTarget = Math.min(150, dataCount);
                 }
                 
-                // Set visible range to show optimal amount of data
+                // Set visible range based on initialPosition prop
                 // Use immediate execution instead of requestAnimationFrame for faster response
                 try {
                   if (dataCount > visibleBarsTarget) {
-                    // Show the most recent data within the target range
-                    const startIndex = Math.max(0, dataCount - visibleBarsTarget);
-                    const endIndex = dataCount - 1;
+                    let startIndex, endIndex;
+                    
+                    if (initialPos === "end") {
+                      // Show the most recent data (current time) within the target range
+                      startIndex = Math.max(0, dataCount - visibleBarsTarget);
+                      endIndex = dataCount - 1;
+                    } else if (initialPos === "start") {
+                      // Show the beginning of data within the target range
+                      startIndex = 0;
+                      endIndex = Math.min(visibleBarsTarget - 1, dataCount - 1);
+                    } else {
+                      // Default to fit all content
+                      chart.timeScale().fitContent();
+                      return;
+                    }
                     
                     if (startIndex < endIndex) {
                       const fromTime = newData[startIndex].time;
@@ -942,28 +973,43 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                   avgTimeSpacing = totalSpacing / Math.max(1, dataCount - 1);
                 }
                 
-                // Apply optimal settings based on timeframe
-                let optimalSpacing = 8, visibleBarsTarget = 100;
+                // Apply optimal settings for readability
+                let optimalSpacing = 12, visibleBarsTarget = 80;
                 if (avgTimeSpacing <= 120) {
-                  optimalSpacing = 4; visibleBarsTarget = 300;
-                } else if (avgTimeSpacing <= 300) {
-                  optimalSpacing = 6; visibleBarsTarget = 150;
-                } else if (avgTimeSpacing <= 900) {
                   optimalSpacing = 8; visibleBarsTarget = 100;
+                } else if (avgTimeSpacing <= 300) {
+                  optimalSpacing = 10; visibleBarsTarget = 70;
+                } else if (avgTimeSpacing <= 900) {
+                  optimalSpacing = 12; visibleBarsTarget = 40;
                 } else if (avgTimeSpacing <= 1800) {
-                  optimalSpacing = 10; visibleBarsTarget = 80;
+                  optimalSpacing = 15; visibleBarsTarget = 50;
                 } else if (avgTimeSpacing <= 3600) {
-                  optimalSpacing = 12; visibleBarsTarget = 120;
+                  optimalSpacing = 18; visibleBarsTarget = 100;
+                } else if (avgTimeSpacing <= 14400) {
+                  optimalSpacing = 20; visibleBarsTarget = 100;
+                } else if (avgTimeSpacing <= 86400) {
+                  optimalSpacing = 22; visibleBarsTarget = 120;
                 } else {
-                  optimalSpacing = 15; visibleBarsTarget = 80;
+                  optimalSpacing = 25; visibleBarsTarget = 150;
                 }
                 
                 chart.applyOptions({ timeScale: { barSpacing: optimalSpacing } });
                 
                 if (dataCount > visibleBarsTarget) {
-                  const startIndex = Math.max(0, dataCount - visibleBarsTarget);
+                  let startIndex, endIndex;
+                  
+                  if (initialPos === "start") {
+                    // Show beginning of data
+                    startIndex = 0;
+                    endIndex = Math.min(visibleBarsTarget - 1, dataCount - 1);
+                  } else {
+                    // Default to current time (end) for resetView
+                    startIndex = Math.max(0, dataCount - visibleBarsTarget);
+                    endIndex = dataCount - 1;
+                  }
+                  
                   const fromTime = raw[startIndex].time;
-                  const toTime = raw[dataCount - 1].time;
+                  const toTime = raw[endIndex].time;
                   chart.timeScale().setVisibleRange({ from: fromTime, to: toTime });
                 } else {
                   chart.timeScale().fitContent();

@@ -1032,6 +1032,7 @@ export default function ChartFullScreen() {
             showMA={false}
             showGrid={true}
             showCrosshair={true}
+            initialPosition="end"
             forcePositive={typeof dayUp === "boolean" ? dayUp : undefined}
             levels={effectiveLevels}
             tradePlan={currentTradePlan}
