@@ -206,18 +206,16 @@ class PolygonRealtimeClient {
   }
 
   private getTimeframeMs(timeframe: string): number {
-    switch (timeframe) {
-      case "1s":
-        return 1000;
-      case "1m":
-        return 60 * 1000;
-      case "1h":
-        return 60 * 60 * 1000;
-      case "1d":
-        return 24 * 60 * 60 * 1000;
-      default:
-        return 60 * 1000; // Default to 1 minute
-    }
+    const tf = (timeframe || "").toLowerCase();
+    if (tf === "1s") return 1000;
+    if (tf === "1m") return 60 * 1000;
+    if (tf === "1h") return 60 * 60 * 1000;
+    if (tf === "1d") return 24 * 60 * 60 * 1000;
+    if (tf === "1w" || tf.includes("week")) return 7 * 24 * 60 * 60 * 1000;
+    if (tf === "1m" || tf === "1min") return 60 * 1000;
+    if (tf === "1mo" || tf.includes("month") || timeframe === "1M")
+      return 30 * 24 * 60 * 60 * 1000; // approx month
+    return 60 * 1000;
   }
 
   private handleAggregateCandle(msg: any, timeframe: string) {
@@ -306,18 +304,35 @@ class PolygonRealtimeClient {
     timeframe: string
   ): Promise<void> {
     const tf = timeframe.toLowerCase();
+    // Always include trades to keep last price flowing
+    await this.subscribeTrades(symbols);
     if (tf.includes("s")) {
       await this.subscribeAggSec(symbols);
-    } else if (tf.includes("m") || tf.includes("min")) {
-      await this.subscribeAggMin(symbols);
-    } else if (tf.includes("h") || tf.includes("hour")) {
-      await this.subscribeAggHour(symbols);
-    } else if (tf.includes("d") || tf.includes("day")) {
-      await this.subscribeAggDay(symbols);
-    } else {
-      // Default to minute aggregates
-      await this.subscribeAggMin(symbols);
+      return;
     }
+    if (tf.includes("min") || /(^|\d)m($|[^o])/.test(tf)) {
+      await this.subscribeAggMin(symbols);
+      return;
+    }
+    if (tf.includes("h") || tf.includes("hour")) {
+      await this.subscribeAggHour(symbols);
+      return;
+    }
+    if (tf.includes("d") || tf.includes("day")) {
+      await this.subscribeAggDay(symbols);
+      return;
+    }
+    if (tf.includes("w") || tf.includes("week")) {
+      // No native weekly; approximate by day and let aggregator roll
+      await this.subscribeAggDay(symbols);
+      return;
+    }
+    if (tf.includes("mo") || tf.includes("month") || timeframe === "1M") {
+      // No native monthly; approximate by day and let aggregator roll
+      await this.subscribeAggDay(symbols);
+      return;
+    }
+    await this.subscribeAggMin(symbols);
   }
 
   unsubscribeTrades(symbols: string[]): void {

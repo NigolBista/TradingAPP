@@ -130,6 +130,18 @@ async function fetchPolygonCandles(
     limit
   )}&apiKey=${encodeURIComponent(key)}`;
 
+  // Debug: show the date range being requested
+  try {
+    // Use ISO UTC dates for clarity
+    const fromStr = toIsoDateUTC(from);
+    const toStr = toIsoDateUTC(to);
+    console.log(
+      `\ud83d\udcf1 Polygon API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit})`
+    );
+  } catch (_) {
+    // no-op
+  }
+
   const json = await fetchJson(url, { "Content-Type": "application/json" });
   const results = (json?.results || []) as any[];
   const candles: Candle[] = results
@@ -174,6 +186,17 @@ async function fetchPolygonCandlesWindow(
     1,
     limit
   )}&apiKey=${encodeURIComponent(key)}`;
+
+  // Debug: show the date range being requested
+  try {
+    const fromStr = toIsoDateUTC(from);
+    const toStr = toIsoDateUTC(to);
+    console.log(
+      `\ud83d\udcf1 Polygon API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit})`
+    );
+  } catch (_) {
+    // no-op
+  }
 
   const json = await fetchJson(
     url,
@@ -381,7 +404,8 @@ function computeDaysBack(
 export async function fetchMarketDataCandles(
   symbol: string,
   resolution: MarketDataResolution,
-  limit: number
+  limit: number,
+  includeExtendedHours: boolean = true
 ): Promise<Candle[]> {
   const apiToken = (Constants.expoConfig?.extra as any)?.marketDataApiToken;
   if (!apiToken) {
@@ -395,9 +419,24 @@ export async function fetchMarketDataCandles(
   const from = new Date(to.getTime() - baseDaysBack * 24 * 60 * 60 * 1000);
 
   const formatDate = (d: Date) => d.toISOString().split("T")[0];
-  const url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
+  const fromStr = formatDate(from);
+  const toStr = formatDate(to);
+
+  // Build URL with extended hours parameter
+  let url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
     symbol
-  )}/?from=${formatDate(from)}&to=${formatDate(to)}&limit=${limit}`;
+  )}/?from=${fromStr}&to=${toStr}&limit=${limit}`;
+
+  // Add extended hours parameter - MarketData.app includes extended hours by default
+  // but we can be explicit about it for clarity
+  if (includeExtendedHours) {
+    url += "&extended=true";
+  }
+
+  // Debug: show the date range being requested
+  console.log(
+    `\ud83d\udce1 API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit})`
+  );
 
   const headers = {
     Authorization: `Bearer ${apiToken}`,
@@ -441,7 +480,8 @@ export async function fetchMarketDataCandlesWindow(
   fromMs: number,
   toMs: number,
   limit: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  includeExtendedHours: boolean = true
 ): Promise<Candle[]> {
   const apiToken = (Constants.expoConfig?.extra as any)?.marketDataApiToken;
   if (!apiToken) {
@@ -476,12 +516,18 @@ export async function fetchMarketDataCandlesWindow(
   const fromStr = formatDate(from);
   const toStr = formatDate(to);
 
-  const url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
+  // Build URL with extended hours parameter
+  let url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
     symbol
   )}/?from=${fromStr}&to=${toStr}&limit=${limit}`;
 
+  // Add extended hours parameter
+  if (includeExtendedHours) {
+    url += "&extended=true";
+  }
+
   console.log(
-    `📡 API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit})`
+    `📡 API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit}, extended: ${includeExtendedHours})`
   );
 
   const headers = {
@@ -528,7 +574,11 @@ export async function fetchMarketDataCandlesWindow(
 export async function fetchCandlesForTimeframe(
   symbol: string,
   timeframe: ExtendedTimeframe,
-  opts?: { outBars?: number; baseCushion?: number }
+  opts?: {
+    outBars?: number;
+    baseCushion?: number;
+    includeExtendedHours?: boolean;
+  }
 ): Promise<Candle[]> {
   const { base, group } = mapExtendedTimeframe(timeframe);
   const provider = getSelectedProvider();
@@ -548,6 +598,7 @@ export async function fetchCandlesForTimeframe(
     resolution: base,
     limit: baseLimit,
     providerOverride: provider,
+    includeExtendedHours: opts?.includeExtendedHours,
   });
   return aggregateCandles(baseCandles, group).slice(-outBars);
 }
@@ -580,7 +631,11 @@ export async function fetchCandlesForTimeframeWindow(
   timeframe: ExtendedTimeframe,
   fromMs: number,
   toMs: number,
-  opts?: { outBars?: number; baseCushion?: number },
+  opts?: {
+    outBars?: number;
+    baseCushion?: number;
+    includeExtendedHours?: boolean;
+  },
   signal?: AbortSignal
 ): Promise<Candle[]> {
   const { base, group } = mapExtendedTimeframe(timeframe);
@@ -609,7 +664,8 @@ export async function fetchCandlesForTimeframeWindow(
           fromMs,
           toMs,
           baseLimit,
-          signal
+          signal,
+          opts?.includeExtendedHours
         );
 
   // Aggregate to target frame and trim to requested time window
@@ -627,6 +683,7 @@ export interface FetchCandlesOptions {
   resolution?: MarketDataResolution;
   limit?: number;
   providerOverride?: ProviderType;
+  includeExtendedHours?: boolean;
 }
 
 /* ---------- ultra-simple in-memory cache ---------- */
@@ -637,9 +694,10 @@ const DEFAULT_TTL_MS = 60_000; // 1 minute — great for intraday pulls
 
 function cacheKey(symbol: string, options: FetchCandlesOptions): string {
   const p = options.providerOverride || getSelectedProvider();
+  const extended = options.includeExtendedHours ?? true;
   return `${symbol}|${p}|${options.resolution || "D"}|${
     options.limit || "default"
-  }`;
+  }|ext:${extended}`;
 }
 
 /** Direct MarketData fetch with caching */
@@ -649,9 +707,10 @@ export async function fetchCandles(
 ): Promise<Candle[]> {
   const resolution = options.resolution || "D";
   const limit = options.limit || 120;
+  const includeExtendedHours = options.includeExtendedHours ?? true;
   const provider = getSelectedProvider(options.providerOverride);
 
-  const key = cacheKey(symbol, { resolution, limit });
+  const key = cacheKey(symbol, { resolution, limit, includeExtendedHours });
 
   // Serve fresh cache
   const cached = candleCache.get(key);
@@ -668,7 +727,12 @@ export async function fetchCandles(
       const candles =
         provider === "polygon"
           ? await fetchPolygonCandles(symbol, resolution, limit)
-          : await fetchMarketDataCandles(symbol, resolution, limit);
+          : await fetchMarketDataCandles(
+              symbol,
+              resolution,
+              limit,
+              includeExtendedHours
+            );
       candleCache.set(key, { ts: Date.now(), candles });
       return candles;
     } finally {

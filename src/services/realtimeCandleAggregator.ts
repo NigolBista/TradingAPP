@@ -67,6 +67,33 @@ class RealtimeCandleAggregator {
   }
 
   private handlePolygonTick(symbol: string, price: number, ts: number) {
+    // Validate price data to prevent chart scaling issues
+    if (!Number.isFinite(price) || price <= 0) {
+      console.warn(`🚫 Rejecting invalid price tick for ${symbol}: ${price}`);
+      return;
+    }
+
+    // Check against recent price history for reasonableness
+    const recentTicks = this.tickBuffer[symbol]?.slice(-20) || [];
+    if (recentTicks.length > 5) {
+      const recentPrices = recentTicks.map((t) => t.price);
+      const minRecent = Math.min(...recentPrices);
+      const maxRecent = Math.max(...recentPrices);
+      const avgRecent =
+        recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
+
+      // Reject prices that are more than 50% away from recent average (likely bad data)
+      const deviation = Math.abs(price - avgRecent) / avgRecent;
+      if (deviation > 0.5) {
+        console.warn(
+          `🚫 Rejecting unreasonable price tick for ${symbol}: ${price} (recent avg: ${avgRecent.toFixed(
+            2
+          )}, deviation: ${(deviation * 100).toFixed(1)}%)`
+        );
+        return;
+      }
+    }
+
     // Buffer ticks for custom timeframe aggregation
     if (!this.tickBuffer[symbol]) {
       this.tickBuffer[symbol] = [];
@@ -113,12 +140,20 @@ class RealtimeCandleAggregator {
         this.updateCandleBuffer(symbol, timeframe, updatedCandle);
         this.emitCandleUpdate(symbol, updatedCandle);
       } else if (candleStartTime > currentCandle.time) {
-        // Complete the previous candle first
-        const completedCandle: AggregatedCandle = {
-          ...currentCandle,
-          isComplete: true,
-        };
-        this.emitCandleUpdate(symbol, completedCandle);
+        // Complete the previous candle first, but don't emit placeholders
+        const wasPlaceholder =
+          currentCandle.open === 0 &&
+          currentCandle.high === 0 &&
+          currentCandle.low === Number.MAX_VALUE &&
+          currentCandle.close === 0;
+
+        if (!wasPlaceholder) {
+          const completedCandle: AggregatedCandle = {
+            ...currentCandle,
+            isComplete: true,
+          };
+          this.emitCandleUpdate(symbol, completedCandle);
+        }
 
         // Start new candle - ensure we have a valid previous close, otherwise use current price
         const previousClose =
@@ -153,18 +188,41 @@ class RealtimeCandleAggregator {
   }
 
   private parseTimeframeToMs(timeframe: string): number {
-    const tf = timeframe.toLowerCase();
+    const raw = timeframe || "";
+    const tf = raw.toLowerCase();
 
+    // Months (approximate to 30 days)
+    if (/\bM\b/.test(raw) || /\bmo\b/.test(tf) || tf.includes("month")) {
+      const months = parseInt(raw.replace(/[^0-9]/g, "")) || 1;
+      return months * 30 * 24 * 60 * 60 * 1000;
+    }
+
+    // Weeks
+    if (tf.includes("w") || tf.includes("week")) {
+      const weeks = parseInt(tf.replace(/[^0-9]/g, "")) || 1;
+      return weeks * 7 * 24 * 60 * 60 * 1000;
+    }
+
+    // Seconds
     if (tf.includes("s")) {
       const seconds = parseInt(tf.replace(/[^0-9]/g, "")) || 1;
       return seconds * 1000;
-    } else if (tf.includes("m") || tf.includes("min")) {
+    }
+
+    // Minutes (keep after months)
+    if (tf.includes("min") || tf.includes("m")) {
       const minutes = parseInt(tf.replace(/[^0-9]/g, "")) || 1;
       return minutes * 60 * 1000;
-    } else if (tf.includes("h") || tf.includes("hour")) {
+    }
+
+    // Hours
+    if (tf.includes("h") || tf.includes("hour")) {
       const hours = parseInt(tf.replace(/[^0-9]/g, "")) || 1;
       return hours * 60 * 60 * 1000;
-    } else if (tf.includes("d") || tf.includes("day")) {
+    }
+
+    // Days
+    if (tf.includes("d") || tf.includes("day")) {
       const days = parseInt(tf.replace(/[^0-9]/g, "")) || 1;
       return days * 24 * 60 * 60 * 1000;
     }

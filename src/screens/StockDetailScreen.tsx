@@ -32,9 +32,6 @@ import LightweightCandles, {
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
-import ChartControls, {
-  type Timeframe,
-} from "../components/charts/ChartControls";
 import TimeframePickerModal, {
   type ExtendedTimeframe,
 } from "../components/charts/TimeframePickerModal";
@@ -43,6 +40,7 @@ import {
   type Candle,
   fetchCandlesForTimeframe,
   fetchCandlesForTimeframeWindow,
+  fetchMarketDataCandlesWindow,
 } from "../services/marketProviders";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import {
@@ -73,6 +71,9 @@ import { type SimpleQuote, getCachedQuotes } from "../services/quotes";
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
 };
+
+// Robinhood-style header timeframes for this screen only
+type HeaderTimeframe = "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "5Y" | "MAX";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
@@ -139,6 +140,12 @@ const styles = StyleSheet.create({
   afterHours: {
     fontSize: 13,
     color: "#888",
+  },
+  sessionIndicator: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+    fontWeight: "500",
   },
   iconButton: {
     padding: 8,
@@ -381,9 +388,11 @@ export default function StockDetailScreen() {
   const [stockName, setStockName] = useState<string>("");
   const [chartType, setChartType] = useState<ChartType>("line");
   const [showChartSettings, setShowChartSettings] = useState(false);
+  const [showExtendedHours, setShowExtendedHours] = useState(true);
   const { pinned, defaultTimeframe, hydrate, toggle, setDefaultTimeframe } =
     useTimeframeStore();
-  const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1D");
+  const [selectedTimeframe, setSelectedTimeframe] =
+    useState<HeaderTimeframe>("1D");
   const [tfModalVisible, setTfModalVisible] = useState(false);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
     defaultTimeframe || "1m"
@@ -400,6 +409,7 @@ export default function StockDetailScreen() {
     useState(false);
   const [showChartTypeBottomSheet, setShowChartTypeBottomSheet] =
     useState(false);
+  const [isYTDView, setIsYTDView] = useState(false);
 
   // Rate limiting state for historical data requests
   const lastHistoricalRequestRef = useRef<number>(0);
@@ -432,9 +442,16 @@ export default function StockDetailScreen() {
     load();
   }, [symbol]);
 
-  // Clear cache and reload chart when timeframe changes
+  // Clear cache and reload chart when timeframe or extended hours setting changes
   useEffect(() => {
-    console.log("🔄 Timeframe changed to:", extendedTf, "for symbol:", symbol);
+    console.log(
+      "🔄 Timeframe or extended hours changed:",
+      extendedTf,
+      "extended hours:",
+      showExtendedHours,
+      "for symbol:",
+      symbol
+    );
 
     // Reset local view state
 
@@ -443,7 +460,7 @@ export default function StockDetailScreen() {
 
     // Load new timeframe data
     load();
-  }, [extendedTf]);
+  }, [extendedTf, showExtendedHours]);
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
   const [unifiedBottomSheetTab, setUnifiedBottomSheetTab] = useState<
     "timeframe" | "chartType"
@@ -679,6 +696,10 @@ export default function StockDetailScreen() {
         async () => {
           // Refresh callback - incrementally update chart data
           try {
+            // Do not override YTD view with non-YTD data
+            if (selectedTimeframe === "YTD") {
+              return;
+            }
             const candles = await smartCandleManager.getCandles(
               symbol,
               extendedTf,
@@ -692,13 +713,44 @@ export default function StockDetailScreen() {
                 if (q && typeof q.last === "number" && candles.length) {
                   const lastIdx = candles.length - 1;
                   const last = candles[lastIdx];
-                  const patched = {
-                    ...last,
-                    close: q.last,
-                    high: Math.max(last.high, q.last),
-                    low: Math.min(last.low, q.last),
-                  } as typeof last;
-                  candles[lastIdx] = patched;
+
+                  // Validate quote price against historical candle data to prevent chart scaling issues
+                  const recentCandles = candles.slice(-20); // Use last 20 candles for reference
+                  const recentPrices = recentCandles.flatMap((c) => [
+                    c.high,
+                    c.low,
+                    c.close,
+                  ]);
+                  const minRecent = Math.min(...recentPrices);
+                  const maxRecent = Math.max(...recentPrices);
+                  const priceRange = maxRecent - minRecent;
+                  const tolerance = Math.max(
+                    priceRange * 0.15,
+                    maxRecent * 0.05
+                  ); // 15% of recent range or 5% of price
+
+                  // Only merge quote if it's within reasonable bounds of recent price action
+                  const isReasonablePrice =
+                    q.last >= minRecent - tolerance &&
+                    q.last <= maxRecent + tolerance;
+
+                  if (isReasonablePrice) {
+                    const patched = {
+                      ...last,
+                      close: q.last,
+                      high: Math.max(last.high, q.last),
+                      low: Math.min(last.low, q.last),
+                    } as typeof last;
+                    candles[lastIdx] = patched;
+                  } else {
+                    console.warn(
+                      `🚫 Rejecting unreasonable quote price for ${symbol}: ${
+                        q.last
+                      } (recent range: ${minRecent.toFixed(
+                        2
+                      )} - ${maxRecent.toFixed(2)})`
+                    );
+                  }
                 }
               } catch (_) {}
 
@@ -730,7 +782,7 @@ export default function StockDetailScreen() {
         if (__DEV__) console.log("⏹️ Stopping stock detail refresh");
         realtimeDataManager.stopStockDetailRefresh();
       };
-    }, [symbol, getCachedSignal, cachedSignal, extendedTf])
+    }, [symbol, getCachedSignal, cachedSignal, extendedTf, selectedTimeframe])
   );
 
   // Remove automatic analysis - only trigger when user explicitly requests it
@@ -1000,6 +1052,21 @@ export default function StockDetailScreen() {
 
     // Try to get cached data from smart candle manager
     try {
+      // Special handling: YTD uses daily bars from Jan 1 → now
+      if (selectedTimeframe === "YTD") {
+        const startOfYear = new Date(new Date().getFullYear(), 0, 1).getTime();
+        const ytdDaily = await fetchMarketDataCandlesWindow(
+          symbol,
+          "D",
+          startOfYear,
+          Date.now(),
+          400,
+          undefined, // signal
+          showExtendedHours
+        );
+        setDailySeries(toLWC(ytdDaily));
+        return;
+      }
       // Use appropriate limit based on timeframe for optimal data coverage
       const getTimeframeLimit = (tf: string): number => {
         const tfLower = tf.toLowerCase();
@@ -1041,7 +1108,8 @@ export default function StockDetailScreen() {
       const cachedCandles = await smartCandleManager.getCandles(
         symbol,
         extendedTf,
-        limit
+        limit,
+        showExtendedHours
       );
       if (cachedCandles && cachedCandles.length > 0) {
         console.log(
@@ -1137,7 +1205,11 @@ export default function StockDetailScreen() {
       const to = earliestTime - 1;
 
       // Calculate how much historical data to fetch based on timeframe
-      const timeframeMs = timeframeSpacingMs(extendedTf);
+      // Use daily spacing for YTD view to keep daily resolution
+      const timeframeMs =
+        selectedTimeframe === "YTD"
+          ? 86_400_000
+          : timeframeSpacingMs(extendedTf);
       const from = Math.max(0, to - numberOfBars * timeframeMs);
 
       console.log(`🔄 Loading more historical data for ${symbol}:`, {
@@ -1149,12 +1221,26 @@ export default function StockDetailScreen() {
       });
 
       try {
-        const olderData = await fetchCandlesForTimeframeWindow(
-          symbol,
-          extendedTf,
-          from,
-          to
-        );
+        let olderData: Candle[] | null = null;
+        if (selectedTimeframe === "YTD") {
+          olderData = await fetchMarketDataCandlesWindow(
+            symbol,
+            "D",
+            from,
+            to,
+            Math.max(30, numberOfBars),
+            undefined, // signal
+            showExtendedHours
+          );
+        } else {
+          olderData = await fetchCandlesForTimeframeWindow(
+            symbol,
+            extendedTf,
+            from,
+            to,
+            { includeExtendedHours: showExtendedHours }
+          );
+        }
         if (olderData?.length) {
           console.log(
             `✅ Loaded ${olderData.length} historical candles for ${symbol}`
@@ -1180,7 +1266,7 @@ export default function StockDetailScreen() {
         return dailySeries;
       }
     },
-    [symbol, extendedTf, dailySeries]
+    [symbol, extendedTf, dailySeries, selectedTimeframe]
   );
 
   // Removed custom edge request logic; lazy loading handled in visible range handler
@@ -1255,7 +1341,7 @@ export default function StockDetailScreen() {
     // Update the real-time manager with new timeframe
     realtimeDataManager.updateTimeframe(tf);
     // Map extended to simple header pills if applicable
-    const map: Record<string, Timeframe> = {
+    const map: Record<string, HeaderTimeframe> = {
       "1m": "1D",
       "2m": "1D",
       "3m": "1D",
@@ -1274,9 +1360,9 @@ export default function StockDetailScreen() {
       "3M": "3M",
       "6M": "1Y",
       "1Y": "1Y",
-      "2Y": "ALL",
-      "5Y": "ALL",
-      ALL: "ALL",
+      "2Y": "MAX",
+      "5Y": "5Y",
+      ALL: "MAX",
     };
     setSelectedTimeframe(map[tf]);
 
@@ -1291,6 +1377,44 @@ export default function StockDetailScreen() {
     } catch (e) {
       console.warn("Failed to load timeframe candles:", e);
     }
+  }
+
+  // Header timeframe handler (Robinhood-style)
+  async function applyHeaderTimeframe(tf: HeaderTimeframe) {
+    setSelectedTimeframe(tf);
+    if (tf === "YTD") {
+      setIsYTDView(true);
+      try {
+        const startOfYear = new Date(new Date().getFullYear(), 0, 1).getTime();
+        const ytdDaily = await fetchMarketDataCandlesWindow(
+          symbol,
+          "D",
+          startOfYear,
+          Date.now(),
+          400
+        );
+        setDailySeries(toLWC(ytdDaily));
+      } catch (e) {
+        console.warn("Failed to load YTD data:", e);
+      }
+      // Keep extendedTf as "1D" so spacing works, but realtime disabled below
+      setExtendedTf("1D");
+      return;
+    }
+
+    setIsYTDView(false);
+    const map: Record<HeaderTimeframe, ExtendedTimeframe> = {
+      "1D": "1D",
+      "1W": "1W",
+      "1M": "1M",
+      "3M": "3M",
+      YTD: "1D", // not used (handled above)
+      "1Y": "1Y",
+      "5Y": "5Y",
+      MAX: "ALL",
+    };
+    const target = map[tf];
+    await applyExtendedTimeframe(target);
   }
 
   // Navigate to chart with signal data
@@ -1573,8 +1697,10 @@ export default function StockDetailScreen() {
       ? initialQuote.changePercent
       : null;
 
-  // After-hours visibility: only show in US after-hours window (4:00pm–8:00pm ET on weekdays)
-  function isUSAfterHours(now: Date = new Date()): boolean {
+  // Enhanced market session detection
+  type MarketSession = "pre-market" | "regular" | "after-hours" | "closed";
+
+  function getMarketSession(now: Date = new Date()): MarketSession {
     try {
       const parts = new Intl.DateTimeFormat("en-US", {
         timeZone: "America/New_York",
@@ -1588,14 +1714,27 @@ export default function StockDetailScreen() {
         parts.find((p) => p.type === "minute")?.value || "0"
       );
       const weekday = parts.find((p) => p.type === "weekday")?.value || "";
-      const isWeekday = weekday ? weekday[0] !== "S" : false; // Mon-Fri
+      const isWeekday = weekday && !["Sat", "Sun"].includes(weekday); // Mon-Fri
       const minutes = hour * 60 + minute;
-      return !!isWeekday && minutes >= 16 * 60 && minutes < 20 * 60;
+
+      if (!isWeekday) return "closed";
+
+      // Pre-market: 4:00 AM - 9:30 AM ET
+      if (minutes >= 4 * 60 && minutes < 9 * 60 + 30) return "pre-market";
+      // Regular hours: 9:30 AM - 4:00 PM ET
+      if (minutes >= 9 * 60 + 30 && minutes < 16 * 60) return "regular";
+      // After-hours: 4:00 PM - 8:00 PM ET
+      if (minutes >= 16 * 60 && minutes < 20 * 60) return "after-hours";
+
+      return "closed";
     } catch {
-      return false;
+      return "closed";
     }
   }
-  const showAfterHours = isUSAfterHours();
+
+  const currentSession = getMarketSession();
+  const showAfterHours = currentSession === "after-hours";
+  const showPreMarket = currentSession === "pre-market";
 
   function toLWC(candles: Candle[]): LWCDatum[] {
     return (candles || []).map((c) => ({
@@ -1696,19 +1835,29 @@ export default function StockDetailScreen() {
               {todayChangePercent.toFixed(2)}%) Today
             </Text>
           )}
-          {showAfterHours && (
+          {(showAfterHours || showPreMarket) && (
             <Text
               style={[
                 styles.afterHours,
                 {
                   color:
-                    todayChange !== null && todayChange < 0
+                    currentSession === "pre-market"
+                      ? "#3b82f6"
+                      : todayChange !== null && todayChange < 0
                       ? "#16a34a"
                       : "#dc2626",
                 },
               ]}
             >
-              After hours
+              {currentSession === "pre-market" ? "Pre-market" : "After hours"}
+            </Text>
+          )}
+          {currentSession !== "closed" && (
+            <Text style={styles.sessionIndicator}>
+              Market:{" "}
+              {currentSession === "regular"
+                ? "Open"
+                : currentSession.replace("-", " ")}
             </Text>
           )}
         </View>
@@ -1737,52 +1886,58 @@ export default function StockDetailScreen() {
               }
               onLoadMoreData={handleLoadMoreData}
               symbol={symbol}
-              timeframe={extendedTf}
-              enableRealtime={true}
+              timeframe={selectedTimeframe === "YTD" ? "1D" : extendedTf}
+              enableRealtime={selectedTimeframe === "1D"}
             />
           </View>
 
-          {/* Unified Chart Controls */}
-          <View style={styles.unifiedControls}>
-            {/* Pinned Timeframes */}
+          {/* Robinhood-style Timeframe Controls */}
+          <View style={[styles.unifiedControls, { paddingHorizontal: 16 }]}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ alignItems: "center" }}
               style={{ flex: 1 }}
             >
-              {(pinned as ExtendedTimeframe[]).map((tf) => (
-                <Pressable
-                  key={`pin-${tf}`}
-                  onPress={() => applyExtendedTimeframe(tf)}
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    borderRadius: 8,
-                    backgroundColor: extendedTf === tf ? "#00D4AA" : "#1a1a1a",
-                    marginRight: 6,
-                  }}
-                >
-                  <Text
+              {(
+                [
+                  "1D",
+                  "1W",
+                  "1M",
+                  "3M",
+                  "YTD",
+                  "1Y",
+                  "5Y",
+                  "MAX",
+                ] as HeaderTimeframe[]
+              ).map((tf) => {
+                const isSelected = selectedTimeframe === tf;
+                return (
+                  <Pressable
+                    key={`hdr-${tf}`}
+                    onPress={() => applyHeaderTimeframe(tf)}
                     style={{
-                      color: extendedTf === tf ? "#000" : "#ccc",
-                      fontWeight: "600",
-                      fontSize: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: 14,
+                      backgroundColor: isSelected ? "#00D4AA" : "#1a1a1a",
+                      marginRight: 8,
                     }}
                   >
-                    {tf}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text
+                      style={{
+                        color: isSelected ? "#000" : "#ccc",
+                        fontWeight: "700",
+                        fontSize: 12,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {tf === "MAX" ? "MAX" : tf}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
-
-            {/* Unified Settings Button */}
-            <Pressable
-              onPress={() => showUnifiedBottomSheetWithTab("timeframe")}
-              style={styles.expandButton}
-            >
-              <Ionicons name="options" size={16} color="#fff" />
-            </Pressable>
 
             {/* Expand Button */}
             <Pressable
@@ -1790,14 +1945,13 @@ export default function StockDetailScreen() {
                 (navigation as any).navigate("ChartFullScreen", {
                   symbol,
                   chartType,
-                  timeframe: extendedTf, // Use extendedTf instead of selectedTimeframe for consistency
+                  timeframe: extendedTf,
                   initialTimeframe: extendedTf,
                   initialData: dailySeries,
                   isDayUp:
                     todayChange !== null && todayChangePercent !== null
                       ? todayChange >= 0
                       : undefined,
-                  // Pass cached signal data if available
                   ...(cachedSignal && {
                     tradePlan: cachedSignal.tradePlan,
                     ai: cachedSignal.aiMeta,
@@ -2993,6 +3147,8 @@ export default function StockDetailScreen() {
         onClose={() => setShowChartSettings(false)}
         currentChartType={chartType}
         onChartTypeChange={setChartType}
+        showExtendedHours={showExtendedHours}
+        onExtendedHoursChange={setShowExtendedHours}
       />
     </View>
   );

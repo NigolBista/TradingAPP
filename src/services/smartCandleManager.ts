@@ -98,7 +98,8 @@ class SmartCandleManager {
   async getCandles(
     symbol: string,
     timeframe: string,
-    limit: number = 500
+    limit: number = 500,
+    includeExtendedHours: boolean = true
   ): Promise<BaseCandle[]> {
     console.log(`📊 Getting candles for ${symbol} ${timeframe}`);
 
@@ -124,7 +125,12 @@ class SmartCandleManager {
       `❌ Cannot derive ${symbol} ${normalizedTimeframe}, fetching fresh data`
     );
     // Need to fetch fresh data
-    return this.fetchAndCache(symbol, normalizedTimeframe, limit);
+    return this.fetchAndCache(
+      symbol,
+      normalizedTimeframe,
+      limit,
+      includeExtendedHours
+    );
   }
 
   /**
@@ -348,7 +354,8 @@ class SmartCandleManager {
   private async fetchAndCache(
     symbol: string,
     timeframe: string,
-    limit: number
+    limit: number,
+    includeExtendedHours: boolean = true
   ): Promise<BaseCandle[]> {
     const cacheKey = `${symbol}:${timeframe}`;
 
@@ -358,7 +365,12 @@ class SmartCandleManager {
       return existing;
     }
 
-    const promise = this.doFetch(symbol, timeframe, limit);
+    const promise = this.doFetch(
+      symbol,
+      timeframe,
+      limit,
+      includeExtendedHours
+    );
     this.inflightRequests.set(cacheKey, promise);
 
     try {
@@ -393,7 +405,12 @@ class SmartCandleManager {
 
     // If gap is too large, do full reload
     if (timeSinceLastCandle > this.MAX_INCREMENTAL_GAP) {
-      const fresh = await this.doFetch(symbol, cached.baseTimeframe, 2000);
+      const fresh = await this.doFetch(
+        symbol,
+        cached.baseTimeframe,
+        2000,
+        true
+      );
       return fresh;
     }
 
@@ -405,7 +422,7 @@ class SmartCandleManager {
       Math.ceil(timeSinceLastCandle / perBarMs) + 1
     );
     const recentLimit = Math.min(100, recentBarsNeeded);
-    return this.doFetch(symbol, cached.baseTimeframe, recentLimit);
+    return this.doFetch(symbol, cached.baseTimeframe, recentLimit, true);
   }
 
   /**
@@ -451,7 +468,8 @@ class SmartCandleManager {
   private async doFetch(
     symbol: string,
     timeframe: string,
-    limit: number
+    limit: number,
+    includeExtendedHours: boolean = true
   ): Promise<BaseCandle[]> {
     console.log(`📡 Fetching ${symbol} ${timeframe} (limit: ${limit})`);
 
@@ -478,6 +496,7 @@ class SmartCandleManager {
 
     const candles = await fetchCandlesForTimeframe(symbol, timeframe as any, {
       outBars,
+      includeExtendedHours, // Use the parameter passed from the UI
       baseCushion: 1.05,
     });
 

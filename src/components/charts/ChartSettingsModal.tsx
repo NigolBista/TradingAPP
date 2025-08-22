@@ -16,6 +16,8 @@ interface ChartSettingsModalProps {
   onClose: () => void;
   currentChartType: ChartType;
   onChartTypeChange: (type: ChartType) => void;
+  showExtendedHours?: boolean;
+  onExtendedHoursChange?: (enabled: boolean) => void;
 }
 
 const chartTypes: { type: ChartType; label: string; icon: string }[] = [
@@ -30,6 +32,8 @@ export default function ChartSettingsModal({
   onClose,
   currentChartType,
   onChartTypeChange,
+  showExtendedHours = true,
+  onExtendedHoursChange,
 }: ChartSettingsModalProps) {
   const handleSelect = (type: ChartType) => {
     onChartTypeChange(type);
@@ -88,6 +92,57 @@ export default function ChartSettingsModal({
               </Pressable>
             ))}
           </View>
+
+          {/* Extended Hours Toggle */}
+          {onExtendedHoursChange && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Trading Sessions</Text>
+                <Pressable
+                  style={styles.option}
+                  onPress={() => onExtendedHoursChange(!showExtendedHours)}
+                >
+                  <View style={styles.optionContent}>
+                    <View style={styles.iconContainer}>
+                      <Ionicons
+                        name="time-outline"
+                        size={20}
+                        color={showExtendedHours ? "#00D4AA" : "#888"}
+                      />
+                    </View>
+                    <View style={styles.toggleContent}>
+                      <Text
+                        style={[
+                          styles.optionLabel,
+                          showExtendedHours && styles.selectedLabel,
+                        ]}
+                      >
+                        Show Extended Hours
+                      </Text>
+                      <Text style={styles.optionSubtitle}>
+                        Include pre-market (4:00-9:30 ET) and after-hours
+                        (16:00-20:00 ET) data
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.toggle,
+                        showExtendedHours && styles.toggleActive,
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.toggleThumb,
+                          showExtendedHours && styles.toggleThumbActive,
+                        ]}
+                      />
+                    </View>
+                  </View>
+                </Pressable>
+              </View>
+            </>
+          )}
         </View>
       </View>
     </Modal>
@@ -162,5 +217,52 @@ const styles = StyleSheet.create({
   selectedLabel: {
     color: "#fff",
     fontWeight: "500",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#2a2a2a",
+    marginHorizontal: 20,
+    marginVertical: 8,
+  },
+  section: {
+    padding: 8,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#888",
+    marginBottom: 8,
+    marginLeft: 16,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  toggleContent: {
+    flex: 1,
+  },
+  optionSubtitle: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  toggle: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#333",
+    padding: 2,
+    justifyContent: "center",
+  },
+  toggleActive: {
+    backgroundColor: "#00D4AA",
+  },
+  toggleThumb: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    transform: [{ translateX: 0 }],
+  },
+  toggleThumbActive: {
+    transform: [{ translateX: 20 }],
   },
 });

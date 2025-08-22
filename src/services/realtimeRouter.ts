@@ -78,6 +78,8 @@ class RealtimeRouter {
 
     // Use Polygon's timeframe-specific subscriptions
     try {
+      // include trades to keep last-price flowing even when aggregate cadence is slow
+      await polygonRealtime.subscribeTrades(symbols);
       await polygonRealtime.subscribeForTimeframe(symbols, timeframe);
       // Initialize candle tracking for each symbol
       symbols.forEach((symbol) => {

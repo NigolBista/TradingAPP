@@ -153,8 +153,32 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
         // Additional validation for OHLC consistency
         if (processedCandle.high < processedCandle.low) {
           console.warn(
-            "Invalid OHLC data - high < low, skipping:",
+            "🚫 Invalid OHLC data - high < low, skipping:",
             processedCandle
+          );
+          continue;
+        }
+
+        // Validate for reasonable price values
+        const prices = [
+          processedCandle.open,
+          processedCandle.high,
+          processedCandle.low,
+          processedCandle.close,
+        ];
+        if (prices.some((p) => !Number.isFinite(p) || p <= 0)) {
+          console.warn("🚫 Invalid price values, skipping:", processedCandle);
+          continue;
+        }
+
+        // Check for extreme price ranges that might indicate bad data
+        const priceRange = processedCandle.high - processedCandle.low;
+        const avgPrice = (processedCandle.high + processedCandle.low) / 2;
+        if (avgPrice > 0 && priceRange / avgPrice > 0.75) {
+          console.warn(
+            `🚫 Extreme price range detected, skipping:`,
+            processedCandle,
+            `(${((priceRange / avgPrice) * 100).toFixed(1)}% range)`
           );
           continue;
         }
@@ -267,6 +291,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
     <div id="wrap">
       <div id="c">
         <div id="t" style="display:none"></div>
+        <div id="sessions" style="position:absolute;inset:0;pointer-events:none;z-index:1"></div>
       </div>
     </div>
     ${scriptLoader}
@@ -380,6 +405,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
 
       log('Creating chart with options');
       const chart = LightweightCharts.createChart(container, chartOptions);
+      const sessionLayer = document.getElementById('sessions');
       
       if (!chart) {
         throw new Error('Failed to create chart instance');
@@ -396,6 +422,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
             width: Math.floor(width),
             height: Math.floor(height)
           });
+          try { updateZones && updateZones(); } catch(_) {}
         }
       });
       
@@ -752,8 +779,96 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
         } catch(_) {}
       }
 
-      // Placeholder for any future overlays (no-op)
-      function updateZones(){}
+      // Session shading (premarket 04:00-09:30 ET, after-hours 16:00-20:00 ET)
+      function getSessionType(tsSec){
+        try {
+          const d = new Date(tsSec * 1000);
+          const parts = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'America/New_York',
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit'
+          }).formatToParts(d);
+          let hh = '00', mm = '00';
+          for (let i=0;i<parts.length;i++){
+            const p = parts[i];
+            if (p && p.type === 'hour') hh = p.value;
+            if (p && p.type === 'minute') mm = p.value;
+          }
+          const minutes = (parseInt(hh,10)||0) * 60 + (parseInt(mm,10)||0);
+          if (minutes >= 240 && minutes < 570) return 'pre';
+          if (minutes >= 960 && minutes <= 1200) return 'after';
+          return 'regular';
+        } catch(_) { return 'regular'; }
+      }
+      function updateZones(){
+        try {
+          if (!sessionLayer || !Array.isArray(raw) || raw.length < 2) {
+            if (sessionLayer) sessionLayer.innerHTML = '';
+            return;
+          }
+          const range = chart.timeScale().getVisibleRange && chart.timeScale().getVisibleRange();
+          if (!range || range.from == null || range.to == null) return;
+          const fromSec = Math.floor(range.from);
+          const toSec = Math.ceil(range.to);
+
+          // Identify indices within range
+          let startIdx = 0;
+          while (startIdx < raw.length && raw[startIdx].time < fromSec) startIdx++;
+          let endIdx = startIdx;
+          while (endIdx < raw.length && raw[endIdx].time <= toSec) endIdx++;
+          if (startIdx > 0) startIdx = startIdx - 1;
+          endIdx = Math.min(endIdx + 1, raw.length);
+
+          const segments = [];
+          let currentType = null;
+          let segStart = null;
+          for (let i = startIdx; i < endIdx; i++) {
+            const t = raw[i].time;
+            const tType = getSessionType(t);
+            if (tType === 'regular') {
+              if (currentType != null && segStart != null) {
+                segments.push({ type: currentType, from: segStart, to: t });
+                currentType = null; segStart = null;
+              }
+              continue;
+            }
+            if (currentType == null) {
+              currentType = tType; segStart = t;
+            } else if (currentType !== tType) {
+              segments.push({ type: currentType, from: segStart, to: t });
+              currentType = tType; segStart = t;
+            }
+          }
+          if (currentType != null && segStart != null) {
+            const lastT = raw[Math.min(endIdx, raw.length - 1)].time;
+            segments.push({ type: currentType, from: segStart, to: lastT });
+          }
+
+          sessionLayer.innerHTML = '';
+          const dark = ${JSON.stringify(theme)} === 'dark';
+          const preColor = dark ? 'rgba(59,130,246,0.10)' : 'rgba(59,130,246,0.08)';
+          const aftColor = dark ? 'rgba(234,88,12,0.12)' : 'rgba(234,88,12,0.10)';
+          for (let i=0;i<segments.length;i++){
+            const s = segments[i];
+            const x1 = chart.timeScale().timeToCoordinate && chart.timeScale().timeToCoordinate(s.from);
+            const x2 = chart.timeScale().timeToCoordinate && chart.timeScale().timeToCoordinate(s.to);
+            if (x1 == null || x2 == null) continue;
+            const left = Math.min(x1, x2);
+            const width = Math.max(1, Math.abs(x2 - x1));
+            if (width < 2) continue;
+            const el = document.createElement('div');
+            el.style.position = 'absolute';
+            el.style.left = left + 'px';
+            el.style.width = width + 'px';
+            el.style.top = '0';
+            el.style.bottom = '0';
+            el.style.background = s.type === 'pre' ? preColor : aftColor;
+            el.style.pointerEvents = 'none';
+            sessionLayer.appendChild(el);
+          }
+        } catch(_) {}
+      }
 
       // Update line/area colors based on data or forced flag
       function updateSeriesColorByData(){
@@ -791,6 +906,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           }
         } catch(_) {}
         addLevelLines();
+        try { updateZones && updateZones(); } catch(_) {}
       }, 100);
       
       // No overlay sync needed for price lines
@@ -833,6 +949,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
           try { updateSeriesColorByData(); } catch(_) {}
           try { addMarkersToSeries(); } catch(_) {}
+          try { updateZones && updateZones(); } catch(_) {}
         } catch(e) { log('appendSeriesData error: ' + e.message); }
       }
       window.addEventListener('message', function(event){
@@ -1042,6 +1159,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
               try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
               try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
               try { updateSeriesColorByData(); } catch(_) {}
+              try { updateZones && updateZones(); } catch(_) {}
               // Reset the in-flight flag when we actually append or reset
               historyInFlight = false;
             } catch(e) { log('appendLeft error: ' + e.message); }
@@ -1073,6 +1191,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                 try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
                 // Update colors
                 try { updateSeriesColorByData(); } catch(_) {}
+                try { updateZones && updateZones(); } catch(_) {}
               }
             } catch(e) { 
               log('updateLastBar error: ' + e.message); 
@@ -1152,6 +1271,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
               JSON.stringify({ visibleRange: { fromMs, toMs } })
             );
           } catch(_) {}
+          try { updateZones && updateZones(); } catch(_) {}
         });
       } catch(_) {}
 
@@ -1443,11 +1563,44 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
 
               // Validate candle data before sending to chart
               if (!lwcCandle.time || lwcCandle.time <= 0) {
-                console.warn(`Invalid candle time for ${symbol}:`, lwcCandle);
+                console.warn(
+                  `🚫 Invalid candle time for ${symbol}:`,
+                  lwcCandle
+                );
                 return;
               }
               if (lwcCandle.high < lwcCandle.low) {
-                console.warn(`Invalid candle OHLC for ${symbol}:`, lwcCandle);
+                console.warn(
+                  `🚫 Invalid candle OHLC for ${symbol}:`,
+                  lwcCandle
+                );
+                return;
+              }
+
+              // Additional validation for reasonable price values
+              const prices = [
+                lwcCandle.open,
+                lwcCandle.high,
+                lwcCandle.low,
+                lwcCandle.close,
+              ];
+              if (prices.some((p) => !Number.isFinite(p) || p <= 0)) {
+                console.warn(
+                  `🚫 Invalid candle prices for ${symbol}:`,
+                  lwcCandle
+                );
+                return;
+              }
+
+              // Check for extreme price movements that might indicate bad data
+              const priceRange = lwcCandle.high - lwcCandle.low;
+              const avgPrice = (lwcCandle.high + lwcCandle.low) / 2;
+              if (avgPrice > 0 && priceRange / avgPrice > 0.5) {
+                console.warn(
+                  `🚫 Extreme price range detected for ${symbol}:`,
+                  lwcCandle,
+                  `(${((priceRange / avgPrice) * 100).toFixed(1)}% range)`
+                );
                 return;
               }
 
