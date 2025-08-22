@@ -21,6 +21,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import LightweightCandles, {
   type LWCDatum,
+  type LightweightCandlesHandle,
 } from "../components/charts/LightweightCandles";
 import ChartSettingsModal, {
   type ChartType,
@@ -37,6 +38,7 @@ import {
   fetchCandlesForTimeframe,
 } from "../services/marketProviders";
 import { getUpcomingFedEvents } from "../services/federalReserve";
+import realtimeRouter from "../services/realtimeRouter";
 import {
   performComprehensiveAnalysis,
   type MarketAnalysis,
@@ -368,6 +370,7 @@ export default function StockDetailScreen() {
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
   const [dailySeries, setDailySeries] = useState<LWCDatum[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
+  const chartRef = React.useRef<LightweightCandlesHandle>(null);
   const [initialQuote, setInitialQuote] = useState<SimpleQuote | null>(
     initialQuoteParam || null
   );
@@ -410,6 +413,125 @@ export default function StockDetailScreen() {
     fromMs: number;
     toMs: number;
   } | null>(null);
+
+  const barSpacingRef = React.useRef<number>(60_000);
+
+  function timeframeSpacingMs(tf: ExtendedTimeframe): number {
+    switch (tf) {
+      case "1m":
+        return 60_000;
+      case "2m":
+        return 120_000;
+      case "3m":
+        return 180_000;
+      case "4m":
+        return 240_000;
+      case "5m":
+        return 300_000;
+      case "10m":
+        return 600_000;
+      case "15m":
+        return 900_000;
+      case "30m":
+        return 1_800_000;
+      case "45m":
+        return 2_700_000;
+      case "1h":
+        return 3_600_000;
+      case "2h":
+        return 7_200_000;
+      case "4h":
+        return 14_400_000;
+      case "6h":
+        return 21_600_000;
+      case "8h":
+        return 28_800_000;
+      case "12h":
+        return 43_200_000;
+      case "1D":
+        return 86_400_000;
+      case "1W":
+        return 7 * 86_400_000;
+      case "1M":
+      case "3M":
+      case "6M":
+      case "1Y":
+      case "2Y":
+      case "5Y":
+      case "ALL":
+        return 30 * 86_400_000; // coarse approximation
+      default:
+        return 60_000;
+    }
+  }
+
+  // Recompute spacing when data/timeframe changes
+  useEffect(() => {
+    try {
+      if (dailySeries && dailySeries.length >= 2) {
+        const last = dailySeries[dailySeries.length - 1];
+        const prev = dailySeries[dailySeries.length - 2];
+        const inferred = Math.max(1, last.time - prev.time);
+        barSpacingRef.current = inferred;
+      } else {
+        barSpacingRef.current = timeframeSpacingMs(extendedTf);
+      }
+    } catch {
+      barSpacingRef.current = timeframeSpacingMs(extendedTf);
+    }
+  }, [dailySeries, extendedTf]);
+
+  // Tick-by-tick: update last bar or append a new one
+  useEffect(() => {
+    let removeListener: (() => void) | null = null;
+    let subscribed = false;
+    try {
+      removeListener = realtimeRouter.onPrice((sym, price, ts) => {
+        if (sym !== symbol) return;
+        setDailySeries((prev) => {
+          if (!prev || prev.length === 0) return prev;
+          const spacing =
+            barSpacingRef.current || timeframeSpacingMs(extendedTf);
+          const last = prev[prev.length - 1];
+          const bucketEnd = last.time + spacing;
+          if (ts < bucketEnd) {
+            // Update current bar
+            const updated = {
+              ...last,
+              high: Math.max(last.high, price),
+              low: Math.min(last.low, price),
+              close: price,
+            } as LWCDatum;
+            const out = prev.slice();
+            out[out.length - 1] = updated;
+            return out;
+          }
+          // Append new bar at the next bucket (align to spacing)
+          const nextTime = last.time + spacing;
+          const open = last.close;
+          const newBar: LWCDatum = {
+            time: nextTime,
+            open,
+            high: Math.max(open, price),
+            low: Math.min(open, price),
+            close: price,
+            volume: last.volume,
+          };
+          return [...prev, newBar];
+        });
+      });
+      realtimeRouter.subscribe([symbol]);
+      subscribed = true;
+    } catch {}
+    return () => {
+      try {
+        if (removeListener) removeListener();
+        if (subscribed) {
+          realtimeRouter.unsubscribe([symbol]);
+        }
+      } catch {}
+    };
+  }, [symbol, extendedTf]);
 
   const symbolSentimentCounts = useMemo(() => {
     // Use aggregated sentiment stats if available, otherwise fall back to individual news counting
@@ -1034,7 +1156,7 @@ export default function StockDetailScreen() {
           const existing = getSeries(symbol, extendedTf);
           if (existing && existing.length) setDailySeries(toLWC(existing));
         }
-      }, 100); // Reduced debounce for faster response
+      }, 300); // Increased debounce to reduce API calls during viewport changes
     };
   }, [symbol, extendedTf]);
 
@@ -1609,6 +1731,7 @@ export default function StockDetailScreen() {
           {/* Chart */}
           <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
             <LightweightCandles
+              ref={chartRef}
               data={dailySeries}
               height={280}
               type={chartType}

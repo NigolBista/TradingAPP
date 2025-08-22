@@ -49,6 +49,14 @@ export type MarketDataResolution =
   | "W"
   | "M";
 
+type ProviderType = "marketData" | "polygon";
+
+function getSelectedProvider(override?: ProviderType): ProviderType {
+  const cfg = (Constants.expoConfig?.extra as any) || {};
+  const envProvider = (cfg.marketProvider as ProviderType) || "marketData";
+  return (override as ProviderType) || envProvider;
+}
+
 /** Small helper */
 async function fetchJson(
   url: string,
@@ -58,6 +66,134 @@ async function fetchJson(
   const res = await fetch(url, { headers, signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
+}
+
+/** Polygon helpers */
+function polygonApiKey(): string | undefined {
+  const cfg = (Constants.expoConfig?.extra as any) || {};
+  return cfg.polygonApiKey as string | undefined;
+}
+
+function mapResolutionToPolygon(resolution: MarketDataResolution): {
+  multiplier: number;
+  timespan: "minute" | "hour" | "day" | "week" | "month";
+} {
+  switch (resolution) {
+    case "1":
+      return { multiplier: 1, timespan: "minute" };
+    case "5":
+      return { multiplier: 5, timespan: "minute" };
+    case "15":
+      return { multiplier: 15, timespan: "minute" };
+    case "30":
+      return { multiplier: 30, timespan: "minute" };
+    case "1H":
+      return { multiplier: 1, timespan: "hour" };
+    case "D":
+      return { multiplier: 1, timespan: "day" };
+    case "W":
+      return { multiplier: 1, timespan: "week" };
+    case "M":
+    default:
+      return { multiplier: 1, timespan: "month" };
+  }
+}
+
+function toIsoDateUTC(d: Date): string {
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+async function fetchPolygonCandles(
+  symbol: string,
+  resolution: MarketDataResolution,
+  limit: number
+): Promise<Candle[]> {
+  const key = polygonApiKey();
+  if (!key) {
+    throw new Error("Polygon API key missing. Set extra.polygonApiKey.");
+  }
+
+  const { multiplier, timespan } = mapResolutionToPolygon(resolution);
+  const to = new Date();
+  const baseDaysBack = computeDaysBack(resolution, limit);
+  const from = new Date(to.getTime() - baseDaysBack * 24 * 60 * 60 * 1000);
+
+  const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(
+    symbol
+  )}/range/${multiplier}/${timespan}/${toIsoDateUTC(from)}/${toIsoDateUTC(
+    to
+  )}?adjusted=true&sort=asc&limit=${Math.max(
+    1,
+    limit
+  )}&apiKey=${encodeURIComponent(key)}`;
+
+  const json = await fetchJson(url, { "Content-Type": "application/json" });
+  const results = (json?.results || []) as any[];
+  const candles: Candle[] = results
+    .map((r) => ({
+      time: Number(r.t),
+      open: Number(r.o),
+      high: Number(r.h),
+      low: Number(r.l),
+      close: Number(r.c),
+      volume: Number(r.v),
+    }))
+    .filter((k) => Number.isFinite(k.open) && Number.isFinite(k.close))
+    .sort((a, b) => a.time - b.time);
+
+  return candles.length > limit ? candles.slice(-limit) : candles;
+}
+
+async function fetchPolygonCandlesWindow(
+  symbol: string,
+  resolution: MarketDataResolution,
+  fromMs: number,
+  toMs: number,
+  limit: number,
+  signal?: AbortSignal
+): Promise<Candle[]> {
+  const key = polygonApiKey();
+  if (!key) {
+    throw new Error("Polygon API key missing. Set extra.polygonApiKey.");
+  }
+
+  const { multiplier, timespan } = mapResolutionToPolygon(resolution);
+  const minMs = Math.min(fromMs, toMs);
+  const maxMs = Math.max(fromMs, toMs);
+  const from = new Date(minMs);
+  const to = new Date(maxMs);
+
+  const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(
+    symbol
+  )}/range/${multiplier}/${timespan}/${toIsoDateUTC(from)}/${toIsoDateUTC(
+    to
+  )}?adjusted=true&sort=asc&limit=${Math.max(
+    1,
+    limit
+  )}&apiKey=${encodeURIComponent(key)}`;
+
+  const json = await fetchJson(
+    url,
+    { "Content-Type": "application/json" },
+    signal
+  );
+  const results = (json?.results || []) as any[];
+  const candles: Candle[] = results
+    .map((r) => ({
+      time: Number(r.t),
+      open: Number(r.o),
+      high: Number(r.h),
+      low: Number(r.l),
+      close: Number(r.c),
+      volume: Number(r.v),
+    }))
+    .filter((k) => Number.isFinite(k.open) && Number.isFinite(k.close))
+    .sort((a, b) => a.time - b.time);
+
+  return candles.length > limit ? candles.slice(-limit) : candles;
 }
 
 /** Group lower-timeframe candles into larger buckets */
@@ -395,6 +531,7 @@ export async function fetchCandlesForTimeframe(
   opts?: { outBars?: number; baseCushion?: number }
 ): Promise<Candle[]> {
   const { base, group } = mapExtendedTimeframe(timeframe);
+  const provider = getSelectedProvider();
 
   // How many *output* bars we want after grouping
   const outBars = opts?.outBars ?? desiredOutputBars(timeframe);
@@ -410,6 +547,7 @@ export async function fetchCandlesForTimeframe(
   const baseCandles = await fetchCandles(symbol, {
     resolution: base,
     limit: baseLimit,
+    providerOverride: provider,
   });
   return aggregateCandles(baseCandles, group).slice(-outBars);
 }
@@ -446,6 +584,7 @@ export async function fetchCandlesForTimeframeWindow(
   signal?: AbortSignal
 ): Promise<Candle[]> {
   const { base, group } = mapExtendedTimeframe(timeframe);
+  const provider = getSelectedProvider();
   const outBars = opts?.outBars ?? desiredOutputBars(timeframe);
   const BASE_CUSHION = opts?.baseCushion ?? 1.2;
   const MAX_BASE = 1200;
@@ -454,14 +593,24 @@ export async function fetchCandlesForTimeframeWindow(
     MAX_BASE
   );
 
-  const baseCandles = await fetchMarketDataCandlesWindow(
-    symbol,
-    base,
-    fromMs,
-    toMs,
-    baseLimit,
-    signal
-  );
+  const baseCandles =
+    provider === "polygon"
+      ? await fetchPolygonCandlesWindow(
+          symbol,
+          base,
+          fromMs,
+          toMs,
+          baseLimit,
+          signal
+        )
+      : await fetchMarketDataCandlesWindow(
+          symbol,
+          base,
+          fromMs,
+          toMs,
+          baseLimit,
+          signal
+        );
 
   // Aggregate to target frame and trim to requested time window
   const aggregated = aggregateCandles(baseCandles, group);
@@ -477,6 +626,7 @@ export async function fetchCandlesForTimeframeWindow(
 export interface FetchCandlesOptions {
   resolution?: MarketDataResolution;
   limit?: number;
+  providerOverride?: ProviderType;
 }
 
 /* ---------- ultra-simple in-memory cache ---------- */
@@ -486,7 +636,10 @@ const inflight = new Map<CacheKey, Promise<Candle[]>>();
 const DEFAULT_TTL_MS = 60_000; // 1 minute — great for intraday pulls
 
 function cacheKey(symbol: string, options: FetchCandlesOptions): string {
-  return `${symbol}|${options.resolution || "D"}|${options.limit || "default"}`;
+  const p = options.providerOverride || getSelectedProvider();
+  return `${symbol}|${p}|${options.resolution || "D"}|${
+    options.limit || "default"
+  }`;
 }
 
 /** Direct MarketData fetch with caching */
@@ -496,6 +649,7 @@ export async function fetchCandles(
 ): Promise<Candle[]> {
   const resolution = options.resolution || "D";
   const limit = options.limit || 120;
+  const provider = getSelectedProvider(options.providerOverride);
 
   const key = cacheKey(symbol, { resolution, limit });
 
@@ -511,7 +665,10 @@ export async function fetchCandles(
 
   const p = (async () => {
     try {
-      const candles = await fetchMarketDataCandles(symbol, resolution, limit);
+      const candles =
+        provider === "polygon"
+          ? await fetchPolygonCandles(symbol, resolution, limit)
+          : await fetchMarketDataCandles(symbol, resolution, limit);
       candleCache.set(key, { ts: Date.now(), candles });
       return candles;
     } finally {

@@ -19,6 +19,9 @@ type Entry = {
   chunks: Chunk[];
   status: "idle" | "fetching" | "live";
   abort?: AbortController | null;
+  lastFetchTime?: number;
+  recentFetchRanges?: Array<{ start: number; end: number; timestamp: number }>;
+  lastViewportRange?: Range;
 };
 
 const store = new Map<BarsKey, Entry>();
@@ -79,6 +82,39 @@ function clampRange(r: Range): Range {
   return { min: Math.min(r.min, r.max), max: Math.max(r.min, r.max) };
 }
 
+// Check if a range was recently fetched (within last 30 seconds)
+function wasRecentlyFetched(entry: Entry, start: number, end: number): boolean {
+  if (!entry.recentFetchRanges) return false;
+
+  const now = Date.now();
+  const recentThreshold = 30000; // 30 seconds
+
+  // Clean up old entries
+  entry.recentFetchRanges = entry.recentFetchRanges.filter(
+    (range) => now - range.timestamp < recentThreshold
+  );
+
+  // Check if requested range overlaps with any recent fetch
+  return entry.recentFetchRanges.some((range) => {
+    const overlapStart = Math.max(start, range.start);
+    const overlapEnd = Math.min(end, range.end);
+    return overlapStart < overlapEnd; // Has overlap
+  });
+}
+
+// Record a fetch attempt
+function recordFetchAttempt(entry: Entry, start: number, end: number): void {
+  if (!entry.recentFetchRanges) entry.recentFetchRanges = [];
+
+  entry.recentFetchRanges.push({
+    start,
+    end,
+    timestamp: Date.now(),
+  });
+
+  entry.lastFetchTime = Date.now();
+}
+
 export type ViewportFetchPlan = {
   backfillFrom?: number;
   backfillTo?: number;
@@ -90,7 +126,16 @@ export function getEntry(symbol: string, tf: ExtendedTimeframe): Entry {
   const k = keyFor(symbol, tf);
   let e = store.get(k);
   if (!e) {
-    e = { key: k, loadedRange: null, chunks: [], status: "idle", abort: null };
+    e = {
+      key: k,
+      loadedRange: null,
+      chunks: [],
+      status: "idle",
+      abort: null,
+      lastFetchTime: 0,
+      recentFetchRanges: [],
+      lastViewportRange: undefined,
+    };
     store.set(k, e);
   }
   return e;
@@ -106,22 +151,51 @@ export function planViewportFetch(
   symbol: string,
   tf: ExtendedTimeframe,
   domain: Range,
-  viewportBarsTarget = 350
+  viewportBarsTarget = 1000 // Increased from 350 to 1000 for larger chunks
 ): ViewportFetchPlan {
   const e = getEntry(symbol, tf);
+
+  // Early exit if already fetching
+  if (e.status === "fetching") {
+    console.log(
+      `📊 Skipping fetch planning - already fetching for ${symbol}:${tf}`
+    );
+    return {};
+  }
+
   const r = clampRange(domain);
+
+  // Check if viewport has changed significantly (more than 5% of span)
+  if (e.lastViewportRange) {
+    const lastSpan = e.lastViewportRange.max - e.lastViewportRange.min;
+    const currentSpan = r.max - r.min;
+    const minChange = Math.max(lastSpan, currentSpan) * 0.05; // 5% threshold
+
+    const minDiff = Math.abs(r.min - e.lastViewportRange.min);
+    const maxDiff = Math.abs(r.max - e.lastViewportRange.max);
+
+    if (minDiff < minChange && maxDiff < minChange) {
+      console.log(
+        `📊 Skipping fetch planning - viewport change too small for ${symbol}:${tf}`
+      );
+      return {};
+    }
+  }
+
+  // Update last viewport range
+  e.lastViewportRange = { min: r.min, max: r.max };
   const { base, group } = mapExtendedTimeframe(tf);
   const baseMs = resolutionToMs(base);
   const approxViewportSpanMs = Math.max(1, r.max - r.min);
 
-  // Choose chunk span ~ 2.5x viewport span, snapped to base bars (fallback to bars target)
+  // Choose much larger chunk span ~ 5x viewport span for fewer API calls
   const chunkSpanMs = Math.max(
     baseMs * group * viewportBarsTarget,
-    Math.round(approxViewportSpanMs * 2.5)
+    Math.round(approxViewportSpanMs * 5.0) // Increased from 2.5x to 5x
   );
 
-  // More conservative threshold - trigger fetch when closer to edge
-  const thresh = Math.round(approxViewportSpanMs * 0.1); // Reduced from 0.2 to 0.1
+  // Less aggressive threshold - only trigger when much closer to edge
+  const thresh = Math.round(approxViewportSpanMs * 0.25); // Increased from 0.1 to 0.25
 
   const plan: ViewportFetchPlan = {};
 
@@ -151,22 +225,38 @@ export function planViewportFetch(
 
   // Backfill left - trigger when viewport approaches left edge
   if (r.min < e.loadedRange.min + thresh) {
-    plan.backfillFrom = e.loadedRange.min - chunkSpanMs;
-    plan.backfillTo = e.loadedRange.min - 1;
-    console.log(`📊 Left backfill planned:`, {
-      from: new Date(plan.backfillFrom).toISOString(),
-      to: new Date(plan.backfillTo).toISOString(),
-    });
+    const backfillFrom = e.loadedRange.min - chunkSpanMs;
+    const backfillTo = e.loadedRange.min - 1;
+
+    // Check if this range was recently fetched
+    if (!wasRecentlyFetched(e, backfillFrom, backfillTo)) {
+      plan.backfillFrom = backfillFrom;
+      plan.backfillTo = backfillTo;
+      console.log(`📊 Left backfill planned:`, {
+        from: new Date(plan.backfillFrom).toISOString(),
+        to: new Date(plan.backfillTo).toISOString(),
+      });
+    } else {
+      console.log(`📊 Left backfill skipped - recently fetched`);
+    }
   }
 
   // Prefetch right - trigger when viewport approaches right edge
   if (r.max > e.loadedRange.max - thresh) {
-    plan.prefetchFrom = e.loadedRange.max + 1;
-    plan.prefetchTo = e.loadedRange.max + chunkSpanMs;
-    console.log(`📊 Right prefetch planned:`, {
-      from: new Date(plan.prefetchFrom).toISOString(),
-      to: new Date(plan.prefetchTo).toISOString(),
-    });
+    const prefetchFrom = e.loadedRange.max + 1;
+    const prefetchTo = e.loadedRange.max + chunkSpanMs;
+
+    // Check if this range was recently fetched
+    if (!wasRecentlyFetched(e, prefetchFrom, prefetchTo)) {
+      plan.prefetchFrom = prefetchFrom;
+      plan.prefetchTo = prefetchTo;
+      console.log(`📊 Right prefetch planned:`, {
+        from: new Date(plan.prefetchFrom).toISOString(),
+        to: new Date(plan.prefetchTo).toISOString(),
+      });
+    } else {
+      console.log(`📊 Right prefetch skipped - recently fetched`);
+    }
   }
 
   return plan;
@@ -210,7 +300,7 @@ export async function fetchWindow(
     console.error(`❌ Viewport fetch failed for ${symbol}:${tf}`, {
       from: new Date(fromMs).toISOString(),
       to: new Date(toMs).toISOString(),
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
     });
     throw error;
   }
@@ -235,6 +325,9 @@ export async function ensureRange(
   const controller = new AbortController();
   entry.abort = controller;
   entry.status = "fetching";
+
+  // Record this fetch attempt to prevent duplicate requests
+  recordFetchAttempt(entry, fetchFrom, fetchTo);
 
   try {
     const data = await fetchWindow(

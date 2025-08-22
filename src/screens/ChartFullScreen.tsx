@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import LightweightCandles, {
   type LWCDatum,
   TradePlanOverlay,
+  type LightweightCandlesHandle,
 } from "../components/charts/LightweightCandles";
 import {
   ensureRange,
@@ -44,6 +45,7 @@ import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import { getCachedQuotes, type SimpleQuote } from "../services/quotes";
 import { smartCandleManager } from "../services/smartCandleManager";
+import realtimeRouter from "../services/realtimeRouter";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -79,108 +81,126 @@ export default function ChartFullScreen() {
   const initialAnalysisContext = route.params?.analysisContext;
   const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe } =
     useTimeframeStore();
-
-  const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    ((initialTimeframe || timeframe) as ExtendedTimeframe) ||
-      defaultTimeframe ||
-      "1m"
-  );
-  const [stockName, setStockName] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(true);
-  const [data, setData] = useState<LWCDatum[]>(initialDataParam || []);
-  const handleVisibleRangeChange = React.useMemo(() => {
-    let t: any;
-    return (range: { fromMs: number; toMs: number }) => {
-      if (!range || !range.fromMs || !range.toMs) return;
-      if (t) clearTimeout(t);
-      t = setTimeout(async () => {
-        try {
-          const domain = {
-            min: Math.min(range.fromMs, range.toMs),
-            max: Math.max(range.fromMs, range.toMs),
+  const chartRef = React.useRef<LightweightCandlesHandle>(null);
+  const barSpacingRef = React.useRef<number>(60_000);
+  function timeframeSpacingMs(tf: ExtendedTimeframe): number {
+    switch (tf) {
+      case "1m":
+        return 60_000;
+      case "2m":
+        return 120_000;
+      case "3m":
+        return 180_000;
+      case "4m":
+        return 240_000;
+      case "5m":
+        return 300_000;
+      case "10m":
+        return 600_000;
+      case "15m":
+        return 900_000;
+      case "30m":
+        return 1_800_000;
+      case "45m":
+        return 2_700_000;
+      case "1h":
+        return 3_600_000;
+      case "2h":
+        return 7_200_000;
+      case "4h":
+        return 14_400_000;
+      case "6h":
+        return 21_600_000;
+      case "8h":
+        return 28_800_000;
+      case "12h":
+        return 43_200_000;
+      case "1D":
+        return 86_400_000;
+      case "1W":
+        return 7 * 86_400_000;
+      case "1M":
+      case "3M":
+      case "6M":
+      case "1Y":
+      case "2Y":
+      case "5Y":
+      case "ALL":
+        return 30 * 86_400_000;
+      default:
+        return 60_000;
+    }
+  }
+  React.useEffect(() => {
+    try {
+      if (initialDataParam && initialDataParam.length >= 2) {
+        const last = initialDataParam[initialDataParam.length - 1];
+        const prev = initialDataParam[initialDataParam.length - 2];
+        const inferred = Math.max(1, last.time - prev.time);
+        barSpacingRef.current = inferred;
+      }
+    } catch {}
+  }, []);
+  React.useEffect(() => {
+    try {
+      if (data && data.length >= 2) {
+        const last = data[data.length - 1];
+        const prev = data[data.length - 2];
+        const inferred = Math.max(1, last.time - prev.time);
+        barSpacingRef.current = inferred;
+      } else {
+        barSpacingRef.current = timeframeSpacingMs(extendedTf);
+      }
+    } catch {
+      barSpacingRef.current = timeframeSpacingMs(extendedTf);
+    }
+  }, [data, extendedTf]);
+  React.useEffect(() => {
+    let removeListener: (() => void) | null = null;
+    let subscribed = false;
+    try {
+      removeListener = realtimeRouter.onPrice((sym, price, ts) => {
+        if (sym !== symbol) return;
+        setData((prev) => {
+          if (!prev || prev.length === 0) return prev;
+          const spacing =
+            barSpacingRef.current || timeframeSpacingMs(extendedTf);
+          const last = prev[prev.length - 1];
+          const bucketEnd = last.time + spacing;
+          if (ts < bucketEnd) {
+            const updated = {
+              ...last,
+              high: Math.max(last.high, price),
+              low: Math.min(last.low, price),
+              close: price,
+            } as LWCDatum;
+            const out = prev.slice();
+            out[out.length - 1] = updated;
+            return out;
+          }
+          const nextTime = last.time + spacing;
+          const open = last.close;
+          const newBar: LWCDatum = {
+            time: nextTime,
+            open,
+            high: Math.max(open, price),
+            low: Math.min(open, price),
+            close: price,
+            volume: last.volume,
           };
-          const plan = planViewportFetch(symbol, extendedTf, domain);
-          const leftNeed = plan.backfillFrom != null && plan.backfillTo != null;
-          const rightNeed =
-            plan.prefetchFrom != null && plan.prefetchTo != null;
-
-          // Prioritize left (historical) data over right (future) data
-          if (leftNeed) {
-            const leftData = await ensureRange(
-              symbol,
-              extendedTf,
-              plan.backfillFrom!,
-              plan.backfillTo!,
-              domain
-            );
-            if (leftData && leftData.length) {
-              setData(
-                leftData.map((c) => ({
-                  time: c.time,
-                  open: c.open,
-                  high: c.high,
-                  low: c.low,
-                  close: c.close,
-                  volume: c.volume,
-                }))
-              );
-            }
-          }
-
-          if (rightNeed) {
-            const rightData = await ensureRange(
-              symbol,
-              extendedTf,
-              plan.prefetchFrom!,
-              plan.prefetchTo!,
-              domain
-            );
-            if (rightData && rightData.length) {
-              setData(
-                rightData.map((c) => ({
-                  time: c.time,
-                  open: c.open,
-                  high: c.high,
-                  low: c.low,
-                  close: c.close,
-                  volume: c.volume,
-                }))
-              );
-            }
-          }
-
-          // Always update with complete stitched series
-          const stitched = getSeries(symbol, extendedTf);
-          if (stitched && stitched.length) {
-            setData(
-              stitched.map((c) => ({
-                time: c.time,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close,
-                volume: c.volume,
-              }))
-            );
-          }
-        } catch (e) {
-          console.warn("Viewport fetch failed:", e);
-          // Try to get existing data on error
-          const existing = getSeries(symbol, extendedTf);
-          if (existing && existing.length) {
-            setData(
-              existing.map((c) => ({
-                time: c.time,
-                open: c.open,
-                high: c.high,
-                low: c.low,
-                close: c.close,
-                volume: c.volume,
-              }))
-            );
-          }
+          return [...prev, newBar];
+        });
+      });
+      realtimeRouter.subscribe([symbol]);
+      subscribed = true;
+    } catch {}
+    return () => {
+      try {
+        if (removeListener) removeListener();
+        if (subscribed) {
+          realtimeRouter.unsubscribe([symbol]);
         }
-      }, 100); // Reduced debounce for faster response
+      } catch {}
     };
   }, [symbol, extendedTf]);
 
@@ -1003,6 +1023,7 @@ export default function ChartFullScreen() {
           </View>
         ) : (
           <LightweightCandles
+            ref={chartRef}
             data={data}
             height={chartHeight}
             type={chartType}

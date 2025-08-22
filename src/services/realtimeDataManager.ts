@@ -4,6 +4,8 @@ import {
   type SimpleQuote,
 } from "./quotes";
 import { smartCandleManager } from "./smartCandleManager";
+import Constants from "expo-constants";
+import realtimeRouter from "./realtimeRouter";
 
 type RefreshCallback = () => void;
 type StockDataCache = {
@@ -18,6 +20,7 @@ class RealtimeDataManager {
   private currentStock: string | null = null;
   private currentTimeframe: string = "1D";
   private refreshCallbacks: RefreshCallback[] = [];
+  private polygonEnabled: boolean = false;
 
   // Pre-cache all watchlist data on app initialization
   async preloadWatchlistData(watchlist: string[]): Promise<void> {
@@ -27,10 +30,22 @@ class RealtimeDataManager {
       "stocks"
     );
     this.currentWatchlist = watchlist;
+    this.polygonEnabled = Boolean(
+      (Constants.expoConfig?.extra as any)?.polygonApiKey
+    );
 
     try {
       // Load quotes for all watchlist stocks
       await this.loadWatchlistQuotes(watchlist);
+
+      // Live subscribe if polygon is configured
+      if (watchlist.length) {
+        try {
+          await realtimeRouter.subscribe(watchlist);
+        } catch (e) {
+          console.warn("Realtime subscribe failed", e);
+        }
+      }
 
       // Load chart data for all watchlist stocks (parallel)
       await this.loadWatchlistCharts(watchlist);
@@ -164,6 +179,9 @@ class RealtimeDataManager {
       this.watchlistInterval = null;
     }
     this.refreshCallbacks = [];
+    try {
+      realtimeRouter.clearAll();
+    } catch {}
   }
 
   // Start 5-second stock detail refresh
@@ -179,6 +197,9 @@ class RealtimeDataManager {
     );
     this.currentStock = symbol;
     this.currentTimeframe = timeframe;
+    this.polygonEnabled = Boolean(
+      (Constants.expoConfig?.extra as any)?.polygonApiKey
+    );
 
     if (callback) {
       this.refreshCallbacks.push(callback);
@@ -187,6 +208,16 @@ class RealtimeDataManager {
     // Clear any existing interval
     if (this.stockDetailInterval) {
       clearInterval(this.stockDetailInterval);
+    }
+
+    // Live subscribe for the focused symbol if available
+    if (symbol) {
+      try {
+        // fire and forget
+        void realtimeRouter.subscribe([symbol]);
+      } catch (e) {
+        console.warn("Realtime subscribe failed for stock detail", e);
+      }
     }
 
     // Start new interval
@@ -228,6 +259,9 @@ class RealtimeDataManager {
       this.stockDetailInterval = null;
     }
     this.refreshCallbacks = [];
+    try {
+      realtimeRouter.clearAll();
+    } catch {}
   }
 
   // Update current timeframe for stock detail refresh

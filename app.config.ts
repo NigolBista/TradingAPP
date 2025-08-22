@@ -67,6 +67,9 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       plaidSecret: process.env.PLAID_SECRET,
       plaidEnvironment: process.env.PLAID_ENVIRONMENT || "sandbox",
       marketDataApiToken: process.env.MARKET_DATA_API_TOKEN,
+      polygonApiKey: process.env.POLYGON_API_KEY,
+      developerMode: String(process.env.DEVELOPER_MODE || "false") === "true",
+      realtimeProvider: process.env.REALTIME_PROVIDER || "polygon", // polygon | simulator
       expoPublic: {
         sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
       },
