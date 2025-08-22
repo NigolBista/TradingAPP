@@ -9,7 +9,7 @@ import {
 import type { PortfolioHistory } from "../../services/portfolioAggregationService";
 import { fetchYahooCandles } from "../../services/marketProviders";
 import { COLORS } from "../../constants/colors";
-import SimpleLineChart from "../charts/SimpleLineChart";
+import AmChartsLine from "../charts/AmChartsLine";
 import { useTheme } from "../../providers/ThemeProvider";
 
 type Period = "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "ALL";
@@ -91,7 +91,7 @@ export default function PerformanceCard({
       </View>
 
       <View style={styles.chartContainer}>
-        <SimpleLineChart
+        <AmChartsLine
           data={chartSeries}
           height={120}
           color={

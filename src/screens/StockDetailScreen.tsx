@@ -25,10 +25,10 @@ import {
   useFocusEffect,
 } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import LightweightCandles, {
-  type LWCDatum,
-  type LightweightCandlesHandle,
-} from "../components/charts/LightweightCandles";
+import AmChartsCandles, {
+  type AmChartsDatum,
+  type AmChartsCandlesHandle,
+} from "../components/charts/AmChartsCandles";
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
@@ -375,9 +375,9 @@ export default function StockDetailScreen() {
 
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
-  const [dailySeries, setDailySeries] = useState<LWCDatum[]>([]);
+  const [dailySeries, setDailySeries] = useState<AmChartsDatum[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
-  const chartRef = React.useRef<LightweightCandlesHandle>(null);
+  const chartRef = React.useRef<AmChartsCandlesHandle>(null);
   const [initialQuote, setInitialQuote] = useState<SimpleQuote | null>(
     initialQuoteParam || null
   );
@@ -540,7 +540,7 @@ export default function StockDetailScreen() {
     }
   }, [dailySeries, extendedTf]);
 
-  // Real-time logic is now handled by LightweightCandles component itself
+  // Real-time logic is now handled by AmChartsCandles component itself
 
   const symbolSentimentCounts = useMemo(() => {
     // Use aggregated sentiment stats if available, otherwise fall back to individual news counting
@@ -1185,7 +1185,7 @@ export default function StockDetailScreen() {
         }
 
         // Return a promise that resolves after the delay
-        return new Promise<LWCDatum[]>((resolve) => {
+        return new Promise<AmChartsDatum[]>((resolve) => {
           historicalRequestTimeoutRef.current = setTimeout(async () => {
             try {
               const result = await handleLoadMoreData(numberOfBars);
@@ -1736,7 +1736,7 @@ export default function StockDetailScreen() {
   const showAfterHours = currentSession === "after-hours";
   const showPreMarket = currentSession === "pre-market";
 
-  function toLWC(candles: Candle[]): LWCDatum[] {
+  function toLWC(candles: Candle[]): AmChartsDatum[] {
     return (candles || []).map((c) => ({
       time: c.time,
       open: c.open,
@@ -1868,7 +1868,7 @@ export default function StockDetailScreen() {
         <View style={styles.chartSection}>
           {/* Chart */}
           <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
-            <LightweightCandles
+            <AmChartsCandles
               ref={chartRef}
               data={dailySeries}
               height={280}

@@ -20,11 +20,11 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import LightweightCandles, {
-  type LWCDatum,
+import AmChartsCandles, {
+  type AmChartsDatum,
   TradePlanOverlay,
-  type LightweightCandlesHandle,
-} from "../components/charts/LightweightCandles";
+  type AmChartsCandlesHandle,
+} from "../components/charts/AmChartsCandles";
 // Removed viewportBars usage; we'll lazy-load via timeRangeChange
 import ChartSettingsModal, {
   type ChartType,
@@ -64,7 +64,8 @@ export default function ChartFullScreen() {
   const initialTimeframe: string | undefined = route.params?.initialTimeframe;
   const isDayUp: boolean | undefined = route.params?.isDayUp;
   const [dayUp, setDayUp] = useState<boolean | undefined>(isDayUp);
-  const initialDataParam: LWCDatum[] | undefined = route.params?.initialData;
+  const initialDataParam: AmChartsDatum[] | undefined =
+    route.params?.initialData;
   const levels = route.params?.levels;
   const initialTradePlan: TradePlanOverlay | undefined =
     route.params?.tradePlan;
@@ -82,7 +83,7 @@ export default function ChartFullScreen() {
   const initialAnalysisContext = route.params?.analysisContext;
   const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe } =
     useTimeframeStore();
-  const chartRef = React.useRef<LightweightCandlesHandle>(null);
+  const chartRef = React.useRef<AmChartsCandlesHandle>(null);
   const barSpacingRef = React.useRef<number>(60_000);
 
   // Rate limiting state for historical data requests
@@ -90,7 +91,7 @@ export default function ChartFullScreen() {
   const historicalRequestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // State variables
-  const [data, setData] = useState<LWCDatum[]>(initialDataParam || []);
+  const [data, setData] = useState<AmChartsDatum[]>(initialDataParam || []);
   const [loading, setLoading] = useState(false);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
     (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
@@ -168,7 +169,7 @@ export default function ChartFullScreen() {
       barSpacingRef.current = timeframeSpacingMs(extendedTf);
     }
   }, [data, extendedTf]);
-  // Real-time logic is now handled by LightweightCandles component itself
+  // Real-time logic is now handled by AmChartsCandles component itself
 
   // Additional state variables
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
@@ -418,7 +419,7 @@ export default function ChartFullScreen() {
         }
 
         // Return a promise that resolves after the delay
-        return new Promise<LWCDatum[]>((resolve) => {
+        return new Promise<AmChartsDatum[]>((resolve) => {
           historicalRequestTimeoutRef.current = setTimeout(async () => {
             try {
               const result = await handleLoadMoreData(numberOfBars);
@@ -1077,7 +1078,7 @@ export default function ChartFullScreen() {
             <Text style={{ color: "#888" }}>Loading...</Text>
           </View>
         ) : (
-          <LightweightCandles
+          <AmChartsCandles
             ref={chartRef}
             data={data}
             height={chartHeight}

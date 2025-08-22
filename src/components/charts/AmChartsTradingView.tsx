@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import LightweightCandles, { TradePlanOverlay } from "./LightweightCandles";
+import AmChartsCandles, { TradePlanOverlay } from "./AmChartsCandles";
 import {
   fetchCandles,
   fetchMarketDataCandlesWindow,
@@ -39,7 +39,7 @@ type Props = {
   enableRealtime?: boolean; // Enable real-time updates
 };
 
-export default function TradingViewChart({
+export default function AmChartsTradingView({
   symbol,
   height = 560,
   interval = "D",
@@ -184,7 +184,7 @@ export default function TradingViewChart({
         return out;
       });
 
-      // Return LWCDatum[] (epoch ms) as the contract expects
+      // Return AmChartsDatum[] (epoch ms) as the contract expects
       return mapped.map((m) => ({ ...m }));
     } catch (error) {
       console.warn("Failed to load more historical data:", error);
@@ -384,7 +384,7 @@ export default function TradingViewChart({
           <ActivityIndicator />
         </View>
       ) : (
-        <LightweightCandles
+        <AmChartsCandles
           data={data}
           height={height}
           type={chartType}
