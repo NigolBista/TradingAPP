@@ -5,10 +5,23 @@ import {
   Pressable,
   ActivityIndicator,
   Text,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import LightweightCandles, { TradePlanOverlay } from "./LightweightCandles";
+import FastCandlestickChart from "./FastCandlestickChart";
+import ChartTouchHandler from "./ChartTouchHandler";
+
+// Import TradePlanOverlay from the new location
+export type TradePlanOverlay = {
+  entry?: number;
+  lateEntry?: number;
+  exit?: number;
+  lateExit?: number;
+  stop?: number;
+  targets?: number[];
+  side?: "long" | "short";
+};
 import {
   fetchCandles,
   MarketDataResolution,
@@ -91,7 +104,6 @@ export default function TradingViewChart({
           );
           candles = await fetchCandles(normalizedSymbol, {
             resolution: base,
-            providerOverride: "yahoo",
           });
         }
         if (group > 1) {
@@ -137,7 +149,6 @@ export default function TradingViewChart({
         } catch (e) {
           return await fetchCandles(normalizedSymbol, {
             resolution: res,
-            providerOverride: "yahoo",
           });
         }
       };
@@ -252,18 +263,27 @@ export default function TradingViewChart({
           <ActivityIndicator />
         </View>
       ) : (
-        <LightweightCandles
-          data={data}
+        <ChartTouchHandler
+          width={Dimensions.get("window").width}
           height={height}
-          type="candlestick"
-          theme={resolvedTheme}
-          showVolume={false}
-          showMA={false}
-          showGrid={true}
-          showCrosshair={true}
-          levels={effectiveLevels}
-          tradePlan={currentTradePlan}
-        />
+          enablePan={true}
+          enableZoom={true}
+        >
+          <FastCandlestickChart
+            data={data}
+            width={Dimensions.get("window").width}
+            height={height}
+            candleWidth={Math.max(
+              4,
+              Math.min(12, Dimensions.get("window").width / data.length)
+            )}
+            showVolume={false}
+            showMovingAverage={false}
+            bullishColor="#16a34a"
+            bearishColor="#dc2626"
+            wickColor="#6b7280"
+          />
+        </ChartTouchHandler>
       )}
       <Pressable
         onPress={handleAnalyzePress}

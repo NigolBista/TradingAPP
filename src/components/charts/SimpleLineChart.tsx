@@ -1,6 +1,7 @@
 import React from "react";
 import { View, StyleSheet, Dimensions } from "react-native";
-import { Svg, Path, Defs, LinearGradient, Stop } from "react-native-svg";
+import FastAreaChart from "./FastAreaChart";
+import FastLineChart from "./FastLineChart";
 
 interface DataPoint {
   time: number;
@@ -31,122 +32,93 @@ export default function SimpleLineChart({
   }
 
   const chartWidth = screenWidth - 32; // Account for margins
-  const chartHeight = height;
 
-  // Calculate min/max for scaling across all series
-  const prices = [
-    ...data.map((d) => d.close).filter((price) => Number.isFinite(price)),
-    ...extraSeries.flatMap((s) =>
-      s.data.map((d) => d.close).filter((price) => Number.isFinite(price))
-    ),
-  ];
+  // Transform data to match FastChart format
+  const chartData = data.map((point) => ({
+    time: point.time,
+    value: point.close,
+  }));
 
-  if (prices.length === 0) {
-    return <View style={[styles.container, { height }]} />;
+  // Transform extra series data
+  const extraSeriesData = extraSeries.map((series) => ({
+    data: series.data.map((point) => ({
+      time: point.time,
+      value: point.close,
+    })),
+    color: series.color || "#6EA8FE",
+    strokeWidth: series.strokeWidth || 2,
+  }));
+
+  // Use FastAreaChart if showFill is true, otherwise use FastLineChart
+  if (showFill) {
+    return (
+      <View style={[styles.container, { height }]}>
+        <FastAreaChart
+          data={chartData}
+          width={chartWidth}
+          height={height}
+          color={color}
+          strokeWidth={strokeWidth}
+          fillOpacity={0.3}
+          showLine={true}
+          showDots={false}
+          style={{ backgroundColor: "transparent" }}
+        />
+
+        {/* Render extra series as line charts on top */}
+        {extraSeriesData.map((series, index) => (
+          <View
+            key={`extra-${index}`}
+            style={[
+              StyleSheet.absoluteFill,
+              { backgroundColor: "transparent" },
+            ]}
+          >
+            <FastLineChart
+              data={series.data}
+              width={chartWidth}
+              height={height}
+              color={series.color}
+              strokeWidth={series.strokeWidth}
+              showDots={false}
+              style={{ backgroundColor: "transparent" }}
+            />
+          </View>
+        ))}
+      </View>
+    );
   }
 
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
-  const priceRange = Math.max(maxPrice - minPrice, 0.01); // Prevent division by zero
-
-  // Create path points for primary
-  const points = data
-    .map((point, index) => {
-      const x = (index / Math.max(data.length - 1, 1)) * chartWidth;
-      const normalizedPrice = Number.isFinite(point.close)
-        ? point.close
-        : minPrice;
-      const y =
-        chartHeight - ((normalizedPrice - minPrice) / priceRange) * chartHeight;
-      return {
-        x: Number.isFinite(x) ? x : 0,
-        y: Number.isFinite(y) ? y : chartHeight,
-      };
-    })
-    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
-
-  // Generate SVG path
-  const pathData =
-    points.length > 0
-      ? points.reduce((path, point, index) => {
-          if (index === 0) {
-            return `M${point.x},${point.y}`;
-          }
-          return `${path} L${point.x},${point.y}`;
-        }, "")
-      : "";
-
-  // Generate gradient fill path
-  const fillPathData = pathData
-    ? `${pathData} L${chartWidth},${chartHeight} L0,${chartHeight} Z`
-    : "";
-
-  // Build paths for extra series
-  const extraPaths = extraSeries.map((series) => {
-    if (!series.data || series.data.length === 0) return "";
-    const pts = series.data
-      .map((point, index) => {
-        const x = (index / Math.max(series.data.length - 1, 1)) * chartWidth;
-        const normalizedPrice = Number.isFinite(point.close)
-          ? point.close
-          : minPrice;
-        const y =
-          chartHeight -
-          ((normalizedPrice - minPrice) / priceRange) * chartHeight;
-        return {
-          x: Number.isFinite(x) ? x : 0,
-          y: Number.isFinite(y) ? y : chartHeight,
-        };
-      })
-      .filter((pt) => Number.isFinite(pt.x) && Number.isFinite(pt.y));
-
-    if (pts.length === 0) return "";
-
-    const p = pts.reduce(
-      (path, pt, idx) =>
-        idx === 0 ? `M${pt.x},${pt.y}` : `${path} L${pt.x},${pt.y}`,
-      ""
-    );
-    return p;
-  });
-
+  // Use FastLineChart for line-only charts
   return (
     <View style={[styles.container, { height }]}>
-      <Svg width={chartWidth} height={chartHeight}>
-        <Defs>
-          <LinearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor={color} stopOpacity="0.3" />
-            <Stop offset="100%" stopColor={color} stopOpacity="0.0" />
-          </LinearGradient>
-        </Defs>
+      <FastLineChart
+        data={chartData}
+        width={chartWidth}
+        height={height}
+        color={color}
+        strokeWidth={strokeWidth}
+        showDots={false}
+        style={{ backgroundColor: "transparent" }}
+      />
 
-        {/* Gradient fill */}
-        {showFill && <Path d={fillPathData} fill="url(#gradient)" />}
-
-        {/* Extra series (behind for visibility) */}
-        {extraPaths.map((p, idx) => (
-          <Path
-            key={`extra-${idx}`}
-            d={p}
-            stroke={extraSeries[idx].color || "#6EA8FE"}
-            strokeWidth={extraSeries[idx].strokeWidth || 2}
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            opacity={0.9}
+      {/* Render extra series as line charts on top */}
+      {extraSeriesData.map((series, index) => (
+        <View
+          key={`extra-${index}`}
+          style={[StyleSheet.absoluteFill, { backgroundColor: "transparent" }]}
+        >
+          <FastLineChart
+            data={series.data}
+            width={chartWidth}
+            height={height}
+            color={series.color}
+            strokeWidth={series.strokeWidth}
+            showDots={false}
+            style={{ backgroundColor: "transparent" }}
           />
-        ))}
-
-        {/* Primary line */}
-        <Path
-          d={pathData}
-          stroke={color}
-          strokeWidth={strokeWidth}
-          fill="none"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </Svg>
+        </View>
+      ))}
     </View>
   );
 }

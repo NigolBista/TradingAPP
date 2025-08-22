@@ -14,10 +14,29 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import LightweightCandles, {
-  type LWCDatum,
-  TradePlanOverlay,
-} from "../components/charts/LightweightCandles";
+import EnhancedCandlestickChart from "../components/charts/EnhancedCandlestickChart";
+import EnhancedLineChart from "../components/charts/EnhancedLineChart";
+import TradePlanOverlay from "../components/charts/TradePlanOverlay";
+
+// Keep the original types for compatibility
+export type LWCDatum = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+};
+
+export type TradePlanOverlay = {
+  entry?: number;
+  lateEntry?: number;
+  exit?: number;
+  lateExit?: number;
+  stop?: number;
+  targets?: number[];
+  side?: "long" | "short";
+};
 import {
   ensureRange,
   getSeries,
@@ -1002,20 +1021,68 @@ export default function ChartFullScreen() {
             <Text style={{ color: "#888" }}>Loading...</Text>
           </View>
         ) : (
-          <LightweightCandles
-            data={data}
-            height={chartHeight}
-            type={chartType}
-            theme={scheme === "dark" ? "dark" : "light"}
-            showVolume={false}
-            showMA={false}
-            showGrid={true}
-            showCrosshair={true}
-            forcePositive={typeof dayUp === "boolean" ? dayUp : undefined}
-            levels={effectiveLevels}
-            tradePlan={currentTradePlan}
-            onVisibleRangeChange={handleVisibleRangeChange}
-          />
+          <View style={{ position: "relative" }}>
+            {chartType === "candlestick" ? (
+              <EnhancedCandlestickChart
+                data={data}
+                width={width}
+                height={chartHeight}
+                candleWidth={Math.max(4, Math.min(12, width / data.length))}
+                showVolume={true}
+                volumeHeight={Math.floor(chartHeight * 0.2)}
+                showMovingAverage={true}
+                maPeriod={20}
+                bullishColor={dayUp !== false ? "#16a34a" : "#dc2626"}
+                bearishColor={dayUp !== false ? "#dc2626" : "#16a34a"}
+                wickColor="#6b7280"
+                volumeColor="#9ca3af"
+                maColor="#f59e0b"
+                showGrid={true}
+                gridColor="#374151"
+                priceScaleWidth={70}
+                timeScaleHeight={35}
+                onPanLeft={() => {
+                  // Load more historical data
+                  console.log("Loading more historical data...");
+                  // You can trigger handleVisibleRangeChange here
+                }}
+                onPanRight={() => {
+                  // Load more recent data
+                  console.log("Loading more recent data...");
+                }}
+              />
+            ) : (
+              <EnhancedLineChart
+                data={data.map((d) => ({ time: d.time, value: d.close }))}
+                width={width}
+                height={chartHeight}
+                color={dayUp !== false ? "#16a34a" : "#dc2626"}
+                strokeWidth={2}
+                showDots={false}
+                showArea={chartType === "area"}
+                areaOpacity={0.3}
+                showGrid={true}
+                gridColor="#374151"
+                priceScaleWidth={70}
+                timeScaleHeight={35}
+                onPanLeft={() => {
+                  console.log("Loading more historical data...");
+                }}
+                onPanRight={() => {
+                  console.log("Loading more recent data...");
+                }}
+              />
+            )}
+
+            {/* Trade Plan Overlay */}
+            <TradePlanOverlay
+              width={width - 70}
+              height={chartHeight - 35}
+              data={data}
+              tradePlan={currentTradePlan}
+              levels={effectiveLevels}
+            />
+          </View>
         )}
         <Pressable
           onPress={handleAnalyzePress}

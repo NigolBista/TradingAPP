@@ -19,9 +19,18 @@ import {
   useFocusEffect,
 } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import LightweightCandles, {
-  type LWCDatum,
-} from "../components/charts/LightweightCandles";
+import EnhancedCandlestickChart from "../components/charts/EnhancedCandlestickChart";
+import EnhancedLineChart from "../components/charts/EnhancedLineChart";
+
+// Keep the original type for compatibility
+export type LWCDatum = {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+};
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
@@ -1607,23 +1616,78 @@ export default function StockDetailScreen() {
         <View style={styles.chartSection}>
           {/* Chart */}
           <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
-            <LightweightCandles
-              data={dailySeries}
-              height={280}
-              type={chartType}
-              theme="dark"
-              showVolume={false}
-              showMA={false}
-              showGrid={true}
-              showCrosshair={true}
-              forcePositive={
-                todayChange !== null && todayChangePercent !== null
-                  ? todayChange >= 0
-                  : undefined
-              }
-              onVisibleRangeChange={handleVisibleRangeChange}
-              onEdgeRequest={handleEdgeRequest}
-            />
+            {chartType === "candlestick" ? (
+              <EnhancedCandlestickChart
+                data={dailySeries}
+                width={Dimensions.get("window").width - 32}
+                height={280}
+                candleWidth={Math.max(
+                  4,
+                  Math.min(
+                    10,
+                    (Dimensions.get("window").width - 32) / dailySeries.length
+                  )
+                )}
+                showVolume={false}
+                showMovingAverage={false}
+                bullishColor={
+                  todayChange !== null &&
+                  todayChangePercent !== null &&
+                  todayChange >= 0
+                    ? "#16a34a"
+                    : "#dc2626"
+                }
+                bearishColor={
+                  todayChange !== null &&
+                  todayChangePercent !== null &&
+                  todayChange >= 0
+                    ? "#dc2626"
+                    : "#16a34a"
+                }
+                wickColor="#6b7280"
+                showGrid={true}
+                gridColor="#374151"
+                priceScaleWidth={60}
+                timeScaleHeight={30}
+                onPanLeft={() => {
+                  console.log("Loading more historical data...");
+                  // Trigger data loading for earlier dates
+                }}
+                onPanRight={() => {
+                  console.log("Loading more recent data...");
+                }}
+              />
+            ) : (
+              <EnhancedLineChart
+                data={dailySeries.map((d) => ({
+                  time: d.time,
+                  value: d.close,
+                }))}
+                width={Dimensions.get("window").width - 32}
+                height={280}
+                color={
+                  todayChange !== null &&
+                  todayChangePercent !== null &&
+                  todayChange >= 0
+                    ? "#16a34a"
+                    : "#dc2626"
+                }
+                strokeWidth={2}
+                showDots={false}
+                showArea={chartType === "area"}
+                areaOpacity={0.3}
+                showGrid={true}
+                gridColor="#374151"
+                priceScaleWidth={60}
+                timeScaleHeight={30}
+                onPanLeft={() => {
+                  console.log("Loading more historical data...");
+                }}
+                onPanRight={() => {
+                  console.log("Loading more recent data...");
+                }}
+              />
+            )}
           </View>
 
           {/* Unified Chart Controls */}
