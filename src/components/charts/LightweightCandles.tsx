@@ -56,6 +56,15 @@ interface Props {
   tradePlan?: TradePlanOverlay;
   // Notify RN when visible time range changes (ms)
   onVisibleRangeChange?: (range: { fromMs: number; toMs: number }) => void;
+  // Notify RN when user nears data edges during pan/zoom (for seamless loading)
+  onEdgeRequest?: (payload: {
+    visible: { fromMs: number; toMs: number };
+    dataset: { minMs: number; maxMs: number };
+    requests: Array<{
+      side: "left" | "right";
+      requestWindow: { fromMs: number; toMs: number };
+    }>;
+  }) => void;
   // Notify when the web chart is ready
   onReady?: () => void;
 }
@@ -80,6 +89,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       levels,
       tradePlan,
       onVisibleRangeChange,
+      onEdgeRequest,
       onReady,
     }: Props,
     ref
@@ -218,8 +228,9 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       const showGrid = ${JSON.stringify(showGrid)};
       const showCrosshair = ${JSON.stringify(showCrosshair)};
       const chartOptions = {
+        width: container.clientWidth,
         height: ${height},
-        autoSize: true,
+        autoSize: false,
         layout: { 
           textColor: dark ? '#e5e7eb' : '#374151', 
           background: { type: 'solid', color: 'transparent' },
@@ -237,8 +248,10 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           timeVisible: true, 
           secondsVisible: false,
           rightOffset: 12,
-          barSpacing: 6,
-          minBarSpacing: 3
+          barSpacing: 8,
+          minBarSpacing: 2,
+          fixLeftEdge: false,
+          fixRightEdge: false
         },
         grid: { 
           horzLines: { color: showGrid ? (dark ? '#1f2937' : '#f3f4f6') : 'transparent' }, 
@@ -278,6 +291,27 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       }
       
       log('Chart created successfully');
+      
+      // Handle resize events to prevent chart distortion
+      const resizeObserver = new ResizeObserver((entries) => {
+        if (chart && container && entries.length > 0) {
+          const entry = entries[0];
+          const { width, height } = entry.contentRect;
+          chart.applyOptions({ 
+            width: Math.floor(width),
+            height: Math.floor(height)
+          });
+        }
+      });
+      
+      if (container) {
+        resizeObserver.observe(container);
+      }
+      
+      // Store cleanup function
+      window.chartCleanup = () => {
+        resizeObserver.disconnect();
+      };
       
       // Compatibility layer for Lightweight Charts v5 (addSeries) and v4 (addXSeries)
       function addSeriesCompat(kind, options){
@@ -648,12 +682,20 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           const msg = JSON.parse(event.data);
           if (!msg || !msg.cmd) return;
           if (msg.cmd === 'setData') {
-            let preserve = null;
-            try { preserve = chart.timeScale().getVisibleLogicalRange && chart.timeScale().getVisibleLogicalRange(); } catch(_) {}
+            let preserveTime = null;
+            let preserveLogical = null;
+            try { preserveTime = chart.timeScale().getVisibleRange && chart.timeScale().getVisibleRange(); } catch(_) {}
+            if (!preserveTime) { try { preserveLogical = chart.timeScale().getVisibleLogicalRange && chart.timeScale().getVisibleLogicalRange(); } catch(_) {} }
             applySeriesData(msg.data || []);
             try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
             try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
-            try { if (preserve && chart.timeScale().setVisibleLogicalRange) chart.timeScale().setVisibleLogicalRange(preserve); } catch(_) {}
+            try {
+              if (preserveTime && chart.timeScale().setVisibleRange) {
+                chart.timeScale().setVisibleRange(preserveTime);
+              } else if (preserveLogical && chart.timeScale().setVisibleLogicalRange) {
+                chart.timeScale().setVisibleLogicalRange(preserveLogical);
+              }
+            } catch(_) {}
           } else if (msg.cmd === 'appendData') {
             appendSeriesData(msg.data || []);
           } else if (msg.cmd === 'scrollToRealTime') {
@@ -664,6 +706,44 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
 
       // Forward visible range changes to RN
       try {
+        let lastEdgeSentAt = 0;
+        let lastEdgeMask = 0; // 1=left,2=right
+        function maybeSendEdge(range){
+          try {
+            if (!range || range.from == null || range.to == null) return;
+            if (!Array.isArray(raw) || raw.length === 0) return;
+            const now = Date.now();
+            if (now - lastEdgeSentAt < 200) return; // throttle
+            const visibleSpan = Math.max(1, range.to - range.from);
+            const threshold = Math.round(visibleSpan * 0.15);
+            const datasetMin = raw[0].time;
+            const datasetMax = raw[raw.length - 1].time;
+            const nearLeft = range.from <= (datasetMin + threshold);
+            const nearRight = range.to >= (datasetMax - threshold);
+            const mask = (nearLeft ? 1 : 0) | (nearRight ? 2 : 0);
+            if (mask === 0 || mask === lastEdgeMask) return;
+            lastEdgeMask = mask;
+            lastEdgeSentAt = now;
+            const requests = [];
+            if (nearLeft) {
+              const reqTo = (datasetMin * 1000) - 1;
+              const reqFrom = Math.max(0, Math.round(reqTo - visibleSpan * 1000 * 2));
+              requests.push({ side: 'left', requestWindow: { fromMs: reqFrom, toMs: Math.round(reqTo) } });
+            }
+            if (nearRight) {
+              const reqFrom = (datasetMax * 1000) + 1;
+              const reqTo = Math.round(reqFrom + visibleSpan * 1000 * 2);
+              requests.push({ side: 'right', requestWindow: { fromMs: Math.round(reqFrom), toMs: reqTo } });
+            }
+            window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify({
+              edgeRequest: {
+                visible: { fromMs: Math.round(range.from * 1000), toMs: Math.round(range.to * 1000) },
+                dataset: { minMs: datasetMin * 1000, maxMs: datasetMax * 1000 },
+                requests
+              }
+            }));
+          } catch(_) {}
+        }
         chart.timeScale().subscribeVisibleTimeRangeChange((range) => {
           if (!range || range.from == null || range.to == null) return;
           const fromMs = Math.round(range.from * 1000);
@@ -673,6 +753,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
               visibleRange: { fromMs, toMs }
             }));
           } catch(_) {}
+          maybeSendEdge(range);
         });
       } catch(_) {}
 
@@ -850,6 +931,13 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                 } catch (_) {}
               } else if (msg?.visibleRange && onVisibleRangeChange) {
                 onVisibleRangeChange(msg.visibleRange);
+              } else if (
+                msg?.edgeRequest &&
+                typeof onEdgeRequest === "function"
+              ) {
+                try {
+                  onEdgeRequest(msg.edgeRequest);
+                } catch (_) {}
               } else {
                 console.log("LightweightCandles WebView message:", msg);
               }

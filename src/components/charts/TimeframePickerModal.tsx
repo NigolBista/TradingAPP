@@ -24,6 +24,9 @@ export type ExtendedTimeframe =
   | "1h"
   | "2h"
   | "4h"
+  | "6h"
+  | "8h"
+  | "12h"
   | "1D"
   | "1W"
   | "1M"
@@ -46,7 +49,7 @@ const groups: { title: string; items: ExtendedTimeframe[] }[] = [
     title: "Minutes",
     items: ["1m", "2m", "3m", "4m", "5m", "10m", "15m", "30m", "45m"],
   },
-  { title: "Hours", items: ["1h", "2h", "4h"] },
+  { title: "Hours", items: ["1h", "2h", "4h", "6h", "8h", "12h"] },
   {
     title: "Days",
     items: ["1D", "1W", "1M", "3M", "6M", "1Y", "2Y", "5Y", "ALL"],

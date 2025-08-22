@@ -29,15 +29,27 @@ const TIMEFRAME_HIERARCHY: Record<
   "1m": { minutes: 1, priority: 1 },
   "2m": { minutes: 2, priority: 2 },
   "3m": { minutes: 3, priority: 3 },
+  "4m": { minutes: 4, priority: 3 },
   "5m": { minutes: 5, priority: 4 },
+  "10m": { minutes: 10, priority: 4 },
   "15m": { minutes: 15, priority: 5 },
   "30m": { minutes: 30, priority: 6 },
+  "45m": { minutes: 45, priority: 6 },
   "1h": { minutes: 60, priority: 7 },
   "2h": { minutes: 120, priority: 8 },
   "4h": { minutes: 240, priority: 9 },
-  "1D": { minutes: 1440, priority: 10 },
-  "1W": { minutes: 10080, priority: 11 },
-  "1M": { minutes: 43200, priority: 12 }, // Approximate
+  "6h": { minutes: 360, priority: 10 },
+  "8h": { minutes: 480, priority: 11 },
+  "12h": { minutes: 720, priority: 12 },
+  "1D": { minutes: 1440, priority: 13 },
+  "1W": { minutes: 10080, priority: 14 },
+  "1M": { minutes: 43200, priority: 15 }, // Approximate
+  "3M": { minutes: 129600, priority: 16 },
+  "6M": { minutes: 259200, priority: 17 },
+  "1Y": { minutes: 525600, priority: 18 },
+  "2Y": { minutes: 1051200, priority: 19 },
+  "5Y": { minutes: 2628000, priority: 20 },
+  ALL: { minutes: 5256000, priority: 21 },
 };
 
 class SmartCandleManager {
@@ -128,16 +140,29 @@ class SmartCandleManager {
       "1hour": "1h",
       "2h": "2h",
       "4h": "4h",
+      "6h": "6h",
+      "8h": "8h",
+      "12h": "12h",
       "1d": "1D",
       "1day": "1D",
       "1w": "1W",
       "1week": "1W",
       "1m": "1m", // 1 minute
+      "2m": "2m",
+      "3m": "3m",
+      "4m": "4m",
       "5m": "5m", // 5 minutes
+      "10m": "10m",
       "15m": "15m", // 15 minutes
       "30m": "30m", // 30 minutes
+      "45m": "45m",
       "1mo": "1M", // 1 month
       "1month": "1M",
+      "3mth": "3M",
+      "6mth": "6M",
+      "1y": "1Y",
+      "2y": "2Y",
+      "5y": "5Y",
     };
 
     // Direct mapping if available
@@ -431,7 +456,26 @@ class SmartCandleManager {
     console.log(`📡 Fetching ${symbol} ${timeframe} (limit: ${limit})`);
 
     // Respect the requested output bar count to avoid large payloads
-    const outBars = Math.max(1, Math.min(1200, Math.floor(limit || 1)));
+    // Ensure appropriate data coverage for different timeframes
+    let outBars = Math.max(1, Math.min(1200, Math.floor(limit || 1)));
+
+    // Ensure minimum data coverage for key timeframes
+    const normalizedTf = timeframe.toLowerCase();
+    if (normalizedTf === "1d") {
+      outBars = Math.max(outBars, 390); // Full trading day in 1-minute intervals
+    } else if (normalizedTf.endsWith("m") && !normalizedTf.includes("mo")) {
+      // Minute timeframes - ensure sufficient intraday coverage
+      const minutes = parseInt(normalizedTf);
+      if (minutes <= 5) {
+        outBars = Math.max(outBars, 390); // Full trading day coverage
+      } else if (minutes <= 30) {
+        outBars = Math.max(outBars, Math.ceil(390 / minutes)); // Proportional coverage
+      }
+    } else if (normalizedTf.endsWith("h")) {
+      // Hour timeframes - ensure multi-day coverage
+      outBars = Math.max(outBars, 156); // ~1 month of hourly data
+    }
+
     const candles = await fetchCandlesForTimeframe(symbol, timeframe as any, {
       outBars,
       baseCushion: 1.05,

@@ -25,6 +25,9 @@ export type ExtendedTimeframe =
   | "1h"
   | "2h"
   | "4h"
+  | "6h"
+  | "8h"
+  | "12h"
   | "1D"
   | "1W"
   | "1M"
@@ -104,73 +107,101 @@ export function mapExtendedTimeframe(tf: ExtendedTimeframe): {
     case "45m":
       return { base: "15", group: 3 };
 
-    // hour groupings (prefer 5m / 15m bases for smooth intraday)
+    // hour groupings - use native hourly data when available
     case "1h":
-      return { base: "5", group: 12 }; // 12×5m = 1h
+      return { base: "1H", group: 1 }; // Native 1-hour data
     case "2h":
-      return { base: "5", group: 24 };
+      return { base: "1H", group: 2 }; // 2×1h = 2h
     case "4h":
-      return { base: "15", group: 16 }; // 16×15m = 4h
+      return { base: "1H", group: 4 }; // 4×1h = 4h
+    case "6h":
+      return { base: "1H", group: 6 }; // 6×1h = 6h
+    case "8h":
+      return { base: "1H", group: 8 }; // 8×1h = 8h
+    case "12h":
+      return { base: "1H", group: 12 }; // 12×1h = 12h
 
     // higher level: intraday feel for 1D, then daily/weekly/monthly
     case "1D":
-      return { base: "5", group: 1 }; // ~78 bars/day
+      return { base: "1", group: 1 }; // 1-minute data for full trading day (390 bars)
     case "1W":
-      return { base: "1H", group: 1 };
+      return { base: "D", group: 1 }; // Daily data for weekly view
     case "1M":
-      return { base: "D", group: 1 };
+      return { base: "D", group: 1 }; // Daily data for monthly view
     case "3M":
+      return { base: "D", group: 1 }; // Daily data for 3-month view
     case "6M":
+      return { base: "D", group: 1 }; // Daily data for 6-month view
     case "1Y":
-      return { base: "D", group: 1 };
+      return { base: "D", group: 1 }; // Daily data for 1-year view
     case "2Y":
+      return { base: "W", group: 1 }; // Weekly data for 2-year view
     case "5Y":
-      return { base: "W", group: 1 };
+      return { base: "W", group: 1 }; // Weekly data for 5-year view
     case "ALL":
     default:
       return { base: "M", group: 1 };
   }
 }
 
-/** Tight, UX-friendly output targets per timeframe (fewer bars = faster UI) */
+/** Professional trading platform data targets per timeframe */
 function desiredOutputBars(tf: ExtendedTimeframe): number {
   switch (tf) {
+    // Minute timeframes - show enough data for meaningful analysis
     case "1m":
+      return 390; // Full trading day (6.5 hours)
     case "2m":
+      return 195; // Full trading day in 2m intervals
     case "3m":
+      return 130; // Full trading day in 3m intervals
     case "4m":
-      return 240; // ~4h of 1m data
+      return 98; // Full trading day in 4m intervals
     case "5m":
+      return 390; // 2 full trading days for pattern analysis
     case "10m":
-      return 78; // ~1 trading day in 5m
+      return 195; // 2 full trading days in 10m intervals
     case "15m":
-      return 26; // ~1 trading day in 15m
+      return 130; // 2 full trading days in 15m intervals
     case "30m":
+      return 65; // 2 full trading days in 30m intervals
     case "45m":
-      return 26; // ~1 week-ish visible quickly
+      return 87; // ~3 trading days in 45m intervals
+
+    // Hour timeframes - show weeks/months of data
     case "1h":
+      return 156; // ~1 month of hourly data (24 trading days)
     case "2h":
+      return 78; // ~1 month of 2h data
     case "4h":
-      return 80; // ~2–3 months compact
+      return 120; // ~2 months of 4h data
+    case "6h":
+      return 80; // ~2 months of 6h data
+    case "8h":
+      return 60; // ~2 months of 8h data
+    case "12h":
+      return 40; // ~2 months of 12h data
+
+    // Daily and longer timeframes
     case "1D":
-      return 78; // one intraday view worth of 5m bars
+      return 390; // full trading day in 1-minute bars (6.5 hours * 60 minutes)
     case "1W":
-      return 100; // ~5–6 weeks hourly
+      return 7; // 1 week of daily data
     case "1M":
-      return 60; // ~3 months daily
+      return 22; // ~1 month of daily data (trading days)
     case "3M":
-      return 90;
+      return 66; // ~3 months of daily data
     case "6M":
-      return 130;
+      return 132; // ~6 months of daily data
     case "1Y":
-      return 200; // slightly under a trading year for snappier loads
+      return 252; // ~1 trading year of daily data
     case "2Y":
-      return 104; // ~2 years weekly
+      return 104; // ~2 years of weekly data
     case "5Y":
+      return 260; // ~5 years of weekly data
     case "ALL":
-      return 180; // monthly/weekly overview, fast
+      return 600; // Maximum historical view (monthly data)
     default:
-      return 120;
+      return 200;
   }
 }
 

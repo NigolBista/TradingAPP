@@ -405,6 +405,10 @@ export default function StockDetailScreen() {
     null
   );
   const [sentimentLoading, setSentimentLoading] = useState(false);
+  const visibleDomainRef = React.useRef<{
+    fromMs: number;
+    toMs: number;
+  } | null>(null);
 
   const symbolSentimentCounts = useMemo(() => {
     // Use aggregated sentiment stats if available, otherwise fall back to individual news counting
@@ -880,10 +884,48 @@ export default function StockDetailScreen() {
 
     // Try to get cached data from smart candle manager
     try {
+      // Use appropriate limit based on timeframe for optimal data coverage
+      const getTimeframeLimit = (tf: string): number => {
+        const tfLower = tf.toLowerCase();
+
+        // Minute timeframes
+        if (tfLower === "1m") return 390; // Full trading day
+        if (tfLower === "2m") return 195; // Full trading day
+        if (tfLower === "3m") return 130; // Full trading day
+        if (tfLower === "4m") return 98; // Full trading day
+        if (tfLower === "5m") return 390; // 2 trading days
+        if (tfLower === "10m") return 195; // 2 trading days
+        if (tfLower === "15m") return 130; // 2 trading days
+        if (tfLower === "30m") return 65; // 2 trading days
+        if (tfLower === "45m") return 87; // ~3 trading days
+
+        // Hour timeframes
+        if (tfLower === "1h") return 156; // ~1 month
+        if (tfLower === "2h") return 78; // ~1 month
+        if (tfLower === "4h") return 120; // ~2 months
+        if (tfLower === "6h") return 80; // ~2 months
+        if (tfLower === "8h") return 60; // ~2 months
+        if (tfLower === "12h") return 40; // ~2 months
+
+        // Daily and longer
+        if (tfLower === "1d") return 390; // Full trading day (1-minute bars)
+        if (tfLower === "1w") return 7; // 1 week
+        if (tfLower === "1m") return 22; // 1 month
+        if (tfLower === "3m") return 66; // 3 months
+        if (tfLower === "6m") return 132; // 6 months
+        if (tfLower === "1y") return 252; // 1 year
+        if (tfLower === "2y") return 104; // 2 years
+        if (tfLower === "5y") return 260; // 5 years
+        if (tfLower === "all") return 600; // All available
+
+        return 500; // Default fallback
+      };
+
+      const limit = getTimeframeLimit(extendedTf);
       const cachedCandles = await smartCandleManager.getCandles(
         symbol,
         extendedTf,
-        500
+        limit
       );
       if (cachedCandles && cachedCandles.length > 0) {
         console.log(
@@ -941,6 +983,7 @@ export default function StockDetailScreen() {
     let t: any;
     return (range: { fromMs: number; toMs: number }) => {
       if (!range || !range.fromMs || !range.toMs) return;
+      visibleDomainRef.current = { fromMs: range.fromMs, toMs: range.toMs };
       if (t) clearTimeout(t);
       t = setTimeout(async () => {
         try {
@@ -980,6 +1023,41 @@ export default function StockDetailScreen() {
       }, 160);
     };
   }, [symbol, extendedTf]);
+
+  // Edge request handler from the chart for seamless pan/zoom loading
+  const handleEdgeRequest = useCallback(
+    async (payload: {
+      visible: { fromMs: number; toMs: number };
+      dataset: { minMs: number; maxMs: number };
+      requests: Array<{
+        side: "left" | "right";
+        requestWindow: { fromMs: number; toMs: number };
+      }>;
+    }) => {
+      try {
+        if (!payload || !payload.requests || payload.requests.length === 0)
+          return;
+        // Prefer processing one side per tick to avoid cancelation in ensureRange
+        const req = payload.requests[0];
+        const domain = {
+          min: Math.min(payload.visible.fromMs, payload.visible.toMs),
+          max: Math.max(payload.visible.fromMs, payload.visible.toMs),
+        };
+        await ensureRange(
+          symbol,
+          extendedTf,
+          req.requestWindow.fromMs,
+          req.requestWindow.toMs,
+          domain
+        );
+        const stitched = getSeries(symbol, extendedTf);
+        if (stitched && stitched.length) setDailySeries(toLWC(stitched));
+      } catch (e) {
+        console.warn("Edge fetch failed:", e);
+      }
+    },
+    [symbol, extendedTf]
+  );
 
   // Load sentiment stats in background
   async function loadSentimentStats() {
@@ -1527,6 +1605,7 @@ export default function StockDetailScreen() {
                   : undefined
               }
               onVisibleRangeChange={handleVisibleRangeChange}
+              onEdgeRequest={handleEdgeRequest}
             />
           </View>
 
