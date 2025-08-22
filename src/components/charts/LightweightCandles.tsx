@@ -742,97 +742,123 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
               if (!preserveTime) { try { preserveLogical = chart.timeScale().getVisibleLogicalRange && chart.timeScale().getVisibleLogicalRange(); } catch(_) {} }
             }
             
-            applySeriesData(newData);
-            try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
-            try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
-            
-            // Auto-fit or restore range
-            try {
-              if (shouldAutoFit && newData.length > 0) {
-                const dataCount = newData.length;
-                
-                // Analyze time intervals to determine timeframe
-                let avgTimeSpacing = 0;
-                if (dataCount >= 2) {
-                  const totalSpacing = newData[newData.length - 1].time - newData[0].time;
-                  avgTimeSpacing = totalSpacing / Math.max(1, dataCount - 1);
-                }
-                
-                // Calculate optimal viewport settings based on timeframe characteristics
-                let optimalSpacing, visibleBarsTarget, rightOffsetBars;
-                
-                if (avgTimeSpacing <= 120) {
-                  // 1-2 minute data: Show ~4-6 hours worth (240-360 bars)
-                  optimalSpacing = 4;
-                  visibleBarsTarget = Math.min(300, dataCount);
-                  rightOffsetBars = 20;
-                } else if (avgTimeSpacing <= 300) {
-                  // 3-5 minute data: Show ~6-8 hours worth (120-160 bars)  
-                  optimalSpacing = 6;
-                  visibleBarsTarget = Math.min(150, dataCount);
-                  rightOffsetBars = 15;
-                } else if (avgTimeSpacing <= 900) {
-                  // 10-15 minute data: Show ~1-2 days worth (96-192 bars)
-                  optimalSpacing = 8;
-                  visibleBarsTarget = Math.min(100, dataCount);
-                  rightOffsetBars = 12;
-                } else if (avgTimeSpacing <= 1800) {
-                  // 30 minute data: Show ~3-5 days worth (144-240 bars)
-                  optimalSpacing = 10;
-                  visibleBarsTarget = Math.min(80, dataCount);
-                  rightOffsetBars = 10;
-                } else if (avgTimeSpacing <= 3600) {
-                  // 1 hour data: Show ~1-2 weeks worth (168-336 bars)
-                  optimalSpacing = 12;
-                  visibleBarsTarget = Math.min(120, dataCount);
-                  rightOffsetBars = 8;
-                } else if (avgTimeSpacing <= 14400) {
-                  // 2-4 hour data: Show ~1-2 months worth
-                  optimalSpacing = 15;
-                  visibleBarsTarget = Math.min(80, dataCount);
-                  rightOffsetBars = 6;
-                } else if (avgTimeSpacing <= 86400) {
-                  // Daily data: Show ~3-6 months worth
-                  optimalSpacing = 18;
-                  visibleBarsTarget = Math.min(120, dataCount);
-                  rightOffsetBars = 5;
-                } else {
-                  // Weekly/Monthly data: Show years worth
-                  optimalSpacing = 25;
-                  visibleBarsTarget = Math.min(100, dataCount);
-                  rightOffsetBars = 3;
-                }
-                
-                // Apply optimal spacing first
+            // PRE-CALCULATE AND APPLY OPTIMAL SPACING BEFORE SETTING DATA
+            // This prevents the visual compression during timeframe switches
+            if (shouldAutoFit && newData.length > 0) {
+              const dataCount = newData.length;
+              
+              // Analyze time intervals to determine timeframe
+              let avgTimeSpacing = 0;
+              if (dataCount >= 2) {
+                const totalSpacing = newData[newData.length - 1].time - newData[0].time;
+                avgTimeSpacing = totalSpacing / Math.max(1, dataCount - 1);
+              }
+              
+              // Calculate optimal viewport settings based on timeframe characteristics
+              let optimalSpacing, rightOffsetBars;
+              
+              if (avgTimeSpacing <= 120) {
+                // 1-2 minute data: Show ~4-6 hours worth (240-360 bars)
+                optimalSpacing = 4;
+                rightOffsetBars = 20;
+              } else if (avgTimeSpacing <= 300) {
+                // 3-5 minute data: Show ~6-8 hours worth (120-160 bars)  
+                optimalSpacing = 6;
+                rightOffsetBars = 15;
+              } else if (avgTimeSpacing <= 900) {
+                // 10-15 minute data: Show ~1-2 days worth (96-192 bars)
+                optimalSpacing = 8;
+                rightOffsetBars = 12;
+              } else if (avgTimeSpacing <= 1800) {
+                // 30 minute data: Show ~3-5 days worth (144-240 bars)
+                optimalSpacing = 10;
+                rightOffsetBars = 10;
+              } else if (avgTimeSpacing <= 3600) {
+                // 1 hour data: Show ~1-2 weeks worth (168-336 bars)
+                optimalSpacing = 12;
+                rightOffsetBars = 8;
+              } else if (avgTimeSpacing <= 14400) {
+                // 2-4 hour data: Show ~1-2 months worth
+                optimalSpacing = 15;
+                rightOffsetBars = 6;
+              } else if (avgTimeSpacing <= 86400) {
+                // Daily data: Show ~3-6 months worth
+                optimalSpacing = 18;
+                rightOffsetBars = 5;
+              } else {
+                // Weekly/Monthly data: Show years worth
+                optimalSpacing = 25;
+                rightOffsetBars = 3;
+              }
+              
+              // Apply optimal spacing BEFORE setting data to prevent compression
+              try {
                 chart.applyOptions({
                   timeScale: {
                     barSpacing: optimalSpacing,
                     rightOffset: rightOffsetBars
                   }
                 });
+              } catch(_) {}
+            }
+            
+            applySeriesData(newData);
+            try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
+            try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
+            
+            // Auto-fit or restore range (spacing already applied above)
+            try {
+              if (shouldAutoFit && newData.length > 0) {
+                const dataCount = newData.length;
+                
+                // Analyze time intervals to determine optimal visible bars
+                let avgTimeSpacing = 0;
+                if (dataCount >= 2) {
+                  const totalSpacing = newData[newData.length - 1].time - newData[0].time;
+                  avgTimeSpacing = totalSpacing / Math.max(1, dataCount - 1);
+                }
+                
+                // Calculate optimal visible bars target based on timeframe
+                let visibleBarsTarget;
+                if (avgTimeSpacing <= 120) {
+                  visibleBarsTarget = Math.min(300, dataCount);
+                } else if (avgTimeSpacing <= 300) {
+                  visibleBarsTarget = Math.min(150, dataCount);
+                } else if (avgTimeSpacing <= 900) {
+                  visibleBarsTarget = Math.min(100, dataCount);
+                } else if (avgTimeSpacing <= 1800) {
+                  visibleBarsTarget = Math.min(80, dataCount);
+                } else if (avgTimeSpacing <= 3600) {
+                  visibleBarsTarget = Math.min(120, dataCount);
+                } else if (avgTimeSpacing <= 14400) {
+                  visibleBarsTarget = Math.min(80, dataCount);
+                } else if (avgTimeSpacing <= 86400) {
+                  visibleBarsTarget = Math.min(120, dataCount);
+                } else {
+                  visibleBarsTarget = Math.min(100, dataCount);
+                }
                 
                 // Set visible range to show optimal amount of data
-                requestAnimationFrame(() => {
-                  try {
-                    if (dataCount > visibleBarsTarget) {
-                      // Show the most recent data within the target range
-                      const startIndex = Math.max(0, dataCount - visibleBarsTarget);
-                      const endIndex = dataCount - 1;
-                      
-                      if (startIndex < endIndex) {
-                        const fromTime = newData[startIndex].time;
-                        const toTime = newData[endIndex].time;
-                        chart.timeScale().setVisibleRange({ from: fromTime, to: toTime });
-                      }
-                    } else {
-                      // Show all data if less than target
-                      chart.timeScale().fitContent();
+                // Use immediate execution instead of requestAnimationFrame for faster response
+                try {
+                  if (dataCount > visibleBarsTarget) {
+                    // Show the most recent data within the target range
+                    const startIndex = Math.max(0, dataCount - visibleBarsTarget);
+                    const endIndex = dataCount - 1;
+                    
+                    if (startIndex < endIndex) {
+                      const fromTime = newData[startIndex].time;
+                      const toTime = newData[endIndex].time;
+                      chart.timeScale().setVisibleRange({ from: fromTime, to: toTime });
                     }
-                  } catch(_) {
-                    // Fallback to fit content
-                    try { chart.timeScale().fitContent(); } catch(_) {}
+                  } else {
+                    // Show all data if less than target
+                    chart.timeScale().fitContent();
                   }
-                });
+                } catch(_) {
+                  // Fallback to fit content
+                  try { chart.timeScale().fitContent(); } catch(_) {}
+                }
               } else if (!shouldAutoFit) {
                 // Restore previous range
                 if (preserveTime && chart.timeScale().setVisibleRange) {

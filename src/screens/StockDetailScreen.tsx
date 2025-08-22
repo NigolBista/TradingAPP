@@ -1173,6 +1173,7 @@ export default function StockDetailScreen() {
       const candles = await smartCandleManager.getCandles(symbol, tf, 500);
       if (candles && candles.length > 0) {
         console.log("📈 Smart timeframe switch for", symbol, tf);
+        // Set data with auto-fit enabled for smooth timeframe transitions
         setDailySeries(toLWC(candles));
       }
     } catch (e) {

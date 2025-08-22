@@ -422,6 +422,7 @@ export default function ChartFullScreen() {
       const candles = await smartCandleManager.getCandles(symbol, tf, 500);
       if (candles && candles.length > 0) {
         console.log("📈 Smart timeframe switch for", symbol, tf);
+        // Set data with proper formatting for smooth timeframe transitions
         setData(
           candles.map((c) => ({
             time: c.time,
