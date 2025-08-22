@@ -71,6 +71,8 @@ interface Props {
 
 export type LightweightCandlesHandle = {
   scrollToRealTime: () => void;
+  fitContent: () => void;
+  resetView: () => void;
 };
 
 const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
@@ -104,27 +106,48 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           );
         } catch (_) {}
       },
+      fitContent: () => {
+        try {
+          (webRef.current as any)?.postMessage?.(
+            JSON.stringify({ cmd: "fitContent" })
+          );
+        } catch (_) {}
+      },
+      resetView: () => {
+        try {
+          (webRef.current as any)?.postMessage?.(
+            JSON.stringify({ cmd: "resetView" })
+          );
+        } catch (_) {}
+      },
     }));
-    const series = useMemo(
-      () =>
-        data.map((d) => ({
+    // Optimize series transformation with better memoization
+    const series = useMemo(() => {
+      if (!data || data.length === 0) return [];
+
+      // Pre-allocate array for better performance
+      const result = new Array(data.length);
+      for (let i = 0; i < data.length; i++) {
+        const d = data[i];
+        result[i] = {
           time: Math.floor(d.time / 1000),
           open: d.open,
           high: d.high,
           low: d.low,
           close: d.close,
           volume: d.volume ?? 0,
-        })),
-      [data]
-    );
+        };
+      }
+      return result;
+    }, [data]);
 
-    // Track last pushed bar time to prefer append over full set
+    // Performance tracking refs
     const lastPushedTimeRef = useRef<number | null>(null);
-    // Track last dataset spacing and length to detect timeframe changes
     const lastSpacingRef = useRef<number | null>(null);
     const lastLengthRef = useRef<number>(0);
-    // Track first time seen to detect left-side extensions
     const lastFirstTimeRef = useRef<number | null>(null);
+    const lastUpdateTimeRef = useRef<number>(0);
+    const pendingUpdateRef = useRef<NodeJS.Timeout | null>(null);
 
     // Resolve local lightweight-charts asset stored as .txt (so Metro treats as asset)
     const [inlineLibText, setInlineLibText] = useState<string | null>(null);
@@ -249,9 +272,12 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           secondsVisible: false,
           rightOffset: 12,
           barSpacing: 8,
-          minBarSpacing: 2,
+          minBarSpacing: 1,
+          maxBarSpacing: 50,
           fixLeftEdge: false,
-          fixRightEdge: false
+          fixRightEdge: false,
+          // Prevent excessive zooming that causes visual issues
+          shiftVisibleRangeOnNewBar: true
         },
         grid: { 
           horzLines: { color: showGrid ? (dark ? '#1f2937' : '#f3f4f6') : 'transparent' }, 
@@ -280,6 +306,15 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           axisPressedMouseMove: true,
           mouseWheel: true,
           pinch: true
+        },
+        // Performance optimizations
+        localization: {
+          priceFormatter: (price) => price.toFixed(2),
+        },
+        // Reduce animation overhead
+        kinetic: {
+          touch: true,
+          mouse: false
         }
       };
 
@@ -402,9 +437,23 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       function applySeriesData(initial){
         try {
           raw = Array.isArray(initial) ? initial : [];
-          const seriesData = (type === 'area' || type === 'line')
-            ? raw.map(d => ({ time: d.time, value: d.close }))
-            : raw;
+          if (raw.length === 0) {
+            mainSeries.setData([]);
+            return;
+          }
+          
+          let seriesData;
+          if (type === 'area' || type === 'line') {
+            // Pre-allocate for line/area charts
+            seriesData = new Array(raw.length);
+            for (let i = 0; i < raw.length; i++) {
+              seriesData[i] = { time: raw[i].time, value: raw[i].close };
+            }
+          } else {
+            // Use raw data directly for candlestick/bar charts
+            seriesData = raw;
+          }
+          
           mainSeries.setData(seriesData);
           try { updateSeriesColorByData(); } catch(_) {}
         } catch(e) { log('applySeriesData error: ' + e.message); }
@@ -682,24 +731,164 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           const msg = JSON.parse(event.data);
           if (!msg || !msg.cmd) return;
           if (msg.cmd === 'setData') {
+            const newData = msg.data || [];
+            const shouldAutoFit = msg.autoFit !== false; // Default to auto-fit unless explicitly disabled
+            
+            // Store current range only if we're not auto-fitting
             let preserveTime = null;
             let preserveLogical = null;
-            try { preserveTime = chart.timeScale().getVisibleRange && chart.timeScale().getVisibleRange(); } catch(_) {}
-            if (!preserveTime) { try { preserveLogical = chart.timeScale().getVisibleLogicalRange && chart.timeScale().getVisibleLogicalRange(); } catch(_) {} }
-            applySeriesData(msg.data || []);
+            if (!shouldAutoFit) {
+              try { preserveTime = chart.timeScale().getVisibleRange && chart.timeScale().getVisibleRange(); } catch(_) {}
+              if (!preserveTime) { try { preserveLogical = chart.timeScale().getVisibleLogicalRange && chart.timeScale().getVisibleLogicalRange(); } catch(_) {} }
+            }
+            
+            applySeriesData(newData);
             try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
             try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
+            
+            // Auto-fit or restore range
             try {
-              if (preserveTime && chart.timeScale().setVisibleRange) {
-                chart.timeScale().setVisibleRange(preserveTime);
-              } else if (preserveLogical && chart.timeScale().setVisibleLogicalRange) {
-                chart.timeScale().setVisibleLogicalRange(preserveLogical);
+              if (shouldAutoFit && newData.length > 0) {
+                const dataCount = newData.length;
+                
+                // Analyze time intervals to determine timeframe
+                let avgTimeSpacing = 0;
+                if (dataCount >= 2) {
+                  const totalSpacing = newData[newData.length - 1].time - newData[0].time;
+                  avgTimeSpacing = totalSpacing / Math.max(1, dataCount - 1);
+                }
+                
+                // Calculate optimal viewport settings based on timeframe characteristics
+                let optimalSpacing, visibleBarsTarget, rightOffsetBars;
+                
+                if (avgTimeSpacing <= 120) {
+                  // 1-2 minute data: Show ~4-6 hours worth (240-360 bars)
+                  optimalSpacing = 4;
+                  visibleBarsTarget = Math.min(300, dataCount);
+                  rightOffsetBars = 20;
+                } else if (avgTimeSpacing <= 300) {
+                  // 3-5 minute data: Show ~6-8 hours worth (120-160 bars)  
+                  optimalSpacing = 6;
+                  visibleBarsTarget = Math.min(150, dataCount);
+                  rightOffsetBars = 15;
+                } else if (avgTimeSpacing <= 900) {
+                  // 10-15 minute data: Show ~1-2 days worth (96-192 bars)
+                  optimalSpacing = 8;
+                  visibleBarsTarget = Math.min(100, dataCount);
+                  rightOffsetBars = 12;
+                } else if (avgTimeSpacing <= 1800) {
+                  // 30 minute data: Show ~3-5 days worth (144-240 bars)
+                  optimalSpacing = 10;
+                  visibleBarsTarget = Math.min(80, dataCount);
+                  rightOffsetBars = 10;
+                } else if (avgTimeSpacing <= 3600) {
+                  // 1 hour data: Show ~1-2 weeks worth (168-336 bars)
+                  optimalSpacing = 12;
+                  visibleBarsTarget = Math.min(120, dataCount);
+                  rightOffsetBars = 8;
+                } else if (avgTimeSpacing <= 14400) {
+                  // 2-4 hour data: Show ~1-2 months worth
+                  optimalSpacing = 15;
+                  visibleBarsTarget = Math.min(80, dataCount);
+                  rightOffsetBars = 6;
+                } else if (avgTimeSpacing <= 86400) {
+                  // Daily data: Show ~3-6 months worth
+                  optimalSpacing = 18;
+                  visibleBarsTarget = Math.min(120, dataCount);
+                  rightOffsetBars = 5;
+                } else {
+                  // Weekly/Monthly data: Show years worth
+                  optimalSpacing = 25;
+                  visibleBarsTarget = Math.min(100, dataCount);
+                  rightOffsetBars = 3;
+                }
+                
+                // Apply optimal spacing first
+                chart.applyOptions({
+                  timeScale: {
+                    barSpacing: optimalSpacing,
+                    rightOffset: rightOffsetBars
+                  }
+                });
+                
+                // Set visible range to show optimal amount of data
+                requestAnimationFrame(() => {
+                  try {
+                    if (dataCount > visibleBarsTarget) {
+                      // Show the most recent data within the target range
+                      const startIndex = Math.max(0, dataCount - visibleBarsTarget);
+                      const endIndex = dataCount - 1;
+                      
+                      if (startIndex < endIndex) {
+                        const fromTime = newData[startIndex].time;
+                        const toTime = newData[endIndex].time;
+                        chart.timeScale().setVisibleRange({ from: fromTime, to: toTime });
+                      }
+                    } else {
+                      // Show all data if less than target
+                      chart.timeScale().fitContent();
+                    }
+                  } catch(_) {
+                    // Fallback to fit content
+                    try { chart.timeScale().fitContent(); } catch(_) {}
+                  }
+                });
+              } else if (!shouldAutoFit) {
+                // Restore previous range
+                if (preserveTime && chart.timeScale().setVisibleRange) {
+                  chart.timeScale().setVisibleRange(preserveTime);
+                } else if (preserveLogical && chart.timeScale().setVisibleLogicalRange) {
+                  chart.timeScale().setVisibleLogicalRange(preserveLogical);
+                }
               }
             } catch(_) {}
           } else if (msg.cmd === 'appendData') {
             appendSeriesData(msg.data || []);
           } else if (msg.cmd === 'scrollToRealTime') {
             try { chart.timeScale().scrollToRealTime(); } catch(_) {}
+          } else if (msg.cmd === 'fitContent') {
+            try { 
+              chart.timeScale().fitContent(); 
+            } catch(_) {}
+          } else if (msg.cmd === 'resetView') {
+            try {
+              // Reset to optimal view for current data
+              if (raw && raw.length > 0) {
+                const dataCount = raw.length;
+                let avgTimeSpacing = 0;
+                if (dataCount >= 2) {
+                  const totalSpacing = raw[raw.length - 1].time - raw[0].time;
+                  avgTimeSpacing = totalSpacing / Math.max(1, dataCount - 1);
+                }
+                
+                // Apply optimal settings based on timeframe
+                let optimalSpacing = 8, visibleBarsTarget = 100;
+                if (avgTimeSpacing <= 120) {
+                  optimalSpacing = 4; visibleBarsTarget = 300;
+                } else if (avgTimeSpacing <= 300) {
+                  optimalSpacing = 6; visibleBarsTarget = 150;
+                } else if (avgTimeSpacing <= 900) {
+                  optimalSpacing = 8; visibleBarsTarget = 100;
+                } else if (avgTimeSpacing <= 1800) {
+                  optimalSpacing = 10; visibleBarsTarget = 80;
+                } else if (avgTimeSpacing <= 3600) {
+                  optimalSpacing = 12; visibleBarsTarget = 120;
+                } else {
+                  optimalSpacing = 15; visibleBarsTarget = 80;
+                }
+                
+                chart.applyOptions({ timeScale: { barSpacing: optimalSpacing } });
+                
+                if (dataCount > visibleBarsTarget) {
+                  const startIndex = Math.max(0, dataCount - visibleBarsTarget);
+                  const fromTime = raw[startIndex].time;
+                  const toTime = raw[dataCount - 1].time;
+                  chart.timeScale().setVisibleRange({ from: fromTime, to: toTime });
+                } else {
+                  chart.timeScale().fitContent();
+                }
+              }
+            } catch(_) {}
           }
         } catch(e) { log('message handler error: ' + e.message); }
       });
@@ -808,73 +997,116 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       lastFirstTimeRef.current = null;
     }, [html]);
 
-    // Prefer incremental appends to avoid viewport resets
+    // Optimized data updates with debouncing and performance improvements
     useEffect(() => {
       if (!isReady || !webRef.current) return;
       if (!series || series.length === 0) return;
-      // If we haven't pushed initial data via onReady yet, wait
       if (lastPushedTimeRef.current == null) return;
-      try {
-        const lastTime = lastPushedTimeRef.current as number;
-        const latest = series[series.length - 1];
-        if (!latest) return;
-        // Detect spacing change or shrink (e.g., timeframe switch)
-        const prevLen = lastLengthRef.current || 0;
-        const prevSpacing = lastSpacingRef.current;
-        const prevFirst = lastFirstTimeRef.current;
-        const newFirst = series[0]?.time ?? null;
-        const newSpacing =
-          series.length >= 2
-            ? series[series.length - 1].time - series[series.length - 2].time
-            : null;
-        const spacingChanged =
-          prevSpacing != null &&
-          newSpacing != null &&
-          Math.abs(newSpacing - prevSpacing) > Math.max(1, prevSpacing * 0.2);
-        const lengthShrank = series.length < prevLen;
-        const extendedLeft =
-          newFirst != null && prevFirst != null && newFirst < prevFirst;
 
-        if (spacingChanged || lengthShrank || extendedLeft) {
-          (webRef.current as any)?.postMessage?.(
-            JSON.stringify({ cmd: "setData", data: series })
-          );
-          lastPushedTimeRef.current = latest.time;
-          lastSpacingRef.current = newSpacing ?? null;
-          lastLengthRef.current = series.length;
-          lastFirstTimeRef.current = newFirst;
-          return;
-        }
+      // Clear any pending updates
+      if (pendingUpdateRef.current) {
+        clearTimeout(pendingUpdateRef.current);
+      }
 
-        // Case 1: same candle is being updated (e.g., in-progress bar)
-        if (latest.time === lastTime) {
-          (webRef.current as any)?.postMessage?.(
-            JSON.stringify({ cmd: "appendData", data: [latest] })
-          );
-          return;
-        }
+      const performUpdate = () => {
+        try {
+          const lastTime = lastPushedTimeRef.current as number;
+          const latest = series[series.length - 1];
+          if (!latest) return;
 
-        // Case 2: new bars appended
-        if (latest.time > lastTime) {
-          const newBars = series.filter((b) => b.time > lastTime);
-          if (newBars.length > 0 && newBars.length <= 500) {
+          // Detect significant changes that require full refresh
+          const prevLen = lastLengthRef.current || 0;
+          const prevSpacing = lastSpacingRef.current;
+          const prevFirst = lastFirstTimeRef.current;
+          const newFirst = series[0]?.time ?? null;
+          const newSpacing =
+            series.length >= 2
+              ? series[series.length - 1].time - series[series.length - 2].time
+              : null;
+
+          const spacingChanged =
+            prevSpacing != null &&
+            newSpacing != null &&
+            Math.abs(newSpacing - prevSpacing) > Math.max(1, prevSpacing * 0.2);
+          const lengthShrank = series.length < prevLen;
+          const extendedLeft =
+            newFirst != null && prevFirst != null && newFirst < prevFirst;
+
+          // Handle timeframe changes with full refresh
+          if (spacingChanged || lengthShrank || extendedLeft) {
+            const shouldAutoFit = spacingChanged || lengthShrank;
             (webRef.current as any)?.postMessage?.(
-              JSON.stringify({ cmd: "appendData", data: newBars })
+              JSON.stringify({
+                cmd: "setData",
+                data: series,
+                autoFit: shouldAutoFit,
+              })
             );
-          } else {
-            (webRef.current as any)?.postMessage?.(
-              JSON.stringify({ cmd: "setData", data: series })
-            );
+            lastPushedTimeRef.current = latest.time;
+            lastSpacingRef.current = newSpacing ?? null;
+            lastLengthRef.current = series.length;
+            lastFirstTimeRef.current = newFirst;
+            lastUpdateTimeRef.current = Date.now();
+            return;
           }
-          lastPushedTimeRef.current = latest.time;
-          lastSpacingRef.current = newSpacing ?? lastSpacingRef.current;
-          lastLengthRef.current = series.length;
-          lastFirstTimeRef.current = newFirst ?? lastFirstTimeRef.current;
-          return;
-        }
 
-        // Case 3: no change or older data -> do nothing to preserve viewport
-      } catch (_) {}
+          // Handle incremental updates
+          if (latest.time === lastTime) {
+            // Same candle update (real-time tick)
+            (webRef.current as any)?.postMessage?.(
+              JSON.stringify({ cmd: "appendData", data: [latest] })
+            );
+            return;
+          }
+
+          if (latest.time > lastTime) {
+            // New bars appended
+            const newBars = series.filter((b) => b.time > lastTime);
+            if (newBars.length > 0 && newBars.length <= 100) {
+              // Batch small updates
+              (webRef.current as any)?.postMessage?.(
+                JSON.stringify({ cmd: "appendData", data: newBars })
+              );
+            } else if (newBars.length > 100) {
+              // Full refresh for large updates
+              (webRef.current as any)?.postMessage?.(
+                JSON.stringify({ cmd: "setData", data: series, autoFit: false })
+              );
+            }
+            lastPushedTimeRef.current = latest.time;
+            lastSpacingRef.current = newSpacing ?? lastSpacingRef.current;
+            lastLengthRef.current = series.length;
+            lastFirstTimeRef.current = newFirst ?? lastFirstTimeRef.current;
+            lastUpdateTimeRef.current = Date.now();
+          }
+        } catch (error) {
+          console.warn("Chart update error:", error);
+        }
+      };
+
+      // Determine update strategy based on change magnitude
+      const now = Date.now();
+      const timeSinceLastUpdate = now - lastUpdateTimeRef.current;
+      const lengthChange = Math.abs(series.length - lastLengthRef.current);
+
+      // Immediate update for significant changes or first update
+      if (
+        lengthChange > 50 ||
+        timeSinceLastUpdate > 2000 ||
+        lastUpdateTimeRef.current === 0
+      ) {
+        performUpdate();
+      } else {
+        // Debounce minor updates for smoother performance
+        pendingUpdateRef.current = setTimeout(performUpdate, 16); // ~60fps
+      }
+
+      return () => {
+        if (pendingUpdateRef.current) {
+          clearTimeout(pendingUpdateRef.current);
+          pendingUpdateRef.current = null;
+        }
+      };
     }, [isReady, series]);
 
     return (
@@ -894,7 +1126,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           /* @ts-expect-error react-native-webview may not expose opaque in types */
           opaque={false}
           javaScriptEnabled={true}
-          domStorageEnabled={true}
+          domStorageEnabled={false}
           bounces={false}
           overScrollMode="never"
           decelerationRate="normal"
@@ -903,6 +1135,14 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           scrollEnabled={false}
           showsHorizontalScrollIndicator={false}
           showsVerticalScrollIndicator={false}
+          // Performance optimizations
+          cacheEnabled={true}
+          incognito={false}
+          thirdPartyCookiesEnabled={false}
+          sharedCookiesEnabled={false}
+          // Reduce memory usage
+          allowsInlineMediaPlayback={false}
+          mediaPlaybackRequiresUserAction={true}
           ref={webRef}
           onMessage={(e) => {
             try {
@@ -912,7 +1152,11 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                 if (onReady) onReady();
                 try {
                   (webRef.current as any)?.postMessage?.(
-                    JSON.stringify({ cmd: "setData", data: series })
+                    JSON.stringify({
+                      cmd: "setData",
+                      data: series,
+                      autoFit: true, // Always auto-fit on initial load
+                    })
                   );
                   // Initialize last pushed time from the dataset we just sent
                   if (Array.isArray(series) && series.length > 0) {
