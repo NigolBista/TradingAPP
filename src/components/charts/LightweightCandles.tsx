@@ -9,6 +9,7 @@ import { View } from "react-native";
 import { WebView } from "react-native-webview";
 import { Asset } from "expo-asset";
 import * as FileSystem from "expo-file-system";
+import { realtimeRouter } from "../../services/realtimeRouter";
 
 export type LWCDatum = {
   time: number; // epoch ms
@@ -62,6 +63,10 @@ interface Props {
   onLoadMoreData?: (numberOfBars: number) => Promise<LWCDatum[]>;
   // Notify when the web chart is ready
   onReady?: () => void;
+  // Real-time updates
+  symbol?: string; // Symbol to subscribe for real-time updates
+  timeframe?: string; // Timeframe for real-time candle aggregation
+  enableRealtime?: boolean; // Enable real-time updates
 }
 
 export type LightweightCandlesHandle = {
@@ -85,10 +90,13 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       forcePositive,
       levels,
       tradePlan,
-      initialPosition = "start",
+      initialPosition = "end",
       onVisibleRangeChange,
       onLoadMoreData,
       onReady,
+      symbol,
+      timeframe = "1m",
+      enableRealtime = false,
     }: Props,
     ref
   ) {
@@ -118,24 +126,68 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
         } catch (_) {}
       },
     }));
-    // Optimize series transformation with better memoization
+    // Optimize series transformation with better memoization and validation
     const series = useMemo(() => {
       if (!data || data.length === 0) return [];
 
       // Pre-allocate array for better performance
-      const result = new Array(data.length);
+      const result: any[] = [];
       for (let i = 0; i < data.length; i++) {
         const d = data[i];
-        result[i] = {
+
+        // Validate input data
+        if (!d || typeof d.time !== "number" || d.time <= 0) {
+          console.warn("Invalid candle data - skipping:", d);
+          continue;
+        }
+
+        const processedCandle = {
           time: Math.floor(d.time / 1000),
-          open: d.open,
-          high: d.high,
-          low: d.low,
-          close: d.close,
-          volume: d.volume ?? 0,
+          open: Number(d.open) || 0,
+          high: Number(d.high) || 0,
+          low: Number(d.low) || 0,
+          close: Number(d.close) || 0,
+          volume: Number(d.volume) || 0,
         };
+
+        // Additional validation for OHLC consistency
+        if (processedCandle.high < processedCandle.low) {
+          console.warn(
+            "Invalid OHLC data - high < low, skipping:",
+            processedCandle
+          );
+          continue;
+        }
+
+        // Ensure open/close are within high/low range
+        processedCandle.open = Math.max(
+          processedCandle.low,
+          Math.min(processedCandle.high, processedCandle.open)
+        );
+        processedCandle.close = Math.max(
+          processedCandle.low,
+          Math.min(processedCandle.high, processedCandle.close)
+        );
+
+        result.push(processedCandle);
       }
-      return result;
+
+      // Ensure strictly increasing time order and remove duplicates
+      result.sort((a, b) => a.time - b.time);
+
+      // Remove duplicate timestamps, keeping the last occurrence
+      const uniqueResult: any[] = [];
+      for (let i = 0; i < result.length; i++) {
+        const current = result[i];
+        const next = result[i + 1];
+
+        // If next candle has the same time, skip current (keep last occurrence)
+        if (!next || current.time !== next.time) {
+          uniqueResult.push(current);
+        }
+      }
+
+      return uniqueResult;
     }, [data]);
 
     // Performance tracking refs
@@ -410,37 +462,76 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
         const lastPrice = raw[raw.length - 1].close;
         isPositive = lastPrice >= firstPrice;
       }
-      const lineColor = isPositive ? '#16a34a' : '#dc2626'; // Green for up, red for down
+      const lineColor = isPositive ? '#00C805' : '#dc2626'; // Robinhood-style green for up, red for down
       
       if (type === 'area') {
         mainSeries = addSeriesCompat('area', { 
           lineColor: lineColor, 
-          topColor: isPositive ? 'rgba(22,163,74,0.4)' : 'rgba(220,38,38,0.4)', 
-          bottomColor: isPositive ? 'rgba(22,163,74,0.05)' : 'rgba(220,38,38,0.05)',
-          lineWidth: 2
+          topColor: isPositive ? 'rgba(0,200,5,0.3)' : 'rgba(220,38,38,0.3)', 
+          bottomColor: isPositive ? 'rgba(0,200,5,0.02)' : 'rgba(220,38,38,0.02)',
+          lineWidth: 2.5,
+          crosshairMarkerVisible: true,
+          crosshairMarkerRadius: 5,
+          crosshairMarkerBorderColor: lineColor,
+          crosshairMarkerBackgroundColor: '#ffffff',
+          crosshairMarkerBorderWidth: 1.5,
+          lastValueVisible: false,
+          priceLineVisible: false
         });
       } else if (type === 'line') {
         mainSeries = addSeriesCompat('line', { 
           color: lineColor, 
-          lineWidth: 3,
+          lineWidth: 2.5,
           crosshairMarkerVisible: true,
-          crosshairMarkerRadius: 6
+          crosshairMarkerRadius: 5,
+          crosshairMarkerBorderColor: lineColor,
+          crosshairMarkerBackgroundColor: '#ffffff',
+          crosshairMarkerBorderWidth: 1.5,
+          lastValueVisible: false,
+          priceLineVisible: false
         });
       } else if (type === 'bar') {
         mainSeries = addSeriesCompat('bar', { 
-          upColor: '#16a34a', 
+          upColor: '#00C805', 
           downColor: '#dc2626',
           openVisible: true,
           thinBars: false
         });
       } else {
         mainSeries = addSeriesCompat('candlestick', { 
-          upColor: '#16a34a', 
+          upColor: '#00C805', 
           downColor: '#dc2626', 
-          wickUpColor: '#16a34a', 
+          wickUpColor: '#00C805', 
           wickDownColor: '#dc2626', 
           borderVisible: false 
         });
+      }
+      
+      // Function to add minimal markers for line and area charts (like Robinhood)
+      function addMarkersToSeries() {
+        if ((type === 'line' || type === 'area') && raw && raw.length > 0) {
+          try {
+            const markers = [];
+            
+            // Only add marker at the last point (current price) like Robinhood
+            const lastPoint = raw[raw.length - 1];
+            if (lastPoint && lastPoint.time && typeof lastPoint.close === 'number') {
+              markers.push({
+                time: lastPoint.time,
+                position: 'inBar',
+                color: lineColor,
+                shape: 'circle',
+                size: 2,
+                id: 'current_price_marker'
+              });
+            }
+            
+            // Clear any existing markers and set only the current price marker
+            mainSeries.setMarkers(markers);
+          } catch (e) {
+            log('Error adding markers: ' + e.message);
+          }
+        }
       }
       
       function applySeriesData(initial){
@@ -465,6 +556,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           
           mainSeries.setData(seriesData);
           try { updateSeriesColorByData(); } catch(_) {}
+          try { addMarkersToSeries(); } catch(_) {}
         } catch(e) { log('applySeriesData error: ' + e.message); }
       }
       applySeriesData(raw);
@@ -675,12 +767,12 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
             const lastPrice = Number(raw[raw.length - 1]?.close || 0);
             positive = lastPrice >= firstPrice;
           }
-          const lc = positive ? '#16a34a' : '#dc2626';
+          const lc = positive ? '#00C805' : '#dc2626';
           if (type === 'area') {
             mainSeries.applyOptions({
               lineColor: lc,
-              topColor: positive ? 'rgba(22,163,74,0.4)' : 'rgba(220,38,38,0.4)',
-              bottomColor: positive ? 'rgba(22,163,74,0.05)' : 'rgba(220,38,38,0.05)'
+              topColor: positive ? 'rgba(0,200,5,0.3)' : 'rgba(220,38,38,0.3)',
+              bottomColor: positive ? 'rgba(0,200,5,0.02)' : 'rgba(220,38,38,0.02)'
             });
           } else if (type === 'line') {
             mainSeries.applyOptions({ color: lc });
@@ -740,6 +832,7 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
           try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
           try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
           try { updateSeriesColorByData(); } catch(_) {}
+          try { addMarkersToSeries(); } catch(_) {}
         } catch(e) { log('appendSeriesData error: ' + e.message); }
       }
       window.addEventListener('message', function(event){
@@ -903,6 +996,8 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                   chart.timeScale().setVisibleLogicalRange(preserveLogical);
                 }
               }
+              // Reset the in-flight flag when we actually append or reset
+              historyInFlight = false;
             } catch(_) {}
           } else if (msg.cmd === 'appendLeft') {
             try {
@@ -947,9 +1042,41 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
               try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
               try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
               try { updateSeriesColorByData(); } catch(_) {}
+              // Reset the in-flight flag when we actually append or reset
+              historyInFlight = false;
             } catch(e) { log('appendLeft error: ' + e.message); }
           } else if (msg.cmd === 'appendData') {
             appendSeriesData(msg.data || []);
+          } else if (msg.cmd === 'updateLastBar') {
+            try {
+              const newBar = msg.data;
+              if (!newBar || typeof newBar.time !== 'number') return;
+              
+              // Update the last bar in the raw data
+              if (raw && raw.length > 0) {
+                raw[raw.length - 1] = newBar;
+                
+                // Update the series data
+                let seriesData;
+                if (type === 'area' || type === 'line') {
+                  seriesData = { time: newBar.time, value: newBar.close };
+                } else {
+                  seriesData = newBar;
+                }
+                
+                // Update the last bar in the chart
+                mainSeries.update(seriesData);
+                
+                // Update volume if available
+                try { if (typeof setVolumeData === 'function') setVolumeData(); } catch(_) {}
+                // Update moving averages
+                try { if (typeof updateMovingAverages === 'function') updateMovingAverages(); } catch(_) {}
+                // Update colors
+                try { updateSeriesColorByData(); } catch(_) {}
+              }
+            } catch(e) { 
+              log('updateLastBar error: ' + e.message); 
+            }
           } else if (msg.cmd === 'scrollToRealTime') {
             try { chart.timeScale().scrollToRealTime(); } catch(_) {}
           } else if (msg.cmd === 'fitContent') {
@@ -1029,17 +1156,20 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       } catch(_) {}
 
       // Infinite history - exactly like TradingView example
+      let historyInFlight = false;
+      let lastHistoryAt = 0;
       try {
         chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
           if (!logicalRange || !raw || raw.length === 0) return;
-          
-          if (logicalRange.from < 10) {
-            // Load more data - calculate how many bars we need
-            const numberBarsToLoad = 50 - logicalRange.from;
+          const now = Date.now();
+          // near the left edge AND not spamming
+          if (logicalRange.from < 5 && !historyInFlight && now - lastHistoryAt > 800) {
+            historyInFlight = true;
+            lastHistoryAt = now;
             try {
               window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
                 JSON.stringify({
-                  loadMoreData: { numberOfBars: numberBarsToLoad }
+                  loadMoreData: { numberOfBars: 200 }
                 })
               );
             } catch(_) {}
@@ -1281,6 +1411,82 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
       };
     }, [isReady, series]);
 
+    // Real-time candle updates
+    useEffect(() => {
+      if (!enableRealtime || !symbol || !isReady) return;
+
+      console.log(
+        `🔄 Setting up real-time updates for ${symbol} (${timeframe})`
+      );
+
+      let candleUnsubscribe: (() => void) | null = null;
+
+      const setupRealtime = async () => {
+        try {
+          // Subscribe to real-time candle updates
+          candleUnsubscribe = realtimeRouter.onCandle(
+            (candleSymbol, candle) => {
+              if (candleSymbol !== symbol) return;
+              if (candle.timeframe !== timeframe) return;
+
+              console.log(`📊 Real-time candle update for ${symbol}:`, candle);
+
+              // Convert to LWCDatum format with proper validation
+              const lwcCandle = {
+                time: Math.floor(candle.time / 1000), // Convert to seconds for LightweightCharts
+                open: Number(candle.open) || 0,
+                high: Number(candle.high) || 0,
+                low: Number(candle.low) || 0,
+                close: Number(candle.close) || 0,
+                volume: Number(candle.volume) || 0,
+              };
+
+              // Validate candle data before sending to chart
+              if (!lwcCandle.time || lwcCandle.time <= 0) {
+                console.warn(`Invalid candle time for ${symbol}:`, lwcCandle);
+                return;
+              }
+              if (lwcCandle.high < lwcCandle.low) {
+                console.warn(`Invalid candle OHLC for ${symbol}:`, lwcCandle);
+                return;
+              }
+
+              // Send update to chart
+              if (webRef.current) {
+                if (candle.isComplete) {
+                  // Complete candle - append as new bar
+                  (webRef.current as any)?.postMessage?.(
+                    JSON.stringify({ cmd: "appendData", data: [lwcCandle] })
+                  );
+                } else {
+                  // Incomplete candle - update current bar
+                  (webRef.current as any)?.postMessage?.(
+                    JSON.stringify({ cmd: "updateLastBar", data: lwcCandle })
+                  );
+                }
+              }
+            }
+          );
+
+          // Subscribe to the symbol for the specific timeframe
+          await realtimeRouter.subscribeForTimeframe([symbol], timeframe);
+        } catch (error) {
+          console.warn("Failed to setup real-time updates:", error);
+        }
+      };
+
+      setupRealtime();
+
+      return () => {
+        console.log(`⏹️ Cleaning up real-time updates for ${symbol}`);
+        if (candleUnsubscribe) {
+          candleUnsubscribe();
+        }
+        // Clean up timeframe-specific subscription
+        realtimeRouter.unsubscribeTimeframe([symbol], timeframe);
+      };
+    }, [enableRealtime, symbol, timeframe, isReady]);
+
     return (
       <View
         style={{
@@ -1348,32 +1554,12 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
               } else if (msg?.visibleRange && onVisibleRangeChange) {
                 onVisibleRangeChange(msg.visibleRange);
               } else if (msg?.loadMoreData && onLoadMoreData) {
-                // Handle infinite history - exactly like TradingView example
-                onLoadMoreData(msg.loadMoreData.numberOfBars)
-                  .then((newData) => {
-                    if (newData?.length) {
-                      // Convert to chart format and send back with delay (like TradingView example)
-                      const chartData = newData.map((d) => ({
-                        time: Math.floor(d.time / 1000),
-                        open: d.open,
-                        high: d.high,
-                        low: d.low,
-                        close: d.close,
-                        volume: d.volume ?? 0,
-                      }));
-
-                      setTimeout(() => {
-                        (webRef.current as any)?.postMessage?.(
-                          JSON.stringify({
-                            cmd: "setData",
-                            data: chartData,
-                            autoFit: false,
-                          })
-                        );
-                      }, 250); // Add loading delay like TradingView example
-                    }
-                  })
-                  .catch((e) => console.warn("Load more data failed:", e));
+                // Defer historical data application to React Native side.
+                // RN updates the `data` prop, and this component will handle
+                // left-extensions via the optimized update effect (appendLeft).
+                onLoadMoreData(msg.loadMoreData.numberOfBars).catch((e) =>
+                  console.warn("Load more data failed:", e)
+                );
               } else {
                 console.log("LightweightCandles WebView message:", msg);
               }

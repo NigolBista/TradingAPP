@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import {
   View,
   Pressable,
@@ -41,7 +47,6 @@ import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import { getCachedQuotes, type SimpleQuote } from "../services/quotes";
 import { smartCandleManager } from "../services/smartCandleManager";
-import realtimeRouter from "../services/realtimeRouter";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -79,6 +84,10 @@ export default function ChartFullScreen() {
     useTimeframeStore();
   const chartRef = React.useRef<LightweightCandlesHandle>(null);
   const barSpacingRef = React.useRef<number>(60_000);
+
+  // Rate limiting state for historical data requests
+  const lastHistoricalRequestRef = useRef<number>(0);
+  const historicalRequestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // State variables
   const [data, setData] = useState<LWCDatum[]>(initialDataParam || []);
@@ -159,54 +168,7 @@ export default function ChartFullScreen() {
       barSpacingRef.current = timeframeSpacingMs(extendedTf);
     }
   }, [data, extendedTf]);
-  React.useEffect(() => {
-    let removeListener: (() => void) | null = null;
-    let subscribed = false;
-    try {
-      removeListener = realtimeRouter.onPrice((sym, price, ts) => {
-        if (sym !== symbol) return;
-        setData((prev) => {
-          if (!prev || prev.length === 0) return prev;
-          const spacing =
-            barSpacingRef.current || timeframeSpacingMs(extendedTf);
-          const last = prev[prev.length - 1];
-          const bucketEnd = last.time + spacing;
-          if (ts < bucketEnd) {
-            const updated = {
-              ...last,
-              high: Math.max(last.high, price),
-              low: Math.min(last.low, price),
-              close: price,
-            } as LWCDatum;
-            const out = prev.slice();
-            out[out.length - 1] = updated;
-            return out;
-          }
-          const nextTime = last.time + spacing;
-          const open = last.close;
-          const newBar: LWCDatum = {
-            time: nextTime,
-            open,
-            high: Math.max(open, price),
-            low: Math.min(open, price),
-            close: price,
-            volume: last.volume,
-          };
-          return [...prev, newBar];
-        });
-      });
-      realtimeRouter.subscribe([symbol]);
-      subscribed = true;
-    } catch {}
-    return () => {
-      try {
-        if (removeListener) removeListener();
-        if (subscribed) {
-          realtimeRouter.unsubscribe([symbol]);
-        }
-      } catch {}
-    };
-  }, [symbol, extendedTf]);
+  // Real-time logic is now handled by LightweightCandles component itself
 
   // Additional state variables
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
@@ -438,7 +400,40 @@ export default function ChartFullScreen() {
     async (numberOfBars: number) => {
       if (!data.length) return [];
 
-      // Get the earliest date from current data
+      // Rate limiting: prevent requests more frequent than every 500ms
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastHistoricalRequestRef.current;
+      const minInterval = 500; // 500ms minimum between requests
+
+      if (timeSinceLastRequest < minInterval) {
+        console.log(
+          `⏳ Rate limiting: delaying historical data request by ${
+            minInterval - timeSinceLastRequest
+          }ms`
+        );
+
+        // Clear any existing timeout
+        if (historicalRequestTimeoutRef.current) {
+          clearTimeout(historicalRequestTimeoutRef.current);
+        }
+
+        // Return a promise that resolves after the delay
+        return new Promise<LWCDatum[]>((resolve) => {
+          historicalRequestTimeoutRef.current = setTimeout(async () => {
+            try {
+              const result = await handleLoadMoreData(numberOfBars);
+              resolve(result);
+            } catch (error) {
+              console.warn("Delayed historical data request failed:", error);
+              resolve(data);
+            }
+          }, minInterval - timeSinceLastRequest);
+        });
+      }
+
+      lastHistoricalRequestRef.current = now;
+
+      // Get the earliest date from current data (already in milliseconds)
       const earliestTime = data[0].time;
       const to = earliestTime - 1;
 
@@ -446,19 +441,45 @@ export default function ChartFullScreen() {
       const timeframeMs = timeframeSpacingMs(extendedTf);
       const from = Math.max(0, to - numberOfBars * timeframeMs);
 
-      const olderData = await fetchCandlesForTimeframeWindow(
-        symbol,
-        extendedTf,
-        from,
-        to
-      );
-      if (olderData?.length) {
-        // Prepend to existing data and return the full dataset (like TradingView example)
-        const updatedData = [...olderData, ...data];
-        setData(updatedData);
-        return updatedData;
+      console.log(`🔄 Loading more historical data for ${symbol}:`, {
+        timeframe: extendedTf,
+        numberOfBars,
+        from: new Date(from).toISOString(),
+        to: new Date(to).toISOString(),
+        earliestCurrent: new Date(earliestTime).toISOString(),
+      });
+
+      try {
+        const olderData = await fetchCandlesForTimeframeWindow(
+          symbol,
+          extendedTf,
+          from,
+          to
+        );
+        if (olderData?.length) {
+          console.log(
+            `✅ Loaded ${olderData.length} historical candles for ${symbol}`
+          );
+          // Prepend to existing data and return the full dataset (like TradingView example)
+          const updatedData = [...olderData, ...data];
+          setData(updatedData);
+          return updatedData;
+        }
+        console.log(`⚠️ No historical data returned for ${symbol}`);
+        return data;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("429")) {
+          console.warn(`🚫 Rate limited by API for ${symbol}, backing off...`);
+          // Exponential backoff for rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        } else {
+          console.warn(
+            `❌ Historical data request failed for ${symbol}:`,
+            error
+          );
+        }
+        return data;
       }
-      return data;
     },
     [symbol, extendedTf, data]
   );
@@ -1071,6 +1092,9 @@ export default function ChartFullScreen() {
             levels={effectiveLevels}
             tradePlan={currentTradePlan}
             onLoadMoreData={handleLoadMoreData}
+            symbol={symbol}
+            timeframe={extendedTf}
+            enableRealtime={true}
           />
         )}
         <Pressable

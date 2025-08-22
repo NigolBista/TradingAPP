@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -39,7 +45,6 @@ import {
   fetchCandlesForTimeframeWindow,
 } from "../services/marketProviders";
 import { getUpcomingFedEvents } from "../services/federalReserve";
-import realtimeRouter from "../services/realtimeRouter";
 import {
   performComprehensiveAnalysis,
   type MarketAnalysis,
@@ -396,6 +401,10 @@ export default function StockDetailScreen() {
   const [showChartTypeBottomSheet, setShowChartTypeBottomSheet] =
     useState(false);
 
+  // Rate limiting state for historical data requests
+  const lastHistoricalRequestRef = useRef<number>(0);
+  const historicalRequestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Clear cache and reset chart when symbol changes
   useEffect(() => {
     console.log("🔄 Symbol changed to:", symbol, "- clearing viewport cache");
@@ -514,57 +523,7 @@ export default function StockDetailScreen() {
     }
   }, [dailySeries, extendedTf]);
 
-  // Tick-by-tick: update last bar or append a new one
-  useEffect(() => {
-    let removeListener: (() => void) | null = null;
-    let subscribed = false;
-    try {
-      removeListener = realtimeRouter.onPrice((sym, price, ts) => {
-        if (sym !== symbol) return;
-        setDailySeries((prev) => {
-          if (!prev || prev.length === 0) return prev;
-          const spacing =
-            barSpacingRef.current || timeframeSpacingMs(extendedTf);
-          const last = prev[prev.length - 1];
-          const bucketEnd = last.time + spacing;
-          if (ts < bucketEnd) {
-            // Update current bar
-            const updated = {
-              ...last,
-              high: Math.max(last.high, price),
-              low: Math.min(last.low, price),
-              close: price,
-            } as LWCDatum;
-            const out = prev.slice();
-            out[out.length - 1] = updated;
-            return out;
-          }
-          // Append new bar at the next bucket (align to spacing)
-          const nextTime = last.time + spacing;
-          const open = last.close;
-          const newBar: LWCDatum = {
-            time: nextTime,
-            open,
-            high: Math.max(open, price),
-            low: Math.min(open, price),
-            close: price,
-            volume: last.volume,
-          };
-          return [...prev, newBar];
-        });
-      });
-      realtimeRouter.subscribe([symbol]);
-      subscribed = true;
-    } catch {}
-    return () => {
-      try {
-        if (removeListener) removeListener();
-        if (subscribed) {
-          realtimeRouter.unsubscribe([symbol]);
-        }
-      } catch {}
-    };
-  }, [symbol, extendedTf]);
+  // Real-time logic is now handled by LightweightCandles component itself
 
   const symbolSentimentCounts = useMemo(() => {
     // Use aggregated sentiment stats if available, otherwise fall back to individual news counting
@@ -1135,12 +1094,45 @@ export default function StockDetailScreen() {
     });
   }
 
-  // Infinite history handler - TradingView style
+  // Infinite history handler - TradingView style with rate limiting
   const handleLoadMoreData = useCallback(
     async (numberOfBars: number) => {
       if (!dailySeries.length) return [];
 
-      // Get the earliest date from current data
+      // Rate limiting: prevent requests more frequent than every 500ms
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastHistoricalRequestRef.current;
+      const minInterval = 500; // 500ms minimum between requests
+
+      if (timeSinceLastRequest < minInterval) {
+        console.log(
+          `⏳ Rate limiting: delaying historical data request by ${
+            minInterval - timeSinceLastRequest
+          }ms`
+        );
+
+        // Clear any existing timeout
+        if (historicalRequestTimeoutRef.current) {
+          clearTimeout(historicalRequestTimeoutRef.current);
+        }
+
+        // Return a promise that resolves after the delay
+        return new Promise<LWCDatum[]>((resolve) => {
+          historicalRequestTimeoutRef.current = setTimeout(async () => {
+            try {
+              const result = await handleLoadMoreData(numberOfBars);
+              resolve(result);
+            } catch (error) {
+              console.warn("Delayed historical data request failed:", error);
+              resolve(dailySeries);
+            }
+          }, minInterval - timeSinceLastRequest);
+        });
+      }
+
+      lastHistoricalRequestRef.current = now;
+
+      // Get the earliest date from current data (already in milliseconds)
       const earliestTime = dailySeries[0].time;
       const to = earliestTime - 1;
 
@@ -1148,19 +1140,45 @@ export default function StockDetailScreen() {
       const timeframeMs = timeframeSpacingMs(extendedTf);
       const from = Math.max(0, to - numberOfBars * timeframeMs);
 
-      const olderData = await fetchCandlesForTimeframeWindow(
-        symbol,
-        extendedTf,
-        from,
-        to
-      );
-      if (olderData?.length) {
-        // Prepend to existing data and return the full dataset (like TradingView example)
-        const updatedData = [...toLWC(olderData), ...dailySeries];
-        setDailySeries(updatedData);
-        return updatedData;
+      console.log(`🔄 Loading more historical data for ${symbol}:`, {
+        timeframe: extendedTf,
+        numberOfBars,
+        from: new Date(from).toISOString(),
+        to: new Date(to).toISOString(),
+        earliestCurrent: new Date(earliestTime).toISOString(),
+      });
+
+      try {
+        const olderData = await fetchCandlesForTimeframeWindow(
+          symbol,
+          extendedTf,
+          from,
+          to
+        );
+        if (olderData?.length) {
+          console.log(
+            `✅ Loaded ${olderData.length} historical candles for ${symbol}`
+          );
+          // Prepend to existing data and return the full dataset (like TradingView example)
+          const updatedData = [...toLWC(olderData), ...dailySeries];
+          setDailySeries(updatedData);
+          return updatedData;
+        }
+        console.log(`⚠️ No historical data returned for ${symbol}`);
+        return dailySeries;
+      } catch (error) {
+        if (error instanceof Error && error.message.includes("429")) {
+          console.warn(`🚫 Rate limited by API for ${symbol}, backing off...`);
+          // Exponential backoff for rate limiting
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        } else {
+          console.warn(
+            `❌ Historical data request failed for ${symbol}:`,
+            error
+          );
+        }
+        return dailySeries;
       }
-      return dailySeries;
     },
     [symbol, extendedTf, dailySeries]
   );
@@ -1718,6 +1736,9 @@ export default function StockDetailScreen() {
                   : undefined
               }
               onLoadMoreData={handleLoadMoreData}
+              symbol={symbol}
+              timeframe={extendedTf}
+              enableRealtime={true}
             />
           </View>
 

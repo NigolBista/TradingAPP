@@ -1,8 +1,10 @@
 import Constants from "expo-constants";
 import { polygonRealtime } from "./polygonRealtime";
 import { simulatorRealtime } from "./simulatorRealtime";
+import { realtimeCandleAggregator } from "./realtimeCandleAggregator";
 
 type Listener = (symbol: string, price: number, ts: number) => void;
+type CandleListener = (symbol: string, candle: any) => void;
 
 export type RealtimeProvider = "polygon" | "simulator";
 
@@ -28,6 +30,11 @@ class RealtimeRouter {
     };
   }
 
+  onCandle(listener: CandleListener): () => void {
+    // Listen to aggregated candles from the candle aggregator
+    return realtimeCandleAggregator.onCandleUpdate(listener);
+  }
+
   async subscribe(symbols: string[]): Promise<void> {
     const { provider, developerMode } = getConfig();
     const active =
@@ -40,6 +47,9 @@ class RealtimeRouter {
       try {
         polygonRealtime.unsubscribeTrades(symbols);
         polygonRealtime.unsubscribeAggMin(symbols);
+        polygonRealtime.unsubscribeAggSec(symbols);
+        polygonRealtime.unsubscribeAggHour(symbols);
+        polygonRealtime.unsubscribeAggDay(symbols);
       } catch {}
       return;
     }
@@ -55,14 +65,55 @@ class RealtimeRouter {
     }
   }
 
+  async subscribeForTimeframe(
+    symbols: string[],
+    timeframe: string
+  ): Promise<void> {
+    const { provider, developerMode } = getConfig();
+
+    if (developerMode && provider === "simulator") {
+      await simulatorRealtime.subscribe(symbols);
+      return;
+    }
+
+    // Use Polygon's timeframe-specific subscriptions
+    try {
+      await polygonRealtime.subscribeForTimeframe(symbols, timeframe);
+      // Initialize candle tracking for each symbol
+      symbols.forEach((symbol) => {
+        realtimeCandleAggregator.initializeCandle(symbol, timeframe);
+      });
+      // stop simulator for these
+      simulatorRealtime.unsubscribe(symbols);
+    } catch (e) {
+      // fallback: if polygon fails, use simulator in dev mode
+      if (developerMode) await simulatorRealtime.subscribe(symbols);
+    }
+  }
+
   unsubscribe(symbols: string[]): void {
     try {
       polygonRealtime.unsubscribeTrades(symbols);
+      polygonRealtime.unsubscribeAggSec(symbols);
       polygonRealtime.unsubscribeAggMin(symbols);
+      polygonRealtime.unsubscribeAggHour(symbols);
+      polygonRealtime.unsubscribeAggDay(symbols);
     } catch {}
     try {
       simulatorRealtime.unsubscribe(symbols);
     } catch {}
+
+    // Clean up candle aggregator
+    symbols.forEach((symbol) => {
+      realtimeCandleAggregator.cleanup(symbol);
+    });
+  }
+
+  unsubscribeTimeframe(symbols: string[], timeframe: string): void {
+    // Clean up specific timeframe tracking
+    symbols.forEach((symbol) => {
+      realtimeCandleAggregator.cleanup(symbol, timeframe);
+    });
   }
 
   clearAll(): void {

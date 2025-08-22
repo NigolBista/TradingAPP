@@ -2,6 +2,18 @@ import Constants from "expo-constants";
 import { saveQuotes, SimpleQuote } from "./quotes";
 
 type PriceListener = (symbol: string, price: number, ts: number) => void;
+type CandleListener = (symbol: string, candle: RealtimeCandle) => void;
+
+export interface RealtimeCandle {
+  symbol: string;
+  time: number; // timestamp in ms
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  timeframe: string; // e.g., "1m", "5m", "1h", "1d"
+}
 
 function getApiKey(): string | undefined {
   const cfg = (Constants.expoConfig?.extra as any) || {};
@@ -19,7 +31,11 @@ class PolygonRealtimeClient {
   private reconnectAttempts = 0;
   private pendingTrades = new Set<string>();
   private pendingAggMin = new Set<string>();
+  private pendingAggSec = new Set<string>();
+  private pendingAggHour = new Set<string>();
+  private pendingAggDay = new Set<string>();
   private priceListeners = new Set<PriceListener>();
+  private candleListeners = new Set<CandleListener>();
 
   private get url(): string {
     return "wss://socket.polygon.io/stocks";
@@ -32,10 +48,25 @@ class PolygonRealtimeClient {
     };
   }
 
+  onCandle(listener: CandleListener): () => void {
+    this.candleListeners.add(listener);
+    return () => {
+      this.candleListeners.delete(listener);
+    };
+  }
+
   private emitPrice(symbol: string, price: number, ts: number) {
     for (const l of Array.from(this.priceListeners)) {
       try {
         l(symbol, price, ts);
+      } catch {}
+    }
+  }
+
+  private emitCandle(candle: RealtimeCandle) {
+    for (const l of Array.from(this.candleListeners)) {
+      try {
+        l(candle.symbol, candle);
       } catch {}
     }
   }
@@ -124,14 +155,93 @@ class PolygonRealtimeClient {
       return;
     }
 
-    // Minute aggregate: { ev: "AM", sym: "AAPL", c: close, t: epochMs }
-    if (ev === "AM" && msg?.sym && typeof msg?.c === "number") {
+    // Handle various aggregate types
+    // Second aggregates: { ev: "A", sym: "AAPL", o: open, h: high, l: low, c: close, v: volume, t: epochMs }
+    if (ev === "A" && msg?.sym && this.isValidCandle(msg)) {
+      this.handleAggregateCandle(msg, "1s");
+      return;
+    }
+
+    // Minute aggregates: { ev: "AM", sym: "AAPL", o: open, h: high, l: low, c: close, v: volume, t: epochMs }
+    if (ev === "AM" && msg?.sym && this.isValidCandle(msg)) {
+      this.handleAggregateCandle(msg, "1m");
+      return;
+    }
+
+    // Hour aggregates: { ev: "AH", sym: "AAPL", o: open, h: high, l: low, c: close, v: volume, t: epochMs }
+    if (ev === "AH" && msg?.sym && this.isValidCandle(msg)) {
+      this.handleAggregateCandle(msg, "1h");
+      return;
+    }
+
+    // Day aggregates: { ev: "AD", sym: "AAPL", o: open, h: high, l: low, c: close, v: volume, t: epochMs }
+    if (ev === "AD" && msg?.sym && this.isValidCandle(msg)) {
+      this.handleAggregateCandle(msg, "1d");
+      return;
+    }
+
+    // Fallback: emit price for any aggregate with close price
+    if (
+      (ev === "AM" || ev === "A" || ev === "AH" || ev === "AD") &&
+      msg?.sym &&
+      typeof msg?.c === "number"
+    ) {
       const symbol = String(msg.sym);
       const price = Number(msg.c);
       const ts = Number(msg.t || Date.now());
       this.emitPrice(symbol, price, ts);
       return;
     }
+  }
+
+  private isValidCandle(msg: any): boolean {
+    return (
+      typeof msg.o === "number" &&
+      typeof msg.h === "number" &&
+      typeof msg.l === "number" &&
+      typeof msg.c === "number" &&
+      typeof msg.v === "number" &&
+      typeof msg.t === "number"
+    );
+  }
+
+  private getTimeframeMs(timeframe: string): number {
+    switch (timeframe) {
+      case "1s":
+        return 1000;
+      case "1m":
+        return 60 * 1000;
+      case "1h":
+        return 60 * 60 * 1000;
+      case "1d":
+        return 24 * 60 * 60 * 1000;
+      default:
+        return 60 * 1000; // Default to 1 minute
+    }
+  }
+
+  private handleAggregateCandle(msg: any, timeframe: string) {
+    const symbol = String(msg.sym);
+
+    // Ensure proper time alignment for the timeframe
+    const timestamp = Number(msg.t);
+    const timeframeMs = this.getTimeframeMs(timeframe);
+    const alignedTime = Math.floor(timestamp / timeframeMs) * timeframeMs;
+
+    const candle: RealtimeCandle = {
+      symbol,
+      time: alignedTime,
+      open: Number(msg.o),
+      high: Number(msg.h),
+      low: Number(msg.l),
+      close: Number(msg.c),
+      volume: Number(msg.v),
+      timeframe,
+    };
+
+    // Emit both candle and price events
+    this.emitCandle(candle);
+    this.emitPrice(symbol, candle.close, candle.time);
   }
 
   private send(obj: any) {
@@ -144,8 +254,17 @@ class PolygonRealtimeClient {
   private flushSubscriptions() {
     if (!this.ws || !this.authed) return;
     const tradeParams = Array.from(this.pendingTrades).map((s) => `T.${s}`);
-    const aggParams = Array.from(this.pendingAggMin).map((s) => `AM.${s}`);
-    const params = [...tradeParams, ...aggParams].join(",");
+    const aggSecParams = Array.from(this.pendingAggSec).map((s) => `A.${s}`);
+    const aggMinParams = Array.from(this.pendingAggMin).map((s) => `AM.${s}`);
+    const aggHourParams = Array.from(this.pendingAggHour).map((s) => `AH.${s}`);
+    const aggDayParams = Array.from(this.pendingAggDay).map((s) => `AD.${s}`);
+    const params = [
+      ...tradeParams,
+      ...aggSecParams,
+      ...aggMinParams,
+      ...aggHourParams,
+      ...aggDayParams,
+    ].join(",");
     if (params.length > 0) {
       this.send({ action: "subscribe", params });
     }
@@ -157,15 +276,59 @@ class PolygonRealtimeClient {
     this.flushSubscriptions();
   }
 
+  async subscribeAggSec(symbols: string[]): Promise<void> {
+    symbols.forEach((s) => this.pendingAggSec.add(s));
+    await this.ensureConnected();
+    this.flushSubscriptions();
+  }
+
   async subscribeAggMin(symbols: string[]): Promise<void> {
     symbols.forEach((s) => this.pendingAggMin.add(s));
     await this.ensureConnected();
     this.flushSubscriptions();
   }
 
+  async subscribeAggHour(symbols: string[]): Promise<void> {
+    symbols.forEach((s) => this.pendingAggHour.add(s));
+    await this.ensureConnected();
+    this.flushSubscriptions();
+  }
+
+  async subscribeAggDay(symbols: string[]): Promise<void> {
+    symbols.forEach((s) => this.pendingAggDay.add(s));
+    await this.ensureConnected();
+    this.flushSubscriptions();
+  }
+
+  // Convenience method to subscribe to appropriate aggregate based on timeframe
+  async subscribeForTimeframe(
+    symbols: string[],
+    timeframe: string
+  ): Promise<void> {
+    const tf = timeframe.toLowerCase();
+    if (tf.includes("s")) {
+      await this.subscribeAggSec(symbols);
+    } else if (tf.includes("m") || tf.includes("min")) {
+      await this.subscribeAggMin(symbols);
+    } else if (tf.includes("h") || tf.includes("hour")) {
+      await this.subscribeAggHour(symbols);
+    } else if (tf.includes("d") || tf.includes("day")) {
+      await this.subscribeAggDay(symbols);
+    } else {
+      // Default to minute aggregates
+      await this.subscribeAggMin(symbols);
+    }
+  }
+
   unsubscribeTrades(symbols: string[]): void {
     symbols.forEach((s) => this.pendingTrades.delete(s));
     const params = symbols.map((s) => `T.${s}`).join(",");
+    if (params.length > 0) this.send({ action: "unsubscribe", params });
+  }
+
+  unsubscribeAggSec(symbols: string[]): void {
+    symbols.forEach((s) => this.pendingAggSec.delete(s));
+    const params = symbols.map((s) => `A.${s}`).join(",");
     if (params.length > 0) this.send({ action: "unsubscribe", params });
   }
 
@@ -175,13 +338,36 @@ class PolygonRealtimeClient {
     if (params.length > 0) this.send({ action: "unsubscribe", params });
   }
 
+  unsubscribeAggHour(symbols: string[]): void {
+    symbols.forEach((s) => this.pendingAggHour.delete(s));
+    const params = symbols.map((s) => `AH.${s}`).join(",");
+    if (params.length > 0) this.send({ action: "unsubscribe", params });
+  }
+
+  unsubscribeAggDay(symbols: string[]): void {
+    symbols.forEach((s) => this.pendingAggDay.delete(s));
+    const params = symbols.map((s) => `AD.${s}`).join(",");
+    if (params.length > 0) this.send({ action: "unsubscribe", params });
+  }
+
   clearAll(): void {
     const trades = Array.from(this.pendingTrades);
-    const aggs = Array.from(this.pendingAggMin);
+    const aggSecs = Array.from(this.pendingAggSec);
+    const aggMins = Array.from(this.pendingAggMin);
+    const aggHours = Array.from(this.pendingAggHour);
+    const aggDays = Array.from(this.pendingAggDay);
+
     if (trades.length) this.unsubscribeTrades(trades);
-    if (aggs.length) this.unsubscribeAggMin(aggs);
+    if (aggSecs.length) this.unsubscribeAggSec(aggSecs);
+    if (aggMins.length) this.unsubscribeAggMin(aggMins);
+    if (aggHours.length) this.unsubscribeAggHour(aggHours);
+    if (aggDays.length) this.unsubscribeAggDay(aggDays);
+
     this.pendingTrades.clear();
+    this.pendingAggSec.clear();
     this.pendingAggMin.clear();
+    this.pendingAggHour.clear();
+    this.pendingAggDay.clear();
   }
 
   disconnect(): void {

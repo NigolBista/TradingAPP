@@ -11,6 +11,7 @@ import { useNavigation } from "@react-navigation/native";
 import LightweightCandles, { TradePlanOverlay } from "./LightweightCandles";
 import {
   fetchCandles,
+  fetchMarketDataCandlesWindow,
   MarketDataResolution,
   aggregateCandles,
 } from "../../services/marketProviders";
@@ -35,6 +36,7 @@ type Props = {
   showExpand?: boolean;
   levels?: TradeLevels;
   tradePlan?: TradePlanOverlay; // optional richer levels, overrides `levels`
+  enableRealtime?: boolean; // Enable real-time updates
 };
 
 export default function TradingViewChart({
@@ -45,6 +47,7 @@ export default function TradingViewChart({
   showExpand = true,
   levels,
   tradePlan,
+  enableRealtime = false,
 }: Props) {
   const scheme = useColorScheme();
   const resolvedTheme = theme || (scheme === "dark" ? "dark" : "light");
@@ -56,11 +59,140 @@ export default function TradingViewChart({
     TradePlanOverlay | undefined
   >(tradePlan);
   const { addAnalysisMessage } = useChatStore();
+  const loadingHistoryRef = React.useRef(false);
 
   const normalizedSymbol = useMemo(
     () => (symbol.includes(":") ? symbol.split(":")[1] : symbol),
     [symbol]
   );
+
+  // Convert TradingView interval to timeframe string for real-time updates
+  const timeframe = useMemo(() => {
+    switch (interval) {
+      case "1":
+        return "1m";
+      case "5":
+        return "5m";
+      case "15":
+        return "15m";
+      case "30":
+        return "30m";
+      case "60":
+        return "1h";
+      case "120":
+        return "2h";
+      case "240":
+        return "4h";
+      case "D":
+        return "1d";
+      case "W":
+        return "1w";
+      case "M":
+        return "1M";
+      default:
+        return "1m";
+    }
+  }, [interval]);
+
+  // Determine chart type based on timeframe for Robinhood-like experience
+  const chartType = useMemo(() => {
+    // Use area for very short timeframes (daily and weekly), candles for intraday
+    if (interval === "D" || interval === "W") {
+      return "area";
+    }
+    return "candlestick";
+  }, [interval]);
+
+  async function handleLoadMoreData(requestedBars: number) {
+    if (loadingHistoryRef.current) return []; // throttle duplicate requests
+    loadingHistoryRef.current = true;
+    try {
+      const earliestMs =
+        data.length > 0
+          ? Math.min(
+              ...data.map((d) =>
+                typeof d.time === "number" ? d.time : +new Date(d.time)
+              )
+            )
+          : Date.now();
+
+      // Map interval to base resolution (same logic you already use)
+      let base: MarketDataResolution =
+        interval === "60"
+          ? "1H"
+          : interval === "120"
+          ? "1H"
+          : interval === "240"
+          ? "1H"
+          : (interval as MarketDataResolution);
+
+      // Fetch historical data using windowed fetch
+      const requestedCount = Math.max(150, requestedBars || 0);
+      const toMs = earliestMs;
+      // Calculate fromMs based on timeframe to get sufficient data
+      const timeSpanMs =
+        interval === "1"
+          ? requestedCount * 60 * 1000 // 1 minute
+          : interval === "5"
+          ? requestedCount * 5 * 60 * 1000 // 5 minutes
+          : interval === "15"
+          ? requestedCount * 15 * 60 * 1000 // 15 minutes
+          : interval === "30"
+          ? requestedCount * 30 * 60 * 1000 // 30 minutes
+          : interval === "60"
+          ? requestedCount * 60 * 60 * 1000 // 1 hour
+          : interval === "120"
+          ? requestedCount * 2 * 60 * 60 * 1000 // 2 hours
+          : interval === "240"
+          ? requestedCount * 4 * 60 * 60 * 1000 // 4 hours
+          : interval === "D"
+          ? requestedCount * 24 * 60 * 60 * 1000 // 1 day
+          : interval === "W"
+          ? requestedCount * 7 * 24 * 60 * 60 * 1000 // 1 week
+          : requestedCount * 30 * 24 * 60 * 60 * 1000; // 1 month for monthly
+      const fromMs = toMs - timeSpanMs;
+
+      const olderCandles = await fetchMarketDataCandlesWindow(
+        normalizedSymbol,
+        base,
+        fromMs,
+        toMs,
+        requestedCount
+      );
+
+      // Map provider -> our shape (epoch ms)
+      const mapped = olderCandles.map((c: any) => ({
+        time:
+          typeof c.time === "number" && c.time < 1e12 ? c.time * 1000 : c.time,
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume,
+      }));
+
+      // Merge into RN state (so WebView will receive appendLeft diff)
+      setData((prev) => {
+        const merged = [...mapped, ...prev];
+        merged.sort((a, b) => a.time - b.time);
+        // de-dupe by time
+        const out: typeof merged = [];
+        for (const it of merged) {
+          if (!out.length || out[out.length - 1].time !== it.time) out.push(it);
+          else out[out.length - 1] = it;
+        }
+        return out;
+      });
+
+      // Return LWCDatum[] (epoch ms) as the contract expects
+      return mapped.map((m) => ({ ...m }));
+    } catch (error) {
+      console.warn("Failed to load more historical data:", error);
+      return [];
+    } finally {
+      loadingHistoryRef.current = false;
+    }
+  }
 
   useEffect(() => {
     let isMounted = true;
@@ -91,7 +223,7 @@ export default function TradingViewChart({
           );
           candles = await fetchCandles(normalizedSymbol, {
             resolution: base,
-            providerOverride: "yahoo",
+            providerOverride: "marketData",
           });
         }
         if (group > 1) {
@@ -137,7 +269,7 @@ export default function TradingViewChart({
         } catch (e) {
           return await fetchCandles(normalizedSymbol, {
             resolution: res,
-            providerOverride: "yahoo",
+            providerOverride: "marketData",
           });
         }
       };
@@ -255,7 +387,7 @@ export default function TradingViewChart({
         <LightweightCandles
           data={data}
           height={height}
-          type="candlestick"
+          type={chartType}
           theme={resolvedTheme}
           showVolume={false}
           showMA={false}
@@ -263,6 +395,10 @@ export default function TradingViewChart({
           showCrosshair={true}
           levels={effectiveLevels}
           tradePlan={currentTradePlan}
+          symbol={normalizedSymbol}
+          timeframe={timeframe}
+          enableRealtime={enableRealtime}
+          onLoadMoreData={handleLoadMoreData}
         />
       )}
       <Pressable
