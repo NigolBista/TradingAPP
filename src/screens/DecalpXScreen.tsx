@@ -20,7 +20,7 @@ import StockAutocomplete from "../components/common/StockAutocomplete";
 import { StockSearchResult } from "../services/stockSearch";
 import { fetchCandles } from "../services/marketProviders";
 import { fetchNewsWithDateFilter } from "../services/newsProviders";
-import AmChartsLine from "../components/charts/AmChartsLine";
+// import AmChartsLine from "../components/charts/AmChartsLine";
 import { useTheme } from "../providers/ThemeProvider";
 import { useUserStore, type TraderType } from "../store/userStore";
 import { buildSignalContext } from "../services/signalEngine";
@@ -567,13 +567,13 @@ export default function DecalpXScreen() {
           </View>
 
           <View style={styles.chartContainer}>
-            <AmChartsLine
+            {/* <AmChartsLine
               data={chartData}
               height={120}
               color={priceChange >= 0 ? "#10B981" : "#EF4444"}
               strokeWidth={2}
               showFill={false}
-            />
+            /> */}
             <Pressable
               onPress={navigateToFullChart}
               style={{

@@ -22,7 +22,11 @@ import ChartSettingsModal, {
 import TimeframePickerModal, {
   type ExtendedTimeframe,
 } from "../components/charts/TimeframePickerModal";
-import { type Candle, fetchCandles } from "../services/marketProviders";
+import {
+  type Candle,
+  fetchCandles,
+  fetchCandlesForTimeframe,
+} from "../services/marketProviders";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import {
   performComprehensiveAnalysis,
@@ -371,9 +375,7 @@ export default function StockDetailScreen() {
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<HeaderTimeframe>("1D");
   const [tfModalVisible, setTfModalVisible] = useState(false);
-  const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    defaultTimeframe || "1M"
-  );
+  const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>("1D");
   const { messages, addAnalysisMessage, clearSymbolMessages } = useChatStore();
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
@@ -387,6 +389,9 @@ export default function StockDetailScreen() {
   const [showChartTypeBottomSheet, setShowChartTypeBottomSheet] =
     useState(false);
   const [isYTDView, setIsYTDView] = useState(false);
+  const [lineChartData, setLineChartData] = useState<
+    { time: number; value: number }[]
+  >([]);
 
   // Clear cache and reset chart when symbol changes
   useEffect(() => {
@@ -638,6 +643,12 @@ export default function StockDetailScreen() {
     // Chart data is now handled directly by KLineProChart via Polygon API
     setLoading(false);
 
+    // Load simple line chart data
+    loadLineChartData().catch((error) => {
+      console.error("Line chart loading failed:", error);
+      setLineChartData([]);
+    });
+
     // Load news and sentiment stats in parallel (truly non-blocking - fire and forget)
     loadNewsInBackground().catch((error) => {
       console.error("News loading failed:", error);
@@ -646,6 +657,24 @@ export default function StockDetailScreen() {
     loadSentimentStats().catch((error) => {
       console.error("Sentiment stats loading failed:", error);
     });
+  }
+
+  async function loadLineChartData() {
+    try {
+      const tf =
+        selectedTimeframe === "YTD" ? ("1D" as ExtendedTimeframe) : extendedTf;
+      const candles = await fetchCandlesForTimeframe(symbol, tf, {
+        includeExtendedHours: showExtendedHours,
+      });
+      const series = (candles || []).map((c) => ({
+        time: c.time,
+        value: c.close,
+      }));
+      setLineChartData(series);
+    } catch (e) {
+      console.error("Failed to load line data:", e);
+      setLineChartData([]);
+    }
   }
 
   // Removed custom edge request logic; lazy loading handled in visible range handler
@@ -1175,6 +1204,8 @@ export default function StockDetailScreen() {
               market="stocks"
               minimalUi
               lineOnly
+              hideVolumePane
+              hideIndicatorPane
             />
           </View>
 

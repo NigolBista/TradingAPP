@@ -13,7 +13,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAppDataStore, type PortfolioHistory } from "../store/appDataStore";
 import { useNavigation } from "@react-navigation/native";
-import AmChartsLine from "../components/charts/AmChartsLine";
 import MarketOverview from "../components/insights/MarketOverview";
 import type { NewsItem } from "../services/newsProviders";
 // Removed useMarketOverviewStore to prevent loops - using centralized store instead

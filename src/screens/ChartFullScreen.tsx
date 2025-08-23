@@ -881,6 +881,8 @@ export default function ChartFullScreen() {
           theme={scheme === "dark" ? "dark" : "light"}
           locale="en-US"
           market="stocks"
+          hideVolumePane
+          hideIndicatorPane
         />
         <Pressable
           onPress={handleAnalyzePress}
