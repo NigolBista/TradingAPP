@@ -227,10 +227,8 @@ export default function KLineProChart({
         // Chart type styles mapping
         var CHART_TYPES = {
           candle: { 
-            type: 'candle',
-            tooltip: {
-              showRule: 'none'
-            },
+            type: 'candle_solid',
+            tooltip: { showRule: 'none' },
             priceMark: {
               show: false,
               last: { show: false },
@@ -240,10 +238,8 @@ export default function KLineProChart({
           },
           line: {  
             type: 'line',
-            line: { color: '#2196F3', size: 1, smooth: true },
-            tooltip: {
-              showRule: 'none'
-            },
+            line: { color: '#2196F3', size: 2, smooth: true },
+            tooltip: { showRule: 'none' },
             priceMark: {
               show: false,
               last: { show: false },
@@ -253,10 +249,13 @@ export default function KLineProChart({
           },
           area: {
             type: 'area',
-            area: { lineColor: '#2196F3', fillColor: 'rgba(33, 150, 243, 0.1)', lineSize: 1 },
-            tooltip: {
-              showRule: 'none'
+            area: { 
+              lineColor: '#2196F3', 
+              fillColor: 'rgba(33, 150, 243, 0.1)', 
+              lineSize: 2,
+              smooth: true 
             },
+            tooltip: { showRule: 'none' },
             priceMark: {
               show: false,
               last: { show: false },
@@ -268,22 +267,75 @@ export default function KLineProChart({
         var INITIAL_CHART_TYPE = ${JSON.stringify(initialChartType)};
         function applyChartType(chart, type){
           try {
+            post({ debug: 'Attempting to apply chart type: ' + type });
+            
+            if (!chart) {
+              post({ warn: 'Chart instance is null/undefined' });
+              return;
+            }
+            
             var style = CHART_TYPES[type] || CHART_TYPES.candle;
-            if (chart && typeof chart.setStyleOptions === 'function') {
+            post({ debug: 'Using style config:', style: style });
+            
+            // Method 1: Try setStyleOptions
+            if (typeof chart.setStyleOptions === 'function') {
+              post({ debug: 'Trying setStyleOptions method' });
               chart.setStyleOptions({ candle: style });
-            } else if (chart && typeof chart.setStyles === 'function') {
+            }
+            
+            // Method 2: Try setStyles
+            if (typeof chart.setStyles === 'function') {
+              post({ debug: 'Trying setStyles method' });
               chart.setStyles({ candle: style });
             }
-          } catch (e) { post({ warn: 'setChartType failed: ' + (e && e.message) }); }
+            
+            // Method 3: Try direct chart type setting
+            var chartTypeMap = {
+              'line': 'timeLine',
+              'candle': 'candle_solid', 
+              'area': 'area'
+            };
+            
+            var klineType = chartTypeMap[type] || 'candle_solid';
+            if (typeof chart.setMainChartType === 'function') {
+              post({ debug: 'Trying setMainChartType with: ' + klineType });
+              chart.setMainChartType(klineType);
+            }
+            
+            // Method 4: Try chart.chart if it exists (nested chart instance)
+            if (chart.chart) {
+              if (typeof chart.chart.setStyleOptions === 'function') {
+                post({ debug: 'Trying nested chart setStyleOptions' });
+                chart.chart.setStyleOptions({ candle: style });
+              }
+              if (typeof chart.chart.setMainChartType === 'function') {
+                post({ debug: 'Trying nested chart setMainChartType' });
+                chart.chart.setMainChartType(klineType);
+              }
+            }
+            
+            post({ debug: 'Chart type application completed for: ' + type });
+          } catch (e) { 
+            post({ error: 'setChartType failed: ' + (e && e.message || e) }); 
+          }
         }
         function create(){
           try {
-            if (!window.klinechartspro) { return false; }
+            post({ debug: 'Starting chart creation with type: ' + INITIAL_CHART_TYPE });
+            
+            if (!window.klinechartspro) { 
+              post({ warn: 'klinechartspro not loaded yet' });
+              return false; 
+            }
+            
             const { KLineChartPro, DefaultDatafeed } = window.klinechartspro;
             if (!${JSON.stringify(
               !!apiKey
             )}) { post({ warn: 'Missing POLYGON_API_KEY (extra.polygonApiKey)' }); }
+            
             const datafeed = new DefaultDatafeed(${JSON.stringify(apiKey)});
+            
+            post({ debug: 'Creating KLineChartPro instance...' });
             const chart = new KLineChartPro({
               container: document.getElementById('app'),
               theme: ${JSON.stringify(theme)},
@@ -300,8 +352,7 @@ export default function KLineProChart({
               mainIndicators: [], // Remove MA and other main indicators
               subIndicators: [], // Remove volume and other sub-indicators
               styles: {
-                candle: { 
-                  type: INITIAL_CHART_TYPE,
+                candle: Object.assign({}, CHART_TYPES[INITIAL_CHART_TYPE] || CHART_TYPES.candle, {
                   tooltip: {
                     showRule: 'none'  // Hides the tooltip that shows OHLC values
                   },
@@ -317,7 +368,7 @@ export default function KLineProChart({
                       show: false    // Hides the low price mark
                     }
                   }
-                },
+                }),
                 xAxis: { 
                   show: false,      // Hides time axis
                   axisLine: {
@@ -366,8 +417,55 @@ export default function KLineProChart({
               }
             });
 
-            try { applyChartType(chart, INITIAL_CHART_TYPE); } catch(e) {}
-            try { window.__KLP__ = { setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} } }; } catch(e) {}
+            post({ debug: 'Chart instance created successfully' });
+            
+            // Log available methods on the chart instance
+            if (chart) {
+              var methods = [];
+              for (var prop in chart) {
+                if (typeof chart[prop] === 'function') {
+                  methods.push(prop);
+                }
+              }
+              post({ debug: 'Available chart methods:', methods: methods.slice(0, 10) }); // Log first 10 methods
+            }
+
+            // Apply initial chart type with multiple attempts
+            try { 
+              post({ debug: 'Applying initial chart type: ' + INITIAL_CHART_TYPE });
+              applyChartType(chart, INITIAL_CHART_TYPE); 
+              
+              // Try again after delays to ensure chart is fully initialized
+              setTimeout(function(){ 
+                post({ debug: 'Retry 1: Applying chart type after 100ms' });
+                applyChartType(chart, INITIAL_CHART_TYPE); 
+              }, 100);
+              setTimeout(function(){ 
+                post({ debug: 'Retry 2: Applying chart type after 300ms' });
+                applyChartType(chart, INITIAL_CHART_TYPE); 
+              }, 300);
+              setTimeout(function(){ 
+                post({ debug: 'Retry 3: Applying chart type after 1000ms' });
+                applyChartType(chart, INITIAL_CHART_TYPE); 
+              }, 1000);
+            } catch(e) {
+              post({ error: 'Initial chart type application failed: ' + (e && e.message || e) });
+            }
+            
+            try { 
+              window.__KLP__ = { 
+                setChartType: function(t){ 
+                  post({ debug: 'External setChartType called with: ' + t });
+                  try { 
+                    applyChartType(chart, t); 
+                  } catch(e) {
+                    post({ error: 'External setChartType failed: ' + (e && e.message || e) });
+                  } 
+                } 
+              }; 
+            } catch(e) {
+              post({ error: 'Failed to set up external chart type function: ' + (e && e.message || e) });
+            }
 
             ${""}
 
