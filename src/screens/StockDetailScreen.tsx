@@ -25,7 +25,7 @@ import {
   useFocusEffect,
 } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import TradingViewWidget from "../components/charts/TradingViewWidget";
+import TradingViewMiniChart from "../components/charts/TradingViewMiniChart";
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
@@ -1863,30 +1863,33 @@ export default function StockDetailScreen() {
       <ScrollView style={{ flex: 1 }}>
         {/* Chart Section */}
         <View style={styles.chartSection}>
-          {/* Chart */}
+          {/* Mini Chart */}
           <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
-            <TradingViewWidget
+            <TradingViewMiniChart
               symbol={symbol}
               height={280}
-              interval={
+              dateRange={
                 selectedTimeframe === "1D"
-                  ? "1"
+                  ? "1D"
                   : selectedTimeframe === "1W"
-                  ? "60"
+                  ? "5D"
                   : selectedTimeframe === "1M"
-                  ? "240"
+                  ? "1M"
                   : selectedTimeframe === "3M"
-                  ? "D"
+                  ? "3M"
                   : selectedTimeframe === "YTD"
-                  ? "D"
+                  ? "YTD"
                   : selectedTimeframe === "1Y"
-                  ? "W"
+                  ? "1Y"
                   : selectedTimeframe === "5Y"
-                  ? "M"
-                  : "D"
+                  ? "5Y"
+                  : "ALL"
               }
               theme="dark"
-              hideTopToolbar={true}
+              isTransparent={true}
+              trendLineColor="#00D4AA"
+              underLineColor="rgba(0, 212, 170, 0.12)"
+              underLineBottomColor="rgba(0, 212, 170, 0)"
             />
           </View>
 
