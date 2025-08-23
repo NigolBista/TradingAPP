@@ -20,11 +20,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AmChartsCandles, {
-  type AmChartsDatum,
-  TradePlanOverlay,
-  type AmChartsCandlesHandle,
-} from "../components/charts/AmChartsCandles";
+import KLineProChart from "../components/charts/KLineProChart";
 // Removed viewportBars usage; we'll lazy-load via timeRangeChange
 import ChartSettingsModal, {
   type ChartType,
@@ -64,11 +60,9 @@ export default function ChartFullScreen() {
   const initialTimeframe: string | undefined = route.params?.initialTimeframe;
   const isDayUp: boolean | undefined = route.params?.isDayUp;
   const [dayUp, setDayUp] = useState<boolean | undefined>(isDayUp);
-  const initialDataParam: AmChartsDatum[] | undefined =
-    route.params?.initialData;
+  const initialDataParam: any[] | undefined = route.params?.initialData;
   const levels = route.params?.levels;
-  const initialTradePlan: TradePlanOverlay | undefined =
-    route.params?.tradePlan;
+  const initialTradePlan: any | undefined = route.params?.tradePlan;
   const initialAiMeta:
     | undefined
     | {
@@ -83,7 +77,7 @@ export default function ChartFullScreen() {
   const initialAnalysisContext = route.params?.analysisContext;
   const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe } =
     useTimeframeStore();
-  const chartRef = React.useRef<AmChartsCandlesHandle>(null);
+  const chartRef = React.useRef<any>(null);
   const barSpacingRef = React.useRef<number>(60_000);
 
   // Rate limiting state for historical data requests
@@ -91,7 +85,7 @@ export default function ChartFullScreen() {
   const historicalRequestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // State variables
-  const [data, setData] = useState<AmChartsDatum[]>(initialDataParam || []);
+  const [data, setData] = useState<any[]>(initialDataParam || []);
   const [loading, setLoading] = useState(false);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
     (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
@@ -175,9 +169,9 @@ export default function ChartFullScreen() {
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
   const [bottomSheetAnim] = useState(new Animated.Value(0));
   const [analyzing, setAnalyzing] = useState<boolean>(false);
-  const [currentTradePlan, setCurrentTradePlan] = useState<
-    TradePlanOverlay | undefined
-  >(initialTradePlan);
+  const [currentTradePlan, setCurrentTradePlan] = useState<any | undefined>(
+    initialTradePlan
+  );
   const [aiMeta, setAiMeta] = useState<
     | undefined
     | {
@@ -419,7 +413,7 @@ export default function ChartFullScreen() {
         }
 
         // Return a promise that resolves after the delay
-        return new Promise<AmChartsDatum[]>((resolve) => {
+        return new Promise<any[]>((resolve) => {
           historicalRequestTimeoutRef.current = setTimeout(async () => {
             try {
               const result = await handleLoadMoreData(numberOfBars);
@@ -1067,37 +1061,14 @@ export default function ChartFullScreen() {
             </View>
           </View>
         </ScrollView>
-        {loading ? (
-          <View
-            style={{
-              height: chartHeight,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ color: "#888" }}>Loading...</Text>
-          </View>
-        ) : (
-          <AmChartsCandles
-            ref={chartRef}
-            data={data}
-            height={chartHeight}
-            type={chartType}
-            theme={scheme === "dark" ? "dark" : "light"}
-            showVolume={false}
-            showMA={false}
-            showGrid={true}
-            showCrosshair={true}
-            initialPosition="end"
-            forcePositive={typeof dayUp === "boolean" ? dayUp : undefined}
-            levels={effectiveLevels}
-            tradePlan={currentTradePlan}
-            onLoadMoreData={handleLoadMoreData}
-            symbol={symbol}
-            timeframe={extendedTf}
-            enableRealtime={true}
-          />
-        )}
+        <KLineProChart
+          symbol={symbol}
+          timeframe={extendedTf as any}
+          height={chartHeight}
+          theme={scheme === "dark" ? "dark" : "light"}
+          locale="en-US"
+          market="stocks"
+        />
         <Pressable
           onPress={handleAnalyzePress}
           disabled={analyzing}

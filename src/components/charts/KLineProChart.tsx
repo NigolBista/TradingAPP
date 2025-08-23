@@ -22,14 +22,14 @@ type SupportedTimeframe =
 
 interface Props {
   symbol: string;
-  timeframe?: SupportedTimeframe;
+  timeframe?: string;
   height?: number;
   locale?: "en-US" | "zh-CN";
   theme?: "dark" | "light";
   market?: "stocks" | "crypto" | "forex"; // Polygon market routing
 }
 
-function mapTimeframeToPeriod(tf: SupportedTimeframe | undefined): {
+function mapTimeframeToPeriod(tf: string | undefined): {
   multiplier: number;
   timespan: string;
   text: string;
