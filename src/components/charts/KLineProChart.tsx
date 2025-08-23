@@ -3,6 +3,40 @@ import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
 
+export interface TradeLevel {
+  price: number;
+  timestamp?: number; // Optional timestamp for time-based anchoring
+  color?: string;
+  label?: string;
+}
+
+export interface TradeZone {
+  entryPrice: number;
+  exitPrice: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  startTime?: number;
+  endTime?: number;
+  color?: string;
+  label?: string;
+  type?: "long" | "short";
+}
+
+export interface ChartAnalysis {
+  symbol: string;
+  currentPrice: number;
+  trend: "bullish" | "bearish" | "sideways";
+  resistance: number;
+  support: number;
+  sma20: number;
+  sma50: number;
+  suggestedEntry: number;
+  suggestedExit: number;
+  stopLoss: number;
+  takeProfit: number;
+  timestamp: number;
+}
+
 interface Props {
   symbol: string;
   timeframe?: string;
@@ -16,6 +50,9 @@ interface Props {
   hideIndicatorPane?: boolean;
   chartType?: "candle" | "line" | "area";
   showYAxis?: boolean; // Controls yAxis visibility - defaults to false
+  tradeLevels?: TradeLevel[]; // Price lines for entry/exit levels
+  tradeZones?: TradeZone[]; // Rectangles for trade visualization
+  onTradeAnalysis?: (analysis: any) => void; // Callback for chart analysis results
 }
 
 // Canonical timeframe map for display and datafeed period settings
@@ -106,6 +143,9 @@ export default function KLineProChart({
   hideIndicatorPane = false,
   chartType,
   showYAxis = false,
+  tradeLevels = [],
+  tradeZones = [],
+  onTradeAnalysis,
 }: Props) {
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
@@ -124,6 +164,79 @@ export default function KLineProChart({
       );
     } catch {}
   }, [chartType]);
+
+  // Draw trade levels (price lines) when they change
+  useEffect(() => {
+    if (!webRef.current || !tradeLevels || tradeLevels.length === 0) return;
+
+    try {
+      const drawLevelsScript = `
+        (function(){
+          try {
+            if (window.__KLP__ && window.__KLP__.clearAllDrawings) {
+              window.__KLP__.clearAllDrawings();
+            }
+            
+            var levels = ${JSON.stringify(tradeLevels)};
+            levels.forEach(function(level) {
+              if (window.__KLP__ && window.__KLP__.drawPriceLine) {
+                window.__KLP__.drawPriceLine(level.price, level.color, level.label);
+              }
+            });
+          } catch(e) {
+            console.error('Failed to draw trade levels:', e);
+          }
+        })();
+      `;
+
+      webRef.current.injectJavaScript(drawLevelsScript);
+    } catch (e) {
+      console.error("Failed to inject trade levels script:", e);
+    }
+  }, [tradeLevels]);
+
+  // Draw trade zones (rectangles) when they change
+  useEffect(() => {
+    if (!webRef.current || !tradeZones || tradeZones.length === 0) return;
+
+    try {
+      const drawZonesScript = `
+        (function(){
+          try {
+            var zones = ${JSON.stringify(tradeZones)};
+            zones.forEach(function(zone) {
+              if (window.__KLP__ && window.__KLP__.drawTradeZone) {
+                window.__KLP__.drawTradeZone(
+                  zone.entryPrice,
+                  zone.exitPrice,
+                  zone.startTime || Date.now() - 86400000, // Default to 1 day ago
+                  zone.endTime || Date.now(),
+                  zone.color,
+                  zone.label,
+                  zone.type || 'long'
+                );
+              }
+              
+              // Draw stop loss and take profit lines if provided
+              if (zone.stopLoss && window.__KLP__ && window.__KLP__.drawStopLoss) {
+                window.__KLP__.drawStopLoss(zone.stopLoss, '#FF5252', 'Stop Loss');
+              }
+              
+              if (zone.takeProfit && window.__KLP__ && window.__KLP__.drawTakeProfit) {
+                window.__KLP__.drawTakeProfit(zone.takeProfit, '#00D4AA', 'Take Profit');
+              }
+            });
+          } catch(e) {
+            console.error('Failed to draw trade zones:', e);
+          }
+        })();
+      `;
+
+      webRef.current.injectJavaScript(drawZonesScript);
+    } catch (e) {
+      console.error("Failed to inject trade zones script:", e);
+    }
+  }, [tradeZones]);
 
   const html = useMemo(() => {
     const compactUi = minimalUi || lineOnly;
@@ -469,10 +582,169 @@ export default function KLineProChart({
                   } catch(e) {
                     post({ error: 'External setChartType failed: ' + (e && e.message || e) });
                   } 
-                } 
+                },
+                
+                // Drawing functions for trade visualization
+                drawPriceLine: function(price, color, label) {
+                  try {
+                    if (!chart || !chart.chart) return;
+                    
+                    var lineId = 'price_line_' + Date.now() + '_' + Math.random();
+                    var lineOptions = {
+                      id: lineId,
+                      points: [{ price: price }],
+                      styles: {
+                        line: {
+                          color: color || '#00D4AA',
+                          size: 2,
+                          style: 'solid'
+                        },
+                        text: {
+                          color: color || '#00D4AA',
+                          size: 12,
+                          family: 'Arial',
+                          weight: 'normal',
+                          offset: [5, 0]
+                        }
+                      },
+                      text: label || ''
+                    };
+                    
+                    if (typeof chart.chart.createOverlay === 'function') {
+                      chart.chart.createOverlay('priceLine', lineOptions);
+                    } else if (typeof chart.createOverlay === 'function') {
+                      chart.createOverlay('priceLine', lineOptions);
+                    }
+                    
+                    post({ debug: 'Price line drawn at: ' + price });
+                    return lineId;
+                  } catch(e) {
+                    post({ error: 'Failed to draw price line: ' + (e && e.message || e) });
+                  }
+                },
+                
+                drawTradeZone: function(entryPrice, exitPrice, startTime, endTime, color, label, type) {
+                  try {
+                    if (!chart || !chart.chart) return;
+                    
+                    var rectId = 'trade_zone_' + Date.now() + '_' + Math.random();
+                    var isLong = type === 'long';
+                    var isProfit = (isLong && exitPrice > entryPrice) || (!isLong && exitPrice < entryPrice);
+                    var defaultColor = isProfit ? 'rgba(0, 212, 170, 0.2)' : 'rgba(255, 82, 82, 0.2)';
+                    
+                    var rectOptions = {
+                      id: rectId,
+                      points: [
+                        { timestamp: startTime, price: entryPrice },
+                        { timestamp: endTime, price: exitPrice }
+                      ],
+                      styles: {
+                        style: 'fill',
+                        color: color || defaultColor,
+                        borderColor: color ? color.replace('0.2', '1') : (isProfit ? '#00D4AA' : '#FF5252'),
+                        borderSize: 1,
+                        borderStyle: 'solid'
+                      },
+                      text: label || (type + ' trade')
+                    };
+                    
+                    if (typeof chart.chart.createOverlay === 'function') {
+                      chart.chart.createOverlay('rect', rectOptions);
+                    } else if (typeof chart.createOverlay === 'function') {
+                      chart.createOverlay('rect', rectOptions);
+                    }
+                    
+                    post({ debug: 'Trade zone drawn: ' + label });
+                    return rectId;
+                  } catch(e) {
+                    post({ error: 'Failed to draw trade zone: ' + (e && e.message || e) });
+                  }
+                },
+                
+                drawStopLoss: function(price, color, label) {
+                  try {
+                    return this.drawPriceLine(price, color || '#FF5252', label || 'Stop Loss');
+                  } catch(e) {
+                    post({ error: 'Failed to draw stop loss: ' + (e && e.message || e) });
+                  }
+                },
+                
+                drawTakeProfit: function(price, color, label) {
+                  try {
+                    return this.drawPriceLine(price, color || '#00D4AA', label || 'Take Profit');
+                  } catch(e) {
+                    post({ error: 'Failed to draw take profit: ' + (e && e.message || e) });
+                  }
+                },
+                
+                clearAllDrawings: function() {
+                  try {
+                    if (chart && chart.chart && typeof chart.chart.removeOverlay === 'function') {
+                      chart.chart.removeOverlay();
+                    } else if (chart && typeof chart.removeOverlay === 'function') {
+                      chart.removeOverlay();
+                    }
+                    post({ debug: 'All drawings cleared' });
+                  } catch(e) {
+                    post({ error: 'Failed to clear drawings: ' + (e && e.message || e) });
+                  }
+                },
+                
+                // Chart analysis function
+                analyzeChart: function() {
+                  try {
+                    if (!chart || !chart.chart) return null;
+                    
+                    // Get visible data range
+                    var visibleRange = chart.chart.getVisibleRange();
+                    var dataList = chart.chart.getDataList();
+                    
+                    if (!dataList || dataList.length === 0) return null;
+                    
+                    // Simple analysis - find support/resistance levels
+                    var recentData = dataList.slice(-50); // Last 50 candles
+                    var highs = recentData.map(function(d) { return d.high; });
+                    var lows = recentData.map(function(d) { return d.low; });
+                    var closes = recentData.map(function(d) { return d.close; });
+                    
+                    var currentPrice = closes[closes.length - 1];
+                    var maxHigh = Math.max.apply(Math, highs);
+                    var minLow = Math.min.apply(Math, lows);
+                    
+                    // Calculate simple moving averages
+                    var sma20 = closes.slice(-20).reduce(function(a, b) { return a + b; }, 0) / 20;
+                    var sma50 = closes.length >= 50 ? closes.slice(-50).reduce(function(a, b) { return a + b; }, 0) / 50 : sma20;
+                    
+                    // Determine trend
+                    var trend = currentPrice > sma20 && sma20 > sma50 ? 'bullish' : 
+                               currentPrice < sma20 && sma20 < sma50 ? 'bearish' : 'sideways';
+                    
+                    // Calculate potential entry/exit levels
+                    var analysis = {
+                      symbol: ${JSON.stringify(safeSymbol)},
+                      currentPrice: currentPrice,
+                      trend: trend,
+                      resistance: maxHigh,
+                      support: minLow,
+                      sma20: sma20,
+                      sma50: sma50,
+                      suggestedEntry: trend === 'bullish' ? currentPrice * 0.98 : currentPrice * 1.02,
+                      suggestedExit: trend === 'bullish' ? currentPrice * 1.05 : currentPrice * 0.95,
+                      stopLoss: trend === 'bullish' ? currentPrice * 0.95 : currentPrice * 1.05,
+                      takeProfit: trend === 'bullish' ? currentPrice * 1.08 : currentPrice * 0.92,
+                      timestamp: Date.now()
+                    };
+                    
+                    post({ analysis: analysis });
+                    return analysis;
+                  } catch(e) {
+                    post({ error: 'Chart analysis failed: ' + (e && e.message || e) });
+                    return null;
+                  }
+                }
               }; 
             } catch(e) {
-              post({ error: 'Failed to set up external chart type function: ' + (e && e.message || e) });
+              post({ error: 'Failed to set up external chart functions: ' + (e && e.message || e) });
             }
 
             ${""}
@@ -548,6 +820,7 @@ export default function KLineProChart({
     lineOnly,
     hideVolumePane,
     hideIndicatorPane,
+    showYAxis,
   ]);
 
   return (
@@ -569,6 +842,12 @@ export default function KLineProChart({
           try {
             const msg = JSON.parse(e.nativeEvent.data);
             if (__DEV__) console.log("KLineProChart:", msg);
+
+            // Handle chart analysis results
+            if (msg && msg.analysis && onTradeAnalysis) {
+              onTradeAnalysis(msg.analysis);
+            }
+
             // if (msg && msg.ready && chartType && webRef.current) {
             //   try {
             //     webRef.current.injectJavaScript(
