@@ -3,24 +3,6 @@ import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
 
-type SupportedTimeframe =
-  | "1m"
-  | "3m"
-  | "5m"
-  | "15m"
-  | "30m"
-  | "1h"
-  | "2h"
-  | "4h"
-  | "1d"
-  | "1w"
-  | "1M"
-  | "3M"
-  | "6M"
-  | "1Y"
-  | "5Y"
-  | "ALL";
-
 interface Props {
   symbol: string;
   timeframe?: string;
@@ -110,21 +92,6 @@ function mapTimeframeToPeriod(tf: string | undefined): {
   return TIMEFRAMES["1d"];
 }
 
-const DEFAULT_PERIODS = [
-  TIMEFRAMES["1m"],
-  TIMEFRAMES["3m"],
-  TIMEFRAMES["5m"],
-  TIMEFRAMES["15m"],
-  TIMEFRAMES["1h"],
-  TIMEFRAMES["4h"],
-  TIMEFRAMES["1d"],
-  TIMEFRAMES["1w"],
-  TIMEFRAMES["1M"],
-  TIMEFRAMES["3M"],
-  TIMEFRAMES["1Y"],
-  TIMEFRAMES["5Y"],
-];
-
 export default function KLineProChart({
   symbol,
   timeframe = "1d",
@@ -144,8 +111,21 @@ export default function KLineProChart({
   const period = useMemo(() => mapTimeframeToPeriod(timeframe), [timeframe]);
   const webRef = useRef<any>(null);
 
+  // Update chart type dynamically after the webview is ready
+  useEffect(() => {
+    if (!webRef.current || !chartType) return;
+    try {
+      webRef.current.injectJavaScript(
+        `(function(){ try{ if(window.__KLP__&&window.__KLP__.setChartType){ window.__KLP__.setChartType(${JSON.stringify(
+          chartType
+        )}); } }catch(e){} })();`
+      );
+    } catch {}
+  }, [chartType]);
+
   const html = useMemo(() => {
     const compactUi = minimalUi || lineOnly;
+    const initialChartType = chartType || (lineOnly ? "line" : "candle");
     // Use the same versions as installed in package.json
     const cssHref =
       "https://unpkg.com/@klinecharts/pro@0.1.1/dist/klinecharts-pro.css";
@@ -246,16 +226,46 @@ export default function KLineProChart({
 
         // Chart type styles mapping
         var CHART_TYPES = {
-          candle: { type: 'candle' },
-          line: {
+          candle: { 
+            type: 'candle',
+            tooltip: {
+              showRule: 'none'
+            },
+            priceMark: {
+              show: false,
+              last: { show: false },
+              high: { show: false },
+              low: { show: false }
+            }
+          },
+          line: {  
             type: 'line',
-            line: { color: '#2196F3', size: 1, smooth: true }
+            line: { color: '#2196F3', size: 1, smooth: true },
+            tooltip: {
+              showRule: 'none'
+            },
+            priceMark: {
+              show: false,
+              last: { show: false },
+              high: { show: false },
+              low: { show: false }
+            }
           },
           area: {
             type: 'area',
-            area: { lineColor: '#2196F3', fillColor: 'rgba(33, 150, 243, 0.1)', lineSize: 1 }
+            area: { lineColor: '#2196F3', fillColor: 'rgba(33, 150, 243, 0.1)', lineSize: 1 },
+            tooltip: {
+              showRule: 'none'
+            },
+            priceMark: {
+              show: false,
+              last: { show: false },
+              high: { show: false },
+              low: { show: false }
+            }
           }
         };
+        var INITIAL_CHART_TYPE = ${JSON.stringify(initialChartType)};
         function applyChartType(chart, type){
           try {
             var style = CHART_TYPES[type] || CHART_TYPES.candle;
@@ -290,8 +300,48 @@ export default function KLineProChart({
               mainIndicators: [], // Remove MA and other main indicators
               subIndicators: [], // Remove volume and other sub-indicators
               styles: {
-                xAxis: { show: false },
-                yAxis: { show: false },
+                candle: { 
+                  type: INITIAL_CHART_TYPE,
+                  tooltip: {
+                    showRule: 'none'  // Hides the tooltip that shows OHLC values
+                  },
+                  priceMark: {
+                    show: false,      // Hides all price marks
+                    last: {
+                      show: false    // Hides the last price mark
+                    },
+                    high: {
+                      show: false    // Hides the high price mark
+                    },
+                    low: {
+                      show: false    // Hides the low price mark
+                    }
+                  }
+                },
+                xAxis: { 
+                  show: false,      // Hides time axis
+                  axisLine: {
+                    show: false    // Hides axis line
+                  },
+                  tickLine: {
+                    show: false    // Hides tick lines
+                  },
+                  tickText: {
+                    show: false    // Hides tick text
+                  }
+                },
+                yAxis: { 
+                  show: false,      // Hides price axis
+                  axisLine: {
+                    show: false    // Hides axis line
+                  },
+                  tickLine: {
+                    show: false    // Hides tick lines
+                  },
+                  tickText: {
+                    show: false    // Hides tick text
+                  }
+                },
                 grid: { show: false },
                 indicator: { show: false }
               },
@@ -315,6 +365,9 @@ export default function KLineProChart({
                   : ""
               }
             });
+
+            try { applyChartType(chart, INITIAL_CHART_TYPE); } catch(e) {}
+            try { window.__KLP__ = { setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} } }; } catch(e) {}
 
             ${""}
 
@@ -363,13 +416,28 @@ export default function KLineProChart({
     </script>
   </body>
 </html>`;
-  }, [height, locale, market, period, polygonApiKey, symbol, theme]);
+  }, [
+    height,
+    locale,
+    market,
+    period,
+    polygonApiKey,
+    symbol,
+    theme,
+    chartType,
+    minimalUi,
+    lineOnly,
+    hideVolumePane,
+    hideIndicatorPane,
+  ]);
 
   return (
     <View style={[styles.container, { height }]}>
       <WebView
         ref={webRef}
-        key={`${symbol}-${period.timespan}-${period.multiplier}`}
+        key={`${symbol}-${period.timespan}-${period.multiplier}-${
+          chartType || (lineOnly ? "line" : "candle")
+        }`}
         originWhitelist={["*"]}
         source={{ html }}
         style={{ height, width: "100%" }}
