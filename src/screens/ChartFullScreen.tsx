@@ -83,8 +83,6 @@ export default function ChartFullScreen() {
         return 120_000;
       case "3m":
         return 180_000;
-      case "4m":
-        return 240_000;
       case "5m":
         return 300_000;
       case "10m":
@@ -93,29 +91,19 @@ export default function ChartFullScreen() {
         return 900_000;
       case "30m":
         return 1_800_000;
-      case "45m":
-        return 2_700_000;
       case "1h":
         return 3_600_000;
       case "2h":
         return 7_200_000;
       case "4h":
         return 14_400_000;
-      case "6h":
-        return 21_600_000;
-      case "8h":
-        return 28_800_000;
-      case "12h":
-        return 43_200_000;
       case "1D":
         return 86_400_000;
       case "1W":
         return 7 * 86_400_000;
       case "1M":
       case "3M":
-      case "6M":
       case "1Y":
-      case "2Y":
       case "5Y":
       case "ALL":
         return 30 * 86_400_000;
@@ -1252,47 +1240,41 @@ export default function ChartFullScreen() {
                     <View style={{ marginBottom: 24 }}>
                       <Text style={styles.timeframeSectionTitle}>Minutes</Text>
                       <View style={styles.timeframeGrid}>
-                        {[
-                          "1m",
-                          "2m",
-                          "3m",
-                          "4m",
-                          "5m",
-                          "10m",
-                          "15m",
-                          "30m",
-                          "45m",
-                        ].map((tf) => {
-                          const isSelected = extendedTf === tf;
-                          const isPinned = pinned.includes(
-                            tf as ExtendedTimeframe
-                          );
-                          return (
-                            <Pressable
-                              key={tf}
-                              onPress={() => {
-                                handleTimeframeChange(tf as ExtendedTimeframe);
-                                hideBottomSheet();
-                              }}
-                              style={[
-                                styles.timeframeButton,
-                                isSelected && styles.timeframeButtonActive,
-                                isPinned && styles.timeframeButtonPinned,
-                              ]}
-                            >
-                              <Text
+                        {["1m", "2m", "3m", "5m", "10m", "15m", "30m"].map(
+                          (tf) => {
+                            const isSelected = extendedTf === tf;
+                            const isPinned = pinned.includes(
+                              tf as ExtendedTimeframe
+                            );
+                            return (
+                              <Pressable
+                                key={tf}
+                                onPress={() => {
+                                  handleTimeframeChange(
+                                    tf as ExtendedTimeframe
+                                  );
+                                }}
                                 style={[
-                                  styles.timeframeButtonText,
-                                  isSelected &&
-                                    styles.timeframeButtonTextActive,
-                                  isPinned && styles.timeframeButtonTextPinned,
+                                  styles.timeframeButton,
+                                  isSelected && styles.timeframeButtonActive,
+                                  isPinned && styles.timeframeButtonPinned,
                                 ]}
                               >
-                                {tf}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
+                                <Text
+                                  style={[
+                                    styles.timeframeButtonText,
+                                    isSelected &&
+                                      styles.timeframeButtonTextActive,
+                                    isPinned &&
+                                      styles.timeframeButtonTextPinned,
+                                  ]}
+                                >
+                                  {tf}
+                                </Text>
+                              </Pressable>
+                            );
+                          }
+                        )}
                       </View>
                     </View>
 
@@ -1310,7 +1292,6 @@ export default function ChartFullScreen() {
                               key={tf}
                               onPress={() => {
                                 handleTimeframeChange(tf as ExtendedTimeframe);
-                                hideBottomSheet();
                               }}
                               style={[
                                 styles.timeframeButton,
@@ -1358,7 +1339,6 @@ export default function ChartFullScreen() {
                               key={tf}
                               onPress={() => {
                                 handleTimeframeChange(tf as ExtendedTimeframe);
-                                hideBottomSheet();
                               }}
                               style={[
                                 styles.timeframeButton,

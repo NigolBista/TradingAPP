@@ -16,25 +16,18 @@ export type ExtendedTimeframe =
   | "1m"
   | "2m"
   | "3m"
-  | "4m"
   | "5m"
   | "10m"
   | "15m"
   | "30m"
-  | "45m"
   | "1h"
   | "2h"
   | "4h"
-  | "6h"
-  | "8h"
-  | "12h"
   | "1D"
   | "1W"
   | "1M"
   | "3M"
-  | "6M"
   | "1Y"
-  | "2Y"
   | "5Y"
   | "ALL";
 
@@ -253,8 +246,6 @@ export function mapExtendedTimeframe(tf: ExtendedTimeframe): {
       return { base: "1", group: 2 };
     case "3m":
       return { base: "1", group: 3 };
-    case "4m":
-      return { base: "1", group: 4 };
     case "5m":
       return { base: "5", group: 1 };
     case "10m":
@@ -263,8 +254,6 @@ export function mapExtendedTimeframe(tf: ExtendedTimeframe): {
       return { base: "15", group: 1 };
     case "30m":
       return { base: "30", group: 1 };
-    case "45m":
-      return { base: "15", group: 3 };
 
     // hour groupings - use native hourly data when available
     case "1h":
@@ -273,12 +262,6 @@ export function mapExtendedTimeframe(tf: ExtendedTimeframe): {
       return { base: "1H", group: 2 }; // 2×1h = 2h
     case "4h":
       return { base: "1H", group: 4 }; // 4×1h = 4h
-    case "6h":
-      return { base: "1H", group: 6 }; // 6×1h = 6h
-    case "8h":
-      return { base: "1H", group: 8 }; // 8×1h = 8h
-    case "12h":
-      return { base: "1H", group: 12 }; // 12×1h = 12h
 
     // higher level: intraday feel for 1D, then daily/weekly/monthly
     case "1D":
@@ -289,12 +272,8 @@ export function mapExtendedTimeframe(tf: ExtendedTimeframe): {
       return { base: "D", group: 1 }; // Daily data for monthly view
     case "3M":
       return { base: "D", group: 1 }; // Daily data for 3-month view
-    case "6M":
-      return { base: "D", group: 1 }; // Daily data for 6-month view
     case "1Y":
       return { base: "D", group: 1 }; // Daily data for 1-year view
-    case "2Y":
-      return { base: "W", group: 1 }; // Weekly data for 2-year view
     case "5Y":
       return { base: "W", group: 1 }; // Weekly data for 5-year view
     case "ALL":
@@ -313,8 +292,6 @@ function desiredOutputBars(tf: ExtendedTimeframe): number {
       return 195; // Full trading day in 2m intervals
     case "3m":
       return 130; // Full trading day in 3m intervals
-    case "4m":
-      return 98; // Full trading day in 4m intervals
     case "5m":
       return 390; // 2 full trading days for pattern analysis
     case "10m":
@@ -323,8 +300,6 @@ function desiredOutputBars(tf: ExtendedTimeframe): number {
       return 130; // 2 full trading days in 15m intervals
     case "30m":
       return 65; // 2 full trading days in 30m intervals
-    case "45m":
-      return 87; // ~3 trading days in 45m intervals
 
     // Hour timeframes - show weeks/months of data
     case "1h":
@@ -333,12 +308,6 @@ function desiredOutputBars(tf: ExtendedTimeframe): number {
       return 78; // ~1 month of 2h data
     case "4h":
       return 120; // ~2 months of 4h data
-    case "6h":
-      return 80; // ~2 months of 6h data
-    case "8h":
-      return 60; // ~2 months of 8h data
-    case "12h":
-      return 40; // ~2 months of 12h data
 
     // Daily and longer timeframes
     case "1D":
@@ -349,12 +318,8 @@ function desiredOutputBars(tf: ExtendedTimeframe): number {
       return 22; // ~1 month of daily data (trading days)
     case "3M":
       return 66; // ~3 months of daily data
-    case "6M":
-      return 132; // ~6 months of daily data
     case "1Y":
       return 252; // ~1 trading year of daily data
-    case "2Y":
-      return 104; // ~2 years of weekly data
     case "5Y":
       return 260; // ~5 years of weekly data
     case "ALL":

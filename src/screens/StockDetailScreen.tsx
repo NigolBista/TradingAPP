@@ -2091,7 +2091,6 @@ export default function StockDetailScreen() {
                           key={tf}
                           onPress={() => {
                             setExtendedTf(tf as ExtendedTimeframe);
-                            hideBottomSheet();
                           }}
                           style={{
                             paddingVertical: 16,
@@ -2268,7 +2267,6 @@ export default function StockDetailScreen() {
                             "1m",
                             "2m",
                             "3m",
-                            "4m",
                             "5m",
                             "10m",
                             "15m",
@@ -2284,7 +2282,6 @@ export default function StockDetailScreen() {
                                 key={tf}
                                 onPress={() => {
                                   setExtendedTf(tf as ExtendedTimeframe);
-                                  hideBottomSheet();
                                 }}
                                 style={[
                                   styles.timeframeButton,
@@ -2323,7 +2320,6 @@ export default function StockDetailScreen() {
                                 key={tf}
                                 onPress={() => {
                                   setExtendedTf(tf as ExtendedTimeframe);
-                                  hideBottomSheet();
                                 }}
                                 style={[
                                   styles.timeframeButton,
@@ -2372,7 +2368,6 @@ export default function StockDetailScreen() {
                                 key={tf}
                                 onPress={() => {
                                   setExtendedTf(tf as ExtendedTimeframe);
-                                  hideBottomSheet();
                                 }}
                                 style={[
                                   styles.timeframeButton,
