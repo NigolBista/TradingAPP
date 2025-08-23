@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { TradePlanOverlay } from "../components/charts/LightweightCandles";
+import { TradePlanOverlay } from "../logic/types";
 
 export interface CachedSignal {
   symbol: string;

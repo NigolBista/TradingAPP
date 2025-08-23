@@ -25,10 +25,7 @@ import {
   useFocusEffect,
 } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import AmChartsCandles, {
-  type AmChartsDatum,
-  type AmChartsCandlesHandle,
-} from "../components/charts/AmChartsCandles";
+import TradingViewWidget from "../components/charts/TradingViewWidget";
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
@@ -375,9 +372,9 @@ export default function StockDetailScreen() {
 
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
-  const [dailySeries, setDailySeries] = useState<AmChartsDatum[]>([]);
+  const [dailySeries, setDailySeries] = useState<Candle[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
-  const chartRef = React.useRef<AmChartsCandlesHandle>(null);
+  // TradingViewWidget does not expose imperative ref
   const [initialQuote, setInitialQuote] = useState<SimpleQuote | null>(
     initialQuoteParam || null
   );
@@ -1185,7 +1182,7 @@ export default function StockDetailScreen() {
         }
 
         // Return a promise that resolves after the delay
-        return new Promise<AmChartsDatum[]>((resolve) => {
+        return new Promise<Candle[]>((resolve) => {
           historicalRequestTimeoutRef.current = setTimeout(async () => {
             try {
               const result = await handleLoadMoreData(numberOfBars);
@@ -1736,7 +1733,7 @@ export default function StockDetailScreen() {
   const showAfterHours = currentSession === "after-hours";
   const showPreMarket = currentSession === "pre-market";
 
-  function toLWC(candles: Candle[]): AmChartsDatum[] {
+  function toLWC(candles: Candle[]): Candle[] {
     return (candles || []).map((c) => ({
       time: c.time,
       open: c.open,
@@ -1868,26 +1865,28 @@ export default function StockDetailScreen() {
         <View style={styles.chartSection}>
           {/* Chart */}
           <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
-            <AmChartsCandles
-              ref={chartRef}
-              data={dailySeries}
-              height={280}
-              type={chartType}
-              theme="dark"
-              showVolume={false}
-              showMA={false}
-              showGrid={true}
-              showCrosshair={true}
-              initialPosition="end"
-              forcePositive={
-                todayChange !== null && todayChangePercent !== null
-                  ? todayChange >= 0
-                  : undefined
-              }
-              onLoadMoreData={handleLoadMoreData}
+            <TradingViewWidget
               symbol={symbol}
-              timeframe={selectedTimeframe === "YTD" ? "1D" : extendedTf}
-              enableRealtime={selectedTimeframe === "1D"}
+              height={280}
+              interval={
+                selectedTimeframe === "1D"
+                  ? "1"
+                  : selectedTimeframe === "1W"
+                  ? "60"
+                  : selectedTimeframe === "1M"
+                  ? "240"
+                  : selectedTimeframe === "3M"
+                  ? "D"
+                  : selectedTimeframe === "YTD"
+                  ? "D"
+                  : selectedTimeframe === "1Y"
+                  ? "W"
+                  : selectedTimeframe === "5Y"
+                  ? "M"
+                  : "D"
+              }
+              theme="dark"
+              hideTopToolbar={true}
             />
           </View>
 

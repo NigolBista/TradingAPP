@@ -8,7 +8,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import AmChartsCandles, { TradePlanOverlay } from "./AmChartsCandles";
+import TradingViewWidget from "./TradingViewWidget";
+import { TradePlanOverlay } from "../../logic/types";
 import {
   fetchCandles,
   fetchMarketDataCandlesWindow,
@@ -184,7 +185,7 @@ export default function AmChartsTradingView({
         return out;
       });
 
-      // Return AmChartsDatum[] (epoch ms) as the contract expects
+      // Return mapped candles (epoch ms)
       return mapped.map((m) => ({ ...m }));
     } catch (error) {
       console.warn("Failed to load more historical data:", error);
@@ -384,21 +385,32 @@ export default function AmChartsTradingView({
           <ActivityIndicator />
         </View>
       ) : (
-        <AmChartsCandles
-          data={data}
-          height={height}
-          type={chartType}
-          theme={resolvedTheme}
-          showVolume={false}
-          showMA={false}
-          showGrid={true}
-          showCrosshair={true}
-          levels={effectiveLevels}
-          tradePlan={currentTradePlan}
+        <TradingViewWidget
           symbol={normalizedSymbol}
-          timeframe={timeframe}
-          enableRealtime={enableRealtime}
-          onLoadMoreData={handleLoadMoreData}
+          height={height}
+          interval={
+            timeframe === "1m"
+              ? "1"
+              : timeframe === "5m"
+              ? "5"
+              : timeframe === "15m"
+              ? "15"
+              : timeframe === "30m"
+              ? "30"
+              : timeframe === "1h"
+              ? "60"
+              : timeframe === "2h"
+              ? "120"
+              : timeframe === "4h"
+              ? "240"
+              : timeframe === "1d"
+              ? "D"
+              : timeframe === "1w"
+              ? "W"
+              : "D"
+          }
+          theme={resolvedTheme}
+          hideTopToolbar={false}
         />
       )}
       <Pressable
