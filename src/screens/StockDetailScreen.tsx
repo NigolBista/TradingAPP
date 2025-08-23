@@ -1194,10 +1194,9 @@ export default function StockDetailScreen() {
           {/* Chart */}
           <View style={styles.chartContainer}>
             <KLineProChart
+              key={`${symbol}-${extendedTf}-${chartType}`}
               symbol={symbol}
-              timeframe={
-                selectedTimeframe === "YTD" ? "1d" : (extendedTf as any)
-              }
+              timeframe={extendedTf}
               height={280}
               theme="dark"
               locale="en-US"
