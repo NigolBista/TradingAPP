@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-  useCallback,
-  useRef,
-} from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   View,
   Pressable,
@@ -22,32 +16,23 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import KLineProChart from "../components/charts/KLineProChart";
 // Removed viewportBars usage; we'll lazy-load via timeRangeChange
-import ChartSettingsModal, {
-  type ChartType,
-} from "../components/charts/ChartSettingsModal";
-import TimeframePickerModal, {
-  ExtendedTimeframe,
-} from "../components/charts/TimeframePickerModal";
+import { type ChartType } from "../components/charts/ChartSettingsModal";
+import { ExtendedTimeframe } from "../components/charts/TimeframePickerModal";
 import StockSearchBar from "../components/common/StockSearchBar";
 import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
-import {
-  fetchCandlesForTimeframe,
-  fetchCandles,
-  fetchCandlesForTimeframeWindow,
-} from "../services/marketProviders";
+// Remove direct candle fetching; KLinePro handles candles internally via Polygon
 import { fetchNews as fetchSymbolNews } from "../services/newsProviders";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { useChatStore } from "../store/chatStore";
-import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
+import { useSignalCacheStore } from "../store/signalCacheStore";
+import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { getUpcomingFedEvents } from "../services/federalReserve";
-import { getCachedQuotes, type SimpleQuote } from "../services/quotes";
-import { smartCandleManager } from "../services/smartCandleManager";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const scheme = useColorScheme();
   const symbol: string = route.params?.symbol || "AAPL";
@@ -86,7 +71,6 @@ export default function ChartFullScreen() {
 
   // State variables
   const [data, setData] = useState<any[]>(initialDataParam || []);
-  const [loading, setLoading] = useState(false);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
     (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
   );
@@ -193,9 +177,6 @@ export default function ChartFullScreen() {
       ? "swing_trade"
       : "auto"
   );
-  const [includeNews, setIncludeNews] = useState<boolean>(true);
-  const [includeFOMC, setIncludeFOMC] = useState<boolean>(false);
-  const [includeMarket, setIncludeMarket] = useState<boolean>(false);
 
   const showUnifiedBottomSheetWithTab = () => {
     setShowUnifiedBottomSheet(true);
@@ -215,8 +196,6 @@ export default function ChartFullScreen() {
       setShowUnifiedBottomSheet(false);
     });
   };
-  const [includeSentiment, setIncludeSentiment] = useState<boolean>(false);
-  const [includeVIX, setIncludeVIX] = useState<boolean>(false);
 
   const [tradePace, setTradePace] = useState<
     "auto" | "day" | "scalp" | "swing"
@@ -261,8 +240,7 @@ export default function ChartFullScreen() {
         return;
       }
       try {
-        const cached = await getCachedQuotes([symbol]);
-        const q: SimpleQuote | undefined = cached[symbol];
+        const q: SimpleQuote = await fetchSingleQuote(symbol);
         if (q && mounted) {
           if (typeof q.change === "number") setDayUp(q.change >= 0);
           else if (typeof q.changePercent === "number")
@@ -297,268 +275,15 @@ export default function ChartFullScreen() {
     }
   }, [initialAiMeta]);
 
-  // Auto-analysis on data load
-  useEffect(() => {
-    if (data.length > 0 && !hasAutoAnalyzed && !analyzing) {
-      setHasAutoAnalyzed(true);
-      // Delay slightly to ensure chart is rendered
-      setTimeout(() => {
-        handleAutoAnalysis();
-      }, 500);
-    }
-  }, [data, hasAutoAnalyzed, analyzing]);
-
-  useEffect(() => {
-    let isMounted = true;
-    async function load() {
-      try {
-        // If initial data provided and timeframe matches, use it and avoid refetch
-        if (initialDataParam && initialDataParam.length > 0) {
-          setLoading(false);
-          return;
-        }
-        setLoading(true);
-        const candles = await fetchCandlesForTimeframe(symbol, extendedTf);
-        if (!isMounted) return;
-        setData(
-          candles.map((c: any) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          }))
-        );
-      } catch (e) {
-        console.warn("Failed to load candles:", e);
-        if (isMounted) setData([]);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      isMounted = false;
-    };
-  }, [symbol, extendedTf]);
-
-  // Final fallback: derive direction from loaded data if still unknown
-  useEffect(() => {
-    if (typeof dayUp === "boolean") return;
-    if (!data || data.length < 2) return;
-    const first = data[0]?.close;
-    const last = data[data.length - 1]?.close;
-    if (typeof first === "number" && typeof last === "number") {
-      setDayUp(last >= first);
-    }
-  }, [data, dayUp]);
-
-  const effectiveLevels = useMemo(() => {
-    if (
-      levels &&
-      (levels.entry ||
-        levels.exit ||
-        levels.entryExtended ||
-        levels.exitExtended)
-    ) {
-      return levels;
-    }
-    if (data && data.length > 0) {
-      const last = data[data.length - 1];
-      const close = Number(last.close) || 0;
-      if (!close) return undefined;
-      const delta = close * 0.01; // 1% bands default
-      return {
-        entry: close + delta * 0.5,
-        entryExtended: close + delta * 1.0,
-        exit: Math.max(0, close - delta * 0.5),
-        exitExtended: Math.max(0, close - delta * 1.0),
-      };
-    }
-    return undefined;
-  }, [levels, data]);
-
-  async function loadStockName() {
-    try {
-      const results = await searchStocksAutocomplete(symbol, 1);
-      if (results.length > 0) {
-        setStockName(results[0].name);
-      }
-    } catch (error) {
-      console.error("Failed to load stock name:", error);
-    }
-  }
-
-  // Infinite history handler - TradingView style
-  const handleLoadMoreData = useCallback(
-    async (numberOfBars: number) => {
-      if (!data.length) return [];
-
-      // Rate limiting: prevent requests more frequent than every 500ms
-      const now = Date.now();
-      const timeSinceLastRequest = now - lastHistoricalRequestRef.current;
-      const minInterval = 500; // 500ms minimum between requests
-
-      if (timeSinceLastRequest < minInterval) {
-        console.log(
-          `⏳ Rate limiting: delaying historical data request by ${
-            minInterval - timeSinceLastRequest
-          }ms`
-        );
-
-        // Clear any existing timeout
-        if (historicalRequestTimeoutRef.current) {
-          clearTimeout(historicalRequestTimeoutRef.current);
-        }
-
-        // Return a promise that resolves after the delay
-        return new Promise<any[]>((resolve) => {
-          historicalRequestTimeoutRef.current = setTimeout(async () => {
-            try {
-              const result = await handleLoadMoreData(numberOfBars);
-              resolve(result);
-            } catch (error) {
-              console.warn("Delayed historical data request failed:", error);
-              resolve(data);
-            }
-          }, minInterval - timeSinceLastRequest);
-        });
-      }
-
-      lastHistoricalRequestRef.current = now;
-
-      // Get the earliest date from current data (already in milliseconds)
-      const earliestTime = data[0].time;
-      const to = earliestTime - 1;
-
-      // Calculate how much historical data to fetch based on timeframe
-      const timeframeMs = timeframeSpacingMs(extendedTf);
-      const from = Math.max(0, to - numberOfBars * timeframeMs);
-
-      console.log(`🔄 Loading more historical data for ${symbol}:`, {
-        timeframe: extendedTf,
-        numberOfBars,
-        from: new Date(from).toISOString(),
-        to: new Date(to).toISOString(),
-        earliestCurrent: new Date(earliestTime).toISOString(),
-      });
-
-      try {
-        const olderData = await fetchCandlesForTimeframeWindow(
-          symbol,
-          extendedTf,
-          from,
-          to
-        );
-        if (olderData?.length) {
-          console.log(
-            `✅ Loaded ${olderData.length} historical candles for ${symbol}`
-          );
-          // Prepend to existing data and return the full dataset (like TradingView example)
-          const updatedData = [...olderData, ...data];
-          setData(updatedData);
-          return updatedData;
-        }
-        console.log(`⚠️ No historical data returned for ${symbol}`);
-        return data;
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("429")) {
-          console.warn(`🚫 Rate limited by API for ${symbol}, backing off...`);
-          // Exponential backoff for rate limiting
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        } else {
-          console.warn(
-            `❌ Historical data request failed for ${symbol}:`,
-            error
-          );
-        }
-        return data;
-      }
-    },
-    [symbol, extendedTf, data]
-  );
-
-  // Handle timeframe change and save as default
-  async function handleTimeframeChange(tf: ExtendedTimeframe) {
-    setExtendedTf(tf);
-    setDefaultTimeframe(tf); // Save as user's preferred default
-
-    // Reset view state for new timeframe
-
-    // Immediately fetch data for the new timeframe using smart candle manager
-    try {
-      setLoading(true);
-      const candles = await smartCandleManager.getCandles(symbol, tf, 500);
-      if (candles && candles.length > 0) {
-        if (__DEV__) console.log("📈 Smart timeframe switch for", symbol, tf);
-        // Set data with proper formatting for smooth timeframe transitions
-        setData(
-          candles.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          }))
-        );
-      }
-    } catch (e) {
-      console.warn("Failed to load timeframe candles:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  // Simulate streaming text output
-  function simulateStreamingText(fullText: string) {
-    setIsStreaming(true);
-    setStreamingText("");
-
-    const words = fullText.split(" ");
-    let currentIndex = 0;
-
-    const interval = setInterval(() => {
-      if (currentIndex < words.length) {
-        setStreamingText(
-          (prev) => prev + (currentIndex === 0 ? "" : " ") + words[currentIndex]
-        );
-        currentIndex++;
-      } else {
-        setIsStreaming(false);
-        clearInterval(interval);
-      }
-    }, 80); // Adjust speed as needed
-  }
-
-  // Auto-analysis with comprehensive context (called on chart load)
-  async function handleAutoAnalysis() {
-    return performAnalysis(true);
-  }
-
-  // Manual analysis (called by user button press)
-  async function handleAnalyzePress() {
-    return performAnalysis(false);
-  }
-
   // Core analysis function
   async function performAnalysis(isAutoAnalysis: boolean = false) {
     try {
       setAnalyzing(true);
-      const get = async (res: "D" | "1H" | "15" | "5") => {
-        try {
-          return await fetchCandles(symbol, { resolution: res });
-        } catch (e) {
-          return await fetchCandles(symbol, { resolution: res });
-        }
-      };
-      const [d, h1, m15, m5] = await Promise.all([
-        get("D"),
-        get("1H"),
-        get("15"),
-        get("5"),
-      ]);
+      // Skip explicit candle fetching; use only quotes/news context for AI
+      const d: any[] = [];
+      const h1: any[] = [];
+      const m15: any[] = [];
+      const m5: any[] = [];
 
       // Context fetches - comprehensive for auto-analysis, user-controlled for manual
       const shouldFetchContext =
@@ -607,14 +332,7 @@ export default function ChartFullScreen() {
 
           // Fetch VIX snapshot
           try {
-            let vixCandles: any[] = [];
-            try {
-              vixCandles = await fetchCandles("^VIX", { resolution: "D" });
-            } catch {
-              vixCandles = await fetchCandles("^VIX", { resolution: "D" });
-            }
-            const last = vixCandles[vixCandles.length - 1];
-            const val = Number(last?.close) || 0;
+            const val = 0;
             const bucket = val < 15 ? "low" : val <= 25 ? "moderate" : "high";
             vixSnapshot = { value: val, bucket };
           } catch {}
@@ -781,7 +499,7 @@ export default function ChartFullScreen() {
         }
 
         // Cache the new signal (but don't add to history - it becomes the new "current")
-        const cachedSignalData: CachedSignal = {
+        const cachedSignalData = {
           symbol,
           timestamp: Date.now(),
           tradePlan: tp,
@@ -802,6 +520,101 @@ export default function ChartFullScreen() {
     } finally {
       setAnalyzing(false);
     }
+  }
+
+  // Auto-analysis on data load
+  useEffect(() => {
+    if (data.length > 0 && !hasAutoAnalyzed && !analyzing) {
+      setHasAutoAnalyzed(true);
+      // Delay slightly to ensure chart is rendered
+      setTimeout(() => {
+        performAnalysis(true);
+      }, 500);
+    }
+  }, [data, hasAutoAnalyzed, analyzing]);
+
+  // No candle fetching; chart is rendered by KLinePro
+
+  // Final fallback: derive direction from loaded data if still unknown
+  useEffect(() => {
+    if (typeof dayUp === "boolean") return;
+    if (!data || data.length < 2) return;
+    const first = data[0]?.close;
+    const last = data[data.length - 1]?.close;
+    if (typeof first === "number" && typeof last === "number") {
+      setDayUp(last >= first);
+    }
+  }, [data, dayUp]);
+
+  const effectiveLevels = useMemo(() => {
+    if (
+      levels &&
+      (levels.entry ||
+        levels.exit ||
+        levels.entryExtended ||
+        levels.exitExtended)
+    ) {
+      return levels;
+    }
+    if (data && data.length > 0) {
+      const last = data[data.length - 1];
+      const close = Number(last.close) || 0;
+      if (!close) return undefined;
+      const delta = close * 0.01; // 1% bands default
+      return {
+        entry: close + delta * 0.5,
+        entryExtended: close + delta * 1.0,
+        exit: Math.max(0, close - delta * 0.5),
+        exitExtended: Math.max(0, close - delta * 1.0),
+      };
+    }
+    return undefined;
+  }, [levels, data]);
+
+  async function loadStockName() {
+    try {
+      const results = await searchStocksAutocomplete(symbol, 1);
+      if (results.length > 0) {
+        setStockName(results[0].name);
+      }
+    } catch (error) {
+      console.error("Failed to load stock name:", error);
+    }
+  }
+
+  // Handle timeframe change and save as default
+  async function handleTimeframeChange(tf: ExtendedTimeframe) {
+    setExtendedTf(tf);
+    setDefaultTimeframe(tf); // Save as user's preferred default
+
+    // Reset view state for new timeframe
+    // Immediately fetch data for the new timeframe using smart candle manager
+  }
+
+  // Simulate streaming text output
+  function simulateStreamingText(fullText: string) {
+    setIsStreaming(true);
+    setStreamingText("");
+
+    const words = fullText.split(" ");
+    let currentIndex = 0;
+
+    const interval = setInterval(() => {
+      if (currentIndex < words.length) {
+        setStreamingText(
+          (prev) => prev + (currentIndex === 0 ? "" : " ") + words[currentIndex]
+        );
+        currentIndex++;
+      } else {
+        setIsStreaming(false);
+        clearInterval(interval);
+      }
+    }, 80); // Adjust speed as needed
+  }
+
+  // Manual analysis (called by user button press)
+  async function handleAnalyzePress() {
+    return performAnalysis(false);
   }
 
   return (

@@ -16,7 +16,7 @@ type TimeframeState = {
 const STORAGE_KEY = "pinned_timeframes_v1";
 const DEFAULT_TIMEFRAME_KEY = "default_timeframe_v1";
 const DEFAULT_PINNED: ExtendedTimeframe[] = [
-  "1m",
+  "1M",
   "5m",
   "15m",
   "1h",

@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useState,
-  useCallback,
-  useRef,
-} from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -18,32 +12,17 @@ import {
   Animated,
   Dimensions,
 } from "react-native";
-import {
-  RouteProp,
-  useRoute,
-  useNavigation,
-  useFocusEffect,
-} from "@react-navigation/native";
+import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import AmChartsCandles, {
-  type AmChartsDatum,
-  type AmChartsCandlesHandle,
-} from "../components/charts/AmChartsCandles";
+
 import KLineProChart from "../components/charts/KLineProChart";
-import Constants from "expo-constants";
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
 import TimeframePickerModal, {
   type ExtendedTimeframe,
 } from "../components/charts/TimeframePickerModal";
-import {
-  fetchCandles,
-  type Candle,
-  fetchCandlesForTimeframe,
-  fetchCandlesForTimeframeWindow,
-  fetchMarketDataCandlesWindow,
-} from "../services/marketProviders";
+import { type Candle, fetchCandles } from "../services/marketProviders";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import {
   performComprehensiveAnalysis,
@@ -56,11 +35,7 @@ import {
   type NewsItem,
   type SentimentStats,
 } from "../services/newsProviders";
-import { realtimeDataManager } from "../services/realtimeDataManager";
-import { smartCandleManager } from "../services/smartCandleManager";
 // Removed viewportBars dependency; using simple lazy loading on visible range change
-
-import { type SignalSummary } from "../services/signalEngine";
 import NewsList from "../components/insights/NewsList";
 import { sendLocalNotification } from "../services/notifications";
 import { searchStocksAutocomplete } from "../services/stockData";
@@ -68,7 +43,7 @@ import { useTimeframeStore } from "../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
-import { type SimpleQuote, getCachedQuotes } from "../services/quotes";
+import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
 
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
@@ -377,13 +352,13 @@ export default function StockDetailScreen() {
 
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
-  const [dailySeries, setDailySeries] = useState<AmChartsDatum[]>([]);
+
   const [news, setNews] = useState<NewsItem[]>([]);
-  const chartRef = React.useRef<AmChartsCandlesHandle>(null);
+
   const [initialQuote, setInitialQuote] = useState<SimpleQuote | null>(
     initialQuoteParam || null
   );
-  const [summary, setSummary] = useState<SignalSummary | null>(null);
+
   const [newsLoading, setNewsLoading] = useState<boolean>(true);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState("");
@@ -391,13 +366,13 @@ export default function StockDetailScreen() {
   const [chartType, setChartType] = useState<ChartType>("line");
   const [showChartSettings, setShowChartSettings] = useState(false);
   const [showExtendedHours, setShowExtendedHours] = useState(true);
-  const { pinned, defaultTimeframe, hydrate, toggle, setDefaultTimeframe } =
+  const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe } =
     useTimeframeStore();
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<HeaderTimeframe>("1D");
   const [tfModalVisible, setTfModalVisible] = useState(false);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    defaultTimeframe || "1m"
+    defaultTimeframe || "1M"
   );
   const { messages, addAnalysisMessage, clearSymbolMessages } = useChatStore();
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
@@ -413,31 +388,15 @@ export default function StockDetailScreen() {
     useState(false);
   const [isYTDView, setIsYTDView] = useState(false);
 
-  // Rate limiting state for historical data requests
-  const lastHistoricalRequestRef = useRef<number>(0);
-  const historicalRequestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   // Clear cache and reset chart when symbol changes
   useEffect(() => {
     console.log("🔄 Symbol changed to:", symbol, "- clearing viewport cache");
 
     // Reset any local caches if needed (viewport cache removed)
 
-    // Also clear the smart candle manager cache to ensure fresh data
-    try {
-      // Force a complete reset
-      smartCandleManager.clearCache?.(symbol);
-    } catch (e) {
-      console.warn("Could not clear smart candle cache:", e);
-    }
-
-    // Reset chart data to prevent stale data from previous symbol
-    setDailySeries([]);
-
     // Clear other symbol-specific state
     setAnalysis(null);
     setNews([]);
-    setSummary(null);
     setCachedSignal(null);
 
     // Load new data
@@ -457,9 +416,6 @@ export default function StockDetailScreen() {
 
     // Reset local view state
 
-    // Reset chart data to force reload
-    setDailySeries([]);
-
     // Load new timeframe data
     load();
   }, [extendedTf, showExtendedHours]);
@@ -472,75 +428,9 @@ export default function StockDetailScreen() {
     null
   );
   const [sentimentLoading, setSentimentLoading] = useState(false);
-  const barSpacingRef = React.useRef<number>(60_000);
 
   // Batch edge requests from WebView to avoid excessive API calls while panning
   // Removed edge batching state; no longer needed with simple lazy loading
-
-  function timeframeSpacingMs(tf: ExtendedTimeframe): number {
-    switch (tf) {
-      case "1m":
-        return 60_000;
-      case "2m":
-        return 120_000;
-      case "3m":
-        return 180_000;
-      case "4m":
-        return 240_000;
-      case "5m":
-        return 300_000;
-      case "10m":
-        return 600_000;
-      case "15m":
-        return 900_000;
-      case "30m":
-        return 1_800_000;
-      case "45m":
-        return 2_700_000;
-      case "1h":
-        return 3_600_000;
-      case "2h":
-        return 7_200_000;
-      case "4h":
-        return 14_400_000;
-      case "6h":
-        return 21_600_000;
-      case "8h":
-        return 28_800_000;
-      case "12h":
-        return 43_200_000;
-      case "1D":
-        return 86_400_000;
-      case "1W":
-        return 7 * 86_400_000;
-      case "1M":
-      case "3M":
-      case "6M":
-      case "1Y":
-      case "2Y":
-      case "5Y":
-      case "ALL":
-        return 30 * 86_400_000; // coarse approximation
-      default:
-        return 60_000;
-    }
-  }
-
-  // Recompute spacing when data/timeframe changes
-  useEffect(() => {
-    try {
-      if (dailySeries && dailySeries.length >= 2) {
-        const last = dailySeries[dailySeries.length - 1];
-        const prev = dailySeries[dailySeries.length - 2];
-        const inferred = Math.max(1, last.time - prev.time);
-        barSpacingRef.current = inferred;
-      } else {
-        barSpacingRef.current = timeframeSpacingMs(extendedTf);
-      }
-    } catch {
-      barSpacingRef.current = timeframeSpacingMs(extendedTf);
-    }
-  }, [dailySeries, extendedTf]);
 
   // Real-time logic is now handled by AmChartsCandles component itself
 
@@ -649,8 +539,7 @@ export default function StockDetailScreen() {
     (async () => {
       if (!initialQuote) {
         try {
-          const cached = await getCachedQuotes([symbol]);
-          const q = cached[symbol];
+          const q = await fetchSingleQuote(symbol);
           if (q && mounted) setInitialQuote(q);
         } catch {}
       }
@@ -666,126 +555,6 @@ export default function StockDetailScreen() {
       setExtendedTf(defaultTimeframe);
     }
   }, [defaultTimeframe]);
-
-  // Refresh cached signal when screen comes into focus and periodically
-  useFocusEffect(
-    useCallback(() => {
-      const refreshCachedSignal = () => {
-        const cached = getCachedSignal(symbol);
-        if (cached) {
-          // Only update if the cached signal is different (newer timestamp)
-          if (!cachedSignal || cached.timestamp > cachedSignal.timestamp) {
-            setCachedSignal(cached);
-          }
-        } else {
-          // If no cached signal, clear the current one
-          setCachedSignal(null);
-        }
-      };
-
-      // Initial refresh
-      refreshCachedSignal();
-
-      // Set up periodic refresh while screen is focused (reduced frequency)
-      const interval = setInterval(refreshCachedSignal, 2500);
-
-      // Start real-time chart refresh
-      if (__DEV__)
-        console.log("🔄 Starting stock detail refresh for", symbol, extendedTf);
-      realtimeDataManager.startStockDetailRefresh(
-        symbol,
-        extendedTf,
-        async () => {
-          // Refresh callback - incrementally update chart data
-          try {
-            // Do not override YTD view with non-YTD data
-            if (selectedTimeframe === "YTD") {
-              return;
-            }
-            const candles = await smartCandleManager.getCandles(
-              symbol,
-              extendedTf,
-              500
-            );
-            if (candles && candles.length > 0) {
-              // Merge latest quote into the last candle to reflect after-hours price
-              try {
-                const qMap = await getCachedQuotes([symbol]);
-                const q = qMap[symbol];
-                if (q && typeof q.last === "number" && candles.length) {
-                  const lastIdx = candles.length - 1;
-                  const last = candles[lastIdx];
-
-                  // Validate quote price against historical candle data to prevent chart scaling issues
-                  const recentCandles = candles.slice(-20); // Use last 20 candles for reference
-                  const recentPrices = recentCandles.flatMap((c) => [
-                    c.high,
-                    c.low,
-                    c.close,
-                  ]);
-                  const minRecent = Math.min(...recentPrices);
-                  const maxRecent = Math.max(...recentPrices);
-                  const priceRange = maxRecent - minRecent;
-                  const tolerance = Math.max(
-                    priceRange * 0.15,
-                    maxRecent * 0.05
-                  ); // 15% of recent range or 5% of price
-
-                  // Only merge quote if it's within reasonable bounds of recent price action
-                  const isReasonablePrice =
-                    q.last >= minRecent - tolerance &&
-                    q.last <= maxRecent + tolerance;
-
-                  if (isReasonablePrice) {
-                    const patched = {
-                      ...last,
-                      close: q.last,
-                      high: Math.max(last.high, q.last),
-                      low: Math.min(last.low, q.last),
-                    } as typeof last;
-                    candles[lastIdx] = patched;
-                  } else {
-                    console.warn(
-                      `🚫 Rejecting unreasonable quote price for ${symbol}: ${
-                        q.last
-                      } (recent range: ${minRecent.toFixed(
-                        2
-                      )} - ${maxRecent.toFixed(2)})`
-                    );
-                  }
-                }
-              } catch (_) {}
-
-              const lwc = toLWC(candles);
-              setDailySeries((prev) => {
-                if (prev.length === 0) return lwc;
-                const prevLast = prev[prev.length - 1].time;
-                const latest = lwc[lwc.length - 1];
-                // Update in-progress bar
-                if (latest.time === prevLast) {
-                  const updated = [...prev];
-                  updated[updated.length - 1] = latest;
-                  return updated;
-                }
-                // Append new bars without resetting existing data
-                const newBars = lwc.filter((c) => c.time > prevLast);
-                return newBars.length > 0 ? [...prev, ...newBars] : prev;
-              });
-            }
-          } catch (error) {
-            console.error("Failed to refresh chart from smart cache:", error);
-          }
-        }
-      );
-
-      // Return cleanup function
-      return () => {
-        clearInterval(interval);
-        if (__DEV__) console.log("⏹️ Stopping stock detail refresh");
-        realtimeDataManager.stopStockDetailRefresh();
-      };
-    }, [symbol, getCachedSignal, cachedSignal, extendedTf, selectedTimeframe])
-  );
 
   // Remove automatic analysis - only trigger when user explicitly requests it
 
@@ -855,192 +624,9 @@ export default function StockDetailScreen() {
         return;
       }
 
-      // Fetch candle data for analysis
-      const limits: Record<"D" | "1H" | "15" | "5", number> = {
-        D: 365,
-        "1H": 300,
-        "15": 200,
-        "5": 150,
-      };
-      const get = async (res: "D" | "1H" | "15" | "5") => {
-        try {
-          return await fetchCandles(symbol, {
-            resolution: res,
-            limit: limits[res],
-          });
-        } catch (e) {
-          return await fetchCandles(symbol, {
-            resolution: res,
-            limit: limits[res],
-          });
-        }
-      };
-
-      const [d, h1, m15, m5] = await Promise.all([
-        get("D"),
-        get("1H"),
-        get("15"),
-        get("5"),
-      ]);
-
-      // Fetch context data for comprehensive analysis
-      let newsBrief: any[] | undefined = undefined;
-      let marketNewsBrief: any[] | undefined = undefined;
-      let fedBrief: any[] | undefined = undefined;
-
-      try {
-        // Use already loaded news with sentiment if available, otherwise fetch fresh
-        let newsData =
-          news.length > 0 ? news : await fetchStockNewsApi(symbol, 25);
-        if (newsData.length === 0) {
-          // Fallback to default provider if Stock News API fails
-          newsData = await fetchSymbolNews(symbol);
-        }
-
-        newsBrief = (newsData || []).slice(0, 5).map((n: any) => ({
-          title: n.title,
-          summary: (n.summary || "").slice(0, 180),
-          source: n.source,
-          publishedAt: n.publishedAt,
-          sentiment: n.sentiment, // Include sentiment from Stock News API
-        }));
-
-        // Add aggregated sentiment stats if available
-        if (sentimentStats) {
-          newsBrief.push({
-            title: "Market Sentiment Analysis",
-            summary: `30-day sentiment: ${
-              sentimentStats.totalPositive
-            } positive, ${sentimentStats.totalNegative} negative, ${
-              sentimentStats.totalNeutral
-            } neutral articles. Overall sentiment score: ${sentimentStats.sentimentScore.toFixed(
-              3
-            )}`,
-            source: "Stock News API",
-            publishedAt: new Date().toISOString(),
-            sentiment:
-              sentimentStats.sentimentScore > 0.3
-                ? "Positive"
-                : sentimentStats.sentimentScore < -0.1
-                ? "Negative"
-                : "Neutral",
-          });
-        }
-
-        // Fetch market news
-        const marketNews = await fetchSymbolNews("SPY"); // Use SPY as market proxy
-        marketNewsBrief = (marketNews || []).slice(0, 3).map((n: any) => ({
-          title: n.title,
-          summary: (n.summary || "").slice(0, 120),
-          source: n.source,
-        }));
-
-        // Fetch FOMC events
-        const events = await getUpcomingFedEvents();
-        fedBrief = (events || []).slice(0, 3).map((e: any) => ({
-          title: e.title,
-          date: e.date,
-          impact: e.impact,
-          type: e.type,
-        }));
-      } catch (error) {
-        console.warn("Failed to fetch context data:", error);
-      }
-
-      // Run AI strategy analysis
-      const output = await runAIStrategy({
-        symbol,
-        mode: "auto",
-        candleData: {
-          "1d": d.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-          "1h": h1.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-          "15m": m15.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-          "5m": m5.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-        },
-        indicators: {},
-        context: {
-          userBias: "neutral",
-          strategyPreference: "auto",
-          userPreferences: {
-            pace: "auto",
-            desiredRR: 2.0,
-          },
-          includeFlags: {
-            macro: true,
-            sentiment: true,
-            vix: true,
-            fomc: true,
-            market: true,
-            fundamentals: true,
-          },
-          news: newsBrief,
-          marketNews: marketNewsBrief,
-          fedEvents: fedBrief,
-          fundamentals: { level: "comprehensive" },
-          analysisType: "comprehensive_auto",
-        },
-      });
-
-      if (output) {
-        const tradePlan = aiOutputToTradePlan(output);
-        const aiMeta = {
-          strategyChosen: String(output.strategyChosen),
-          side: output.side,
-          confidence: output.confidence,
-          why: output.why || [],
-          notes: output.tradePlanNotes || [],
-          targets: output.targets || [],
-          riskReward: output.riskReward,
-        };
-        const analysisContext = {
-          mode: "auto",
-          tradePace: "auto",
-          desiredRR: 2.0,
-          contextMode: "comprehensive",
-          isAutoAnalysis: true,
-        };
-
-        // Cache the signal
-        const cachedSignalData: CachedSignal = {
-          symbol,
-          timestamp: Date.now(),
-          tradePlan,
-          aiMeta,
-          analysisContext,
-          rawAnalysisOutput: output,
-        };
-
-        cacheSignal(cachedSignalData);
-        setCachedSignal(cachedSignalData);
-      }
+      // Analysis now requires Polygon API key for candle data
+      console.log("Auto-analysis requires Polygon API key for candle data");
+      return;
     } catch (error) {
       console.error("Auto-analysis failed:", error);
     } finally {
@@ -1049,110 +635,8 @@ export default function StockDetailScreen() {
   }
 
   async function load() {
-    // Show chart immediately - no loading state
+    // Chart data is now handled directly by KLineProChart via Polygon API
     setLoading(false);
-
-    // Try to get cached data from smart candle manager
-    try {
-      // Special handling: YTD uses daily bars from Jan 1 → now
-      if (selectedTimeframe === "YTD") {
-        const startOfYear = new Date(new Date().getFullYear(), 0, 1).getTime();
-        const ytdDaily = await fetchMarketDataCandlesWindow(
-          symbol,
-          "D",
-          startOfYear,
-          Date.now(),
-          400,
-          undefined, // signal
-          showExtendedHours
-        );
-        setDailySeries(toLWC(ytdDaily));
-        return;
-      }
-      // Use appropriate limit based on timeframe for optimal data coverage
-      const getTimeframeLimit = (tf: string): number => {
-        const tfLower = tf.toLowerCase();
-
-        // Minute timeframes
-        if (tfLower === "1m") return 390; // Full trading day
-        if (tfLower === "2m") return 195; // Full trading day
-        if (tfLower === "3m") return 130; // Full trading day
-        if (tfLower === "4m") return 98; // Full trading day
-        if (tfLower === "5m") return 390; // 2 trading days
-        if (tfLower === "10m") return 195; // 2 trading days
-        if (tfLower === "15m") return 130; // 2 trading days
-        if (tfLower === "30m") return 65; // 2 trading days
-        if (tfLower === "45m") return 87; // ~3 trading days
-
-        // Hour timeframes
-        if (tfLower === "1h") return 156; // ~1 month
-        if (tfLower === "2h") return 78; // ~1 month
-        if (tfLower === "4h") return 120; // ~2 months
-        if (tfLower === "6h") return 80; // ~2 months
-        if (tfLower === "8h") return 60; // ~2 months
-        if (tfLower === "12h") return 40; // ~2 months
-
-        // Daily and longer
-        if (tfLower === "1d") return 390; // Full trading day (1-minute bars)
-        if (tfLower === "1w") return 7; // 1 week
-        if (tfLower === "1m") return 22; // 1 month
-        if (tfLower === "3m") return 66; // 3 months
-        if (tfLower === "6m") return 132; // 6 months
-        if (tfLower === "1y") return 252; // 1 year
-        if (tfLower === "2y") return 104; // 2 years
-        if (tfLower === "5y") return 260; // 5 years
-        if (tfLower === "all") return 600; // All available
-
-        return 500; // Default fallback
-      };
-
-      const limit = getTimeframeLimit(extendedTf);
-      const cachedCandles = await smartCandleManager.getCandles(
-        symbol,
-        extendedTf,
-        limit,
-        showExtendedHours
-      );
-      if (cachedCandles && cachedCandles.length > 0) {
-        console.log(
-          "📈 Loading smart cached chart data for",
-          symbol,
-          extendedTf
-        );
-        setDailySeries(toLWC(cachedCandles));
-      } else if (dailySeries.length === 0) {
-        // Set placeholder data if we don't have cached data
-        const now = Math.floor(Date.now() / 1000);
-        const placeholderPrice = initialQuote?.last || 100;
-        setDailySeries([
-          {
-            time: now,
-            open: placeholderPrice,
-            high: placeholderPrice,
-            low: placeholderPrice,
-            close: placeholderPrice,
-            volume: 0,
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error("Smart cache failed, using placeholder:", error);
-      // Set placeholder data on error
-      if (dailySeries.length === 0) {
-        const now = Math.floor(Date.now() / 1000);
-        const placeholderPrice = initialQuote?.last || 100;
-        setDailySeries([
-          {
-            time: now,
-            open: placeholderPrice,
-            high: placeholderPrice,
-            low: placeholderPrice,
-            close: placeholderPrice,
-            volume: 0,
-          },
-        ]);
-      }
-    }
 
     // Load news and sentiment stats in parallel (truly non-blocking - fire and forget)
     loadNewsInBackground().catch((error) => {
@@ -1163,113 +647,6 @@ export default function StockDetailScreen() {
       console.error("Sentiment stats loading failed:", error);
     });
   }
-
-  // Infinite history handler - TradingView style with rate limiting
-  const handleLoadMoreData = useCallback(
-    async (numberOfBars: number) => {
-      if (!dailySeries.length) return [];
-
-      // Rate limiting: prevent requests more frequent than every 500ms
-      const now = Date.now();
-      const timeSinceLastRequest = now - lastHistoricalRequestRef.current;
-      const minInterval = 500; // 500ms minimum between requests
-
-      if (timeSinceLastRequest < minInterval) {
-        console.log(
-          `⏳ Rate limiting: delaying historical data request by ${
-            minInterval - timeSinceLastRequest
-          }ms`
-        );
-
-        // Clear any existing timeout
-        if (historicalRequestTimeoutRef.current) {
-          clearTimeout(historicalRequestTimeoutRef.current);
-        }
-
-        // Return a promise that resolves after the delay
-        return new Promise<AmChartsDatum[]>((resolve) => {
-          historicalRequestTimeoutRef.current = setTimeout(async () => {
-            try {
-              const result = await handleLoadMoreData(numberOfBars);
-              resolve(result);
-            } catch (error) {
-              console.warn("Delayed historical data request failed:", error);
-              resolve(dailySeries);
-            }
-          }, minInterval - timeSinceLastRequest);
-        });
-      }
-
-      lastHistoricalRequestRef.current = now;
-
-      // Get the earliest date from current data (already in milliseconds)
-      const earliestTime = dailySeries[0].time;
-      const to = earliestTime - 1;
-
-      // Calculate how much historical data to fetch based on timeframe
-      // Use daily spacing for YTD view to keep daily resolution
-      const timeframeMs =
-        selectedTimeframe === "YTD"
-          ? 86_400_000
-          : timeframeSpacingMs(extendedTf);
-      const from = Math.max(0, to - numberOfBars * timeframeMs);
-
-      console.log(`🔄 Loading more historical data for ${symbol}:`, {
-        timeframe: extendedTf,
-        numberOfBars,
-        from: new Date(from).toISOString(),
-        to: new Date(to).toISOString(),
-        earliestCurrent: new Date(earliestTime).toISOString(),
-      });
-
-      try {
-        let olderData: Candle[] | null = null;
-        if (selectedTimeframe === "YTD") {
-          olderData = await fetchMarketDataCandlesWindow(
-            symbol,
-            "D",
-            from,
-            to,
-            Math.max(30, numberOfBars),
-            undefined, // signal
-            showExtendedHours
-          );
-        } else {
-          olderData = await fetchCandlesForTimeframeWindow(
-            symbol,
-            extendedTf,
-            from,
-            to,
-            { includeExtendedHours: showExtendedHours }
-          );
-        }
-        if (olderData?.length) {
-          console.log(
-            `✅ Loaded ${olderData.length} historical candles for ${symbol}`
-          );
-          // Prepend to existing data and return the full dataset (like TradingView example)
-          const updatedData = [...toLWC(olderData), ...dailySeries];
-          setDailySeries(updatedData);
-          return updatedData;
-        }
-        console.log(`⚠️ No historical data returned for ${symbol}`);
-        return dailySeries;
-      } catch (error) {
-        if (error instanceof Error && error.message.includes("429")) {
-          console.warn(`🚫 Rate limited by API for ${symbol}, backing off...`);
-          // Exponential backoff for rate limiting
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-        } else {
-          console.warn(
-            `❌ Historical data request failed for ${symbol}:`,
-            error
-          );
-        }
-        return dailySeries;
-      }
-    },
-    [symbol, extendedTf, dailySeries, selectedTimeframe]
-  );
 
   // Removed custom edge request logic; lazy loading handled in visible range handler
 
@@ -1334,71 +711,12 @@ export default function StockDetailScreen() {
     }
   }
 
-  async function applyExtendedTimeframe(tf: ExtendedTimeframe) {
-    setExtendedTf(tf);
-    setDefaultTimeframe(tf); // Save as user's preferred default
-
-    // Reset view state for new timeframe
-
-    // Update the real-time manager with new timeframe
-    realtimeDataManager.updateTimeframe(tf);
-    // Map extended to simple header pills if applicable
-    const map: Record<string, HeaderTimeframe> = {
-      "1m": "1D",
-      "2m": "1D",
-      "3m": "1D",
-      "4m": "1D",
-      "5m": "1D",
-      "10m": "1D",
-      "15m": "1D",
-      "30m": "1D",
-      "45m": "1D",
-      "1h": "1W",
-      "2h": "1W",
-      "4h": "1M",
-      "1D": "1D",
-      "1W": "1W",
-      "1M": "1M",
-      "3M": "3M",
-      "6M": "1Y",
-      "1Y": "1Y",
-      "2Y": "MAX",
-      "5Y": "5Y",
-      ALL: "MAX",
-    };
-    setSelectedTimeframe(map[tf]);
-
-    // Use smart candle manager for instant timeframe switching
-    try {
-      const candles = await smartCandleManager.getCandles(symbol, tf, 500);
-      if (candles && candles.length > 0) {
-        if (__DEV__) console.log("📈 Smart timeframe switch for", symbol, tf);
-        // Set data with auto-fit enabled for smooth timeframe transitions
-        setDailySeries(toLWC(candles));
-      }
-    } catch (e) {
-      console.warn("Failed to load timeframe candles:", e);
-    }
-  }
-
   // Header timeframe handler (Robinhood-style)
   async function applyHeaderTimeframe(tf: HeaderTimeframe) {
     setSelectedTimeframe(tf);
     if (tf === "YTD") {
       setIsYTDView(true);
-      try {
-        const startOfYear = new Date(new Date().getFullYear(), 0, 1).getTime();
-        const ytdDaily = await fetchMarketDataCandlesWindow(
-          symbol,
-          "D",
-          startOfYear,
-          Date.now(),
-          400
-        );
-        setDailySeries(toLWC(ytdDaily));
-      } catch (e) {
-        console.warn("Failed to load YTD data:", e);
-      }
+      // Chart data now handled by KLineProChart via Polygon API
       // Keep extendedTf as "1D" so spacing works, but realtime disabled below
       setExtendedTf("1D");
       return;
@@ -1416,7 +734,7 @@ export default function StockDetailScreen() {
       MAX: "ALL",
     };
     const target = map[tf];
-    await applyExtendedTimeframe(target);
+    setExtendedTf(target);
   }
 
   // Navigate to chart with signal data
@@ -1511,7 +829,7 @@ export default function StockDetailScreen() {
         }));
 
         // Add aggregated sentiment stats if available
-        if (sentimentStats) {
+        if (sentimentStats && newsBrief) {
           newsBrief.push({
             title: "Market Sentiment Analysis",
             summary: `30-day sentiment: ${
@@ -1557,7 +875,7 @@ export default function StockDetailScreen() {
         symbol,
         mode: "auto",
         candleData: {
-          "1d": d.map((c) => ({
+          "1d": d.map((c: any) => ({
             time: c.time,
             open: c.open,
             high: c.high,
@@ -1565,7 +883,7 @@ export default function StockDetailScreen() {
             close: c.close,
             volume: c.volume,
           })),
-          "1h": h1.map((c) => ({
+          "1h": h1.map((c: any) => ({
             time: c.time,
             open: c.open,
             high: c.high,
@@ -1573,7 +891,7 @@ export default function StockDetailScreen() {
             close: c.close,
             volume: c.volume,
           })),
-          "15m": m15.map((c) => ({
+          "15m": m15.map((c: any) => ({
             time: c.time,
             open: c.open,
             high: c.high,
@@ -1581,7 +899,7 @@ export default function StockDetailScreen() {
             close: c.close,
             volume: c.volume,
           })),
-          "5m": m5.map((c) => ({
+          "5m": m5.map((c: any) => ({
             time: c.time,
             open: c.open,
             high: c.high,
@@ -1639,7 +957,7 @@ export default function StockDetailScreen() {
         // Now create the new signal
         const tradePlan = aiOutputToTradePlan(output);
         const aiMeta = {
-          strategyChosen: String(output.strategyChosen),
+          strategyChosen: String(output.strategyChosen || ""),
           side: output.side,
           confidence: output.confidence,
           why: output.why || [],
@@ -1676,20 +994,7 @@ export default function StockDetailScreen() {
     }
   }
 
-  const latestChartPrice = useMemo(() => {
-    try {
-      return dailySeries && dailySeries.length > 0
-        ? dailySeries[dailySeries.length - 1].close
-        : null;
-    } catch {
-      return null;
-    }
-  }, [dailySeries]);
-  const currentPrice =
-    (latestChartPrice != null ? latestChartPrice : undefined) ??
-    initialQuote?.last ??
-    analysis?.currentPrice ??
-    0;
+  const currentPrice = initialQuote?.last ?? analysis?.currentPrice ?? 0;
 
   // Use real quote deltas when available; otherwise avoid showing potentially incorrect values
   const todayChange =
@@ -1737,17 +1042,6 @@ export default function StockDetailScreen() {
   const currentSession = getMarketSession();
   const showAfterHours = currentSession === "after-hours";
   const showPreMarket = currentSession === "pre-market";
-
-  function toLWC(candles: Candle[]): AmChartsDatum[] {
-    return (candles || []).map((c) => ({
-      time: c.time,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-      volume: c.volume,
-    }));
-  }
 
   async function onSetAlert() {
     await sendLocalNotification(
@@ -1938,7 +1232,7 @@ export default function StockDetailScreen() {
                   chartType,
                   timeframe: extendedTf,
                   initialTimeframe: extendedTf,
-                  initialData: dailySeries,
+                  initialData: [],
                   isDayUp:
                     todayChange !== null && todayChangePercent !== null
                       ? todayChange >= 0
@@ -2604,7 +1898,7 @@ export default function StockDetailScreen() {
           visible={tfModalVisible}
           onClose={() => setTfModalVisible(false)}
           selected={extendedTf}
-          onSelect={(tf) => applyExtendedTimeframe(tf)}
+          onSelect={(tf) => setExtendedTf(tf)}
         />
 
         {/* News */}
@@ -2758,7 +2052,7 @@ export default function StockDetailScreen() {
                         <Pressable
                           key={tf}
                           onPress={() => {
-                            applyExtendedTimeframe(tf as ExtendedTimeframe);
+                            setExtendedTf(tf as ExtendedTimeframe);
                             hideBottomSheet();
                           }}
                           style={{
@@ -2951,9 +2245,7 @@ export default function StockDetailScreen() {
                               <Pressable
                                 key={tf}
                                 onPress={() => {
-                                  applyExtendedTimeframe(
-                                    tf as ExtendedTimeframe
-                                  );
+                                  setExtendedTf(tf as ExtendedTimeframe);
                                   hideBottomSheet();
                                 }}
                                 style={[
@@ -2992,9 +2284,7 @@ export default function StockDetailScreen() {
                               <Pressable
                                 key={tf}
                                 onPress={() => {
-                                  applyExtendedTimeframe(
-                                    tf as ExtendedTimeframe
-                                  );
+                                  setExtendedTf(tf as ExtendedTimeframe);
                                   hideBottomSheet();
                                 }}
                                 style={[
@@ -3043,9 +2333,7 @@ export default function StockDetailScreen() {
                               <Pressable
                                 key={tf}
                                 onPress={() => {
-                                  applyExtendedTimeframe(
-                                    tf as ExtendedTimeframe
-                                  );
+                                  setExtendedTf(tf as ExtendedTimeframe);
                                   hideBottomSheet();
                                 }}
                                 style={[

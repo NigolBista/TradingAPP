@@ -30,7 +30,6 @@ import FocusScreen from "../screens/FocusScreen";
 import MarketOverviewScreen from "../screens/MarketOverviewScreen";
 import MarketOverviewTabScreen from "../screens/MarketOverviewTabScreen";
 import FederalReserveScreen from "../screens/FederalReserveScreen";
-import StockNewsApiDemoScreen from "../screens/StockNewsApiDemoScreen";
 import DecalpXScreen from "../screens/DecalpXScreen";
 import MarketOverviewPage from "../screens/MarketOverviewPage";
 import EarningsCalendarScreen from "../screens/EarningsCalendarScreen";
@@ -168,11 +167,6 @@ export default function RootNavigation() {
             name="FederalReserve"
             component={FederalReserveScreen}
             options={{ headerShown: false }}
-          />
-          <RootStack.Screen
-            name="StockNewsApiDemo"
-            component={StockNewsApiDemoScreen}
-            options={{ headerShown: true, title: "Stock News API Demo" }}
           />
           <RootStack.Screen
             name="DecalpX"

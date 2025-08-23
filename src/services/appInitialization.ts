@@ -53,7 +53,7 @@ export async function initializeApp(): Promise<void> {
       console.log("✅ Earnings data hydrated successfully");
       console.log("✅ Global market data cached successfully");
 
-      // Pre-load watchlist data in background (non-blocking)
+      // Pre-load watchlist quotes in background (non-blocking)
       preloadWatchlistData().catch((error) => {
         console.error("❌ Watchlist pre-loading failed:", error);
       });
@@ -122,7 +122,7 @@ async function preloadWatchlistData(): Promise<void> {
       symbolsArray
     );
 
-    // Pre-load all watchlist data
+    // Pre-load watchlist quotes and subscribe to realtime; charts handled by KLine Pro
     await realtimeDataManager.preloadWatchlistData(symbolsArray);
 
     console.log("✅ Watchlist data pre-loaded successfully");
