@@ -237,8 +237,13 @@ export default function KLineProChart({
             }
           },
           line: {  
-            type: 'line',
-            line: { color: '#2196F3', size: 2, smooth: true },
+            type: 'area',                 // use the "area" series type
+            area: {
+              lineColor: '#2196F3',  
+              lineSize: 1,
+              smooth: true,
+              backgroundColor: 'rgba(0,0,0,0)',
+            },
             tooltip: { showRule: 'none' },
             priceMark: {
               show: false,
@@ -252,7 +257,7 @@ export default function KLineProChart({
             area: { 
               lineColor: '#2196F3', 
               fillColor: 'rgba(33, 150, 243, 0.1)', 
-              lineSize: 2,
+              lineSize: 1,
               smooth: true 
             },
             tooltip: { showRule: 'none' },
@@ -291,7 +296,7 @@ export default function KLineProChart({
             
             // Method 3: Try direct chart type setting
             var chartTypeMap = {
-              'line': 'timeLine',
+              'line': 'area',           // line charts now use area type with transparent background
               'candle': 'candle_solid', 
               'area': 'area'
             };
@@ -473,11 +478,24 @@ export default function KLineProChart({
 
             ${
               lineOnly
-                ? `// Switch to simple line style using only chart APIs
+                ? `// Switch to simple line style using area type with transparent background
             (function(){
               function toLine(){
-                try { if (chart && typeof chart.setMainChartType === 'function') { chart.setMainChartType('timeLine'); } } catch(e) {}
-                try { if (chart && typeof chart.setStyleOptions === 'function') { chart.setStyleOptions({ candle: { type: 'line' } }); } } catch(e) {}
+                try { if (chart && typeof chart.setMainChartType === 'function') { chart.setMainChartType('area'); } } catch(e) {}
+                try { if (chart && typeof chart.setStyleOptions === 'function') { 
+                  chart.setStyleOptions({ 
+                    candle: { 
+                      type: 'area',
+                      area: {
+                        lineSize: 2,
+                        lineColor: '#2b6cb0',
+                        smooth: true,
+                        backgroundColor: 'rgba(0,0,0,0)',
+                        point: { show: false }
+                      }
+                    } 
+                  }); 
+                } } catch(e) {}
               }
               toLine();
               setTimeout(toLine, 80);
