@@ -61,6 +61,10 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       openaiApiKey: process.env.OPENAI_API_KEY,
       fredApiKey: process.env.FRED_API_KEY,
       marketProvider: process.env.MARKET_PROVIDER || "polygon",
+      quotesProvider:
+        process.env.QUOTES_PROVIDER ||
+        process.env.MARKET_PROVIDER ||
+        "marketData",
       stockNewsApiKey: process.env.STOCK_NEWS_API_KEY,
       newsProvider: process.env.NEWS_PROVIDER || "stocknewsapi",
       plaidClientId: process.env.PLAID_CLIENT_ID,

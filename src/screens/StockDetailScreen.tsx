@@ -49,8 +49,8 @@ type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
 };
 
-// Robinhood-style header timeframes for this screen only
-type HeaderTimeframe = "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "5Y" | "MAX";
+// Simplified header timeframes for this screen only
+type HeaderTimeframe = "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "5Y" | "ALL";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
@@ -731,7 +731,7 @@ export default function StockDetailScreen() {
       YTD: "1D", // not used (handled above)
       "1Y": "1Y",
       "5Y": "5Y",
-      MAX: "ALL",
+      ALL: "ALL",
     };
     const target = map[tf];
     setExtendedTf(target);
@@ -1163,7 +1163,7 @@ export default function StockDetailScreen() {
         {/* Chart Section */}
         <View style={styles.chartSection}>
           {/* Chart */}
-          <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
+          <View style={styles.chartContainer}>
             <KLineProChart
               symbol={symbol}
               timeframe={
@@ -1173,6 +1173,8 @@ export default function StockDetailScreen() {
               theme="dark"
               locale="en-US"
               market="stocks"
+              minimalUi
+              lineOnly
             />
           </View>
 
@@ -1193,7 +1195,7 @@ export default function StockDetailScreen() {
                   "YTD",
                   "1Y",
                   "5Y",
-                  "MAX",
+                  "ALL",
                 ] as HeaderTimeframe[]
               ).map((tf) => {
                 const isSelected = selectedTimeframe === tf;
@@ -1217,7 +1219,7 @@ export default function StockDetailScreen() {
                         textTransform: "uppercase",
                       }}
                     >
-                      {tf === "MAX" ? "MAX" : tf}
+                      {tf}
                     </Text>
                   </Pressable>
                 );
