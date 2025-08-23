@@ -9,54 +9,80 @@ export type SimpleQuote = {
   updated?: number; // epoch seconds from API
 };
 
-// No caching - direct Polygon API calls only
-
-// Removed MarketData.app quotes support; Polygon-only now
-
-export async function fetchSingleQuote(
-  symbol: string,
-  providerOverride?: "marketData" | "polygon"
-): Promise<SimpleQuote> {
-  const cfg = (Constants.expoConfig?.extra as any) || {};
-  const provider =
-    providerOverride ||
-    cfg.quotesProvider ||
-    cfg.marketProvider ||
-    "marketData";
-
-  if (provider === "polygon") {
-    const { fetchPolygonSingleQuote } = await import("./polygonQuotes");
-    return await fetchPolygonSingleQuote(symbol);
-  }
-
-  const { fetchMarketDataSingleQuote } = await import("./marketDataQuotes");
-  return await fetchMarketDataSingleQuote(symbol);
+function buildAuthHeaders(): Record<string, string> {
+  const token = (Constants.expoConfig?.extra as any)?.marketDataApiToken;
+  return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
 export async function fetchBulkQuotes(
-  symbols: string[],
-  providerOverride?: "marketData" | "polygon"
+  symbols: string[]
 ): Promise<Record<string, SimpleQuote>> {
-  const cfg = (Constants.expoConfig?.extra as any) || {};
-  const provider =
-    providerOverride ||
-    cfg.quotesProvider ||
-    cfg.marketProvider ||
-    "marketData";
+  if (!symbols || symbols.length === 0) return {};
 
-  if (provider === "polygon") {
-    const { fetchPolygonBulkQuotes } = await import("./polygonQuotes");
-    return await fetchPolygonBulkQuotes(symbols);
+  const params = encodeURIComponent(symbols.join(","));
+  const url = `https://api.marketdata.app/v1/stocks/bulkquotes/?symbols=${params}`;
+  const headers = { ...buildAuthHeaders(), "Content-Type": "application/json" };
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) {
+    throw new Error(`Bulk quotes HTTP ${res.status}`);
   }
 
-  const { fetchMarketDataBulkQuotes } = await import("./marketDataQuotes");
-  return await fetchMarketDataBulkQuotes(symbols);
+  const json = await res.json();
+  if (json?.s !== "ok") {
+    throw new Error(`Bulk quotes API error: ${json?.errmsg || "unknown"}`);
+  }
+
+  const syms: string[] = json.symbol || [];
+  const last: number[] = json.last || [];
+  const change: number[] = json.change || [];
+  const changepct: number[] = json.changepct || [];
+  const volume: number[] = json.volume || [];
+  const updated: number[] = json.updated || [];
+
+  const out: Record<string, SimpleQuote> = {};
+  for (let i = 0; i < syms.length; i++) {
+    const s = syms[i];
+    const q: SimpleQuote = {
+      symbol: s,
+      last: Number(last[i] ?? 0) || 0,
+      change: Number(change[i] ?? 0) || 0,
+      changePercent: Number(changepct[i] ?? 0) * 100 || 0, // API returns fraction; convert to %
+      volume: Number(volume[i] ?? 0) || 0,
+      updated: Number(updated[i] ?? 0) || undefined,
+    };
+    out[s] = q;
+  }
+  return out;
 }
 
-// Backward-compatible alias: caching layer was removed, delegate to fetchBulkQuotes
+export async function fetchSingleQuote(symbol: string): Promise<SimpleQuote> {
+  const url = `https://api.marketdata.app/v1/stocks/quotes/${encodeURIComponent(
+    symbol
+  )}`;
+  const headers = { ...buildAuthHeaders(), "Content-Type": "application/json" };
+
+  const res = await fetch(url, { headers });
+  if (!res.ok) throw new Error(`Quote HTTP ${res.status}`);
+
+  const j = await res.json();
+  if (j?.s !== "ok")
+    throw new Error(`Quote API error: ${j?.errmsg || "unknown"}`);
+
+  const q: SimpleQuote = {
+    symbol: j.symbol || symbol,
+    last: Number(j.last ?? 0) || 0,
+    change: Number(j.change ?? 0) || 0,
+    changePercent: Number(j.changepct ?? 0) * 100 || 0, // API returns fraction; convert to %
+    volume: Number(j.volume ?? 0) || 0,
+    updated: Number(j.updated ?? 0) || undefined,
+  };
+  return q;
+}
+
+// Backward-compatible alias
 export async function fetchAndCacheBulkQuotes(
-  symbols: string[],
-  providerOverride?: "marketData" | "polygon"
+  symbols: string[]
 ): Promise<Record<string, SimpleQuote>> {
-  return await fetchBulkQuotes(symbols, providerOverride);
+  return await fetchBulkQuotes(symbols);
 }
