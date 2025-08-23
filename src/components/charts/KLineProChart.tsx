@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
@@ -33,6 +33,7 @@ interface Props {
   lineOnly?: boolean;
   hideVolumePane?: boolean;
   hideIndicatorPane?: boolean;
+  chartType?: "candle" | "line" | "area";
 }
 
 // Canonical timeframe map for display and datafeed period settings
@@ -139,11 +140,13 @@ export default function KLineProChart({
   lineOnly = false,
   hideVolumePane = false,
   hideIndicatorPane = false,
+  chartType,
 }: Props) {
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
 
   const period = useMemo(() => mapTimeframeToPeriod(timeframe), [timeframe]);
+  const webRef = useRef<any>(null);
 
   const html = useMemo(() => {
     const compactUi = minimalUi || lineOnly;
@@ -244,6 +247,29 @@ export default function KLineProChart({
         function post(msg){ try { window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch(e) {} }
         window.onerror = function(m, s, l, c, e){ post({ error: m || (e && e.message) || 'unknown' }); };
         (function(){ var ce = console.error, cl = console.log; console.error = function(){ try{ post({ consoleError: Array.from(arguments).join(' ') }); }catch(_){} ce && ce.apply(console, arguments); }; console.log = function(){ try{ post({ consoleLog: Array.from(arguments).join(' ') }); }catch(_){} cl && cl.apply(console, arguments); }; })();
+
+        // Chart type styles mapping
+        var CHART_TYPES = {
+          candle: { type: 'candle' },
+          line: {
+            type: 'line',
+            line: { color: '#2196F3', size: 1, smooth: true }
+          },
+          area: {
+            type: 'area',
+            area: { lineColor: '#2196F3', fillColor: 'rgba(33, 150, 243, 0.1)', lineSize: 1 }
+          }
+        };
+        function applyChartType(chart, type){
+          try {
+            var style = CHART_TYPES[type] || CHART_TYPES.candle;
+            if (chart && typeof chart.setStyleOptions === 'function') {
+              chart.setStyleOptions({ candle: style });
+            } else if (chart && typeof chart.setStyles === 'function') {
+              chart.setStyles({ candle: style });
+            }
+          } catch (e) { post({ warn: 'setChartType failed: ' + (e && e.message) }); }
+        }
         function create(){
           try {
             if (!window.klinechartspro) { return false; }
@@ -263,32 +289,15 @@ export default function KLineProChart({
     )}, exchange: 'XNAS', priceCurrency: 'usd', shortName: ${JSON.stringify(
       safeSymbol
     )} },
-              ${lineOnly ? `mainChartType: 'timeLine',` : ""}
               period: ${JSON.stringify(period)},
               periods: [], // Hide timeframe buttons
               mainIndicators: [], // Remove MA and other main indicators
               subIndicators: [], // Remove volume and other sub-indicators
               styles: {
-                // candle: {
-                //   type: 'line',
-                //   line: {
-                //     color: '#2196F3',
-                //     size: 1,
-                //     smooth: true
-                //   }
-                // },
-                xAxis: {
-                  show: false // Hide time axis
-                },
-                yAxis: {
-                  show: false // Hide price axis
-                },
-                grid: {
-                  show: false // Hide grid lines
-                },
-                indicator: {
-                  show: false // Hide all indicators
-                }
+                xAxis: { show: false },
+                yAxis: { show: false },
+                grid: { show: false },
+                indicator: { show: false }
               },
               drawingBarVisible: false, // Hide drawing tools
               datafeed,
@@ -310,7 +319,7 @@ export default function KLineProChart({
                   : ""
               }
             });
-            
+
             ${""}
 
             ${""}
@@ -363,6 +372,7 @@ export default function KLineProChart({
   return (
     <View style={[styles.container, { height }]}>
       <WebView
+        ref={webRef}
         key={`${symbol}-${period.timespan}-${period.multiplier}`}
         originWhitelist={["*"]}
         source={{ html }}
@@ -376,6 +386,15 @@ export default function KLineProChart({
           try {
             const msg = JSON.parse(e.nativeEvent.data);
             if (__DEV__) console.log("KLineProChart:", msg);
+            // if (msg && msg.ready && chartType && webRef.current) {
+            //   try {
+            //     webRef.current.injectJavaScript(
+            //       `(function(){ try{ if(window.__KLP__&&window.__KLP__.setChartType){ window.__KLP__.setChartType(${JSON.stringify(
+            //         chartType
+            //       )}); } }catch(e){} })();`
+            //     );
+            //   } catch {}
+            // }
           } catch (err) {
             if (__DEV__) console.log("KLineProChart:", e.nativeEvent.data);
           }

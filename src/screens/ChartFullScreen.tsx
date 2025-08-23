@@ -881,6 +881,9 @@ export default function ChartFullScreen() {
           theme={scheme === "dark" ? "dark" : "light"}
           locale="en-US"
           market="stocks"
+          chartType={
+            chartType === "candlestick" ? "candle" : (chartType as any)
+          }
           hideVolumePane
           hideIndicatorPane
         />

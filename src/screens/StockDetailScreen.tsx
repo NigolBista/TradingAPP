@@ -1202,8 +1202,10 @@ export default function StockDetailScreen() {
               theme="dark"
               locale="en-US"
               market="stocks"
+              chartType={
+                chartType === "candlestick" ? "candle" : (chartType as any)
+              }
               minimalUi
-              lineOnly
               hideVolumePane
               hideIndicatorPane
             />
@@ -1217,23 +1219,16 @@ export default function StockDetailScreen() {
               contentContainerStyle={{ alignItems: "center" }}
               style={{ flex: 1 }}
             >
-              {(
-                [
-                  "1D",
-                  "1W",
-                  "1M",
-                  "3M",
-                  "YTD",
-                  "1Y",
-                  "5Y",
-                  "ALL",
-                ] as HeaderTimeframe[]
-              ).map((tf) => {
-                const isSelected = selectedTimeframe === tf;
+              {/* Dynamic Pinned Timeframes */}
+              {pinned.map((tf) => {
+                const isSelected = extendedTf === tf;
                 return (
                   <Pressable
-                    key={`hdr-${tf}`}
-                    onPress={() => applyHeaderTimeframe(tf)}
+                    key={`tf-${tf}`}
+                    onPress={() => {
+                      setExtendedTf(tf);
+                      setDefaultTimeframe(tf); // Save as user's preferred default
+                    }}
                     style={{
                       paddingHorizontal: 14,
                       paddingVertical: 8,
@@ -1247,7 +1242,6 @@ export default function StockDetailScreen() {
                         color: isSelected ? "#000" : "#ccc",
                         fontWeight: "700",
                         fontSize: 12,
-                        textTransform: "uppercase",
                       }}
                     >
                       {tf}
@@ -1257,30 +1251,42 @@ export default function StockDetailScreen() {
               })}
             </ScrollView>
 
-            {/* Expand Button */}
-            <Pressable
-              onPress={() =>
-                (navigation as any).navigate("ChartFullScreen", {
-                  symbol,
-                  chartType,
-                  timeframe: extendedTf,
-                  initialTimeframe: extendedTf,
-                  initialData: [],
-                  isDayUp:
-                    todayChange !== null && todayChangePercent !== null
-                      ? todayChange >= 0
-                      : undefined,
-                  ...(cachedSignal && {
-                    tradePlan: cachedSignal.tradePlan,
-                    ai: cachedSignal.aiMeta,
-                    analysisContext: cachedSignal.analysisContext,
-                  }),
-                })
-              }
-              style={styles.expandButton}
-            >
-              <Ionicons name="expand" size={16} color="#fff" />
-            </Pressable>
+            {/* Settings and Expand Buttons */}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {/* Settings Button */}
+              <Pressable
+                onPress={() => showUnifiedBottomSheetWithTab("timeframe")}
+                style={[styles.expandButton]}
+                hitSlop={10}
+              >
+                <Ionicons name="settings-outline" size={16} color="#fff" />
+              </Pressable>
+
+              {/* Expand Button */}
+              <Pressable
+                onPress={() =>
+                  (navigation as any).navigate("ChartFullScreen", {
+                    symbol,
+                    chartType,
+                    timeframe: extendedTf,
+                    initialTimeframe: extendedTf,
+                    initialData: [],
+                    isDayUp:
+                      todayChange !== null && todayChangePercent !== null
+                        ? todayChange >= 0
+                        : undefined,
+                    ...(cachedSignal && {
+                      tradePlan: cachedSignal.tradePlan,
+                      ai: cachedSignal.aiMeta,
+                      analysisContext: cachedSignal.analysisContext,
+                    }),
+                  })
+                }
+                style={styles.expandButton}
+              >
+                <Ionicons name="expand" size={16} color="#fff" />
+              </Pressable>
+            </View>
           </View>
 
           {/* Horizontal Separator */}
