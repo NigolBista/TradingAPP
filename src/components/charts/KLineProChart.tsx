@@ -35,6 +35,28 @@ interface Props {
   hideIndicatorPane?: boolean;
 }
 
+// Canonical timeframe map for display and datafeed period settings
+const TIMEFRAMES: Record<
+  string,
+  { multiplier: number; timespan: string; text: string }
+> = {
+  "1m": { multiplier: 1, timespan: "minute", text: "1m" },
+  "3m": { multiplier: 3, timespan: "minute", text: "3m" },
+  "5m": { multiplier: 5, timespan: "minute", text: "5m" },
+  "15m": { multiplier: 15, timespan: "minute", text: "15m" },
+  "1h": { multiplier: 1, timespan: "hour", text: "1H" },
+  "4h": { multiplier: 4, timespan: "hour", text: "4H" },
+  "1d": { multiplier: 1, timespan: "day", text: "D" },
+  "1w": { multiplier: 1, timespan: "week", text: "W" },
+  "1M": { multiplier: 1, timespan: "month", text: "M" },
+  "3M": { multiplier: 3, timespan: "month", text: "3M" },
+  "1Y": { multiplier: 1, timespan: "year", text: "1Y" },
+  "5Y": { multiplier: 5, timespan: "year", text: "5Y" },
+  // Additional commonly used keys kept for compatibility with external controls
+  "6M": { multiplier: 6, timespan: "month", text: "6M" },
+  "2Y": { multiplier: 2, timespan: "year", text: "2Y" },
+};
+
 function mapTimeframeToPeriod(tf: string | undefined): {
   multiplier: number;
   timespan: string;
@@ -43,51 +65,67 @@ function mapTimeframeToPeriod(tf: string | undefined): {
   const raw = (tf || "1d") as string;
   const lower = raw.toLowerCase();
 
-  // Handle month/year timeframes first (uppercase M and Y)
-  if (raw === "1M") return { multiplier: 1, timespan: "month", text: "1M" };
-  if (raw === "3M") return { multiplier: 3, timespan: "month", text: "3M" };
-  if (raw === "6M") return { multiplier: 6, timespan: "month", text: "6M" };
-  if (raw === "1Y") return { multiplier: 1, timespan: "year", text: "1Y" };
-  if (raw === "5Y") return { multiplier: 5, timespan: "year", text: "5Y" };
+  // Normalize common aliases/case
+  const normalized =
+    raw === "1D"
+      ? "1d"
+      : raw === "1W"
+      ? "1w"
+      : raw === "1H"
+      ? "1h"
+      : raw === "4H"
+      ? "4h"
+      : raw === "6M"
+      ? "6M"
+      : raw === "1M"
+      ? "1M"
+      : raw === "3M"
+      ? "3M"
+      : raw === "1Y"
+      ? "1Y"
+      : raw === "2Y"
+      ? "2Y"
+      : raw === "5Y"
+      ? "5Y"
+      : lower;
 
-  // Handle minute timeframes (lowercase m only)
+  // Direct map if available
+  if (TIMEFRAMES[normalized]) return TIMEFRAMES[normalized];
+
+  // Special ALL range (max)
+  if (raw === "ALL") return { multiplier: 1, timespan: "month", text: "ALL" };
+
+  // Generic fallbacks for minutes/hours
   if (lower.endsWith("m") && raw.endsWith("m")) {
     const n = parseInt(lower.replace("m", "")) || 1;
     return { multiplier: n, timespan: "minute", text: `${n}m` };
   }
-
-  // Handle hour timeframes (1h, 2h, 4h, etc.)
   if (lower.endsWith("h")) {
     const n = parseInt(lower.replace("h", "")) || 1;
-    return { multiplier: n, timespan: "hour", text: `${n}h` };
+    return { multiplier: n, timespan: "hour", text: `${n}H` };
   }
 
-  // Handle day/week timeframes (accept both upper and lowercase)
-  if (lower === "1d" || raw === "1D")
-    return { multiplier: 1, timespan: "day", text: "1D" };
-  if (lower === "1w" || raw === "1W")
-    return { multiplier: 1, timespan: "week", text: "1W" };
+  // Days/weeks default
+  if (lower === "1d") return TIMEFRAMES["1d"];
+  if (lower === "1w") return TIMEFRAMES["1w"];
 
-  // Handle ALL timeframe (use monthly for maximum range)
-  if (raw === "ALL") return { multiplier: 1, timespan: "month", text: "ALL" };
-
-  // Default fallback
-  return { multiplier: 1, timespan: "day", text: "1D" };
+  // Default fallback to daily
+  return TIMEFRAMES["1d"];
 }
 
 const DEFAULT_PERIODS = [
-  { multiplier: 1, timespan: "minute", text: "1m" },
-  { multiplier: 3, timespan: "minute", text: "3m" },
-  { multiplier: 5, timespan: "minute", text: "5m" },
-  { multiplier: 15, timespan: "minute", text: "15m" },
-  { multiplier: 1, timespan: "hour", text: "1h" },
-  { multiplier: 4, timespan: "hour", text: "4h" },
-  { multiplier: 1, timespan: "day", text: "1D" },
-  { multiplier: 1, timespan: "week", text: "1W" },
-  { multiplier: 1, timespan: "month", text: "1M" },
-  { multiplier: 3, timespan: "month", text: "3M" },
-  { multiplier: 1, timespan: "year", text: "1Y" },
-  { multiplier: 5, timespan: "year", text: "5Y" },
+  TIMEFRAMES["1m"],
+  TIMEFRAMES["3m"],
+  TIMEFRAMES["5m"],
+  TIMEFRAMES["15m"],
+  TIMEFRAMES["1h"],
+  TIMEFRAMES["4h"],
+  TIMEFRAMES["1d"],
+  TIMEFRAMES["1w"],
+  TIMEFRAMES["1M"],
+  TIMEFRAMES["3M"],
+  TIMEFRAMES["1Y"],
+  TIMEFRAMES["5Y"],
 ];
 
 export default function KLineProChart({
@@ -105,10 +143,7 @@ export default function KLineProChart({
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
 
-  const period = useMemo(
-    () => mapTimeframeToPeriod(timeframe as SupportedTimeframe),
-    [timeframe]
-  );
+  const period = useMemo(() => mapTimeframeToPeriod(timeframe), [timeframe]);
 
   const html = useMemo(() => {
     const compactUi = minimalUi || lineOnly;
@@ -145,6 +180,11 @@ export default function KLineProChart({
         --klinecharts-pro-selected-color: rgba(0, 212, 170, 0.15);
       }
       
+      /* hide only timeframe chips */
+      .klinecharts-pro-period-bar .item.period { display: none !important; }
+      /* or hide the whole period bar */
+      .klinecharts-pro-period-bar { display: none !important; }
+
       /* Remove any watermark/logo/background icons */
       .klinecharts-pro-watermark,
       .klinecharts-watermark,
@@ -225,9 +265,33 @@ export default function KLineProChart({
     )} },
               ${lineOnly ? `mainChartType: 'timeLine',` : ""}
               period: ${JSON.stringify(period)},
-              periods: ${JSON.stringify(DEFAULT_PERIODS)},
+              periods: [], // Hide timeframe buttons
+              mainIndicators: [], // Remove MA and other main indicators
+              subIndicators: [], // Remove volume and other sub-indicators
+              styles: {
+                // candle: {
+                //   type: 'line',
+                //   line: {
+                //     color: '#2196F3',
+                //     size: 1,
+                //     smooth: true
+                //   }
+                // },
+                xAxis: {
+                  show: false // Hide time axis
+                },
+                yAxis: {
+                  show: false // Hide price axis
+                },
+                grid: {
+                  show: false // Hide grid lines
+                },
+                indicator: {
+                  show: false // Hide all indicators
+                }
+              },
+              drawingBarVisible: false, // Hide drawing tools
               datafeed,
-              subIndicators: [], // Remove all sub-indicators including volume
               ${
                 compactUi || hideVolumePane || hideIndicatorPane
                   ? `layout: {
