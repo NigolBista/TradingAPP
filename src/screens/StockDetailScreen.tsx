@@ -1189,7 +1189,7 @@ export default function StockDetailScreen() {
         </View>
       </View>
 
-      <ScrollView style={{ flex: 1 }}>
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
         {/* Chart Section */}
         <View style={styles.chartSection}>
           {/* Chart */}

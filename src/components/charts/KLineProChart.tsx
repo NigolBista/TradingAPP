@@ -15,6 +15,7 @@ interface Props {
   hideVolumePane?: boolean;
   hideIndicatorPane?: boolean;
   chartType?: "candle" | "line" | "area";
+  showYAxis?: boolean; // Controls yAxis visibility - defaults to false
 }
 
 // Canonical timeframe map for display and datafeed period settings
@@ -104,6 +105,7 @@ export default function KLineProChart({
   hideVolumePane = false,
   hideIndicatorPane = false,
   chartType,
+  showYAxis = false,
 }: Props) {
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
@@ -387,15 +389,16 @@ export default function KLineProChart({
                   }
                 },
                 yAxis: { 
-                  show: false,      // Hides price axis
+                  show: ${showYAxis},      // Controls price axis visibility
+                  scrollZoomEnabled: ${showYAxis},
                   axisLine: {
-                    show: false    // Hides axis line
+                    show: ${showYAxis}    // Controls axis line visibility
                   },
                   tickLine: {
-                    show: false    // Hides tick lines
+                    show: ${showYAxis}    // Controls tick lines visibility
                   },
                   tickText: {
-                    show: false    // Hides tick text
+                    show: ${showYAxis}    // Controls tick text visibility
                   }
                 },
                 grid: { show: false },
