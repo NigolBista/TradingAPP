@@ -70,7 +70,7 @@ type RootStackParamList = {
 };
 
 // Robinhood-style header timeframes for this screen only
-type HeaderTimeframe = "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "5Y" | "MAX";
+type HeaderTimeframe = "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "5Y";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
@@ -1330,6 +1330,7 @@ export default function StockDetailScreen() {
   }
 
   async function applyExtendedTimeframe(tf: ExtendedTimeframe) {
+    console.log(`🎯 Applying extended timeframe: ${tf}`);
     setExtendedTf(tf);
     setDefaultTimeframe(tf); // Save as user's preferred default
 
@@ -1357,9 +1358,9 @@ export default function StockDetailScreen() {
       "3M": "3M",
       "6M": "1Y",
       "1Y": "1Y",
-      "2Y": "MAX",
+      "2Y": "5Y",
       "5Y": "5Y",
-      ALL: "MAX",
+      ALL: "5Y",
     };
     setSelectedTimeframe(map[tf]);
 
@@ -1378,6 +1379,7 @@ export default function StockDetailScreen() {
 
   // Header timeframe handler (Robinhood-style)
   async function applyHeaderTimeframe(tf: HeaderTimeframe) {
+    console.log(`📊 Header timeframe clicked: ${tf}`);
     setSelectedTimeframe(tf);
     if (tf === "YTD") {
       setIsYTDView(true);
@@ -1408,7 +1410,6 @@ export default function StockDetailScreen() {
       YTD: "1D", // not used (handled above)
       "1Y": "1Y",
       "5Y": "5Y",
-      MAX: "ALL",
     };
     const target = map[tf];
     await applyExtendedTimeframe(target);
@@ -1868,23 +1869,28 @@ export default function StockDetailScreen() {
             <TradingViewMiniChart
               symbol={symbol}
               height={280}
-              dateRange={
-                selectedTimeframe === "1D"
-                  ? "1D"
-                  : selectedTimeframe === "1W"
-                  ? "5D"
-                  : selectedTimeframe === "1M"
-                  ? "1M"
-                  : selectedTimeframe === "3M"
-                  ? "3M"
-                  : selectedTimeframe === "YTD"
-                  ? "YTD"
-                  : selectedTimeframe === "1Y"
-                  ? "1Y"
-                  : selectedTimeframe === "5Y"
-                  ? "5Y"
-                  : "ALL"
-              }
+              dateRange={(() => {
+                const range =
+                  selectedTimeframe === "1D"
+                    ? "1D"
+                    : selectedTimeframe === "1W"
+                    ? "5D"
+                    : selectedTimeframe === "1M"
+                    ? "1M"
+                    : selectedTimeframe === "3M"
+                    ? "3M"
+                    : selectedTimeframe === "YTD"
+                    ? "YTD"
+                    : selectedTimeframe === "1Y"
+                    ? "1Y"
+                    : selectedTimeframe === "5Y"
+                    ? "5Y"
+                    : "5Y"; // Default to 5Y instead of ALL
+                console.log(
+                  `📈 TradingView dateRange: ${selectedTimeframe} → ${range}`
+                );
+                return range;
+              })()}
               theme="dark"
               isTransparent={true}
               trendLineColor="#00D4AA"
@@ -1902,16 +1908,7 @@ export default function StockDetailScreen() {
               style={{ flex: 1 }}
             >
               {(
-                [
-                  "1D",
-                  "1W",
-                  "1M",
-                  "3M",
-                  "YTD",
-                  "1Y",
-                  "5Y",
-                  "MAX",
-                ] as HeaderTimeframe[]
+                ["1D", "1W", "1M", "3M", "YTD", "1Y", "5Y"] as HeaderTimeframe[]
               ).map((tf) => {
                 const isSelected = selectedTimeframe === tf;
                 return (
@@ -1934,7 +1931,7 @@ export default function StockDetailScreen() {
                         textTransform: "uppercase",
                       }}
                     >
-                      {tf === "MAX" ? "MAX" : tf}
+                      {tf}
                     </Text>
                   </Pressable>
                 );

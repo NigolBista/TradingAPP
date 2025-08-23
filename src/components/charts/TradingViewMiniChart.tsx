@@ -51,6 +51,30 @@ export default function TradingViewMiniChart({
     const widgetWidth = typeof width === "number" ? `${width}px` : width;
     const widgetHeight = autosize ? "100%" : `${height}px`;
 
+    // Map dateRange to TradingView interval
+    const getInterval = (range: string) => {
+      switch (range) {
+        case "1D":
+          return "5"; // 5 minute intervals for 1 day
+        case "5D":
+          return "30"; // 30 minute intervals for 5 days (1 week view)
+        case "1M":
+          return "60"; // 1 hour intervals for 1 month
+        case "3M":
+          return "240"; // 4 hour intervals for 3 months
+        case "6M":
+        case "YTD":
+        case "1Y":
+          return "D"; // Daily intervals for 1 year
+        case "5Y":
+        case "ALL":
+        default:
+          return "W"; // Weekly intervals for 5 years and beyond
+      }
+    };
+
+    const interval = getInterval(dateRange);
+
     return `<!doctype html><html><head>
       <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
       <style>
@@ -78,7 +102,7 @@ export default function TradingViewMiniChart({
             try {
               new TradingView.widget({
                 symbol: ${JSON.stringify(safeSymbol)},
-                interval: "D",
+                interval: ${JSON.stringify(interval)},
                 container_id: "tvchart",
                 autosize: true,
                 theme: ${JSON.stringify(resolvedTheme)},
