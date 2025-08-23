@@ -56,8 +56,22 @@ function cleanupCache() {
   }
 }
 
-// Run cleanup every 10 minutes
-setInterval(cleanupCache, 10 * 60 * 1000);
+// Run cleanup every 10 minutes (singleton guard)
+let cleanupInterval: any = (globalThis as any).__NEWS_CACHE_CLEANUP__;
+if (!cleanupInterval) {
+  cleanupInterval = setInterval(cleanupCache, 10 * 60 * 1000);
+  (globalThis as any).__NEWS_CACHE_CLEANUP__ = cleanupInterval;
+}
+
+export function stopNewsCacheCleanup() {
+  try {
+    const existing = (globalThis as any).__NEWS_CACHE_CLEANUP__;
+    if (existing) {
+      clearInterval(existing);
+      (globalThis as any).__NEWS_CACHE_CLEANUP__ = null;
+    }
+  } catch {}
+}
 
 async function fetchJson(url: string, headers: Record<string, string> = {}) {
   const res = await fetch(url, { headers });

@@ -35,11 +35,7 @@ import StockAutocomplete from "../components/common/StockAutocomplete";
 import AddToWatchlistModal from "../components/common/AddToWatchlistModal";
 import SwipeableStockItem from "../components/common/SwipeableStockItem";
 import { useTheme } from "../providers/ThemeProvider";
-import {
-  getCachedQuotes,
-  fetchAndCacheBulkQuotes,
-  type SimpleQuote,
-} from "../services/quotes";
+import { fetchBulkQuotes, type SimpleQuote } from "../services/quotes";
 import { realtimeDataManager } from "../services/realtimeDataManager";
 import { useFocusEffect } from "@react-navigation/native";
 
@@ -247,18 +243,16 @@ interface StockData extends ScanResult {
 export default function WatchlistScreen() {
   const navigation = useNavigation();
   const { theme } = useTheme();
-  const {
-    profile,
-    getActiveWatchlist,
-    createWatchlist,
-    deleteWatchlist,
-    addToWatchlist,
-    removeFromWatchlist,
-    toggleFavorite,
-    toggleGlobalFavorite,
-    isGlobalFavorite,
-    setActiveWatchlist,
-  } = useUserStore();
+  const profile = useUserStore((s) => s.profile);
+  const getActiveWatchlist = useUserStore((s) => s.getActiveWatchlist);
+  const createWatchlist = useUserStore((s) => s.createWatchlist);
+  const deleteWatchlist = useUserStore((s) => s.deleteWatchlist);
+  const addToWatchlist = useUserStore((s) => s.addToWatchlist);
+  const removeFromWatchlist = useUserStore((s) => s.removeFromWatchlist);
+  const toggleFavorite = useUserStore((s) => s.toggleFavorite);
+  const toggleGlobalFavorite = useUserStore((s) => s.toggleGlobalFavorite);
+  const isGlobalFavorite = useUserStore((s) => s.isGlobalFavorite);
+  const setActiveWatchlist = useUserStore((s) => s.setActiveWatchlist);
 
   const styles = createStyles(theme);
 
@@ -314,11 +308,12 @@ export default function WatchlistScreen() {
 
       const symbols = computeSymbols();
       if (symbols && symbols.length > 0) {
-        console.log(
-          "🔄 Starting watchlist refresh for",
-          symbols.length,
-          "stocks"
-        );
+        if (__DEV__)
+          console.log(
+            "🔄 Starting watchlist refresh for",
+            symbols.length,
+            "stocks"
+          );
         realtimeDataManager.startWatchlistRefresh(symbols, () => {
           // Refresh callback - update the UI when new data arrives
           setRefreshing(false); // Ensure refresh indicator is off
@@ -326,7 +321,7 @@ export default function WatchlistScreen() {
       }
 
       return () => {
-        console.log("⏹️ Stopping watchlist refresh");
+        if (__DEV__) console.log("⏹️ Stopping watchlist refresh");
         realtimeDataManager.stopWatchlistRefresh();
       };
     }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists])
@@ -354,7 +349,7 @@ export default function WatchlistScreen() {
       if (!symbols || symbols.length === 0) return;
 
       try {
-        const cached = await getCachedQuotes(symbols);
+        const cached = await fetchBulkQuotes(symbols);
         if (!isMounted) return;
 
         const signature = symbols
@@ -508,8 +503,8 @@ export default function WatchlistScreen() {
       );
       Object.assign(companyNamesRef.current, nameMap);
 
-      // Show cached quotes immediately if available
-      const cached = await getCachedQuotes(symbols);
+      // Fetch fresh quotes from Polygon
+      const cached = await fetchBulkQuotes(symbols);
       const hasAnyCached = Object.keys(cached).length > 0;
       if (hasAnyCached) {
         const immediate: StockData[] = symbols.map((symbol) => {
@@ -535,7 +530,7 @@ export default function WatchlistScreen() {
       }
 
       // Background fetch fresh quotes (bulk)
-      const fresh = await fetchAndCacheBulkQuotes(symbols);
+      const fresh = await fetchBulkQuotes(symbols);
       const updated: StockData[] = symbols.map((symbol) => {
         const q = fresh[symbol] as SimpleQuote | undefined;
         const price = q?.last ?? 0;

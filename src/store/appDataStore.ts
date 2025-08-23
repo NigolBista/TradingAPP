@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { plaidIntegrationService } from "../services/plaidIntegration";
-import { plaidPortfolioService } from "../services/portfolioAggregationService_NEW";
+import { plaidPortfolioService } from "../services/portfolioAggregationService";
 import { MockDataInitializer } from "../services/mockDataInitializer";
 import { fetchAndCacheBulkQuotes } from "../services/quotes";
 import { useUserStore } from "./userStore";

@@ -60,13 +60,20 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
       openaiApiKey: process.env.OPENAI_API_KEY,
       fredApiKey: process.env.FRED_API_KEY,
-      marketProvider: process.env.MARKET_PROVIDER || "marketData",
+      marketProvider: process.env.MARKET_PROVIDER || "polygon",
+      quotesProvider:
+        process.env.QUOTES_PROVIDER ||
+        process.env.MARKET_PROVIDER ||
+        "marketData",
       stockNewsApiKey: process.env.STOCK_NEWS_API_KEY,
       newsProvider: process.env.NEWS_PROVIDER || "stocknewsapi",
       plaidClientId: process.env.PLAID_CLIENT_ID,
       plaidSecret: process.env.PLAID_SECRET,
       plaidEnvironment: process.env.PLAID_ENVIRONMENT || "sandbox",
       marketDataApiToken: process.env.MARKET_DATA_API_TOKEN,
+      polygonApiKey: process.env.POLYGON_API_KEY,
+      developerMode: String(process.env.DEVELOPER_MODE || "false") === "true",
+      realtimeProvider: process.env.REALTIME_PROVIDER || "polygon", // polygon | simulator
       expoPublic: {
         sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
       },

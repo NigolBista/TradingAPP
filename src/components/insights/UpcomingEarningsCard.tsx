@@ -263,7 +263,8 @@ export default function UpcomingEarningsCard({
   const [recentForTop, setRecentForTop] = useState<RecentEarningsItem[]>([]);
 
   const loadEarnings = async () => {
-    console.log("🔄 Loading earnings with favorites:", profile.favorites);
+    if (__DEV__)
+      console.log("🔄 Loading earnings with favorites:", profile.favorites);
 
     // Get user's favorite stocks (GLOBAL favorites only)
     const favoriteSymbolsSet = new Set<string>(
@@ -273,45 +274,51 @@ export default function UpcomingEarningsCard({
 
     // Special debug for WKHS
     const hasWKHS = favoriteSymbolsSet.has("WKHS");
-    console.log("🐎 WKHS Debug:", {
-      inFavorites: hasWKHS,
-      favoriteSymbolsSet: Array.from(favoriteSymbolsSet),
-      originalFavorites: profile.favorites,
-    });
+    if (__DEV__)
+      console.log("🐎 WKHS Debug:", {
+        inFavorites: hasWKHS,
+        favoriteSymbolsSet: Array.from(favoriteSymbolsSet),
+        originalFavorites: profile.favorites,
+      });
 
-    console.log("📊 Available data:", {
-      todaysEarnings: todaysEarnings.length,
-      upcomingEarnings: upcomingEarnings.length,
-      recentEarnings: recentEarnings.length,
-      favorites: uniqueFavoriteSymbols,
-    });
+    if (__DEV__)
+      console.log("📊 Available data:", {
+        todaysEarnings: todaysEarnings.length,
+        upcomingEarnings: upcomingEarnings.length,
+        recentEarnings: recentEarnings.length,
+        favorites: uniqueFavoriteSymbols,
+      });
 
     // Debug: Show all upcoming earnings symbols
-    console.log(
-      "📋 All upcoming earnings symbols:",
-      upcomingEarnings.map((e) => e.symbol.toUpperCase())
-    );
-    console.log(
-      "📋 All today's earnings symbols:",
-      todaysEarnings.map((e) => e.symbol.toUpperCase())
-    );
+    if (__DEV__) {
+      console.log(
+        "📋 All upcoming earnings symbols:",
+        upcomingEarnings.map((e) => e.symbol.toUpperCase())
+      );
+      console.log(
+        "📋 All today's earnings symbols:",
+        todaysEarnings.map((e) => e.symbol.toUpperCase())
+      );
+    }
 
     // Debug: Check if any favorites match upcoming earnings
     const matchingUpcoming = upcomingEarnings.filter((item) =>
       favoriteSymbolsSet.has(item.symbol.toUpperCase())
     );
-    console.log(
-      "🎯 Matching upcoming earnings for favorites:",
-      matchingUpcoming.map((e) => `${e.symbol} - ${e.date}`)
-    );
+    if (__DEV__)
+      console.log(
+        "🎯 Matching upcoming earnings for favorites:",
+        matchingUpcoming.map((e) => `${e.symbol} - ${e.date}`)
+      );
 
     const matchingTodays = todaysEarnings.filter((item) =>
       favoriteSymbolsSet.has(item.symbol.toUpperCase())
     );
-    console.log(
-      "🎯 Matching today's earnings for favorites:",
-      matchingTodays.map((e) => `${e.symbol} - ${e.date}`)
-    );
+    if (__DEV__)
+      console.log(
+        "🎯 Matching today's earnings for favorites:",
+        matchingTodays.map((e) => `${e.symbol} - ${e.date}`)
+      );
 
     // Special WKHS debug
     const wkhsInUpcoming = upcomingEarnings.find(
@@ -320,16 +327,17 @@ export default function UpcomingEarningsCard({
     const wkhsInTodays = todaysEarnings.find(
       (item) => item.symbol.toUpperCase() === "WKHS"
     );
-    console.log("🐎 WKHS in earnings data:", {
-      inUpcoming: wkhsInUpcoming
-        ? `${wkhsInUpcoming.symbol} - ${wkhsInUpcoming.date}`
-        : "Not found",
-      inTodays: wkhsInTodays
-        ? `${wkhsInTodays.symbol} - ${wkhsInTodays.date}`
-        : "Not found",
-      upcomingCount: upcomingEarnings.length,
-      todaysCount: todaysEarnings.length,
-    });
+    if (__DEV__)
+      console.log("🐎 WKHS in earnings data:", {
+        inUpcoming: wkhsInUpcoming
+          ? `${wkhsInUpcoming.symbol} - ${wkhsInUpcoming.date}`
+          : "Not found",
+        inTodays: wkhsInTodays
+          ? `${wkhsInTodays.symbol} - ${wkhsInTodays.date}`
+          : "Not found",
+        upcomingCount: upcomingEarnings.length,
+        todaysCount: todaysEarnings.length,
+      });
 
     // Filter cached data for user's favorites (upcoming earnings within 1 month)
     if (uniqueFavoriteSymbols.length > 0) {
@@ -340,10 +348,11 @@ export default function UpcomingEarningsCard({
       oneMonthFromNow.setMonth(now.getMonth() + 1);
       oneMonthFromNow.setHours(23, 59, 59, 999); // End of day one month from now
 
-      console.log("📅 Date filtering range:", {
-        now: now.toLocaleDateString(),
-        oneMonthFromNow: oneMonthFromNow.toLocaleDateString(),
-      });
+      if (__DEV__)
+        console.log("📅 Date filtering range:", {
+          now: now.toLocaleDateString(),
+          oneMonthFromNow: oneMonthFromNow.toLocaleDateString(),
+        });
 
       // Filter upcoming earnings for favorites within next month
       const filteredUpcoming = upcomingEarnings.filter((item) => {
@@ -353,7 +362,7 @@ export default function UpcomingEarningsCard({
           earningsDate >= now && earningsDate <= oneMonthFromNow;
 
         // Debug each favorite check
-        if (isFavorite) {
+        if (isFavorite && __DEV__) {
           console.log(`🔍 Checking favorite ${item.symbol}:`, {
             earningsDate: earningsDate.toLocaleDateString(),
             now: now.toLocaleDateString(),
@@ -367,18 +376,20 @@ export default function UpcomingEarningsCard({
         return isFavorite && isInDateRange;
       });
 
-      console.log(
-        "⭐ Filtered upcoming favorites:",
-        filteredUpcoming.map((e) => `${e.symbol} - ${e.date}`)
-      );
+      if (__DEV__)
+        console.log(
+          "⭐ Filtered upcoming favorites:",
+          filteredUpcoming.map((e) => `${e.symbol} - ${e.date}`)
+        );
       let favoritesToShow = filteredUpcoming;
 
       // Fallback: if cache doesn't include favorite earnings, fetch specifically for favorites
       if (favoritesToShow.length === 0 && uniqueFavoriteSymbols.length > 0) {
         try {
-          console.log(
-            "🔁 No favorites found in cached upcoming; fetching favorites directly..."
-          );
+          if (__DEV__)
+            console.log(
+              "🔁 No favorites found in cached upcoming; fetching favorites directly..."
+            );
           const fetchedFavorites = await fetchUpcomingEarnings(
             uniqueFavoriteSymbols,
             60
@@ -390,10 +401,11 @@ export default function UpcomingEarningsCard({
             return d >= now && d <= oneMonthFromNow;
           });
 
-          console.log(
-            "⭐ Fetched favorites within 30 days:",
-            filteredFetched.map((e) => `${e.symbol} - ${e.date}`)
-          );
+          if (__DEV__)
+            console.log(
+              "⭐ Fetched favorites within 30 days:",
+              filteredFetched.map((e) => `${e.symbol} - ${e.date}`)
+            );
           favoritesToShow = filteredFetched;
         } catch (e) {
           console.warn("⚠️ Failed to fetch favorites upcoming earnings:", e);
@@ -401,11 +413,12 @@ export default function UpcomingEarningsCard({
       }
 
       const slicedUpcoming = favoritesToShow.slice(0, 5);
-      console.log(
-        "⭐ Setting favoriteEarnings to:",
-        slicedUpcoming.length,
-        "items"
-      );
+      if (__DEV__)
+        console.log(
+          "⭐ Setting favoriteEarnings to:",
+          slicedUpcoming.length,
+          "items"
+        );
       setFavoriteEarnings(slicedUpcoming);
 
       // Filter recent earnings for favorites
@@ -413,15 +426,16 @@ export default function UpcomingEarningsCard({
         favoriteSymbolsSet.has(item.symbol.toUpperCase())
       );
 
-      console.log(
-        "📈 Filtered recent favorites:",
-        filteredRecent.map((e) => `${e.symbol} - ${e.date}`)
-      );
+      if (__DEV__)
+        console.log(
+          "📈 Filtered recent favorites:",
+          filteredRecent.map((e) => `${e.symbol} - ${e.date}`)
+        );
       setFavoriteRecentEarnings(filteredRecent.slice(0, 5));
 
       setShowingRecent(false);
     } else {
-      console.log("❌ No favorites found");
+      if (__DEV__) console.log("❌ No favorites found");
       setFavoriteEarnings([]);
       setFavoriteRecentEarnings([]);
       setShowingRecent(false);
@@ -430,21 +444,24 @@ export default function UpcomingEarningsCard({
     // Create prioritized top 5 earnings list for main display
     // Combine today's earnings with upcoming earnings, prioritizing favorites
     const allEarnings = [...todaysEarnings, ...upcomingEarnings];
-    console.log("🔄 All earnings for prioritization:", allEarnings.length);
-    console.log(
-      "🔄 All earnings symbols:",
-      allEarnings.map(
-        (e) => `${e.symbol} - ${new Date(e.date).toLocaleDateString()}`
-      )
-    );
+    if (__DEV__)
+      console.log("🔄 All earnings for prioritization:", allEarnings.length);
+    if (__DEV__)
+      console.log(
+        "🔄 All earnings symbols:",
+        allEarnings.map(
+          (e) => `${e.symbol} - ${new Date(e.date).toLocaleDateString()}`
+        )
+      );
 
     // Separate favorites and non-favorites
     const favoriteEarningsAll = allEarnings.filter((item) => {
       const isMatch = favoriteSymbolsSet.has(item.symbol.toUpperCase());
       if (isMatch) {
-        console.log(
-          `✅ Found favorite match for prioritization: ${item.symbol} - ${item.date}`
-        );
+        if (__DEV__)
+          console.log(
+            `✅ Found favorite match for prioritization: ${item.symbol} - ${item.date}`
+          );
       }
       return isMatch;
     });
@@ -453,20 +470,26 @@ export default function UpcomingEarningsCard({
       (item) => !favoriteSymbolsSet.has(item.symbol.toUpperCase())
     );
 
-    console.log(
-      "🎯 Favorite earnings found for prioritization:",
-      favoriteEarningsAll.length
-    );
-    console.log("🎯 Non-favorite earnings found:", nonFavoriteEarnings.length);
+    if (__DEV__)
+      console.log(
+        "🎯 Favorite earnings found for prioritization:",
+        favoriteEarningsAll.length
+      );
+    if (__DEV__)
+      console.log(
+        "🎯 Non-favorite earnings found:",
+        nonFavoriteEarnings.length
+      );
 
-    console.log("🎯 Prioritization breakdown:", {
-      favoriteEarningsAll: favoriteEarningsAll.map(
-        (e) => `${e.symbol} - ${e.date}`
-      ),
-      nonFavoriteEarnings: nonFavoriteEarnings
-        .slice(0, 3)
-        .map((e) => `${e.symbol} - ${e.date}`),
-    });
+    if (__DEV__)
+      console.log("🎯 Prioritization breakdown:", {
+        favoriteEarningsAll: favoriteEarningsAll.map(
+          (e) => `${e.symbol} - ${e.date}`
+        ),
+        nonFavoriteEarnings: nonFavoriteEarnings
+          .slice(0, 3)
+          .map((e) => `${e.symbol} - ${e.date}`),
+      });
 
     // Sort by date (earliest first)
     favoriteEarningsAll.sort(
@@ -485,10 +508,11 @@ export default function UpcomingEarningsCard({
       ), // Fill remaining slots
     ].slice(0, 5); // Ensure we never exceed 5 total
 
-    console.log(
-      "🏆 Final prioritized earnings:",
-      prioritizedEarnings.map((e) => `${e.symbol} - ${e.date}`)
-    );
+    if (__DEV__)
+      console.log(
+        "🏆 Final prioritized earnings:",
+        prioritizedEarnings.map((e) => `${e.symbol} - ${e.date}`)
+      );
     setTopEarnings(prioritizedEarnings);
 
     // Fetch recent actuals for top symbols to show actual vs estimate when available
@@ -510,7 +534,7 @@ export default function UpcomingEarningsCard({
 
   useEffect(() => {
     // Force refresh when component mounts to ensure fresh data
-    console.log("🚀 Component mounted, forcing refresh...");
+    if (__DEV__) console.log("🚀 Component mounted, forcing refresh...");
     if (isHydrated) {
       forceRefreshEarningsData();
     }
@@ -518,7 +542,11 @@ export default function UpcomingEarningsCard({
 
   useEffect(() => {
     // Force refresh when favorites change to get updated earnings data
-    console.log("⭐ Favorites changed, forcing refresh...", profile.favorites);
+    if (__DEV__)
+      console.log(
+        "⭐ Favorites changed, forcing refresh...",
+        profile.favorites
+      );
     if (isHydrated && profile.favorites.length > 0) {
       forceRefreshEarningsData();
     }
@@ -526,25 +554,28 @@ export default function UpcomingEarningsCard({
 
   useEffect(() => {
     // Filter earnings when cached data changes
-    console.log("🔄 Data changed, reloading earnings...");
+    if (__DEV__) console.log("🔄 Data changed, reloading earnings...");
     loadEarnings();
   }, [todaysEarnings, upcomingEarnings, recentEarnings, isHydrated]);
 
   useEffect(() => {
     // Debug when favoriteEarnings state changes
-    console.log(
-      "📊 favoriteEarnings state updated:",
-      favoriteEarnings.length,
-      favoriteEarnings.map((e) => e.symbol)
-    );
+    if (__DEV__)
+      console.log(
+        "📊 favoriteEarnings state updated:",
+        favoriteEarnings.length,
+        favoriteEarnings.map((e) => e.symbol)
+      );
   }, [favoriteEarnings]);
 
   // Add focus effect to refresh when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      console.log("🎯 Screen focused, checking if refresh needed...");
+      if (__DEV__)
+        console.log("🎯 Screen focused, checking if refresh needed...");
       if (isHydrated) {
-        console.log("🎯 Screen focused, forcing refresh for latest data...");
+        if (__DEV__)
+          console.log("🎯 Screen focused, forcing refresh for latest data...");
         forceRefreshEarningsData();
       }
     }, [isHydrated, forceRefreshEarningsData])
@@ -948,23 +979,25 @@ export default function UpcomingEarningsCard({
   };
 
   // Debug render data
-  console.log("🎨 Rendering with data:", {
-    topEarnings: topEarnings.length,
-    favoriteEarnings: favoriteEarnings.length,
-    favoriteRecentEarnings: favoriteRecentEarnings.length,
-    isLoading,
-    isHydrated,
-  });
+  if (__DEV__)
+    console.log("🎨 Rendering with data:", {
+      topEarnings: topEarnings.length,
+      favoriteEarnings: favoriteEarnings.length,
+      favoriteRecentEarnings: favoriteRecentEarnings.length,
+      isLoading,
+      isHydrated,
+    });
 
   // Debug specific sections
-  console.log("🎨 Section visibility:", {
-    showTopEarnings: topEarnings.length > 0,
-    showFavoriteEarnings: favoriteEarnings.length > 0,
-    showRecentEarnings: favoriteRecentEarnings.length > 0,
-    favoriteEarningsItems: favoriteEarnings.map(
-      (e) => `${e.symbol} - ${e.date}`
-    ),
-  });
+  if (__DEV__)
+    console.log("🎨 Section visibility:", {
+      showTopEarnings: topEarnings.length > 0,
+      showFavoriteEarnings: favoriteEarnings.length > 0,
+      showRecentEarnings: favoriteRecentEarnings.length > 0,
+      favoriteEarningsItems: favoriteEarnings.map(
+        (e) => `${e.symbol} - ${e.date}`
+      ),
+    });
 
   return (
     <View style={styles.container}>

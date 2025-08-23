@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   View,
   Pressable,
@@ -14,34 +14,25 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import LightweightCandles, {
-  type LWCDatum,
-  TradePlanOverlay,
-} from "../components/charts/LightweightCandles";
-import ChartSettingsModal, {
-  type ChartType,
-} from "../components/charts/ChartSettingsModal";
-import TimeframePickerModal, {
-  ExtendedTimeframe,
-} from "../components/charts/TimeframePickerModal";
+import KLineProChart from "../components/charts/KLineProChart";
+// Removed viewportBars usage; we'll lazy-load via timeRangeChange
+import { type ChartType } from "../components/charts/ChartSettingsModal";
+import { ExtendedTimeframe } from "../components/charts/TimeframePickerModal";
 import StockSearchBar from "../components/common/StockSearchBar";
 import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
-import {
-  fetchCandlesForTimeframe,
-  fetchCandles,
-  fetchNews,
-} from "../services/marketProviders";
+// Remove direct candle fetching; KLinePro handles candles internally via Polygon
+import { fetchNews as fetchSymbolNews } from "../services/newsProviders";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { useChatStore } from "../store/chatStore";
-import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
+import { useSignalCacheStore } from "../store/signalCacheStore";
+import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { getUpcomingFedEvents } from "../services/federalReserve";
-import { getCachedQuotes, type SimpleQuote } from "../services/quotes";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const scheme = useColorScheme();
   const symbol: string = route.params?.symbol || "AAPL";
@@ -54,10 +45,9 @@ export default function ChartFullScreen() {
   const initialTimeframe: string | undefined = route.params?.initialTimeframe;
   const isDayUp: boolean | undefined = route.params?.isDayUp;
   const [dayUp, setDayUp] = useState<boolean | undefined>(isDayUp);
-  const initialDataParam: LWCDatum[] | undefined = route.params?.initialData;
+  const initialDataParam: any[] | undefined = route.params?.initialData;
   const levels = route.params?.levels;
-  const initialTradePlan: TradePlanOverlay | undefined =
-    route.params?.tradePlan;
+  const initialTradePlan: any | undefined = route.params?.tradePlan;
   const initialAiMeta:
     | undefined
     | {
@@ -70,24 +60,91 @@ export default function ChartFullScreen() {
         riskReward?: number;
       } = route.params?.ai;
   const initialAnalysisContext = route.params?.analysisContext;
-  const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe } =
+  const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
     useTimeframeStore();
+  const [pinError, setPinError] = useState<string | null>(null);
+  const chartRef = React.useRef<any>(null);
+  const barSpacingRef = React.useRef<number>(60_000);
 
+  // Rate limiting state for historical data requests
+  const lastHistoricalRequestRef = useRef<number>(0);
+  const historicalRequestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // State variables
+  const [data, setData] = useState<any[]>(initialDataParam || []);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    ((initialTimeframe || timeframe) as ExtendedTimeframe) ||
-      defaultTimeframe ||
-      "1m"
+    (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
   );
   const [stockName, setStockName] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(true);
-  const [data, setData] = useState<LWCDatum[]>(initialDataParam || []);
+  function timeframeSpacingMs(tf: ExtendedTimeframe): number {
+    switch (tf) {
+      case "1m":
+        return 60_000;
+      case "2m":
+        return 120_000;
+      case "3m":
+        return 180_000;
+      case "5m":
+        return 300_000;
+      case "10m":
+        return 600_000;
+      case "15m":
+        return 900_000;
+      case "30m":
+        return 1_800_000;
+      case "1h":
+        return 3_600_000;
+      case "2h":
+        return 7_200_000;
+      case "4h":
+        return 14_400_000;
+      case "1D":
+        return 86_400_000;
+      case "1W":
+        return 7 * 86_400_000;
+      case "1M":
+      case "3M":
+      case "1Y":
+      case "5Y":
+      case "ALL":
+        return 30 * 86_400_000;
+      default:
+        return 60_000;
+    }
+  }
+  React.useEffect(() => {
+    try {
+      if (initialDataParam && initialDataParam.length >= 2) {
+        const last = initialDataParam[initialDataParam.length - 1];
+        const prev = initialDataParam[initialDataParam.length - 2];
+        const inferred = Math.max(1, last.time - prev.time);
+        barSpacingRef.current = inferred;
+      }
+    } catch {}
+  }, []);
+  React.useEffect(() => {
+    try {
+      if (data && data.length >= 2) {
+        const last = data[data.length - 1];
+        const prev = data[data.length - 2];
+        const inferred = Math.max(1, last.time - prev.time);
+        barSpacingRef.current = inferred;
+      } else {
+        barSpacingRef.current = timeframeSpacingMs(extendedTf);
+      }
+    } catch {
+      barSpacingRef.current = timeframeSpacingMs(extendedTf);
+    }
+  }, [data, extendedTf]);
+  // Real-time logic is now handled by AmChartsCandles component itself
 
+  // Additional state variables
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
   const [bottomSheetAnim] = useState(new Animated.Value(0));
   const [analyzing, setAnalyzing] = useState<boolean>(false);
-  const [currentTradePlan, setCurrentTradePlan] = useState<
-    TradePlanOverlay | undefined
-  >(initialTradePlan);
+  const [currentTradePlan, setCurrentTradePlan] = useState<any | undefined>(
+    initialTradePlan
+  );
   const [aiMeta, setAiMeta] = useState<
     | undefined
     | {
@@ -109,9 +166,6 @@ export default function ChartFullScreen() {
       ? "swing_trade"
       : "auto"
   );
-  const [includeNews, setIncludeNews] = useState<boolean>(true);
-  const [includeFOMC, setIncludeFOMC] = useState<boolean>(false);
-  const [includeMarket, setIncludeMarket] = useState<boolean>(false);
 
   const showUnifiedBottomSheetWithTab = () => {
     setShowUnifiedBottomSheet(true);
@@ -131,8 +185,6 @@ export default function ChartFullScreen() {
       setShowUnifiedBottomSheet(false);
     });
   };
-  const [includeSentiment, setIncludeSentiment] = useState<boolean>(false);
-  const [includeVIX, setIncludeVIX] = useState<boolean>(false);
 
   const [tradePace, setTradePace] = useState<
     "auto" | "day" | "scalp" | "swing"
@@ -177,8 +229,7 @@ export default function ChartFullScreen() {
         return;
       }
       try {
-        const cached = await getCachedQuotes([symbol]);
-        const q: SimpleQuote | undefined = cached[symbol];
+        const q: SimpleQuote = await fetchSingleQuote(symbol);
         if (q && mounted) {
           if (typeof q.change === "number") setDayUp(q.change >= 0);
           else if (typeof q.changePercent === "number")
@@ -213,156 +264,15 @@ export default function ChartFullScreen() {
     }
   }, [initialAiMeta]);
 
-  // Auto-analysis on data load
-  useEffect(() => {
-    if (data.length > 0 && !hasAutoAnalyzed && !analyzing) {
-      setHasAutoAnalyzed(true);
-      // Delay slightly to ensure chart is rendered
-      setTimeout(() => {
-        handleAutoAnalysis();
-      }, 500);
-    }
-  }, [data, hasAutoAnalyzed, analyzing]);
-
-  useEffect(() => {
-    let isMounted = true;
-    async function load() {
-      try {
-        // If initial data provided and timeframe matches, use it and avoid refetch
-        if (initialDataParam && initialDataParam.length > 0) {
-          setLoading(false);
-          return;
-        }
-        setLoading(true);
-        const candles = await fetchCandlesForTimeframe(symbol, extendedTf);
-        if (!isMounted) return;
-        setData(
-          candles.map((c: any) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          }))
-        );
-      } catch (e) {
-        console.warn("Failed to load candles:", e);
-        if (isMounted) setData([]);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-    load();
-    return () => {
-      isMounted = false;
-    };
-  }, [symbol, extendedTf]);
-
-  // Final fallback: derive direction from loaded data if still unknown
-  useEffect(() => {
-    if (typeof dayUp === "boolean") return;
-    if (!data || data.length < 2) return;
-    const first = data[0]?.close;
-    const last = data[data.length - 1]?.close;
-    if (typeof first === "number" && typeof last === "number") {
-      setDayUp(last >= first);
-    }
-  }, [data, dayUp]);
-
-  const effectiveLevels = useMemo(() => {
-    if (
-      levels &&
-      (levels.entry ||
-        levels.exit ||
-        levels.entryExtended ||
-        levels.exitExtended)
-    ) {
-      return levels;
-    }
-    if (data && data.length > 0) {
-      const last = data[data.length - 1];
-      const close = Number(last.close) || 0;
-      if (!close) return undefined;
-      const delta = close * 0.01; // 1% bands default
-      return {
-        entry: close + delta * 0.5,
-        entryExtended: close + delta * 1.0,
-        exit: Math.max(0, close - delta * 0.5),
-        exitExtended: Math.max(0, close - delta * 1.0),
-      };
-    }
-    return undefined;
-  }, [levels, data]);
-
-  async function loadStockName() {
-    try {
-      const results = await searchStocksAutocomplete(symbol, 1);
-      if (results.length > 0) {
-        setStockName(results[0].name);
-      }
-    } catch (error) {
-      console.error("Failed to load stock name:", error);
-    }
-  }
-
-  // Handle timeframe change and save as default
-  function handleTimeframeChange(tf: ExtendedTimeframe) {
-    setExtendedTf(tf);
-    setDefaultTimeframe(tf); // Save as user's preferred default
-  }
-
-  // Simulate streaming text output
-  function simulateStreamingText(fullText: string) {
-    setIsStreaming(true);
-    setStreamingText("");
-
-    const words = fullText.split(" ");
-    let currentIndex = 0;
-
-    const interval = setInterval(() => {
-      if (currentIndex < words.length) {
-        setStreamingText(
-          (prev) => prev + (currentIndex === 0 ? "" : " ") + words[currentIndex]
-        );
-        currentIndex++;
-      } else {
-        setIsStreaming(false);
-        clearInterval(interval);
-      }
-    }, 80); // Adjust speed as needed
-  }
-
-  // Auto-analysis with comprehensive context (called on chart load)
-  async function handleAutoAnalysis() {
-    return performAnalysis(true);
-  }
-
-  // Manual analysis (called by user button press)
-  async function handleAnalyzePress() {
-    return performAnalysis(false);
-  }
-
   // Core analysis function
   async function performAnalysis(isAutoAnalysis: boolean = false) {
     try {
       setAnalyzing(true);
-      const get = async (res: "D" | "1H" | "15" | "5") => {
-        try {
-          return await fetchCandles(symbol, { resolution: res });
-        } catch (e) {
-          return await fetchCandles(symbol, {
-            resolution: res,
-            providerOverride: "yahoo",
-          });
-        }
-      };
-      const [d, h1, m15, m5] = await Promise.all([
-        get("D"),
-        get("1H"),
-        get("15"),
-        get("5"),
-      ]);
+      // Skip explicit candle fetching; use only quotes/news context for AI
+      const d: any[] = [];
+      const h1: any[] = [];
+      const m15: any[] = [];
+      const m5: any[] = [];
 
       // Context fetches - comprehensive for auto-analysis, user-controlled for manual
       const shouldFetchContext =
@@ -377,7 +287,7 @@ export default function ChartFullScreen() {
       // Fetch symbol news
       if (shouldFetchContext) {
         try {
-          const news = await fetchNews(symbol);
+          const news = await fetchSymbolNews(symbol);
           newsBrief = (news || []).slice(0, 5).map((n: any) => ({
             title: n.title,
             summary: (n.summary || "").slice(0, 180),
@@ -390,7 +300,7 @@ export default function ChartFullScreen() {
         if (isAutoAnalysis) {
           // Fetch market news
           try {
-            const marketNews = await fetchNews("SPY"); // Use SPY as market proxy
+            const marketNews = await fetchSymbolNews("SPY"); // Use SPY as market proxy
             marketNewsBrief = (marketNews || []).slice(0, 3).map((n: any) => ({
               title: n.title,
               summary: (n.summary || "").slice(0, 120),
@@ -411,17 +321,7 @@ export default function ChartFullScreen() {
 
           // Fetch VIX snapshot
           try {
-            let vixCandles: any[] = [];
-            try {
-              vixCandles = await fetchCandles("^VIX", { resolution: "D" });
-            } catch {
-              vixCandles = await fetchCandles("^VIX", {
-                resolution: "D",
-                providerOverride: "yahoo",
-              });
-            }
-            const last = vixCandles[vixCandles.length - 1];
-            const val = Number(last?.close) || 0;
+            const val = 0;
             const bucket = val < 15 ? "low" : val <= 25 ? "moderate" : "high";
             vixSnapshot = { value: val, bucket };
           } catch {}
@@ -588,7 +488,7 @@ export default function ChartFullScreen() {
         }
 
         // Cache the new signal (but don't add to history - it becomes the new "current")
-        const cachedSignalData: CachedSignal = {
+        const cachedSignalData = {
           symbol,
           timestamp: Date.now(),
           tradePlan: tp,
@@ -609,6 +509,101 @@ export default function ChartFullScreen() {
     } finally {
       setAnalyzing(false);
     }
+  }
+
+  // Auto-analysis on data load
+  useEffect(() => {
+    if (data.length > 0 && !hasAutoAnalyzed && !analyzing) {
+      setHasAutoAnalyzed(true);
+      // Delay slightly to ensure chart is rendered
+      setTimeout(() => {
+        performAnalysis(true);
+      }, 500);
+    }
+  }, [data, hasAutoAnalyzed, analyzing]);
+
+  // No candle fetching; chart is rendered by KLinePro
+
+  // Final fallback: derive direction from loaded data if still unknown
+  useEffect(() => {
+    if (typeof dayUp === "boolean") return;
+    if (!data || data.length < 2) return;
+    const first = data[0]?.close;
+    const last = data[data.length - 1]?.close;
+    if (typeof first === "number" && typeof last === "number") {
+      setDayUp(last >= first);
+    }
+  }, [data, dayUp]);
+
+  const effectiveLevels = useMemo(() => {
+    if (
+      levels &&
+      (levels.entry ||
+        levels.exit ||
+        levels.entryExtended ||
+        levels.exitExtended)
+    ) {
+      return levels;
+    }
+    if (data && data.length > 0) {
+      const last = data[data.length - 1];
+      const close = Number(last.close) || 0;
+      if (!close) return undefined;
+      const delta = close * 0.01; // 1% bands default
+      return {
+        entry: close + delta * 0.5,
+        entryExtended: close + delta * 1.0,
+        exit: Math.max(0, close - delta * 0.5),
+        exitExtended: Math.max(0, close - delta * 1.0),
+      };
+    }
+    return undefined;
+  }, [levels, data]);
+
+  async function loadStockName() {
+    try {
+      const results = await searchStocksAutocomplete(symbol, 1);
+      if (results.length > 0) {
+        setStockName(results[0].name);
+      }
+    } catch (error) {
+      console.error("Failed to load stock name:", error);
+    }
+  }
+
+  // Handle timeframe change and save as default
+  async function handleTimeframeChange(tf: ExtendedTimeframe) {
+    setExtendedTf(tf);
+    setDefaultTimeframe(tf); // Save as user's preferred default
+
+    // Reset view state for new timeframe
+    // Immediately fetch data for the new timeframe using smart candle manager
+  }
+
+  // Simulate streaming text output
+  function simulateStreamingText(fullText: string) {
+    setIsStreaming(true);
+    setStreamingText("");
+
+    const words = fullText.split(" ");
+    let currentIndex = 0;
+
+    const interval = setInterval(() => {
+      if (currentIndex < words.length) {
+        setStreamingText(
+          (prev) => prev + (currentIndex === 0 ? "" : " ") + words[currentIndex]
+        );
+        currentIndex++;
+      } else {
+        setIsStreaming(false);
+        clearInterval(interval);
+      }
+    }, 80); // Adjust speed as needed
+  }
+
+  // Manual analysis (called by user button press)
+  async function handleAnalyzePress() {
+    return performAnalysis(false);
   }
 
   return (
@@ -868,31 +863,19 @@ export default function ChartFullScreen() {
             </View>
           </View>
         </ScrollView>
-        {loading ? (
-          <View
-            style={{
-              height: chartHeight,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text style={{ color: "#888" }}>Loading...</Text>
-          </View>
-        ) : (
-          <LightweightCandles
-            data={data}
-            height={chartHeight}
-            type={chartType}
-            theme={scheme === "dark" ? "dark" : "light"}
-            showVolume={false}
-            showMA={false}
-            showGrid={true}
-            showCrosshair={true}
-            forcePositive={typeof dayUp === "boolean" ? dayUp : undefined}
-            levels={effectiveLevels}
-            tradePlan={currentTradePlan}
-          />
-        )}
+        <KLineProChart
+          symbol={symbol}
+          timeframe={extendedTf as any}
+          height={chartHeight}
+          theme={scheme === "dark" ? "dark" : "light"}
+          locale="en-US"
+          market="stocks"
+          chartType={
+            chartType === "candlestick" ? "candle" : (chartType as any)
+          }
+          hideVolumePane
+          hideIndicatorPane
+        />
         <Pressable
           onPress={handleAnalyzePress}
           disabled={analyzing}
@@ -1258,47 +1241,47 @@ export default function ChartFullScreen() {
                     <View style={{ marginBottom: 24 }}>
                       <Text style={styles.timeframeSectionTitle}>Minutes</Text>
                       <View style={styles.timeframeGrid}>
-                        {[
-                          "1m",
-                          "2m",
-                          "3m",
-                          "4m",
-                          "5m",
-                          "10m",
-                          "15m",
-                          "30m",
-                          "45m",
-                        ].map((tf) => {
-                          const isSelected = extendedTf === tf;
-                          const isPinned = pinned.includes(
-                            tf as ExtendedTimeframe
-                          );
-                          return (
-                            <Pressable
-                              key={tf}
-                              onPress={() => {
-                                handleTimeframeChange(tf as ExtendedTimeframe);
-                                hideBottomSheet();
-                              }}
-                              style={[
-                                styles.timeframeButton,
-                                isSelected && styles.timeframeButtonActive,
-                                isPinned && styles.timeframeButtonPinned,
-                              ]}
-                            >
-                              <Text
+                        {["1m", "2m", "3m", "5m", "10m", "15m", "30m"].map(
+                          (tf) => {
+                            const isSelected = extendedTf === tf;
+                            const isPinned = pinned.includes(
+                              tf as ExtendedTimeframe
+                            );
+                            return (
+                              <Pressable
+                                key={tf}
+                                onPress={async () => {
+                                  const success = await toggle(
+                                    tf as ExtendedTimeframe
+                                  );
+                                  if (!success) {
+                                    setPinError(
+                                      "You can pin up to 10 timeframes"
+                                    );
+                                    setTimeout(() => setPinError(null), 2000);
+                                  }
+                                }}
                                 style={[
-                                  styles.timeframeButtonText,
-                                  isSelected &&
-                                    styles.timeframeButtonTextActive,
-                                  isPinned && styles.timeframeButtonTextPinned,
+                                  styles.timeframeButton,
+                                  isSelected && styles.timeframeButtonActive,
+                                  isPinned && styles.timeframeButtonPinned,
                                 ]}
                               >
-                                {tf}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
+                                <Text
+                                  style={[
+                                    styles.timeframeButtonText,
+                                    isSelected &&
+                                      styles.timeframeButtonTextActive,
+                                    isPinned &&
+                                      styles.timeframeButtonTextPinned,
+                                  ]}
+                                >
+                                  {tf}
+                                </Text>
+                              </Pressable>
+                            );
+                          }
+                        )}
                       </View>
                     </View>
 
@@ -1306,7 +1289,7 @@ export default function ChartFullScreen() {
                     <View style={{ marginBottom: 24 }}>
                       <Text style={styles.timeframeSectionTitle}>Hours</Text>
                       <View style={styles.timeframeGrid}>
-                        {["1h", "2h", "4h", "6h", "8h", "12h"].map((tf) => {
+                        {["1h", "2h", "4h"].map((tf) => {
                           const isSelected = extendedTf === tf;
                           const isPinned = pinned.includes(
                             tf as ExtendedTimeframe
@@ -1315,8 +1298,7 @@ export default function ChartFullScreen() {
                             <Pressable
                               key={tf}
                               onPress={() => {
-                                handleTimeframeChange(tf as ExtendedTimeframe);
-                                hideBottomSheet();
+                                toggle(tf as ExtendedTimeframe);
                               }}
                               style={[
                                 styles.timeframeButton,
@@ -1344,47 +1326,39 @@ export default function ChartFullScreen() {
                     <View style={{ marginBottom: 24 }}>
                       <Text style={styles.timeframeSectionTitle}>Days</Text>
                       <View style={styles.timeframeGrid}>
-                        {[
-                          "1D",
-                          "1W",
-                          "1M",
-                          "3M",
-                          "6M",
-                          "1Y",
-                          "2Y",
-                          "5Y",
-                          "ALL",
-                        ].map((tf) => {
-                          const isSelected = extendedTf === tf;
-                          const isPinned = pinned.includes(
-                            tf as ExtendedTimeframe
-                          );
-                          return (
-                            <Pressable
-                              key={tf}
-                              onPress={() => {
-                                handleTimeframeChange(tf as ExtendedTimeframe);
-                                hideBottomSheet();
-                              }}
-                              style={[
-                                styles.timeframeButton,
-                                isSelected && styles.timeframeButtonActive,
-                                isPinned && styles.timeframeButtonPinned,
-                              ]}
-                            >
-                              <Text
+                        {["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "ALL"].map(
+                          (tf) => {
+                            const isSelected = extendedTf === tf;
+                            const isPinned = pinned.includes(
+                              tf as ExtendedTimeframe
+                            );
+                            return (
+                              <Pressable
+                                key={tf}
+                                onPress={() => {
+                                  toggle(tf as ExtendedTimeframe);
+                                }}
                                 style={[
-                                  styles.timeframeButtonText,
-                                  isSelected &&
-                                    styles.timeframeButtonTextActive,
-                                  isPinned && styles.timeframeButtonTextPinned,
+                                  styles.timeframeButton,
+                                  isSelected && styles.timeframeButtonActive,
+                                  isPinned && styles.timeframeButtonPinned,
                                 ]}
                               >
-                                {tf}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
+                                <Text
+                                  style={[
+                                    styles.timeframeButtonText,
+                                    isSelected &&
+                                      styles.timeframeButtonTextActive,
+                                    isPinned &&
+                                      styles.timeframeButtonTextPinned,
+                                  ]}
+                                >
+                                  {tf}
+                                </Text>
+                              </Pressable>
+                            );
+                          }
+                        )}
                       </View>
                     </View>
                   </View>

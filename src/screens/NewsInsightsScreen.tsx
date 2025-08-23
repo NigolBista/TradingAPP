@@ -172,7 +172,7 @@ const ECONOMIC_EVENTS = [
 
 export default function NewsInsightsScreen() {
   const { theme } = useTheme();
-  const { profile } = useUserStore();
+  const profile = useUserStore((s) => s.profile);
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const {
@@ -205,23 +205,27 @@ export default function NewsInsightsScreen() {
       const globalCacheData = getAllCachedData();
 
       if (globalCacheData.isValid && globalCacheData.news.length > 0) {
-        console.log("📦 NewsInsights using global cached data", {
-          newsCount: globalCacheData.news.length,
-          cacheAge:
-            Math.round((Date.now() - globalCacheData.lastUpdate) / 1000) + "s",
-        });
+        if (__DEV__)
+          console.log("📦 NewsInsights using global cached data", {
+            newsCount: globalCacheData.news.length,
+            cacheAge:
+              Math.round((Date.now() - globalCacheData.lastUpdate) / 1000) +
+              "s",
+          });
         generalNews = globalCacheData.news;
         setMarketNews(generalNews);
       } else {
-        console.log("🔄 NewsInsights fetching fresh data - no valid cache");
+        if (__DEV__)
+          console.log("🔄 NewsInsights fetching fresh data - no valid cache");
         // Load general market news with enhanced Stock News API
         try {
           generalNews = await fetchGeneralMarketNews(30);
         } catch (stockNewsError) {
-          console.log(
-            "Stock News API failed for market news, falling back:",
-            stockNewsError
-          );
+          if (__DEV__)
+            console.log(
+              "Stock News API failed for market news, falling back:",
+              stockNewsError
+            );
           // Fallback to default provider
           generalNews = await fetchNews("market");
         }
@@ -250,16 +254,19 @@ export default function NewsInsightsScreen() {
         globalCacheData.isValid &&
         globalCacheData.trendingStocks.length > 0
       ) {
-        console.log("📦 NewsInsights using cached trending stocks");
+        if (__DEV__)
+          console.log("📦 NewsInsights using cached trending stocks");
         setTrendingStocks(globalCacheData.trendingStocks.slice(0, 10));
       } else {
-        console.log("🔄 NewsInsights fetching fresh trending stocks");
+        if (__DEV__)
+          console.log("🔄 NewsInsights fetching fresh trending stocks");
         // Load trending stocks
         try {
           const trending = await fetchTrendingStocks(7);
           setTrendingStocks(trending.slice(0, 10));
         } catch (trendingError) {
-          console.log("Failed to fetch trending stocks:", trendingError);
+          if (__DEV__)
+            console.log("Failed to fetch trending stocks:", trendingError);
           setTrendingStocks([]);
         }
       }
@@ -279,7 +286,11 @@ export default function NewsInsightsScreen() {
       // Force refresh the cache first to get fresh data
       await refreshData(30, true, true);
     } catch (error) {
-      console.log("Cache refresh failed, continuing with regular load:", error);
+      if (__DEV__)
+        console.log(
+          "Cache refresh failed, continuing with regular load:",
+          error
+        );
     }
     await loadData();
   }

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -12,28 +12,19 @@ import {
   Animated,
   Dimensions,
 } from "react-native";
-import {
-  RouteProp,
-  useRoute,
-  useNavigation,
-  useFocusEffect,
-} from "@react-navigation/native";
+import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import LightweightCandles, {
-  type LWCDatum,
-} from "../components/charts/LightweightCandles";
+
+import KLineProChart from "../components/charts/KLineProChart";
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
-import ChartControls, {
-  type Timeframe,
-} from "../components/charts/ChartControls";
 import TimeframePickerModal, {
   type ExtendedTimeframe,
 } from "../components/charts/TimeframePickerModal";
 import {
-  fetchCandles,
   type Candle,
+  fetchCandles,
   fetchCandlesForTimeframe,
 } from "../services/marketProviders";
 import { getUpcomingFedEvents } from "../services/federalReserve";
@@ -48,10 +39,7 @@ import {
   type NewsItem,
   type SentimentStats,
 } from "../services/newsProviders";
-import { realtimeDataManager } from "../services/realtimeDataManager";
-import { smartCandleManager } from "../services/smartCandleManager";
-
-import { type SignalSummary } from "../services/signalEngine";
+// Removed viewportBars dependency; using simple lazy loading on visible range change
 import NewsList from "../components/insights/NewsList";
 import { sendLocalNotification } from "../services/notifications";
 import { searchStocksAutocomplete } from "../services/stockData";
@@ -59,11 +47,14 @@ import { useTimeframeStore } from "../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
-import { type SimpleQuote, getCachedQuotes } from "../services/quotes";
+import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
 
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
 };
+
+// Simplified header timeframes for this screen only
+type HeaderTimeframe = "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "5Y" | "ALL";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
@@ -130,6 +121,12 @@ const styles = StyleSheet.create({
   afterHours: {
     fontSize: 13,
     color: "#888",
+  },
+  sessionIndicator: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+    fontWeight: "500",
   },
   iconButton: {
     padding: 8,
@@ -359,25 +356,27 @@ export default function StockDetailScreen() {
 
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
-  const [dailySeries, setDailySeries] = useState<LWCDatum[]>([]);
+
   const [news, setNews] = useState<NewsItem[]>([]);
+
   const [initialQuote, setInitialQuote] = useState<SimpleQuote | null>(
     initialQuoteParam || null
   );
-  const [summary, setSummary] = useState<SignalSummary | null>(null);
+
   const [newsLoading, setNewsLoading] = useState<boolean>(true);
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [stockName, setStockName] = useState<string>("");
   const [chartType, setChartType] = useState<ChartType>("line");
   const [showChartSettings, setShowChartSettings] = useState(false);
-  const { pinned, defaultTimeframe, hydrate, toggle, setDefaultTimeframe } =
+  const [showExtendedHours, setShowExtendedHours] = useState(true);
+  const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
     useTimeframeStore();
-  const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>("1D");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [selectedTimeframe, setSelectedTimeframe] =
+    useState<HeaderTimeframe>("1D");
   const [tfModalVisible, setTfModalVisible] = useState(false);
-  const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    defaultTimeframe || "1m"
-  );
+  const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>("1D");
   const { messages, addAnalysisMessage, clearSymbolMessages } = useChatStore();
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
@@ -390,6 +389,42 @@ export default function StockDetailScreen() {
     useState(false);
   const [showChartTypeBottomSheet, setShowChartTypeBottomSheet] =
     useState(false);
+  const [isYTDView, setIsYTDView] = useState(false);
+  const [lineChartData, setLineChartData] = useState<
+    { time: number; value: number }[]
+  >([]);
+
+  // Clear cache and reset chart when symbol changes
+  useEffect(() => {
+    console.log("🔄 Symbol changed to:", symbol, "- clearing viewport cache");
+
+    // Reset any local caches if needed (viewport cache removed)
+
+    // Clear other symbol-specific state
+    setAnalysis(null);
+    setNews([]);
+    setCachedSignal(null);
+
+    // Load new data
+    load();
+  }, [symbol]);
+
+  // Clear cache and reload chart when timeframe or extended hours setting changes
+  useEffect(() => {
+    console.log(
+      "🔄 Timeframe or extended hours changed:",
+      extendedTf,
+      "extended hours:",
+      showExtendedHours,
+      "for symbol:",
+      symbol
+    );
+
+    // Reset local view state
+
+    // Load new timeframe data
+    load();
+  }, [extendedTf, showExtendedHours]);
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
   const [unifiedBottomSheetTab, setUnifiedBottomSheetTab] = useState<
     "timeframe" | "chartType"
@@ -399,6 +434,11 @@ export default function StockDetailScreen() {
     null
   );
   const [sentimentLoading, setSentimentLoading] = useState(false);
+
+  // Batch edge requests from WebView to avoid excessive API calls while panning
+  // Removed edge batching state; no longer needed with simple lazy loading
+
+  // Real-time logic is now handled by AmChartsCandles component itself
 
   const symbolSentimentCounts = useMemo(() => {
     // Use aggregated sentiment stats if available, otherwise fall back to individual news counting
@@ -505,8 +545,7 @@ export default function StockDetailScreen() {
     (async () => {
       if (!initialQuote) {
         try {
-          const cached = await getCachedQuotes([symbol]);
-          const q = cached[symbol];
+          const q = await fetchSingleQuote(symbol);
           if (q && mounted) setInitialQuote(q);
         } catch {}
       }
@@ -522,59 +561,6 @@ export default function StockDetailScreen() {
       setExtendedTf(defaultTimeframe);
     }
   }, [defaultTimeframe]);
-
-  // Refresh cached signal when screen comes into focus and periodically
-  useFocusEffect(
-    useCallback(() => {
-      const refreshCachedSignal = () => {
-        const cached = getCachedSignal(symbol);
-        if (cached) {
-          // Only update if the cached signal is different (newer timestamp)
-          if (!cachedSignal || cached.timestamp > cachedSignal.timestamp) {
-            setCachedSignal(cached);
-          }
-        } else {
-          // If no cached signal, clear the current one
-          setCachedSignal(null);
-        }
-      };
-
-      // Initial refresh
-      refreshCachedSignal();
-
-      // Set up periodic refresh while screen is focused (reduced frequency)
-      const interval = setInterval(refreshCachedSignal, 2500);
-
-      // Start real-time chart refresh
-      console.log("🔄 Starting stock detail refresh for", symbol, extendedTf);
-      realtimeDataManager.startStockDetailRefresh(
-        symbol,
-        extendedTf,
-        async () => {
-          // Refresh callback - reload chart data from smart cache
-          try {
-            const candles = await smartCandleManager.getCandles(
-              symbol,
-              extendedTf,
-              500
-            );
-            if (candles && candles.length > 0) {
-              setDailySeries(toLWC(candles));
-            }
-          } catch (error) {
-            console.error("Failed to refresh chart from smart cache:", error);
-          }
-        }
-      );
-
-      // Return cleanup function
-      return () => {
-        clearInterval(interval);
-        console.log("⏹️ Stopping stock detail refresh");
-        realtimeDataManager.stopStockDetailRefresh();
-      };
-    }, [symbol, getCachedSignal, cachedSignal, extendedTf])
-  );
 
   // Remove automatic analysis - only trigger when user explicitly requests it
 
@@ -644,192 +630,9 @@ export default function StockDetailScreen() {
         return;
       }
 
-      // Fetch candle data for analysis
-      const limits: Record<"D" | "1H" | "15" | "5", number> = {
-        D: 365,
-        "1H": 300,
-        "15": 200,
-        "5": 150,
-      };
-      const get = async (res: "D" | "1H" | "15" | "5") => {
-        try {
-          return await fetchCandles(symbol, {
-            resolution: res,
-            limit: limits[res],
-          });
-        } catch (e) {
-          return await fetchCandles(symbol, {
-            resolution: res,
-            limit: limits[res],
-          });
-        }
-      };
-
-      const [d, h1, m15, m5] = await Promise.all([
-        get("D"),
-        get("1H"),
-        get("15"),
-        get("5"),
-      ]);
-
-      // Fetch context data for comprehensive analysis
-      let newsBrief: any[] | undefined = undefined;
-      let marketNewsBrief: any[] | undefined = undefined;
-      let fedBrief: any[] | undefined = undefined;
-
-      try {
-        // Use already loaded news with sentiment if available, otherwise fetch fresh
-        let newsData =
-          news.length > 0 ? news : await fetchStockNewsApi(symbol, 25);
-        if (newsData.length === 0) {
-          // Fallback to default provider if Stock News API fails
-          newsData = await fetchSymbolNews(symbol);
-        }
-
-        newsBrief = (newsData || []).slice(0, 5).map((n: any) => ({
-          title: n.title,
-          summary: (n.summary || "").slice(0, 180),
-          source: n.source,
-          publishedAt: n.publishedAt,
-          sentiment: n.sentiment, // Include sentiment from Stock News API
-        }));
-
-        // Add aggregated sentiment stats if available
-        if (sentimentStats) {
-          newsBrief.push({
-            title: "Market Sentiment Analysis",
-            summary: `30-day sentiment: ${
-              sentimentStats.totalPositive
-            } positive, ${sentimentStats.totalNegative} negative, ${
-              sentimentStats.totalNeutral
-            } neutral articles. Overall sentiment score: ${sentimentStats.sentimentScore.toFixed(
-              3
-            )}`,
-            source: "Stock News API",
-            publishedAt: new Date().toISOString(),
-            sentiment:
-              sentimentStats.sentimentScore > 0.3
-                ? "Positive"
-                : sentimentStats.sentimentScore < -0.1
-                ? "Negative"
-                : "Neutral",
-          });
-        }
-
-        // Fetch market news
-        const marketNews = await fetchSymbolNews("SPY"); // Use SPY as market proxy
-        marketNewsBrief = (marketNews || []).slice(0, 3).map((n: any) => ({
-          title: n.title,
-          summary: (n.summary || "").slice(0, 120),
-          source: n.source,
-        }));
-
-        // Fetch FOMC events
-        const events = await getUpcomingFedEvents();
-        fedBrief = (events || []).slice(0, 3).map((e: any) => ({
-          title: e.title,
-          date: e.date,
-          impact: e.impact,
-          type: e.type,
-        }));
-      } catch (error) {
-        console.warn("Failed to fetch context data:", error);
-      }
-
-      // Run AI strategy analysis
-      const output = await runAIStrategy({
-        symbol,
-        mode: "auto",
-        candleData: {
-          "1d": d.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-          "1h": h1.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-          "15m": m15.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-          "5m": m5.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-        },
-        indicators: {},
-        context: {
-          userBias: "neutral",
-          strategyPreference: "auto",
-          userPreferences: {
-            pace: "auto",
-            desiredRR: 2.0,
-          },
-          includeFlags: {
-            macro: true,
-            sentiment: true,
-            vix: true,
-            fomc: true,
-            market: true,
-            fundamentals: true,
-          },
-          news: newsBrief,
-          marketNews: marketNewsBrief,
-          fedEvents: fedBrief,
-          fundamentals: { level: "comprehensive" },
-          analysisType: "comprehensive_auto",
-        },
-      });
-
-      if (output) {
-        const tradePlan = aiOutputToTradePlan(output);
-        const aiMeta = {
-          strategyChosen: String(output.strategyChosen),
-          side: output.side,
-          confidence: output.confidence,
-          why: output.why || [],
-          notes: output.tradePlanNotes || [],
-          targets: output.targets || [],
-          riskReward: output.riskReward,
-        };
-        const analysisContext = {
-          mode: "auto",
-          tradePace: "auto",
-          desiredRR: 2.0,
-          contextMode: "comprehensive",
-          isAutoAnalysis: true,
-        };
-
-        // Cache the signal
-        const cachedSignalData: CachedSignal = {
-          symbol,
-          timestamp: Date.now(),
-          tradePlan,
-          aiMeta,
-          analysisContext,
-          rawAnalysisOutput: output,
-        };
-
-        cacheSignal(cachedSignalData);
-        setCachedSignal(cachedSignalData);
-      }
+      // Analysis now requires Polygon API key for candle data
+      console.log("Auto-analysis requires Polygon API key for candle data");
+      return;
     } catch (error) {
       console.error("Auto-analysis failed:", error);
     } finally {
@@ -838,56 +641,14 @@ export default function StockDetailScreen() {
   }
 
   async function load() {
-    // Show chart immediately - no loading state
+    // Chart data is now handled directly by KLineProChart via Polygon API
     setLoading(false);
 
-    // Try to get cached data from smart candle manager
-    try {
-      const cachedCandles = await smartCandleManager.getCandles(
-        symbol,
-        extendedTf,
-        500
-      );
-      if (cachedCandles && cachedCandles.length > 0) {
-        console.log(
-          "📈 Loading smart cached chart data for",
-          symbol,
-          extendedTf
-        );
-        setDailySeries(toLWC(cachedCandles));
-      } else if (dailySeries.length === 0) {
-        // Set placeholder data if we don't have cached data
-        const now = Math.floor(Date.now() / 1000);
-        const placeholderPrice = initialQuote?.last || 100;
-        setDailySeries([
-          {
-            time: now,
-            open: placeholderPrice,
-            high: placeholderPrice,
-            low: placeholderPrice,
-            close: placeholderPrice,
-            volume: 0,
-          },
-        ]);
-      }
-    } catch (error) {
-      console.error("Smart cache failed, using placeholder:", error);
-      // Set placeholder data on error
-      if (dailySeries.length === 0) {
-        const now = Math.floor(Date.now() / 1000);
-        const placeholderPrice = initialQuote?.last || 100;
-        setDailySeries([
-          {
-            time: now,
-            open: placeholderPrice,
-            high: placeholderPrice,
-            low: placeholderPrice,
-            close: placeholderPrice,
-            volume: 0,
-          },
-        ]);
-      }
-    }
+    // Load simple line chart data
+    loadLineChartData().catch((error) => {
+      console.error("Line chart loading failed:", error);
+      setLineChartData([]);
+    });
 
     // Load news and sentiment stats in parallel (truly non-blocking - fire and forget)
     loadNewsInBackground().catch((error) => {
@@ -898,6 +659,26 @@ export default function StockDetailScreen() {
       console.error("Sentiment stats loading failed:", error);
     });
   }
+
+  async function loadLineChartData() {
+    try {
+      const tf =
+        selectedTimeframe === "YTD" ? ("1D" as ExtendedTimeframe) : extendedTf;
+      const candles = await fetchCandlesForTimeframe(symbol, tf, {
+        includeExtendedHours: showExtendedHours,
+      });
+      const series = (candles || []).map((c) => ({
+        time: c.time,
+        value: c.close,
+      }));
+      setLineChartData(series);
+    } catch (e) {
+      console.error("Failed to load line data:", e);
+      setLineChartData([]);
+    }
+  }
+
+  // Removed custom edge request logic; lazy loading handled in visible range handler
 
   // Load sentiment stats in background
   async function loadSentimentStats() {
@@ -960,48 +741,30 @@ export default function StockDetailScreen() {
     }
   }
 
-  async function applyExtendedTimeframe(tf: ExtendedTimeframe) {
-    setExtendedTf(tf);
-    setDefaultTimeframe(tf); // Save as user's preferred default
+  // Header timeframe handler (Robinhood-style)
+  async function applyHeaderTimeframe(tf: HeaderTimeframe) {
+    setSelectedTimeframe(tf);
+    if (tf === "YTD") {
+      setIsYTDView(true);
+      // Chart data now handled by KLineProChart via Polygon API
+      // Keep extendedTf as "1D" so spacing works, but realtime disabled below
+      setExtendedTf("1D");
+      return;
+    }
 
-    // Update the real-time manager with new timeframe
-    realtimeDataManager.updateTimeframe(tf);
-    // Map extended to simple header pills if applicable
-    const map: Record<string, Timeframe> = {
-      "1m": "1D",
-      "2m": "1D",
-      "3m": "1D",
-      "4m": "1D",
-      "5m": "1D",
-      "10m": "1D",
-      "15m": "1D",
-      "30m": "1D",
-      "45m": "1D",
-      "1h": "1W",
-      "2h": "1W",
-      "4h": "1M",
+    setIsYTDView(false);
+    const map: Record<HeaderTimeframe, ExtendedTimeframe> = {
       "1D": "1D",
       "1W": "1W",
       "1M": "1M",
       "3M": "3M",
-      "6M": "1Y",
+      YTD: "1D", // not used (handled above)
       "1Y": "1Y",
-      "2Y": "ALL",
-      "5Y": "ALL",
+      "5Y": "5Y",
       ALL: "ALL",
     };
-    setSelectedTimeframe(map[tf]);
-
-    // Use smart candle manager for instant timeframe switching
-    try {
-      const candles = await smartCandleManager.getCandles(symbol, tf, 500);
-      if (candles && candles.length > 0) {
-        console.log("📈 Smart timeframe switch for", symbol, tf);
-        setDailySeries(toLWC(candles));
-      }
-    } catch (e) {
-      console.warn("Failed to load timeframe candles:", e);
-    }
+    const target = map[tf];
+    setExtendedTf(target);
   }
 
   // Navigate to chart with signal data
@@ -1096,7 +859,7 @@ export default function StockDetailScreen() {
         }));
 
         // Add aggregated sentiment stats if available
-        if (sentimentStats) {
+        if (sentimentStats && newsBrief) {
           newsBrief.push({
             title: "Market Sentiment Analysis",
             summary: `30-day sentiment: ${
@@ -1142,7 +905,7 @@ export default function StockDetailScreen() {
         symbol,
         mode: "auto",
         candleData: {
-          "1d": d.map((c) => ({
+          "1d": d.map((c: any) => ({
             time: c.time,
             open: c.open,
             high: c.high,
@@ -1150,7 +913,7 @@ export default function StockDetailScreen() {
             close: c.close,
             volume: c.volume,
           })),
-          "1h": h1.map((c) => ({
+          "1h": h1.map((c: any) => ({
             time: c.time,
             open: c.open,
             high: c.high,
@@ -1158,7 +921,7 @@ export default function StockDetailScreen() {
             close: c.close,
             volume: c.volume,
           })),
-          "15m": m15.map((c) => ({
+          "15m": m15.map((c: any) => ({
             time: c.time,
             open: c.open,
             high: c.high,
@@ -1166,7 +929,7 @@ export default function StockDetailScreen() {
             close: c.close,
             volume: c.volume,
           })),
-          "5m": m5.map((c) => ({
+          "5m": m5.map((c: any) => ({
             time: c.time,
             open: c.open,
             high: c.high,
@@ -1224,7 +987,7 @@ export default function StockDetailScreen() {
         // Now create the new signal
         const tradePlan = aiOutputToTradePlan(output);
         const aiMeta = {
-          strategyChosen: String(output.strategyChosen),
+          strategyChosen: String(output.strategyChosen || ""),
           side: output.side,
           confidence: output.confidence,
           why: output.why || [],
@@ -1271,8 +1034,10 @@ export default function StockDetailScreen() {
       ? initialQuote.changePercent
       : null;
 
-  // After-hours visibility: only show in US after-hours window (4:00pm–8:00pm ET on weekdays)
-  function isUSAfterHours(now: Date = new Date()): boolean {
+  // Enhanced market session detection
+  type MarketSession = "pre-market" | "regular" | "after-hours" | "closed";
+
+  function getMarketSession(now: Date = new Date()): MarketSession {
     try {
       const parts = new Intl.DateTimeFormat("en-US", {
         timeZone: "America/New_York",
@@ -1286,25 +1051,27 @@ export default function StockDetailScreen() {
         parts.find((p) => p.type === "minute")?.value || "0"
       );
       const weekday = parts.find((p) => p.type === "weekday")?.value || "";
-      const isWeekday = weekday ? weekday[0] !== "S" : false; // Mon-Fri
+      const isWeekday = weekday && !["Sat", "Sun"].includes(weekday); // Mon-Fri
       const minutes = hour * 60 + minute;
-      return !!isWeekday && minutes >= 16 * 60 && minutes < 20 * 60;
+
+      if (!isWeekday) return "closed";
+
+      // Pre-market: 4:00 AM - 9:30 AM ET
+      if (minutes >= 4 * 60 && minutes < 9 * 60 + 30) return "pre-market";
+      // Regular hours: 9:30 AM - 4:00 PM ET
+      if (minutes >= 9 * 60 + 30 && minutes < 16 * 60) return "regular";
+      // After-hours: 4:00 PM - 8:00 PM ET
+      if (minutes >= 16 * 60 && minutes < 20 * 60) return "after-hours";
+
+      return "closed";
     } catch {
-      return false;
+      return "closed";
     }
   }
-  const showAfterHours = isUSAfterHours();
 
-  function toLWC(candles: Candle[]): LWCDatum[] {
-    return (candles || []).map((c) => ({
-      time: c.time,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-      volume: c.volume,
-    }));
-  }
+  const currentSession = getMarketSession();
+  const showAfterHours = currentSession === "after-hours";
+  const showPreMarket = currentSession === "pre-market";
 
   async function onSetAlert() {
     await sendLocalNotification(
@@ -1394,19 +1161,29 @@ export default function StockDetailScreen() {
               {todayChangePercent.toFixed(2)}%) Today
             </Text>
           )}
-          {showAfterHours && (
+          {(showAfterHours || showPreMarket) && (
             <Text
               style={[
                 styles.afterHours,
                 {
                   color:
-                    todayChange !== null && todayChange < 0
+                    currentSession === "pre-market"
+                      ? "#3b82f6"
+                      : todayChange !== null && todayChange < 0
                       ? "#16a34a"
                       : "#dc2626",
                 },
               ]}
             >
-              After hours
+              {currentSession === "pre-market" ? "Pre-market" : "After hours"}
+            </Text>
+          )}
+          {currentSession !== "closed" && (
+            <Text style={styles.sessionIndicator}>
+              Market:{" "}
+              {currentSession === "regular"
+                ? "Open"
+                : currentSession.replace("-", " ")}
             </Text>
           )}
         </View>
@@ -1416,91 +1193,100 @@ export default function StockDetailScreen() {
         {/* Chart Section */}
         <View style={styles.chartSection}>
           {/* Chart */}
-          <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
-            <LightweightCandles
-              data={dailySeries}
+          <View style={styles.chartContainer}>
+            <KLineProChart
+              key={`${symbol}-${extendedTf}-${chartType}`}
+              symbol={symbol}
+              timeframe={extendedTf}
               height={280}
-              type={chartType}
               theme="dark"
-              showVolume={false}
-              showMA={false}
-              showGrid={true}
-              showCrosshair={true}
-              forcePositive={
-                todayChange !== null && todayChangePercent !== null
-                  ? todayChange >= 0
-                  : undefined
+              locale="en-US"
+              market="stocks"
+              chartType={
+                chartType === "candlestick" ? "candle" : (chartType as any)
               }
+              minimalUi
+              hideVolumePane
+              hideIndicatorPane
             />
           </View>
 
-          {/* Unified Chart Controls */}
-          <View style={styles.unifiedControls}>
-            {/* Pinned Timeframes */}
+          {/* Robinhood-style Timeframe Controls */}
+          <View style={[styles.unifiedControls, { paddingHorizontal: 16 }]}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ alignItems: "center" }}
               style={{ flex: 1 }}
             >
-              {(pinned as ExtendedTimeframe[]).map((tf) => (
-                <Pressable
-                  key={`pin-${tf}`}
-                  onPress={() => applyExtendedTimeframe(tf)}
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    borderRadius: 8,
-                    backgroundColor: extendedTf === tf ? "#00D4AA" : "#1a1a1a",
-                    marginRight: 6,
-                  }}
-                >
-                  <Text
+              {/* Dynamic Pinned Timeframes */}
+              {pinned.map((tf) => {
+                const isSelected = extendedTf === tf;
+                return (
+                  <Pressable
+                    key={`tf-${tf}`}
+                    onPress={() => {
+                      setExtendedTf(tf);
+                      setDefaultTimeframe(tf); // Save as user's preferred default
+                    }}
                     style={{
-                      color: extendedTf === tf ? "#000" : "#ccc",
-                      fontWeight: "600",
-                      fontSize: 12,
+                      paddingHorizontal: 14,
+                      paddingVertical: 8,
+                      borderRadius: 14,
+                      backgroundColor: isSelected ? "#00D4AA" : "#1a1a1a",
+                      marginRight: 8,
                     }}
                   >
-                    {tf}
-                  </Text>
-                </Pressable>
-              ))}
+                    <Text
+                      style={{
+                        color: isSelected ? "#000" : "#ccc",
+                        fontWeight: "700",
+                        fontSize: 12,
+                      }}
+                    >
+                      {tf}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
 
-            {/* Unified Settings Button */}
-            <Pressable
-              onPress={() => showUnifiedBottomSheetWithTab("timeframe")}
-              style={styles.expandButton}
-            >
-              <Ionicons name="options" size={16} color="#fff" />
-            </Pressable>
+            {/* Settings and Expand Buttons */}
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {/* Settings Button */}
+              <Pressable
+                onPress={() => showUnifiedBottomSheetWithTab("timeframe")}
+                style={[styles.expandButton]}
+                hitSlop={10}
+              >
+                <Ionicons name="settings-outline" size={16} color="#fff" />
+              </Pressable>
 
-            {/* Expand Button */}
-            <Pressable
-              onPress={() =>
-                (navigation as any).navigate("ChartFullScreen", {
-                  symbol,
-                  chartType,
-                  timeframe: extendedTf, // Use extendedTf instead of selectedTimeframe for consistency
-                  initialTimeframe: extendedTf,
-                  initialData: dailySeries,
-                  isDayUp:
-                    todayChange !== null && todayChangePercent !== null
-                      ? todayChange >= 0
-                      : undefined,
-                  // Pass cached signal data if available
-                  ...(cachedSignal && {
-                    tradePlan: cachedSignal.tradePlan,
-                    ai: cachedSignal.aiMeta,
-                    analysisContext: cachedSignal.analysisContext,
-                  }),
-                })
-              }
-              style={styles.expandButton}
-            >
-              <Ionicons name="expand" size={16} color="#fff" />
-            </Pressable>
+              {/* Expand Button */}
+              <Pressable
+                onPress={() =>
+                  (navigation as any).navigate("ChartFullScreen", {
+                    symbol,
+                    chartType,
+                    timeframe: extendedTf,
+                    initialTimeframe: extendedTf,
+                    initialData: [],
+                    isDayUp:
+                      todayChange !== null && todayChangePercent !== null
+                        ? todayChange >= 0
+                        : undefined,
+                    ...(cachedSignal && {
+                      tradePlan: cachedSignal.tradePlan,
+                      ai: cachedSignal.aiMeta,
+                      analysisContext: cachedSignal.analysisContext,
+                    }),
+                  })
+                }
+                style={styles.expandButton}
+              >
+                <Ionicons name="expand" size={16} color="#fff" />
+              </Pressable>
+            </View>
           </View>
 
           {/* Horizontal Separator */}
@@ -2151,7 +1937,7 @@ export default function StockDetailScreen() {
           visible={tfModalVisible}
           onClose={() => setTfModalVisible(false)}
           selected={extendedTf}
-          onSelect={(tf) => applyExtendedTimeframe(tf)}
+          onSelect={(tf) => setExtendedTf(tf)}
         />
 
         {/* News */}
@@ -2292,8 +2078,6 @@ export default function StockDetailScreen() {
                         "1h",
                         "2h",
                         "4h",
-                        "6h",
-                        "12h",
                         "1D",
                         "1W",
                         "1M",
@@ -2305,8 +2089,7 @@ export default function StockDetailScreen() {
                         <Pressable
                           key={tf}
                           onPress={() => {
-                            applyExtendedTimeframe(tf as ExtendedTimeframe);
-                            hideBottomSheet();
+                            setExtendedTf(tf as ExtendedTimeframe);
                           }}
                           style={{
                             paddingVertical: 16,
@@ -2479,50 +2262,47 @@ export default function StockDetailScreen() {
                           Minutes
                         </Text>
                         <View style={styles.timeframeGrid}>
-                          {[
-                            "1m",
-                            "2m",
-                            "3m",
-                            "4m",
-                            "5m",
-                            "10m",
-                            "15m",
-                            "30m",
-                            "45m",
-                          ].map((tf) => {
-                            const isSelected = extendedTf === tf;
-                            const isPinned = pinned.includes(
-                              tf as ExtendedTimeframe
-                            );
-                            return (
-                              <Pressable
-                                key={tf}
-                                onPress={() => {
-                                  applyExtendedTimeframe(
-                                    tf as ExtendedTimeframe
-                                  );
-                                  hideBottomSheet();
-                                }}
-                                style={[
-                                  styles.timeframeButton,
-                                  isSelected && styles.timeframeButtonActive,
-                                  isPinned && styles.timeframeButtonPinned,
-                                ]}
-                              >
-                                <Text
+                          {["1m", "2m", "3m", "5m", "10m", "15m", "30m"].map(
+                            (tf) => {
+                              const isSelected = extendedTf === tf;
+                              const isPinned = pinned.includes(
+                                tf as ExtendedTimeframe
+                              );
+                              return (
+                                <Pressable
+                                  key={tf}
+                                  onPress={async () => {
+                                    const success = await toggle(
+                                      tf as ExtendedTimeframe
+                                    );
+                                    if (!success) {
+                                      setPinError(
+                                        "You can pin up to 10 timeframes"
+                                      );
+                                      setTimeout(() => setPinError(null), 2000);
+                                    }
+                                  }}
                                   style={[
-                                    styles.timeframeButtonText,
-                                    isSelected &&
-                                      styles.timeframeButtonTextActive,
-                                    isPinned &&
-                                      styles.timeframeButtonTextPinned,
+                                    styles.timeframeButton,
+                                    isSelected && styles.timeframeButtonActive,
+                                    isPinned && styles.timeframeButtonPinned,
                                   ]}
                                 >
-                                  {tf}
-                                </Text>
-                              </Pressable>
-                            );
-                          })}
+                                  <Text
+                                    style={[
+                                      styles.timeframeButtonText,
+                                      isSelected &&
+                                        styles.timeframeButtonTextActive,
+                                      isPinned &&
+                                        styles.timeframeButtonTextPinned,
+                                    ]}
+                                  >
+                                    {tf}
+                                  </Text>
+                                </Pressable>
+                              );
+                            }
+                          )}
                         </View>
                       </View>
 
@@ -2530,7 +2310,7 @@ export default function StockDetailScreen() {
                       <View style={{ marginBottom: 24 }}>
                         <Text style={styles.timeframeSectionTitle}>Hours</Text>
                         <View style={styles.timeframeGrid}>
-                          {["1h", "2h", "4h", "6h", "8h", "12h"].map((tf) => {
+                          {["1h", "2h", "4h"].map((tf) => {
                             const isSelected = extendedTf === tf;
                             const isPinned = pinned.includes(
                               tf as ExtendedTimeframe
@@ -2538,11 +2318,16 @@ export default function StockDetailScreen() {
                             return (
                               <Pressable
                                 key={tf}
-                                onPress={() => {
-                                  applyExtendedTimeframe(
+                                onPress={async () => {
+                                  const success = await toggle(
                                     tf as ExtendedTimeframe
                                   );
-                                  hideBottomSheet();
+                                  if (!success) {
+                                    setPinError(
+                                      "You can pin up to 10 timeframes"
+                                    );
+                                    setTimeout(() => setPinError(null), 2000);
+                                  }
                                 }}
                                 style={[
                                   styles.timeframeButton,
@@ -2578,7 +2363,6 @@ export default function StockDetailScreen() {
                             "3M",
                             "6M",
                             "1Y",
-                            "2Y",
                             "5Y",
                             "ALL",
                           ].map((tf) => {
@@ -2589,11 +2373,16 @@ export default function StockDetailScreen() {
                             return (
                               <Pressable
                                 key={tf}
-                                onPress={() => {
-                                  applyExtendedTimeframe(
+                                onPress={async () => {
+                                  const success = await toggle(
                                     tf as ExtendedTimeframe
                                   );
-                                  hideBottomSheet();
+                                  if (!success) {
+                                    setPinError(
+                                      "You can pin up to 10 timeframes"
+                                    );
+                                    setTimeout(() => setPinError(null), 2000);
+                                  }
                                 }}
                                 style={[
                                   styles.timeframeButton,
@@ -2618,6 +2407,21 @@ export default function StockDetailScreen() {
                         </View>
                       </View>
                     </View>
+
+                    {/* Error Message */}
+                    {pinError && (
+                      <View style={{ padding: 20, alignItems: "center" }}>
+                        <Text
+                          style={{
+                            color: "#EF4444",
+                            fontSize: 14,
+                            textAlign: "center",
+                          }}
+                        >
+                          {pinError}
+                        </Text>
+                      </View>
+                    )}
                   </ScrollView>
                 )}
               </Pressable>
@@ -2685,6 +2489,8 @@ export default function StockDetailScreen() {
         onClose={() => setShowChartSettings(false)}
         currentChartType={chartType}
         onChartTypeChange={setChartType}
+        showExtendedHours={showExtendedHours}
+        onExtendedHoursChange={setShowExtendedHours}
       />
     </View>
   );

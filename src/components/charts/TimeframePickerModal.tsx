@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   Modal,
   View,
@@ -15,12 +15,10 @@ export type ExtendedTimeframe =
   | "1m"
   | "2m"
   | "3m"
-  | "4m"
   | "5m"
   | "10m"
   | "15m"
   | "30m"
-  | "45m"
   | "1h"
   | "2h"
   | "4h"
@@ -28,9 +26,7 @@ export type ExtendedTimeframe =
   | "1W"
   | "1M"
   | "3M"
-  | "6M"
   | "1Y"
-  | "2Y"
   | "5Y"
   | "ALL";
 
@@ -44,12 +40,12 @@ interface Props {
 const groups: { title: string; items: ExtendedTimeframe[] }[] = [
   {
     title: "Minutes",
-    items: ["1m", "2m", "3m", "4m", "5m", "10m", "15m", "30m", "45m"],
+    items: ["1m", "2m", "3m", "5m", "10m", "15m", "30m"],
   },
   { title: "Hours", items: ["1h", "2h", "4h"] },
   {
     title: "Days",
-    items: ["1D", "1W", "1M", "3M", "6M", "1Y", "2Y", "5Y", "ALL"],
+    items: ["1D", "1W", "1M", "3M", "1Y", "5Y", "ALL"],
   },
 ];
 
@@ -59,21 +55,27 @@ export default function TimeframePickerModal({
   selected,
   onSelect,
 }: Props) {
+  // Ignore onSelect - this modal is purely for managing pinned timeframes
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const { pinned, toggle } = useTimeframeStore();
+  const [pinError, setPinError] = useState<string | null>(null);
   return (
     <Modal
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={() => {}}
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <View style={styles.modal}>
+        <View
+          style={styles.modal}
+          onStartShouldSetResponder={() => true}
+          onResponderGrant={() => {}}
+        >
           <View style={styles.header}>
-            <Text style={styles.title}>Select Timeframe</Text>
+            <Text style={styles.title}>Manage Pinned Timeframes</Text>
             <Pressable onPress={onClose} style={styles.closeButton}>
               <Ionicons name="close" size={20} color="#888" />
             </Pressable>
@@ -84,32 +86,34 @@ export default function TimeframePickerModal({
                 <Text style={styles.groupTitle}>{g.title}</Text>
                 <View style={styles.grid}>
                   {g.items.map((tf) => {
-                    const isSel = selected === tf;
                     const isPinned = pinned.includes(tf);
                     return (
                       <Pressable
                         key={tf}
                         onPress={() => {
-                          // Tap toggles favorite; do not close modal
+                          // Tap toggles pin; do not close modal
+                          console.log("Timeframe pressed:", tf);
+                          const isPinnedNow = pinned.includes(tf);
+                          if (!isPinnedNow && pinned.length >= 10) {
+                            setPinError("You can pin up to 10 timeframes");
+                            setTimeout(() => setPinError(null), 1500);
+                            return;
+                          }
                           toggle(tf);
+                          console.log("Toggle completed for:", tf);
                         }}
-                        style={[
-                          styles.cell,
-                          isSel && styles.cellSelected,
-                          isPinned && styles.cellPinned,
-                        ]}
+                        style={[styles.cell, isPinned && styles.cellPinned]}
                       >
                         <View style={styles.cellContent}>
                           <Text
                             style={[
                               styles.cellText,
-                              isSel && styles.cellTextSelected,
                               isPinned && styles.cellTextPinned,
                             ]}
                           >
                             {tf}
                           </Text>
-                          {/* favorited indicated via styles only */}
+                          {/* pinned indicated via styles only */}
                         </View>
                       </Pressable>
                     );
@@ -121,8 +125,12 @@ export default function TimeframePickerModal({
             {/* Instructions */}
             <View style={styles.instructions}>
               <Text style={styles.instructionText}>
-                Tap to add/remove favorites • Close with X or tap outside
+                Tap to pin/unpin timeframes • Max 6 timeframes • Close with X or
+                tap outside
               </Text>
+              {pinError ? (
+                <Text style={styles.errorText}>{pinError}</Text>
+              ) : null}
             </View>
           </ScrollView>
         </View>
@@ -177,10 +185,7 @@ const createStyles = (theme: any) =>
       marginBottom: 8,
       backgroundColor: theme.colors.surface,
     },
-    cellSelected: {
-      backgroundColor: theme.colors.primary,
-      borderColor: theme.colors.primary,
-    },
+
     cellPinned: {
       borderColor: "#00D4AA",
       borderWidth: 2,
@@ -192,11 +197,16 @@ const createStyles = (theme: any) =>
       justifyContent: "center",
     },
     cellText: { color: theme.colors.textSecondary, fontWeight: "600" },
-    cellTextSelected: { color: "#000" },
     cellTextPinned: { color: theme.colors.primary },
     instructions: { padding: 16, alignItems: "center" },
     instructionText: {
       color: theme.colors.textSecondary,
+      fontSize: 12,
+      textAlign: "center",
+    },
+    errorText: {
+      marginTop: 6,
+      color: "#EF4444",
       fontSize: 12,
       textAlign: "center",
     },

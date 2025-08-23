@@ -18,9 +18,9 @@ import { useNavigation } from "@react-navigation/native";
 import { useAppDataStore } from "../store/appDataStore";
 import StockAutocomplete from "../components/common/StockAutocomplete";
 import { StockSearchResult } from "../services/stockSearch";
-import { fetchYahooCandles } from "../services/marketProviders";
+import { fetchCandles } from "../services/marketProviders";
 import { fetchNewsWithDateFilter } from "../services/newsProviders";
-import SimpleLineChart from "../components/charts/SimpleLineChart";
+// import AmChartsLine from "../components/charts/AmChartsLine";
 import { useTheme } from "../providers/ThemeProvider";
 import { useUserStore, type TraderType } from "../store/userStore";
 import { buildSignalContext } from "../services/signalEngine";
@@ -51,7 +51,7 @@ export default function DecalpXScreen() {
     riskReward?: number;
   } | null>(null);
   const [aiLoading, setAiLoading] = useState<boolean>(false);
-  const { profile } = useUserStore();
+  const profile = useUserStore((s) => s.profile);
 
   // Use centralized store instead of old marketOverviewStore
   const {
@@ -358,9 +358,15 @@ export default function DecalpXScreen() {
     (async () => {
       if (!selected) return;
       try {
-        const candles = await fetchYahooCandles(selected.symbol, "5d", "1d");
+        const candles = await fetchCandles(selected.symbol, {
+          resolution: "D",
+          limit: 5,
+        });
         const last = candles[candles.length - 1]?.close ?? null;
-        const mapped = candles.map((c) => ({ time: c.time, close: c.close }));
+        const mapped = candles.map((c: any) => ({
+          time: c.time,
+          close: c.close,
+        }));
         const news = await fetchNewsWithDateFilter(selected.symbol, 72);
         let positive = 0,
           negative = 0,
@@ -561,13 +567,13 @@ export default function DecalpXScreen() {
           </View>
 
           <View style={styles.chartContainer}>
-            <SimpleLineChart
+            {/* <AmChartsLine
               data={chartData}
               height={120}
               color={priceChange >= 0 ? "#10B981" : "#EF4444"}
               strokeWidth={2}
               showFill={false}
-            />
+            /> */}
             <Pressable
               onPress={navigateToFullChart}
               style={{

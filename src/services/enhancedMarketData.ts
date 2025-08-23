@@ -1,10 +1,5 @@
-import {
-  fetchCandles,
-  fetchNews,
-  Candle,
-  NewsItem,
-  FetchCandlesOptions,
-} from "./marketProviders";
+import { fetchNews, NewsItem } from "./marketProviders";
+import { fetchAndCacheBulkQuotes, fetchSingleQuote } from "./quotes";
 // Removed old brokerage services - now using Plaid integration
 // import { brokerageApiService, BrokerageQuote } from "./legacy/brokerageApiService";
 // import { brokerageAuthService, BrokerageProvider } from "./legacy/brokerageAuth";
@@ -17,7 +12,7 @@ const sessionHeartbeatService = {
   destroy: () => {},
 };
 
-export interface MarketDataOptions extends FetchCandlesOptions {
+export interface MarketDataOptions {
   preferBrokerage?: boolean;
   brokerageProvider?: string; // Changed from BrokerageProvider to string
 }
@@ -77,7 +72,7 @@ class EnhancedMarketDataService {
     };
   }
 
-  // Enhanced quote fetching with brokerage support
+  // Enhanced quote fetching (Polygon-only via quotes service)
   async getQuote(
     symbol: string,
     options: MarketDataOptions = {}
@@ -90,95 +85,30 @@ class EnhancedMarketDataService {
       return cached.quote;
     }
 
-    const { provider, isBrokerage } = this.getBestProvider(options);
-
     try {
       let quote: EnhancedQuote;
-
-      if (isBrokerage) {
-        // With Plaid, quotes should be fetched via traditional market providers
-        // to avoid legacy brokerage calls. Fall through to traditional path.
-      }
-
-      {
-        // Fall back to traditional providers (delayed data)
-        // This is a simplified implementation - you'd need to adapt based on your current quote fetching
-        const candles = await fetchCandles(symbol, {
-          ...options,
-          providerOverride: provider as any,
-        });
-        const latestCandle = candles[candles.length - 1];
-
-        if (!latestCandle) {
-          throw new Error(`No data available for ${symbol}`);
-        }
-
-        quote = {
-          symbol,
-          price: latestCandle.close,
-          change: 0, // Would need previous close to calculate
-          changePercent: 0,
-          volume: latestCandle.volume ?? 0,
-          provider,
-          isRealTime: false,
-          lastUpdated: new Date(),
-        };
-      }
+      const q = await fetchSingleQuote(symbol);
+      quote = {
+        symbol: q.symbol,
+        price: q.last,
+        change: q.change,
+        changePercent: q.changePercent,
+        volume: q.volume ?? 0,
+        provider: "polygon",
+        isRealTime: true,
+        lastUpdated: new Date(),
+      };
 
       // Cache the result
       this.quoteCache.set(cacheKey, { quote, timestamp: Date.now() });
       return quote;
     } catch (error) {
-      console.error(
-        `Failed to get quote for ${symbol} from ${provider}:`,
-        error
-      );
-
-      // If brokerage failed, try fallback to traditional providers
-      if (isBrokerage) {
-        console.log(`Falling back to traditional providers for ${symbol}`);
-        return this.getQuote(symbol, { ...options, preferBrokerage: false });
-      }
-
+      console.error(`Failed to get quote for ${symbol}:`, error);
       throw error;
     }
   }
 
-  // Enhanced candle fetching with brokerage support
-  async getCandles(
-    symbol: string,
-    options: MarketDataOptions = {}
-  ): Promise<Candle[]> {
-    const { provider, isBrokerage } = this.getBestProvider(options);
-
-    try {
-      if (isBrokerage) {
-        // No legacy brokerage candles; use traditional providers
-      }
-      {
-        // Use traditional providers
-        return await fetchCandles(symbol, {
-          ...options,
-          providerOverride: provider as any,
-        });
-      }
-    } catch (error) {
-      console.error(
-        `Failed to get candles for ${symbol} from ${provider}:`,
-        error
-      );
-
-      // If brokerage failed, try fallback
-      if (isBrokerage) {
-        console.log(
-          `Falling back to traditional providers for ${symbol} candles`
-        );
-        return this.getCandles(symbol, { ...options, preferBrokerage: false });
-      }
-
-      throw error;
-    }
-  }
+  // Candle fetching removed; KLine Pro handles candles internally via Polygon
 
   // Enhanced news fetching with brokerage support
   async getNews(
@@ -221,30 +151,6 @@ class EnhancedMarketDataService {
   async getWatchlist() {
     // Watchlist not supported via Plaid read-only; return empty list
     return [] as any[];
-  }
-
-  // Map resolution to brokerage timeframe
-  private mapResolutionToBrokerageTimeframe(resolution?: string): string {
-    switch (resolution) {
-      case "1":
-        return "1minute";
-      case "5":
-        return "5minute";
-      case "15":
-        return "15minute";
-      case "30":
-        return "30minute";
-      case "1H":
-        return "hour";
-      case "D":
-        return "day";
-      case "W":
-        return "week";
-      case "M":
-        return "month";
-      default:
-        return "day";
-    }
   }
 
   // Check connection status for all brokerage accounts

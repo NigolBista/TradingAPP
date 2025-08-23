@@ -142,7 +142,7 @@ const STRATEGY_FILTERS = [
 
 export default function SignalsFeedScreen() {
   const navigation = useNavigation();
-  const { profile } = useUserStore();
+  const profile = useUserStore((s) => s.profile);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [signals, setSignals] = useState<SignalSummary[]>([]);

@@ -245,7 +245,7 @@ const STRATEGY_FILTERS = [
 export default function MarketOverviewTabScreen() {
   const navigation = useNavigation();
   const { theme } = useTheme();
-  const { profile } = useUserStore();
+  const profile = useUserStore((s) => s.profile);
   const [activeTab, setActiveTab] = useState<TabType>("Market");
   const insets = useSafeAreaInsets();
 
