@@ -29,6 +29,8 @@ import AmChartsCandles, {
   type AmChartsDatum,
   type AmChartsCandlesHandle,
 } from "../components/charts/AmChartsCandles";
+import KLineProChart from "../components/charts/KLineProChart";
+import Constants from "expo-constants";
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
@@ -1868,27 +1870,40 @@ export default function StockDetailScreen() {
         <View style={styles.chartSection}>
           {/* Chart */}
           <View style={[styles.chartContainer, { paddingHorizontal: 16 }]}>
-            <AmChartsCandles
-              ref={chartRef}
-              data={dailySeries}
-              height={280}
-              type={chartType}
-              theme="dark"
-              showVolume={false}
-              showMA={false}
-              showGrid={true}
-              showCrosshair={true}
-              initialPosition="end"
-              forcePositive={
-                todayChange !== null && todayChangePercent !== null
-                  ? todayChange >= 0
-                  : undefined
-              }
-              onLoadMoreData={handleLoadMoreData}
-              symbol={symbol}
-              timeframe={selectedTimeframe === "YTD" ? "1D" : extendedTf}
-              enableRealtime={selectedTimeframe === "1D"}
-            />
+            {Boolean((Constants.expoConfig?.extra as any)?.polygonApiKey) ? (
+              <KLineProChart
+                symbol={symbol}
+                timeframe={
+                  selectedTimeframe === "YTD" ? "1d" : (extendedTf as any)
+                }
+                height={280}
+                theme="dark"
+                locale="en-US"
+                market="stocks"
+              />
+            ) : (
+              <AmChartsCandles
+                ref={chartRef}
+                data={dailySeries}
+                height={280}
+                type={chartType}
+                theme="dark"
+                showVolume={false}
+                showMA={false}
+                showGrid={true}
+                showCrosshair={true}
+                initialPosition="end"
+                forcePositive={
+                  todayChange !== null && todayChangePercent !== null
+                    ? todayChange >= 0
+                    : undefined
+                }
+                onLoadMoreData={handleLoadMoreData}
+                symbol={symbol}
+                timeframe={selectedTimeframe === "YTD" ? "1D" : extendedTf}
+                enableRealtime={selectedTimeframe === "1D"}
+              />
+            )}
           </View>
 
           {/* Robinhood-style Timeframe Controls */}
