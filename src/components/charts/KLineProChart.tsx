@@ -9,7 +9,6 @@ type SupportedTimeframe =
   | "5m"
   | "15m"
   | "30m"
-  | "45m"
   | "1h"
   | "2h"
   | "4h"
@@ -55,7 +54,6 @@ const TIMEFRAMES: Record<
   "5Y": { multiplier: 5, timespan: "year", text: "5Y" },
   // Additional commonly used keys kept for compatibility with external controls
   "6M": { multiplier: 6, timespan: "month", text: "6M" },
-  "2Y": { multiplier: 2, timespan: "year", text: "2Y" },
 };
 
 function mapTimeframeToPeriod(tf: string | undefined): {
@@ -84,8 +82,6 @@ function mapTimeframeToPeriod(tf: string | undefined): {
       ? "3M"
       : raw === "1Y"
       ? "1Y"
-      : raw === "2Y"
-      ? "2Y"
       : raw === "5Y"
       ? "5Y"
       : lower;

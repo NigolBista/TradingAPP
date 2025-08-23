@@ -9,13 +9,13 @@ type TimeframeState = {
   hydrate: () => Promise<void>;
   pin: (tf: ExtendedTimeframe) => Promise<void>;
   unpin: (tf: ExtendedTimeframe) => Promise<void>;
-  toggle: (tf: ExtendedTimeframe) => Promise<void>;
+  toggle: (tf: ExtendedTimeframe) => Promise<boolean>;
   setDefaultTimeframe: (tf: ExtendedTimeframe) => Promise<void>;
 };
 
 const STORAGE_KEY = "pinned_timeframes_v1";
 const DEFAULT_TIMEFRAME_KEY = "default_timeframe_v1";
-const MAX_PINNED = 6;
+const MAX_PINNED = 10;
 const DEFAULT_PINNED: ExtendedTimeframe[] = [
   "1m",
   "5m",
@@ -23,7 +23,6 @@ const DEFAULT_PINNED: ExtendedTimeframe[] = [
   "1h",
   "1D",
   "1W",
-  "1M",
 ];
 const INITIAL_DEFAULT_TIMEFRAME: ExtendedTimeframe = "1D";
 
@@ -109,9 +108,11 @@ export const useTimeframeStore = create<TimeframeState>((set, get) => ({
     const { pinned } = get();
     if (pinned.includes(tf)) {
       await get().unpin(tf);
+      return true;
     } else {
-      if (pinned.length >= MAX_PINNED) return;
+      if (pinned.length >= MAX_PINNED) return false;
       await get().pin(tf);
+      return true;
     }
   },
   setDefaultTimeframe: async (tf) => {

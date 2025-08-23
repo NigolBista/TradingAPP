@@ -94,8 +94,8 @@ export default function TimeframePickerModal({
                           // Tap toggles pin; do not close modal
                           console.log("Timeframe pressed:", tf);
                           const isPinnedNow = pinned.includes(tf);
-                          if (!isPinnedNow && pinned.length >= 6) {
-                            setPinError("You can pin up to 6 timeframes");
+                          if (!isPinnedNow && pinned.length >= 10) {
+                            setPinError("You can pin up to 10 timeframes");
                             setTimeout(() => setPinError(null), 1500);
                             return;
                           }

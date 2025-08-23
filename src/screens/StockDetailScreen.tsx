@@ -370,8 +370,9 @@ export default function StockDetailScreen() {
   const [chartType, setChartType] = useState<ChartType>("line");
   const [showChartSettings, setShowChartSettings] = useState(false);
   const [showExtendedHours, setShowExtendedHours] = useState(true);
-  const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe } =
+  const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
     useTimeframeStore();
+  const [pinError, setPinError] = useState<string | null>(null);
   const [selectedTimeframe, setSelectedTimeframe] =
     useState<HeaderTimeframe>("1D");
   const [tfModalVisible, setTfModalVisible] = useState(false);
@@ -2077,8 +2078,6 @@ export default function StockDetailScreen() {
                         "1h",
                         "2h",
                         "4h",
-                        "6h",
-                        "12h",
                         "1D",
                         "1W",
                         "1M",
@@ -2263,46 +2262,47 @@ export default function StockDetailScreen() {
                           Minutes
                         </Text>
                         <View style={styles.timeframeGrid}>
-                          {[
-                            "1m",
-                            "2m",
-                            "3m",
-                            "5m",
-                            "10m",
-                            "15m",
-                            "30m",
-                            "45m",
-                          ].map((tf) => {
-                            const isSelected = extendedTf === tf;
-                            const isPinned = pinned.includes(
-                              tf as ExtendedTimeframe
-                            );
-                            return (
-                              <Pressable
-                                key={tf}
-                                onPress={() => {
-                                  setExtendedTf(tf as ExtendedTimeframe);
-                                }}
-                                style={[
-                                  styles.timeframeButton,
-                                  isSelected && styles.timeframeButtonActive,
-                                  isPinned && styles.timeframeButtonPinned,
-                                ]}
-                              >
-                                <Text
+                          {["1m", "2m", "3m", "5m", "10m", "15m", "30m"].map(
+                            (tf) => {
+                              const isSelected = extendedTf === tf;
+                              const isPinned = pinned.includes(
+                                tf as ExtendedTimeframe
+                              );
+                              return (
+                                <Pressable
+                                  key={tf}
+                                  onPress={async () => {
+                                    const success = await toggle(
+                                      tf as ExtendedTimeframe
+                                    );
+                                    if (!success) {
+                                      setPinError(
+                                        "You can pin up to 10 timeframes"
+                                      );
+                                      setTimeout(() => setPinError(null), 2000);
+                                    }
+                                  }}
                                   style={[
-                                    styles.timeframeButtonText,
-                                    isSelected &&
-                                      styles.timeframeButtonTextActive,
-                                    isPinned &&
-                                      styles.timeframeButtonTextPinned,
+                                    styles.timeframeButton,
+                                    isSelected && styles.timeframeButtonActive,
+                                    isPinned && styles.timeframeButtonPinned,
                                   ]}
                                 >
-                                  {tf}
-                                </Text>
-                              </Pressable>
-                            );
-                          })}
+                                  <Text
+                                    style={[
+                                      styles.timeframeButtonText,
+                                      isSelected &&
+                                        styles.timeframeButtonTextActive,
+                                      isPinned &&
+                                        styles.timeframeButtonTextPinned,
+                                    ]}
+                                  >
+                                    {tf}
+                                  </Text>
+                                </Pressable>
+                              );
+                            }
+                          )}
                         </View>
                       </View>
 
@@ -2310,7 +2310,7 @@ export default function StockDetailScreen() {
                       <View style={{ marginBottom: 24 }}>
                         <Text style={styles.timeframeSectionTitle}>Hours</Text>
                         <View style={styles.timeframeGrid}>
-                          {["1h", "2h", "4h", "6h", "8h", "12h"].map((tf) => {
+                          {["1h", "2h", "4h"].map((tf) => {
                             const isSelected = extendedTf === tf;
                             const isPinned = pinned.includes(
                               tf as ExtendedTimeframe
@@ -2318,8 +2318,16 @@ export default function StockDetailScreen() {
                             return (
                               <Pressable
                                 key={tf}
-                                onPress={() => {
-                                  setExtendedTf(tf as ExtendedTimeframe);
+                                onPress={async () => {
+                                  const success = await toggle(
+                                    tf as ExtendedTimeframe
+                                  );
+                                  if (!success) {
+                                    setPinError(
+                                      "You can pin up to 10 timeframes"
+                                    );
+                                    setTimeout(() => setPinError(null), 2000);
+                                  }
                                 }}
                                 style={[
                                   styles.timeframeButton,
@@ -2355,7 +2363,6 @@ export default function StockDetailScreen() {
                             "3M",
                             "6M",
                             "1Y",
-                            "2Y",
                             "5Y",
                             "ALL",
                           ].map((tf) => {
@@ -2366,8 +2373,16 @@ export default function StockDetailScreen() {
                             return (
                               <Pressable
                                 key={tf}
-                                onPress={() => {
-                                  setExtendedTf(tf as ExtendedTimeframe);
+                                onPress={async () => {
+                                  const success = await toggle(
+                                    tf as ExtendedTimeframe
+                                  );
+                                  if (!success) {
+                                    setPinError(
+                                      "You can pin up to 10 timeframes"
+                                    );
+                                    setTimeout(() => setPinError(null), 2000);
+                                  }
                                 }}
                                 style={[
                                   styles.timeframeButton,
@@ -2392,6 +2407,21 @@ export default function StockDetailScreen() {
                         </View>
                       </View>
                     </View>
+
+                    {/* Error Message */}
+                    {pinError && (
+                      <View style={{ padding: 20, alignItems: "center" }}>
+                        <Text
+                          style={{
+                            color: "#EF4444",
+                            fontSize: 14,
+                            textAlign: "center",
+                          }}
+                        >
+                          {pinError}
+                        </Text>
+                      </View>
+                    )}
                   </ScrollView>
                 )}
               </Pressable>

@@ -60,8 +60,9 @@ export default function ChartFullScreen() {
         riskReward?: number;
       } = route.params?.ai;
   const initialAnalysisContext = route.params?.analysisContext;
-  const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe } =
+  const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
     useTimeframeStore();
+  const [pinError, setPinError] = useState<string | null>(null);
   const chartRef = React.useRef<any>(null);
   const barSpacingRef = React.useRef<number>(60_000);
 
@@ -1249,10 +1250,16 @@ export default function ChartFullScreen() {
                             return (
                               <Pressable
                                 key={tf}
-                                onPress={() => {
-                                  handleTimeframeChange(
+                                onPress={async () => {
+                                  const success = await toggle(
                                     tf as ExtendedTimeframe
                                   );
+                                  if (!success) {
+                                    setPinError(
+                                      "You can pin up to 10 timeframes"
+                                    );
+                                    setTimeout(() => setPinError(null), 2000);
+                                  }
                                 }}
                                 style={[
                                   styles.timeframeButton,
@@ -1282,7 +1289,7 @@ export default function ChartFullScreen() {
                     <View style={{ marginBottom: 24 }}>
                       <Text style={styles.timeframeSectionTitle}>Hours</Text>
                       <View style={styles.timeframeGrid}>
-                        {["1h", "2h", "4h", "6h", "8h", "12h"].map((tf) => {
+                        {["1h", "2h", "4h"].map((tf) => {
                           const isSelected = extendedTf === tf;
                           const isPinned = pinned.includes(
                             tf as ExtendedTimeframe
@@ -1291,7 +1298,7 @@ export default function ChartFullScreen() {
                             <Pressable
                               key={tf}
                               onPress={() => {
-                                handleTimeframeChange(tf as ExtendedTimeframe);
+                                toggle(tf as ExtendedTimeframe);
                               }}
                               style={[
                                 styles.timeframeButton,
@@ -1319,46 +1326,39 @@ export default function ChartFullScreen() {
                     <View style={{ marginBottom: 24 }}>
                       <Text style={styles.timeframeSectionTitle}>Days</Text>
                       <View style={styles.timeframeGrid}>
-                        {[
-                          "1D",
-                          "1W",
-                          "1M",
-                          "3M",
-                          "6M",
-                          "1Y",
-                          "2Y",
-                          "5Y",
-                          "ALL",
-                        ].map((tf) => {
-                          const isSelected = extendedTf === tf;
-                          const isPinned = pinned.includes(
-                            tf as ExtendedTimeframe
-                          );
-                          return (
-                            <Pressable
-                              key={tf}
-                              onPress={() => {
-                                handleTimeframeChange(tf as ExtendedTimeframe);
-                              }}
-                              style={[
-                                styles.timeframeButton,
-                                isSelected && styles.timeframeButtonActive,
-                                isPinned && styles.timeframeButtonPinned,
-                              ]}
-                            >
-                              <Text
+                        {["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "ALL"].map(
+                          (tf) => {
+                            const isSelected = extendedTf === tf;
+                            const isPinned = pinned.includes(
+                              tf as ExtendedTimeframe
+                            );
+                            return (
+                              <Pressable
+                                key={tf}
+                                onPress={() => {
+                                  toggle(tf as ExtendedTimeframe);
+                                }}
                                 style={[
-                                  styles.timeframeButtonText,
-                                  isSelected &&
-                                    styles.timeframeButtonTextActive,
-                                  isPinned && styles.timeframeButtonTextPinned,
+                                  styles.timeframeButton,
+                                  isSelected && styles.timeframeButtonActive,
+                                  isPinned && styles.timeframeButtonPinned,
                                 ]}
                               >
-                                {tf}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
+                                <Text
+                                  style={[
+                                    styles.timeframeButtonText,
+                                    isSelected &&
+                                      styles.timeframeButtonTextActive,
+                                    isPinned &&
+                                      styles.timeframeButtonTextPinned,
+                                  ]}
+                                >
+                                  {tf}
+                                </Text>
+                              </Pressable>
+                            );
+                          }
+                        )}
                       </View>
                     </View>
                   </View>
