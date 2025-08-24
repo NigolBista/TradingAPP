@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import KLineProChart from "../components/charts/KLineProChart";
+import { defaultChartStyles } from "../constants/chartStyles";
 // Removed viewportBars usage; we'll lazy-load via timeRangeChange
 import { type ChartType } from "../components/charts/ChartSettingsModal";
 import { ExtendedTimeframe } from "../components/charts/TimeframePickerModal";
@@ -28,6 +29,7 @@ import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { getUpcomingFedEvents } from "../services/federalReserve";
+import EnhancedKLineProChart from "../components/charts/EnhancedKLineProChart";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -863,7 +865,7 @@ export default function ChartFullScreen() {
             </View>
           </View>
         </ScrollView>
-        <KLineProChart
+        <EnhancedKLineProChart 
           symbol={symbol}
           timeframe={extendedTf as any}
           height={chartHeight}
@@ -876,7 +878,8 @@ export default function ChartFullScreen() {
           hideVolumePane
           hideIndicatorPane
           showYAxis={true}
-        />
+          styleConfig={defaultChartStyles}
+        /> */}
         <Pressable
           onPress={handleAnalyzePress}
           disabled={analyzing}

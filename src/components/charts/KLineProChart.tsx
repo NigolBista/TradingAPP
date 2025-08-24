@@ -53,6 +53,8 @@ interface Props {
   tradeLevels?: TradeLevel[]; // Price lines for entry/exit levels
   tradeZones?: TradeZone[]; // Rectangles for trade visualization
   onTradeAnalysis?: (analysis: any) => void; // Callback for chart analysis results
+  /** Optional full style configuration object (KLineCharts/Pro styles JSON) */
+  styleConfig?: any;
 }
 
 // Canonical timeframe map for display and datafeed period settings
@@ -148,6 +150,7 @@ const KLineProChart = React.forwardRef<any, Props>(
       tradeLevels = [],
       tradeZones = [],
       onTradeAnalysis,
+      styleConfig,
     }: Props,
     ref
   ) => {
@@ -199,6 +202,248 @@ const KLineProChart = React.forwardRef<any, Props>(
               );
           } catch {}
         },
+        addHorizontalRayLineAtLevel: (
+          priceLevel: number,
+          timestamp?: number,
+          color?: string,
+          label?: string
+        ) => {
+          try {
+            webRef.current &&
+              webRef.current.injectJavaScript(
+                `(function(){ try{ if(window.__KLP__&&window.__KLP__.addHorizontalRayLineAtLevel){ window.__KLP__.addHorizontalRayLineAtLevel(${priceLevel}, ${
+                  timestamp || "undefined"
+                }, ${JSON.stringify(color || "")}, ${JSON.stringify(
+                  label || ""
+                )}); } }catch(e){} })();`
+              );
+          } catch {}
+        },
+        // Test direct KLineCharts API
+        testDirectOverlay: (priceLevel: number, overlayType?: string) => {
+          try {
+            const type = overlayType || "horizontalStraightLine";
+            webRef.current &&
+              webRef.current.injectJavaScript(
+                `(function(){ 
+                  try{ 
+                    if(window.__KLP__ && window.__KLP__.createOverlay){ 
+                      var lineId = window.__KLP__.createOverlay({
+                        name: '${type}',
+                        points: [{ value: ${priceLevel} }],
+                        lock: true
+                      });
+                      console.log('Direct overlay created with ID:', lineId);
+                    } 
+                  }catch(e){ 
+                    console.error('Direct overlay creation failed:', e); 
+                  } 
+                })();`
+              );
+          } catch {}
+        },
+        // Get supported overlays
+        getSupportedOverlays: () => {
+          try {
+            webRef.current &&
+              webRef.current.injectJavaScript(
+                `(function(){ 
+                  try{ 
+                    if(window.__KLP__ && window.__KLP__.getSupportedOverlays){ 
+                      var overlays = window.__KLP__.getSupportedOverlays();
+                      console.log('Supported overlays:', overlays);
+                    } 
+                  }catch(e){ 
+                    console.error('Get supported overlays failed:', e); 
+                  } 
+                })();`
+              );
+          } catch {}
+        },
+        // Debug window objects
+        debugWindowObjects: () => {
+          try {
+            webRef.current &&
+              webRef.current.injectJavaScript(
+                `(function(){ 
+                  try{ 
+                    console.log('=== WINDOW DEBUG ===');
+                    console.log('window.chart:', !!window.chart);
+                    console.log('window.klinecharts:', !!window.klinecharts);
+                    console.log('window.__KLP__:', !!window.__KLP__);
+                    
+                    if (window.chart) {
+                      // Debug the chart object structure
+                      console.log('Chart object type:', typeof window.chart);
+                      console.log('Chart constructor:', window.chart.constructor.name);
+                      console.log('Chart keys:', Object.keys(window.chart));
+                      console.log('Chart properties:', Object.getOwnPropertyNames(window.chart));
+                      
+                      // Deep inspection of all properties
+                      for (var key in window.chart) {
+                        try {
+                          var prop = window.chart[key];
+                          if (prop && typeof prop === 'object') {
+                            console.log('Property ' + key + ':', typeof prop, prop.constructor ? prop.constructor.name : 'unknown');
+                            if (prop.constructor && prop.constructor.name && prop.constructor.name.toLowerCase().includes('chart')) {
+                              console.log('Found potential chart in property:', key);
+                              var propMethods = Object.getOwnPropertyNames(prop).filter(function(p) {
+                                return typeof prop[p] === 'function';
+                              });
+                              console.log(key + ' methods:', propMethods.slice(0, 10));
+                            }
+                          }
+                        } catch(e) {
+                          console.log('Error inspecting property ' + key + ':', e.message);
+                        }
+                      }
+                      
+                      var chartMethods = Object.getOwnPropertyNames(window.chart).filter(function(prop) {
+                        return typeof window.chart[prop] === 'function';
+                      });
+                      console.log('Chart methods:', chartMethods.slice(0, 15));
+                      console.log('Total chart methods:', chartMethods.length);
+                      
+                      // Check if chart has nested chart instance (_chartApi)
+                      if (window.chart._chartApi) {
+                        console.log('Found _chartApi instance');
+                        console.log('_chartApi type:', typeof window.chart._chartApi);
+                        console.log('_chartApi constructor:', window.chart._chartApi.constructor.name);
+                        var apiMethods = Object.getOwnPropertyNames(window.chart._chartApi).filter(function(prop) {
+                          return typeof window.chart._chartApi[prop] === 'function';
+                        });
+                        console.log('_chartApi methods:', apiMethods.slice(0, 15));
+                        console.log('Total _chartApi methods:', apiMethods.length);
+                        
+                        // Check for overlay methods specifically
+                        var overlayApiMethods = apiMethods.filter(function(method) {
+                          return method.toLowerCase().includes('overlay') || 
+                                 method.toLowerCase().includes('draw') ||
+                                 method.toLowerCase().includes('create');
+                        });
+                        console.log('_chartApi overlay methods:', overlayApiMethods);
+                      }
+                      
+                      // Also check for chart.chart (fallback)
+                      if (window.chart.chart) {
+                        console.log('Found nested chart instance');
+                        console.log('Nested chart type:', typeof window.chart.chart);
+                        console.log('Nested chart constructor:', window.chart.chart.constructor.name);
+                        var nestedMethods = Object.getOwnPropertyNames(window.chart.chart).filter(function(prop) {
+                          return typeof window.chart.chart[prop] === 'function';
+                        });
+                        console.log('Nested chart methods:', nestedMethods.slice(0, 15));
+                        console.log('Total nested methods:', nestedMethods.length);
+                      }
+                      
+                      // Check for overlay-related methods
+                      var overlayMethods = chartMethods.filter(function(method) {
+                        return method.toLowerCase().includes('overlay') || 
+                               method.toLowerCase().includes('draw') ||
+                               method.toLowerCase().includes('create');
+                      });
+                      console.log('Overlay-related methods:', overlayMethods);
+                    }
+                    
+                    if (window.__KLP__) {
+                      console.log('__KLP__ methods:', Object.keys(window.__KLP__));
+                    }
+                    
+                    // Try to create a test overlay with different APIs
+                    if (window.chart) {
+                      console.log('Testing overlay creation...');
+                      
+                      // Check if KLineChartPro has direct overlay methods
+                      console.log('Checking KLineChartPro direct methods...');
+                      var directMethods = [];
+                      for (var method in window.chart) {
+                        if (typeof window.chart[method] === 'function') {
+                          directMethods.push(method);
+                        }
+                      }
+                      console.log('Direct methods on chart:', directMethods);
+                      
+                      // Check prototype methods
+                      if (window.chart.constructor && window.chart.constructor.prototype) {
+                        var prototypeMethods = Object.getOwnPropertyNames(window.chart.constructor.prototype).filter(function(prop) {
+                          return typeof window.chart.constructor.prototype[prop] === 'function' && prop !== 'constructor';
+                        });
+                        console.log('Prototype methods:', prototypeMethods.slice(0, 15));
+                      }
+                      
+                      // Method 1: Try createOverlay (basic KLineCharts)
+                      if (typeof window.chart.createOverlay === 'function') {
+                        try {
+                          var testId1 = window.chart.createOverlay({
+                            name: 'horizontalStraightLine',
+                            points: [{ value: 225 }]
+                          });
+                          console.log('createOverlay result:', testId1);
+                        } catch(e) {
+                          console.log('createOverlay failed:', e.message);
+                        }
+                      }
+                      
+                      // Method 2: Try addOverlay (Pro version)
+                      if (typeof window.chart.addOverlay === 'function') {
+                        try {
+                          var testId2 = window.chart.addOverlay({
+                            name: 'horizontalStraightLine',
+                            points: [{ value: 225 }]
+                          });
+                          console.log('addOverlay result:', testId2);
+                        } catch(e) {
+                          console.log('addOverlay failed:', e.message);
+                        }
+                      }
+                      
+                      // Method 3: Try createShape (Pro version)
+                      if (typeof window.chart.createShape === 'function') {
+                        try {
+                          var testId3 = window.chart.createShape({
+                            name: 'horizontalStraightLine',
+                            points: [{ value: 225 }]
+                          });
+                          console.log('createShape result:', testId3);
+                        } catch(e) {
+                          console.log('createShape failed:', e.message);
+                        }
+                      }
+                      
+                      // Method 4: Try _chartApi (KLineCharts Pro internal API)
+                      if (window.chart._chartApi && typeof window.chart._chartApi.createOverlay === 'function') {
+                        try {
+                          var testId4 = window.chart._chartApi.createOverlay({
+                            name: 'horizontalStraightLine',
+                            points: [{ value: 225 }]
+                          });
+                          console.log('_chartApi.createOverlay result:', testId4);
+                        } catch(e) {
+                          console.log('_chartApi.createOverlay failed:', e.message);
+                        }
+                      }
+                      
+                      // Method 5: Check if it's Pro version with different API
+                      if (window.chart.chart && typeof window.chart.chart.createOverlay === 'function') {
+                        try {
+                          var testId5 = window.chart.chart.createOverlay({
+                            name: 'horizontalStraightLine',
+                            points: [{ value: 225 }]
+                          });
+                          console.log('chart.chart.createOverlay result:', testId5);
+                        } catch(e) {
+                          console.log('chart.chart.createOverlay failed:', e.message);
+                        }
+                      }
+                    }
+                    
+                  }catch(e){ 
+                    console.error('Window debug failed:', e); 
+                  } 
+                })();`
+              );
+          } catch {}
+        },
       }),
       []
     );
@@ -214,6 +459,18 @@ const KLineProChart = React.forwardRef<any, Props>(
         );
       } catch {}
     }, [chartType]);
+
+    // Apply external style overrides dynamically
+    useEffect(() => {
+      if (!webRef.current || !styleConfig) return;
+      try {
+        webRef.current.injectJavaScript(
+          `(function(){ try{ if(window.__KLP__&&window.__KLP__.setStyles){ window.__KLP__.setStyles(${JSON.stringify(
+            styleConfig
+          )}); } }catch(e){} })();`
+        );
+      } catch {}
+    }, [styleConfig]);
 
     // Draw trade levels (price lines) when they change
     useEffect(() => {
@@ -431,6 +688,23 @@ const KLineProChart = React.forwardRef<any, Props>(
           }
         };
         var INITIAL_CHART_TYPE = ${JSON.stringify(initialChartType)};
+        var USER_STYLES = ${JSON.stringify(styleConfig || null)};
+        var SHOW_Y_AXIS = ${JSON.stringify(showYAxis)};
+
+        function isObject(obj){ return obj && typeof obj === 'object' && !Array.isArray(obj); }
+        function deepMerge(target, source){
+          if (!isObject(target) || !isObject(source)) return target;
+          Object.keys(source).forEach(function(key){
+            var srcVal = source[key];
+            if (isObject(srcVal)){
+              if (!isObject(target[key])) target[key] = {};
+              deepMerge(target[key], srcVal);
+            } else {
+              target[key] = srcVal;
+            }
+          });
+          return target;
+        }
         function applyChartType(chart, type){
           try {
             post({ debug: 'Attempting to apply chart type: ' + type });
@@ -517,52 +791,19 @@ const KLineProChart = React.forwardRef<any, Props>(
               periods: [], // Hide timeframe buttons
               mainIndicators: [], // Remove MA and other main indicators
               subIndicators: [], // Remove volume and other sub-indicators
-              styles: {
-                candle: Object.assign({}, CHART_TYPES[INITIAL_CHART_TYPE] || CHART_TYPES.candle, {
-                  tooltip: {
-                    showRule: 'none'  // Hides the tooltip that shows OHLC values
-                  },
-                  priceMark: {
-                    show: false,      // Hides all price marks
-                    last: {
-                      show: false    // Hides the last price mark
-                    },
-                    high: {
-                      show: false    // Hides the high price mark
-                    },
-                    low: {
-                      show: false    // Hides the low price mark
-                    }
-                  }
-                }),
-                xAxis: { 
-                  show: false,      // Hides time axis
-                  axisLine: {
-                    show: false    // Hides axis line
-                  },
-                  tickLine: {
-                    show: false    // Hides tick lines
-                  },
-                  tickText: {
-                    show: false    // Hides tick text
-                  }
-                },
-                yAxis: { 
-                  show: ${showYAxis},      // Controls price axis visibility
-                  scrollZoomEnabled: ${showYAxis},
-                  axisLine: {
-                    show: ${showYAxis}    // Controls axis line visibility
-                  },
-                  tickLine: {
-                    show: ${showYAxis}    // Controls tick lines visibility
-                  },
-                  tickText: {
-                    show: ${showYAxis}    // Controls tick text visibility
-                  }
-                },
-                grid: { show: false },
-                indicator: { show: false }
-              },
+              styles: (function(){
+                var base = {
+                  candle: Object.assign({}, CHART_TYPES[INITIAL_CHART_TYPE] || CHART_TYPES.candle, {
+                    tooltip: { showRule: 'none' },
+                    priceMark: { show: false, last: { show: false }, high: { show: false }, low: { show: false } }
+                  }),
+                  xAxis: { show: false, axisLine: { show: false }, tickLine: { show: false }, tickText: { show: false } },
+                  yAxis: { show: SHOW_Y_AXIS, scrollZoomEnabled: SHOW_Y_AXIS, axisLine: { show: SHOW_Y_AXIS }, tickLine: { show: SHOW_Y_AXIS }, tickText: { show: SHOW_Y_AXIS } },
+                  grid: { show: false },
+                  indicator: { show: false }
+                };
+                try { return USER_STYLES ? deepMerge(base, USER_STYLES) : base; } catch(_) { return base; }
+              })(),
               drawingBarVisible: false, // Hide drawing tools
               datafeed,
               ${
@@ -620,7 +861,171 @@ const KLineProChart = React.forwardRef<any, Props>(
             }
             
             try { 
+              // Expose KLineCharts library and chart instance to window for debugging
+              post({ debug: 'Exposing chart and library to window' });
+              
+              // Expose chart instance
+              window.chart = chart.getChart();
+              
+              // Debug: Log what we're exposing
+              post({ 
+                debug: 'Window objects exposed', 
+                hasChart: !!window.chart,
+                hasKLineCharts: !!window.klinecharts,
+                chartMethods: window.chart ? Object.getOwnPropertyNames(window.chart).filter(function(prop) {
+                  return typeof window.chart[prop] === 'function';
+                }).slice(0, 5) : []
+              });
+              
               window.__KLP__ = { 
+                // Direct access to chart instance
+                chart: chart,
+                
+                // Direct access to KLineCharts library
+                klinecharts: window.klinecharts,
+                
+                // Helper function to create overlays (uses working Pro methods)
+                createOverlay: function(options) {
+                  try {
+                    if (!options || !options.name) {
+                      post({ error: 'Invalid overlay options' });
+                      return null;
+                    }
+                    
+                    var overlayType = options.name;
+                    var points = options.points || [];
+                    var styles = options.styles || {};
+                    var lock = options.lock || false;
+                    
+                    // Map overlay types to working Pro methods
+                    if (overlayType === 'horizontalStraightLine' || overlayType === 'horizontalRayLine' || overlayType === 'priceLine') {
+                      if (points.length > 0 && typeof points[0].value !== 'undefined') {
+                        var priceLevel = points[0].value;
+                        var color = (styles.line && styles.line.color) || '#00D4AA';
+                        var label = options.text || ('Line at ' + priceLevel);
+                        
+                        // Use the working drawPriceLine method
+                        if (window.__KLP__ && window.__KLP__.drawPriceLine) {
+                          var lineId = window.__KLP__.drawPriceLine(priceLevel, color, label);
+                          post({ 
+                            debug: 'Overlay created via drawPriceLine', 
+                            id: lineId, 
+                            type: overlayType,
+                            price: priceLevel,
+                            color: color
+                          });
+                          return lineId;
+                        }
+                      }
+                    }
+                    
+                    // Fallback: try direct chart access (probably won't work but worth trying)
+                    if (chart && typeof chart.createOverlay === 'function') {
+                      var overlayId = chart.createOverlay(options);
+                      post({ 
+                        debug: 'Overlay created via direct chart', 
+                        id: overlayId, 
+                        options: options 
+                      });
+                      return overlayId;
+                    }
+                    
+                    post({ error: 'No working overlay creation method found for type: ' + overlayType });
+                    return null;
+                  } catch(e) {
+                    post({ error: 'createOverlay failed: ' + (e && e.message || e) });
+                    return null;
+                  }
+                },
+                
+                // Helper function to update overlays (Pro compatible)
+                overrideOverlay: function(options) {
+                  try {
+                    if (!options || !options.id) {
+                      post({ error: 'Invalid override options - id required' });
+                      return false;
+                    }
+                    
+                    // For Pro, we need to remove and recreate since direct override may not work
+                    if (options.points && options.points.length > 0 && typeof options.points[0].value !== 'undefined') {
+                      // Remove existing overlay
+                      if (window.__KLP__ && window.__KLP__.removeOverlayById) {
+                        window.__KLP__.removeOverlayById(options.id);
+                      }
+                      
+                      // Create new overlay with updated values
+                      var newOverlay = {
+                        name: 'horizontalStraightLine',
+                        points: options.points
+                      };
+                      var newId = this.createOverlay(newOverlay);
+                      
+                      post({ 
+                        debug: 'Overlay updated via recreate', 
+                        oldId: options.id,
+                        newId: newId,
+                        options: options 
+                      });
+                      return newId;
+                    }
+                    
+                    post({ error: 'Override not supported for this overlay type' });
+                    return false;
+                  } catch(e) {
+                    post({ error: 'overrideOverlay failed: ' + (e && e.message || e) });
+                    return false;
+                  }
+                },
+                
+                // Helper function to remove overlays (Pro compatible)
+                removeOverlay: function(filter) {
+                  try {
+                    if (!filter) {
+                      post({ error: 'Remove filter required' });
+                      return false;
+                    }
+                    
+                    // Use Pro's removeOverlayById if available
+                    if (filter.id && window.__KLP__ && window.__KLP__.removeOverlayById) {
+                      var result = window.__KLP__.removeOverlayById(filter.id);
+                      post({ 
+                        debug: 'Overlay removed via removeOverlayById', 
+                        result: result, 
+                        filter: filter 
+                      });
+                      return result;
+                    }
+                    
+                    // Fallback to clearAllDrawings if no specific ID
+                    if (window.__KLP__ && window.__KLP__.clearAllDrawings) {
+                      window.__KLP__.clearAllDrawings();
+                      post({ 
+                        debug: 'All overlays cleared via clearAllDrawings' 
+                      });
+                      return true;
+                    }
+                    
+                    post({ error: 'No working remove method found' });
+                    return false;
+                  } catch(e) {
+                    post({ error: 'removeOverlay failed: ' + (e && e.message || e) });
+                    return false;
+                  }
+                },
+                
+                // Get supported overlays
+                getSupportedOverlays: function() {
+                  try {
+                    if (window.klinecharts && typeof window.klinecharts.getSupportedOverlays === 'function') {
+                      return window.klinecharts.getSupportedOverlays();
+                    }
+                    return ['horizontalStraightLine', 'horizontalRayLine', 'horizontalSegment', 'priceLine', 'verticalStraightLine', 'verticalRayLine', 'segment', 'rayLine', 'straightLine'];
+                  } catch(e) {
+                    post({ error: 'getSupportedOverlays failed: ' + (e && e.message || e) });
+                    return [];
+                  }
+                },
+                
                 setChartType: function(t){ 
                   post({ debug: 'External setChartType called with: ' + t });
                   try { 
@@ -628,6 +1033,15 @@ const KLineProChart = React.forwardRef<any, Props>(
                   } catch(e) {
                     post({ error: 'External setChartType failed: ' + (e && e.message || e) });
                   } 
+                },
+                // Allow external style overrides
+                setStyles: function(s){
+                  try {
+                    if (!s) return;
+                    if (typeof chart.setStyleOptions === 'function') { chart.setStyleOptions(s); }
+                    if (typeof chart.setStyles === 'function') { chart.setStyles(s); }
+                    post({ debug: 'setStyles applied' });
+                  } catch(e) { post({ error: 'setStyles failed: ' + (e && e.message || e) }); }
                 },
                 
                 // Indicator controls
@@ -711,7 +1125,7 @@ const KLineProChart = React.forwardRef<any, Props>(
                     var lineId = 'price_line_' + Date.now() + '_' + Math.random();
                     var lineOptions = {
                       id: lineId,
-                      points: [{ price: price }],
+                      points: [{ value: price }],
                       styles: {
                         line: {
                           color: color || '#00D4AA',
@@ -745,8 +1159,8 @@ const KLineProChart = React.forwardRef<any, Props>(
                     if (!created) {
                       var lastTs = undefined;
                       try { var dl = (chart.chart && chart.chart.getDataList && chart.chart.getDataList()) || []; if (dl && dl.length) { lastTs = dl[dl.length - 1].timestamp || dl[dl.length - 1].time; } } catch(_) {}
-                      var pointA = lastTs ? { timestamp: lastTs, price: price } : { price: price };
-                      var pointB = lastTs ? { timestamp: lastTs + 60000, price: price } : { price: price };
+                      var pointA = lastTs ? { timestamp: lastTs, value: price } : { value: price };
+                      var pointB = lastTs ? { timestamp: lastTs + 60000, value: price } : { value: price };
                       var opts = { id: lineId, points: [pointA], styles: lineOptions.styles, text: lineOptions.text };
                       try { if (chart.chart && typeof chart.chart.createOverlay === 'function') { chart.chart.createOverlay('horizontalStraightLine', opts); created = true; } } catch(_) {}
                       if (!created) {
@@ -762,6 +1176,124 @@ const KLineProChart = React.forwardRef<any, Props>(
                   }
                 },
                 
+                // Enhanced horizontal line with better value display
+                drawHorizontalLineWithValue: function(price, color, label, showValue, valuePosition) {
+                  try {
+                    if (!chart) return;
+                    
+                    var lineId = 'horizontal_line_' + Date.now() + '_' + Math.random();
+                    var displayText = label || '';
+                    var lineColor = color || '#00D4AA';
+                    
+                    // Add price value to label if requested
+                    if (showValue !== false) {
+                      var formattedPrice = typeof price === 'number' ? price.toFixed(2) : String(price);
+                      displayText = displayText ? displayText + ' (' + formattedPrice + ')' : formattedPrice;
+                    }
+                    
+                    var lineOptions = {
+                      id: lineId,
+                      points: [{ value: price }],
+                      styles: {
+                        line: {
+                          color: lineColor,
+                          size: 3, // Make line thicker for better visibility
+                          style: 'solid'
+                        },
+                        text: {
+                          color: lineColor,
+                          size: 14, // Larger text
+                          family: 'Arial',
+                          weight: 'bold',
+                          offset: valuePosition === 'left' ? [-10, 0] : [10, 0],
+                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                          borderRadius: 4,
+                          paddingLeft: 6,
+                          paddingRight: 6,
+                          paddingTop: 3,
+                          paddingBottom: 3
+                        }
+                      },
+                      text: displayText
+                    };
+                    
+                    var created = false;
+                    var method = 'unknown';
+                    var chartInstance = chart.chart || chart;
+                    
+                    // Try horizontalStraightLine first (infinite line)
+                    if (!created && chartInstance && typeof chartInstance.createOverlay === 'function') {
+                      try {
+                        var overlayId = chartInstance.createOverlay('horizontalStraightLine', lineOptions);
+                        if (overlayId) {
+                          created = true;
+                          method = 'horizontalStraightLine';
+                          lineId = overlayId;
+                          post({ debug: 'horizontalStraightLine created successfully with ID: ' + overlayId });
+                        } else {
+                          post({ debug: 'horizontalStraightLine returned null/undefined' });
+                        }
+                      } catch(e) {
+                        post({ debug: 'horizontalStraightLine in drawHorizontalLineWithValue failed: ' + (e && e.message || e) });
+                      }
+                    }
+                    
+                    // Fallback to priceLine
+                    if (!created && chartInstance && typeof chartInstance.createOverlay === 'function') {
+                      try {
+                        var overlayId = chartInstance.createOverlay('priceLine', lineOptions);
+                        if (overlayId) {
+                          created = true;
+                          method = 'priceLine';
+                          lineId = overlayId;
+                          post({ debug: 'priceLine created successfully with ID: ' + overlayId });
+                        } else {
+                          post({ debug: 'priceLine returned null/undefined' });
+                        }
+                      } catch(e) {
+                        post({ debug: 'priceLine in drawHorizontalLineWithValue failed: ' + (e && e.message || e) });
+                      }
+                    }
+                    
+                    // If overlays don't work, try the existing drawPriceLine function
+                    if (!created && typeof this.drawPriceLine === 'function') {
+                      try {
+                        var resultId = this.drawPriceLine(price, lineColor, displayText);
+                        if (resultId) {
+                          created = true;
+                          method = 'drawPriceLine_fallback';
+                          lineId = resultId;
+                          post({ debug: 'drawPriceLine fallback created successfully with ID: ' + resultId });
+                        }
+                      } catch(e) {
+                        post({ debug: 'drawPriceLine fallback failed: ' + (e && e.message || e) });
+                      }
+                    }
+                    
+                    // Force chart refresh to ensure visibility
+                    try {
+                      if (chartInstance && typeof chartInstance.refresh === 'function') {
+                        chartInstance.refresh();
+                      } else if (chartInstance && typeof chartInstance.invalidate === 'function') {
+                        chartInstance.invalidate();
+                      }
+                    } catch(_) {}
+                    
+                    post({ 
+                      debug: 'Horizontal line with value drawn at: ' + price, 
+                      label: displayText, 
+                      created: created,
+                      method: method,
+                      lineId: lineId,
+                      color: lineColor
+                    });
+                    return created ? lineId : null;
+                  } catch(e) {
+                    post({ error: 'Failed to draw horizontal line with value: ' + (e && e.message || e) });
+                    return null;
+                  }
+                },
+                
                 drawTradeZone: function(entryPrice, exitPrice, startTime, endTime, color, label, type) {
                   try {
                     if (!chart || !chart.chart) return;
@@ -774,8 +1306,8 @@ const KLineProChart = React.forwardRef<any, Props>(
                     var rectOptions = {
                       id: rectId,
                       points: [
-                        { timestamp: startTime, price: entryPrice },
-                        { timestamp: endTime, price: exitPrice }
+                        { timestamp: startTime, value: entryPrice },
+                        { timestamp: endTime, value: exitPrice }
                       ],
                       styles: {
                         style: 'fill',
@@ -843,6 +1375,251 @@ const KLineProChart = React.forwardRef<any, Props>(
                   } catch(e) {
                     post({ error: 'Failed to remove overlay: ' + (e && e.message || e) });
                     return false;
+                  }
+                },
+                
+                // Add horizontal ray line at specific price level
+                addHorizontalRayLineAtLevel: function(priceLevel, timestamp, color, label) {
+                  try {
+                    if (!chart) {
+                      post({ error: 'Widget not available' });
+                      return;
+                    }
+
+                    var currentTime = timestamp || Date.now();
+                    var lineId = 'horizontal_ray_' + Date.now() + '_' + Math.random();
+                    var displayText = label || ('Ray Line $' + priceLevel.toFixed(2));
+                    var lineColor = color || '#00D4AA';
+                    
+                    var created = false;
+                    var method = 'unknown';
+                    
+                    // Get the underlying chart instance
+                    var chartInstance = chart.chart || chart;
+                    
+                    if (!chartInstance) {
+                      post({ error: 'No chart instance available' });
+                      return null;
+                    }
+                    
+                    // Method 1: Try horizontalRayLine (the actual overlay type from KLineCharts)
+                    if (!created && typeof chartInstance.createOverlay === 'function') {
+                      try {
+                        // KLineCharts horizontalRayLine expects a single point with timestamp and value
+                        var rayLineOptions = {
+                          id: lineId,
+                          points: [
+                            { timestamp: currentTime, value: priceLevel }
+                          ],
+                          styles: {
+                            line: {
+                              color: lineColor,
+                              size: 2,
+                              style: 'solid'
+                            },
+                            text: {
+                              color: lineColor,
+                              size: 12,
+                              family: 'Arial',
+                              weight: 'bold',
+                              offset: [5, 0]
+                            }
+                          },
+                          text: displayText
+                        };
+                        
+                        // Create the overlay using the correct KLineCharts API
+                        var overlayId = chartInstance.createOverlay('horizontalRayLine', rayLineOptions);
+                        if (overlayId) {
+                          created = true;
+                          method = 'horizontalRayLine';
+                          lineId = overlayId;
+                          post({ debug: 'Successfully created horizontalRayLine overlay with ID: ' + overlayId });
+                        } else {
+                          post({ debug: 'horizontalRayLine createOverlay returned null/undefined' });
+                        }
+                      } catch(e) {
+                        post({ debug: 'horizontalRayLine failed: ' + (e && e.message || e) });
+                      }
+                    }
+                    
+                    // Method 2: Try horizontalStraightLine as fallback
+                    if (!created && typeof chartInstance.createOverlay === 'function') {
+                      try {
+                        var straightLineOptions = {
+                          id: lineId + '_straight',
+                          points: [{ value: priceLevel }],
+                          styles: {
+                            line: {
+                              color: lineColor,
+                              size: 2,
+                              style: 'solid'
+                            },
+                            text: {
+                              color: lineColor,
+                              size: 12,
+                              family: 'Arial',
+                              weight: 'bold',
+                              offset: [5, 0]
+                            }
+                          },
+                          text: displayText
+                        };
+                        
+                        chartInstance.createOverlay('horizontalStraightLine', straightLineOptions);
+                        created = true;
+                        method = 'horizontalStraightLine';
+                        lineId = lineId + '_straight';
+                        post({ debug: 'Successfully created horizontalStraightLine overlay' });
+                      } catch(e) {
+                        post({ debug: 'horizontalStraightLine failed: ' + (e && e.message || e) });
+                      }
+                    }
+                    
+                    // Method 3: Try priceLine as fallback
+                    if (!created && typeof chartInstance.createOverlay === 'function') {
+                      try {
+                        var priceLineOptions = {
+                          id: lineId + '_price',
+                          points: [{ value: priceLevel }],
+                          styles: {
+                            line: {
+                              color: lineColor,
+                              size: 2,
+                              style: 'solid'
+                            },
+                            text: {
+                              color: lineColor,
+                              size: 12,
+                              family: 'Arial',
+                              weight: 'bold',
+                              offset: [5, 0]
+                            }
+                          },
+                          text: displayText
+                        };
+                        
+                        chartInstance.createOverlay('priceLine', priceLineOptions);
+                        created = true;
+                        method = 'priceLine';
+                        lineId = lineId + '_price';
+                        post({ debug: 'Successfully created priceLine overlay' });
+                      } catch(e) {
+                        post({ debug: 'priceLine failed: ' + (e && e.message || e) });
+                      }
+                    }
+                    
+                    // Method 4: Try using existing drawHorizontalLineWithValue function
+                    if (!created && typeof this.drawHorizontalLineWithValue === 'function') {
+                      try {
+                        var resultId = this.drawHorizontalLineWithValue(priceLevel, lineColor, displayText, true, 'right');
+                        if (resultId) {
+                          created = true;
+                          method = 'drawHorizontalLineWithValue';
+                          lineId = resultId;
+                        }
+                      } catch(e) {
+                        post({ debug: 'drawHorizontalLineWithValue failed: ' + (e && e.message || e) });
+                      }
+                    }
+                    
+                    // Method 5: Try using existing drawPriceLine function
+                    if (!created && typeof this.drawPriceLine === 'function') {
+                      try {
+                        var resultId = this.drawPriceLine(priceLevel, lineColor, displayText);
+                        if (resultId) {
+                          created = true;
+                          method = 'drawPriceLine';
+                          lineId = resultId;
+                        }
+                      } catch(e) {
+                        post({ debug: 'drawPriceLine failed: ' + (e && e.message || e) });
+                      }
+                    }
+                    
+                    // Debug: Log available overlay types and chart instance info
+                    if (!created) {
+                      try {
+                        // Log chart instance type and available methods
+                        var chartMethods = [];
+                        for (var prop in chartInstance) {
+                          if (typeof chartInstance[prop] === 'function') {
+                            chartMethods.push(prop);
+                          }
+                        }
+                        post({ debug: 'Chart instance methods:', methods: chartMethods.slice(0, 15) });
+                        
+                        // Try to get supported overlays if method exists
+                        if (typeof chartInstance.getSupportedOverlays === 'function') {
+                          var supportedOverlays = chartInstance.getSupportedOverlays();
+                          post({ debug: 'Available overlay types:', overlays: supportedOverlays });
+                        } else {
+                          post({ debug: 'getSupportedOverlays method not available' });
+                        }
+                        
+                        // Check if we can access the global overlay registry
+                        if (typeof window.klinecharts !== 'undefined' && window.klinecharts.getSupportedOverlays) {
+                          var globalOverlays = window.klinecharts.getSupportedOverlays();
+                          post({ debug: 'Global supported overlays:', overlays: globalOverlays });
+                        }
+                      } catch(e) {
+                        post({ debug: 'Debug info gathering failed: ' + (e && e.message || e) });
+                      }
+                    }
+                    
+                    // Get current price range for debugging
+                    var priceRange = null;
+                    var currentPrice = null;
+                    try {
+                      // Try multiple ways to get chart data
+                      var dataList = null;
+                      if (chartInstance && typeof chartInstance.getDataList === 'function') {
+                        dataList = chartInstance.getDataList();
+                      } else if (chart && typeof chart.getDataList === 'function') {
+                        dataList = chart.getDataList();
+                      }
+                      
+                      if (dataList && dataList.length > 0) {
+                        var lastCandle = dataList[dataList.length - 1];
+                        currentPrice = lastCandle.close || lastCandle.c || lastCandle.value || lastCandle.price;
+                        post({ debug: 'Found current price: ' + currentPrice, dataLength: dataList.length });
+                      } else {
+                        post({ debug: 'No data list available or empty', hasDataList: !!dataList });
+                      }
+                      
+                      // Try to get visible range
+                      if (chartInstance && typeof chartInstance.getVisibleRange === 'function') {
+                        var visibleRange = chartInstance.getVisibleRange();
+                        if (visibleRange) {
+                          priceRange = { from: visibleRange.from, to: visibleRange.to };
+                        }
+                      } else if (chart && typeof chart.getVisibleRange === 'function') {
+                        var visibleRange = chart.getVisibleRange();
+                        if (visibleRange) {
+                          priceRange = { from: visibleRange.from, to: visibleRange.to };
+                        }
+                      }
+                    } catch(e) {
+                      post({ debug: 'Could not get price range info: ' + (e && e.message || e) });
+                    }
+                    
+                    post({ 
+                      debug: 'Horizontal ray line at level: ' + priceLevel, 
+                      id: lineId, 
+                      created: created,
+                      method: method,
+                      color: lineColor,
+                      label: displayText,
+                      timestamp: currentTime,
+                      currentPrice: currentPrice,
+                      priceRange: priceRange,
+                      priceLevel: priceLevel
+                    });
+                    
+                    return created ? lineId : null;
+                  } catch(e) {
+                    post({ error: 'Failed to add horizontal ray line: ' + (e && e.message || e) });
+                    return null;
                   }
                 },
                 
