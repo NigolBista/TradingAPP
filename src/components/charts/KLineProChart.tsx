@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useImperativeHandle } from "react";
 import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
@@ -130,53 +130,99 @@ function mapTimeframeToPeriod(tf: string | undefined): {
   return TIMEFRAMES["1d"];
 }
 
-export default function KLineProChart({
-  symbol,
-  timeframe = "1d",
-  height = 280,
-  locale = "en-US",
-  theme = "dark",
-  market = "stocks",
-  minimalUi = false,
-  lineOnly = false,
-  hideVolumePane = false,
-  hideIndicatorPane = false,
-  chartType,
-  showYAxis = false,
-  tradeLevels = [],
-  tradeZones = [],
-  onTradeAnalysis,
-}: Props) {
-  const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
-    ?.polygonApiKey;
+const KLineProChart = React.forwardRef<any, Props>(
+  (
+    {
+      symbol,
+      timeframe = "1d",
+      height = 280,
+      locale = "en-US",
+      theme = "dark",
+      market = "stocks",
+      minimalUi = false,
+      lineOnly = false,
+      hideVolumePane = false,
+      hideIndicatorPane = false,
+      chartType,
+      showYAxis = false,
+      tradeLevels = [],
+      tradeZones = [],
+      onTradeAnalysis,
+    }: Props,
+    ref
+  ) => {
+    const polygonApiKey: string | undefined = (
+      Constants.expoConfig?.extra as any
+    )?.polygonApiKey;
 
-  const period = useMemo(() => mapTimeframeToPeriod(timeframe), [timeframe]);
-  const webRef = useRef<any>(null);
+    const period = useMemo(() => mapTimeframeToPeriod(timeframe), [timeframe]);
+    const webRef = useRef<any>(null);
 
-  // Update chart type dynamically after the webview is ready
-  useEffect(() => {
-    if (!webRef.current || !chartType) return;
-    try {
-      webRef.current.injectJavaScript(
-        `(function(){ try{ if(window.__KLP__&&window.__KLP__.setChartType){ window.__KLP__.setChartType(${JSON.stringify(
-          chartType
-        )}); } }catch(e){} })();`
-      );
-    } catch {}
-  }, [chartType]);
+    // Expose imperative API to parent (tool use from outside)
+    useImperativeHandle(
+      ref,
+      () => ({
+        injectJavaScript: (script: string) => {
+          try {
+            webRef.current && webRef.current.injectJavaScript(script);
+          } catch {}
+        },
+        showIndicators: () => {
+          try {
+            webRef.current &&
+              webRef.current.injectJavaScript(
+                `(function(){ try{ if(window.__KLP__&&window.__KLP__.showIndicators){ window.__KLP__.showIndicators(); } }catch(e){} })();`
+              );
+          } catch {}
+        },
+        hideIndicators: () => {
+          try {
+            webRef.current &&
+              webRef.current.injectJavaScript(
+                `(function(){ try{ if(window.__KLP__&&window.__KLP__.hideIndicators){ window.__KLP__.hideIndicators(); } }catch(e){} })();`
+              );
+          } catch {}
+        },
+        clearAllDrawings: () => {
+          try {
+            webRef.current &&
+              webRef.current.injectJavaScript(
+                `(function(){ try{ if(window.__KLP__&&window.__KLP__.clearAllDrawings){ window.__KLP__.clearAllDrawings(); } }catch(e){} })();`
+              );
+          } catch {}
+        },
+        clearIndicators: () => {
+          try {
+            webRef.current &&
+              webRef.current.injectJavaScript(
+                `(function(){ try{ if(window.__KLP__&&window.__KLP__.clearIndicators){ window.__KLP__.clearIndicators(); } }catch(e){} })();`
+              );
+          } catch {}
+        },
+      }),
+      []
+    );
 
-  // Draw trade levels (price lines) when they change
-  useEffect(() => {
-    if (!webRef.current || !tradeLevels || tradeLevels.length === 0) return;
+    // Update chart type dynamically after the webview is ready
+    useEffect(() => {
+      if (!webRef.current || !chartType) return;
+      try {
+        webRef.current.injectJavaScript(
+          `(function(){ try{ if(window.__KLP__&&window.__KLP__.setChartType){ window.__KLP__.setChartType(${JSON.stringify(
+            chartType
+          )}); } }catch(e){} })();`
+        );
+      } catch {}
+    }, [chartType]);
 
-    try {
-      const drawLevelsScript = `
+    // Draw trade levels (price lines) when they change
+    useEffect(() => {
+      if (!webRef.current || !tradeLevels || tradeLevels.length === 0) return;
+
+      try {
+        const drawLevelsScript = `
         (function(){
           try {
-            if (window.__KLP__ && window.__KLP__.clearAllDrawings) {
-              window.__KLP__.clearAllDrawings();
-            }
-            
             var levels = ${JSON.stringify(tradeLevels)};
             levels.forEach(function(level) {
               if (window.__KLP__ && window.__KLP__.drawPriceLine) {
@@ -189,18 +235,18 @@ export default function KLineProChart({
         })();
       `;
 
-      webRef.current.injectJavaScript(drawLevelsScript);
-    } catch (e) {
-      console.error("Failed to inject trade levels script:", e);
-    }
-  }, [tradeLevels]);
+        webRef.current.injectJavaScript(drawLevelsScript);
+      } catch (e) {
+        console.error("Failed to inject trade levels script:", e);
+      }
+    }, [tradeLevels]);
 
-  // Draw trade zones (rectangles) when they change
-  useEffect(() => {
-    if (!webRef.current || !tradeZones || tradeZones.length === 0) return;
+    // Draw trade zones (rectangles) when they change
+    useEffect(() => {
+      if (!webRef.current || !tradeZones || tradeZones.length === 0) return;
 
-    try {
-      const drawZonesScript = `
+      try {
+        const drawZonesScript = `
         (function(){
           try {
             var zones = ${JSON.stringify(tradeZones)};
@@ -232,26 +278,26 @@ export default function KLineProChart({
         })();
       `;
 
-      webRef.current.injectJavaScript(drawZonesScript);
-    } catch (e) {
-      console.error("Failed to inject trade zones script:", e);
-    }
-  }, [tradeZones]);
+        webRef.current.injectJavaScript(drawZonesScript);
+      } catch (e) {
+        console.error("Failed to inject trade zones script:", e);
+      }
+    }, [tradeZones]);
 
-  const html = useMemo(() => {
-    const compactUi = minimalUi || lineOnly;
-    const initialChartType = chartType || (lineOnly ? "line" : "candle");
-    // Use the same versions as installed in package.json
-    const cssHref =
-      "https://unpkg.com/@klinecharts/pro@0.1.1/dist/klinecharts-pro.css";
-    const klinechartsSrc =
-      "https://unpkg.com/klinecharts@9.8.12/dist/umd/klinecharts.min.js";
-    const proSrc =
-      "https://unpkg.com/@klinecharts/pro@0.1.1/dist/klinecharts-pro.umd.js";
-    const safeSymbol = (symbol || "AAPL").toUpperCase();
-    const apiKey = polygonApiKey || "";
+    const html = useMemo(() => {
+      const compactUi = minimalUi || lineOnly;
+      const initialChartType = chartType || (lineOnly ? "line" : "candle");
+      // Use the same versions as installed in package.json
+      const cssHref =
+        "https://unpkg.com/@klinecharts/pro@0.1.1/dist/klinecharts-pro.css";
+      const klinechartsSrc =
+        "https://unpkg.com/klinecharts@9.8.12/dist/umd/klinecharts.min.js";
+      const proSrc =
+        "https://unpkg.com/@klinecharts/pro@0.1.1/dist/klinecharts-pro.umd.js";
+      const safeSymbol = (symbol || "AAPL").toUpperCase();
+      const apiKey = polygonApiKey || "";
 
-    return `<!doctype html>
+      return `<!doctype html>
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
@@ -463,10 +509,10 @@ export default function KLineProChart({
               symbol: { ticker: ${JSON.stringify(
                 safeSymbol
               )}, market: ${JSON.stringify(
-      market
-    )}, exchange: 'XNAS', priceCurrency: 'usd', shortName: ${JSON.stringify(
-      safeSymbol
-    )} },
+        market
+      )}, exchange: 'XNAS', priceCurrency: 'usd', shortName: ${JSON.stringify(
+        safeSymbol
+      )} },
               period: ${JSON.stringify(period)},
               periods: [], // Hide timeframe buttons
               mainIndicators: [], // Remove MA and other main indicators
@@ -584,10 +630,83 @@ export default function KLineProChart({
                   } 
                 },
                 
+                // Indicator controls
+                addIndicator: function(config){
+                  try {
+                    if (!chart) return;
+                    var type = (config && config.type ? String(config.type) : 'MA').toUpperCase();
+                    var period = (config && config.period) || 20;
+                    var color = (config && config.color) || '#00D4AA';
+                    var params = (config && config.parameters) || {};
+
+                    // Ensure indicator visuals are enabled
+                    try { if (typeof chart.setStyles === 'function') { chart.setStyles({ indicator: { show: true } }); } } catch(_) {}
+                    try { if (typeof chart.setLayout === 'function') { chart.setLayout({ showIndicatorPane: true }); } } catch(_) {}
+
+                    // Map friendly names to klinecharts names
+                    var nameMap = { SMA: 'MA', EMA: 'EMA', RSI: 'RSI', MACD: 'MACD', BOLLINGER: 'BOLL', BOLL: 'BOLL', VOL: 'VOL', VOLUME: 'VOL' };
+                    var name = nameMap[type] || type;
+
+                    var calcParams = undefined;
+                    if (name === 'MA' || name === 'EMA') { calcParams = [period]; }
+                    if (name === 'RSI') { calcParams = [period]; }
+                    if (name === 'MACD') { calcParams = [ params.fast || 12, params.slow || 26, params.signal || 9 ]; }
+                    if (name === 'BOLL') { calcParams = [ period, params.deviation || params.std || 2 ]; }
+
+                    var added = false;
+
+                    // Attempt via pro API first
+                    try {
+                      if (typeof chart.setMainIndicators === 'function') {
+                        var current = (chart.getMainIndicators && chart.getMainIndicators()) || [];
+                        var next = current.concat([{ name: name, calcParams: calcParams }]);
+                        chart.setMainIndicators(next);
+                        added = true;
+                      }
+                    } catch(_) {}
+
+                    // Fallback to underlying klinecharts instance
+                    try {
+                      if (!added && chart.chart && typeof chart.chart.createIndicator === 'function') {
+                        var options = { id: undefined, lock: false, styles: { line: { color: color } } };
+                        chart.chart.createIndicator(name, true, undefined, { calcParams: calcParams, styles: options.styles });
+                        added = true;
+                      }
+                    } catch(_) {}
+
+                    post({ debug: 'addIndicator', name: name, calcParams: calcParams, added: added });
+                    return added;
+                  } catch(e) {
+                    post({ error: 'addIndicator failed: ' + (e && e.message || e) });
+                    return false;
+                  }
+                },
+                clearIndicators: function(){
+                  try {
+                    var cleared = false;
+                    try { if (typeof chart.setMainIndicators === 'function') { chart.setMainIndicators([]); cleared = true; } } catch(_) {}
+                    try { if (typeof chart.setSubIndicators === 'function') { chart.setSubIndicators([]); cleared = true; } } catch(_) {}
+                    try { if (chart.chart && typeof chart.chart.removeIndicator === 'function') { chart.chart.removeIndicator(); cleared = true; } } catch(_) {}
+                    post({ debug: 'clearIndicators', cleared: cleared });
+                  } catch(e) {
+                    post({ error: 'clearIndicators failed: ' + (e && e.message || e) });
+                  }
+                },
+                showIndicators: function(){
+                  try { if (typeof chart.setStyles === 'function') { chart.setStyles({ indicator: { show: true } }); } } catch(_) {}
+                  try { if (typeof chart.setLayout === 'function') { chart.setLayout({ showIndicatorPane: true }); } } catch(_) {}
+                  post({ debug: 'showIndicators called' });
+                },
+                hideIndicators: function(){
+                  try { if (typeof chart.setStyles === 'function') { chart.setStyles({ indicator: { show: false } }); } } catch(_) {}
+                  try { if (typeof chart.setLayout === 'function') { chart.setLayout({ showIndicatorPane: false }); } } catch(_) {}
+                  post({ debug: 'hideIndicators called' });
+                },
+                
                 // Drawing functions for trade visualization
                 drawPriceLine: function(price, color, label) {
                   try {
-                    if (!chart || !chart.chart) return;
+                    if (!chart) return;
                     
                     var lineId = 'price_line_' + Date.now() + '_' + Math.random();
                     var lineOptions = {
@@ -610,10 +729,30 @@ export default function KLineProChart({
                       text: label || ''
                     };
                     
-                    if (typeof chart.chart.createOverlay === 'function') {
-                      chart.chart.createOverlay('priceLine', lineOptions);
-                    } else if (typeof chart.createOverlay === 'function') {
-                      chart.createOverlay('priceLine', lineOptions);
+                    var created = false;
+                    // Try priceLine
+                    try {
+                      if (chart.chart && typeof chart.chart.createOverlay === 'function') {
+                        chart.chart.createOverlay('priceLine', lineOptions);
+                        created = true;
+                      } else if (typeof chart.createOverlay === 'function') {
+                        chart.createOverlay('priceLine', lineOptions);
+                        created = true;
+                      }
+                    } catch(_) {}
+
+                    // Fallback to horizontal types using latest timestamp
+                    if (!created) {
+                      var lastTs = undefined;
+                      try { var dl = (chart.chart && chart.chart.getDataList && chart.chart.getDataList()) || []; if (dl && dl.length) { lastTs = dl[dl.length - 1].timestamp || dl[dl.length - 1].time; } } catch(_) {}
+                      var pointA = lastTs ? { timestamp: lastTs, price: price } : { price: price };
+                      var pointB = lastTs ? { timestamp: lastTs + 60000, price: price } : { price: price };
+                      var opts = { id: lineId, points: [pointA], styles: lineOptions.styles, text: lineOptions.text };
+                      try { if (chart.chart && typeof chart.chart.createOverlay === 'function') { chart.chart.createOverlay('horizontalStraightLine', opts); created = true; } } catch(_) {}
+                      if (!created) {
+                        opts.points = [pointA, pointB];
+                        try { if (chart.chart && typeof chart.chart.createOverlay === 'function') { chart.chart.createOverlay('horizontalSegment', opts); created = true; } } catch(_) {}
+                      }
                     }
                     
                     post({ debug: 'Price line drawn at: ' + price });
@@ -687,6 +826,23 @@ export default function KLineProChart({
                     post({ debug: 'All drawings cleared' });
                   } catch(e) {
                     post({ error: 'Failed to clear drawings: ' + (e && e.message || e) });
+                  }
+                },
+                
+                removeOverlayById: function(id) {
+                  try {
+                    if (!id) return false;
+                    if (chart && chart.chart && typeof chart.chart.removeOverlay === 'function') {
+                      chart.chart.removeOverlay(id);
+                      return true;
+                    } else if (chart && typeof chart.removeOverlay === 'function') {
+                      chart.removeOverlay(id);
+                      return true;
+                    }
+                    return false;
+                  } catch(e) {
+                    post({ error: 'Failed to remove overlay: ' + (e && e.message || e) });
+                    return false;
                   }
                 },
                 
@@ -807,64 +963,67 @@ export default function KLineProChart({
     </script>
   </body>
 </html>`;
-  }, [
-    height,
-    locale,
-    market,
-    period,
-    polygonApiKey,
-    symbol,
-    theme,
-    chartType,
-    minimalUi,
-    lineOnly,
-    hideVolumePane,
-    hideIndicatorPane,
-    showYAxis,
-  ]);
+    }, [
+      height,
+      locale,
+      market,
+      period,
+      polygonApiKey,
+      symbol,
+      theme,
+      chartType,
+      minimalUi,
+      lineOnly,
+      hideVolumePane,
+      hideIndicatorPane,
+      showYAxis,
+    ]);
 
-  return (
-    <View style={[styles.container, { height }]}>
-      <WebView
-        ref={webRef}
-        key={`${symbol}-${period.timespan}-${period.multiplier}-${
-          chartType || (lineOnly ? "line" : "candle")
-        }`}
-        originWhitelist={["*"]}
-        source={{ html }}
-        style={{ height, width: "100%" }}
-        javaScriptEnabled
-        domStorageEnabled
-        startInLoadingState={false}
-        scalesPageToFit={false}
-        scrollEnabled={false}
-        onMessage={(e) => {
-          try {
-            const msg = JSON.parse(e.nativeEvent.data);
-            if (__DEV__) console.log("KLineProChart:", msg);
+    return (
+      <View style={[styles.container, { height }]}>
+        <WebView
+          ref={webRef}
+          key={`${symbol}-${period.timespan}-${period.multiplier}-${
+            chartType || (lineOnly ? "line" : "candle")
+          }`}
+          originWhitelist={["*"]}
+          source={{ html }}
+          style={{ height, width: "100%" }}
+          javaScriptEnabled
+          domStorageEnabled
+          startInLoadingState={false}
+          scalesPageToFit={false}
+          scrollEnabled={false}
+          onMessage={(e) => {
+            try {
+              const msg = JSON.parse(e.nativeEvent.data);
+              if (__DEV__) console.log("KLineProChart:", msg);
 
-            // Handle chart analysis results
-            if (msg && msg.analysis && onTradeAnalysis) {
-              onTradeAnalysis(msg.analysis);
+              // Handle chart analysis results
+              if (msg && msg.analysis && onTradeAnalysis) {
+                onTradeAnalysis(msg.analysis);
+              }
+
+              // if (msg && msg.ready && chartType && webRef.current) {
+              //   try {
+              //     webRef.current.injectJavaScript(
+              //       `(function(){ try{ if(window.__KLP__&&window.__KLP__.setChartType){ window.__KLP__.setChartType(${JSON.stringify(
+              //         chartType
+              //       )}); } }catch(e){} })();`
+              //     );
+              //   } catch {}
+              // }
+            } catch (err) {
+              if (__DEV__) console.log("KLineProChart:", e.nativeEvent.data);
             }
+          }}
+        />
+      </View>
+    );
+  }
+);
 
-            // if (msg && msg.ready && chartType && webRef.current) {
-            //   try {
-            //     webRef.current.injectJavaScript(
-            //       `(function(){ try{ if(window.__KLP__&&window.__KLP__.setChartType){ window.__KLP__.setChartType(${JSON.stringify(
-            //         chartType
-            //       )}); } }catch(e){} })();`
-            //     );
-            //   } catch {}
-            // }
-          } catch (err) {
-            if (__DEV__) console.log("KLineProChart:", e.nativeEvent.data);
-          }
-        }}
-      />
-    </View>
-  );
-}
+export default KLineProChart;
 
 const styles = StyleSheet.create({
   container: {

@@ -443,4 +443,175 @@ export class AnalysisParser {
       textAnalysis: analysis.textAnalysis,
     };
   }
+
+  /**
+   * Convenience: Parse raw XML (LLM response) directly into chart props
+   */
+  static extractChartPropsFromXml(xml: string) {
+    const parsed = AnalysisParser.parseAnalysisResponse(xml);
+    const { tradeLevels, tradeZones } = AnalysisParser.toChartFormat(parsed);
+    return { tradeLevels, tradeZones };
+  }
+
+  /**
+   * Convert a simple JSON shape into chart props
+   * Supported shape: { side: 'long'|'short', entry: number, exit: number, stop: number, targets?: number[] }
+   * Options: { timeframe?: string, visibleCandles?: number, currentPrice?: number }
+   */
+  static extractChartPropsFromJson(
+    json: any,
+    options: {
+      timeframe?: string;
+      visibleCandles?: number;
+      currentPrice?: number;
+    } = {}
+  ) {
+    try {
+      const side = (json.side || "long") as "long" | "short";
+      const entry = Number(json.entry);
+      const exit = Number(json.exit);
+      const stop = Number(json.stop);
+      const targets = Array.isArray(json.targets)
+        ? json.targets.map(Number)
+        : [];
+
+      if (
+        !Number.isFinite(entry) ||
+        !Number.isFinite(exit) ||
+        !Number.isFinite(stop)
+      ) {
+        return { tradeLevels: [], tradeZones: [] };
+      }
+
+      // Calculate realistic timeframe-based timestamps
+      const { timeframe = "1d", visibleCandles = 50 } = options;
+      const { startTime, endTime } = this.calculateRealisticTimeRange(
+        timeframe,
+        visibleCandles
+      );
+
+      const tradeLevels: TradeLevel[] = [
+        {
+          price: entry,
+          color: "#00D4AA",
+          label: "Entry",
+          timestamp: Date.now(),
+        },
+        { price: exit, color: "#2196F3", label: "Exit", timestamp: Date.now() },
+        {
+          price: stop,
+          color: "#FF5252",
+          label: "Stop Loss",
+          timestamp: Date.now(),
+        },
+        ...targets.map((p: number, i: number) => ({
+          price: p,
+          color: "#4CAF50",
+          label: `TP${i + 1}`,
+          timestamp: Date.now(),
+        })),
+      ];
+
+      const tradeZones: any[] = [
+        {
+          entryPrice: entry,
+          exitPrice: exit,
+          stopLoss: stop,
+          takeProfit: targets.length ? targets[targets.length - 1] : exit,
+          startTime: startTime,
+          endTime: endTime,
+          color:
+            side === "long"
+              ? "rgba(0, 212, 170, 0.2)"
+              : "rgba(255, 82, 82, 0.2)",
+          label: side === "long" ? "Long Trade" : "Short Trade",
+          type: side,
+          confidence:
+            (typeof json.confidence === "number"
+              ? `${json.confidence}%`
+              : json.confidence || "") || "0%",
+          riskReward:
+            json.riskReward != null
+              ? typeof json.riskReward === "number"
+                ? `1:${json.riskReward}`
+                : String(json.riskReward)
+              : "1:1",
+        },
+      ];
+
+      return { tradeLevels, tradeZones };
+    } catch {
+      return { tradeLevels: [], tradeZones: [] };
+    }
+  }
+
+  /**
+   * Calculate realistic time range based on timeframe and visible candles
+   */
+  private static calculateRealisticTimeRange(
+    timeframe: string,
+    visibleCandles: number
+  ) {
+    const now = Date.now();
+
+    // Timeframe to milliseconds mapping
+    const timeframeMs: Record<string, number> = {
+      "1m": 60 * 1000,
+      "3m": 3 * 60 * 1000,
+      "5m": 5 * 60 * 1000,
+      "15m": 15 * 60 * 1000,
+      "30m": 30 * 60 * 1000,
+      "1h": 60 * 60 * 1000,
+      "2h": 2 * 60 * 60 * 1000,
+      "4h": 4 * 60 * 60 * 1000,
+      "6h": 6 * 60 * 60 * 1000,
+      "12h": 12 * 60 * 60 * 1000,
+      "1d": 24 * 60 * 60 * 1000,
+      "1w": 7 * 24 * 60 * 60 * 1000,
+      "1M": 30 * 24 * 60 * 60 * 1000,
+    };
+
+    const candleDuration = timeframeMs[timeframe] || timeframeMs["1d"];
+    const totalVisibleTime = candleDuration * visibleCandles;
+
+    // Position rectangle in the last 20% of visible time (recent but not at the very edge)
+    const rectangleStart = now - totalVisibleTime * 0.3;
+    const rectangleEnd = now - totalVisibleTime * 0.1;
+
+    return {
+      startTime: rectangleStart,
+      endTime: rectangleEnd,
+    };
+  }
+
+  /**
+   * Smart extractor: detects XML vs JSON (object or string) and returns chart props
+   */
+  static extractChartProps(
+    input: string | object,
+    options: {
+      timeframe?: string;
+      visibleCandles?: number;
+      currentPrice?: number;
+    } = {}
+  ) {
+    if (typeof input === "string") {
+      const s = input.trim();
+      if (
+        s.startsWith("<") &&
+        /<trade_levels>|<trade_zones>|<indicators>/.test(s)
+      ) {
+        return this.extractChartPropsFromXml(s);
+      }
+      try {
+        const j = JSON.parse(s);
+        return this.extractChartPropsFromJson(j, options);
+      } catch {
+        // Not JSON string, try as XML anyway
+        return this.extractChartPropsFromXml(s);
+      }
+    }
+    // object path
+    return this.extractChartPropsFromJson(input, options);
+  }
 }
