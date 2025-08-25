@@ -615,85 +615,12 @@ export default function KLineProChart({
             post({ debug: 'Chart instance created successfully' });
 
 
-            // Apply initial chart type with multiple attempts
+            // Apply initial chart type
             try { 
               post({ debug: 'Applying initial chart type: ' + INITIAL_CHART_TYPE });
               applyChartType(chart, INITIAL_CHART_TYPE); 
             } catch(e) {
               post({ error: 'Initial chart type application failed: ' + (e && e.message || e) });
-            }
-            
-            // Helper: manage level overlays (entry/exit/take profit)
-            function removeExistingLevelOverlays(){
-              try {
-                var ids = (window.__KLP__ && window.__KLP__.levelOverlayIds) || [];
-                if (ids && ids.length) {
-                  if (typeof chart.removeOverlay === 'function') {
-                    ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} });
-                  }
-                  if (chart.chart && typeof chart.chart.removeOverlay === 'function') {
-                    ids.forEach(function(id){ try { chart.chart.removeOverlay(id); } catch(_){} });
-                  }
-                }
-              } catch(_) {}
-              window.__KLP__ = window.__KLP__ || {};
-              window.__KLP__.levelOverlayIds = [];
-            }
-            function addLevel(price, label, color){
-              if (price == null || isNaN(price)) return;
-              var createdId = null;
-              function tryCreate(target){
-                try {
-                  var id = target.createOverlay({
-                    name: 'horizontalStraightLine',
-                    lock: true,
-                    styles: {
-                      line: { style: 'dashed', dashedValue: [4, 2], size: 1, color: color },
-                      text: { show: true, text: label, color: '#FFFFFF', backgroundColor: '#686D76', borderColor: '#686D76', borderSize: 1, borderRadius: 2, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2 }
-                    },
-                    points: [{ value: Number(price) }]
-                  });
-                  return id;
-                } catch(_) { return null; }
-              }
-              if (chart && typeof chart.createOverlay === 'function') {
-                createdId = tryCreate(chart);
-              }
-              if (!createdId && chart && chart.chart && typeof chart.chart.createOverlay === 'function') {
-                createdId = tryCreate(chart.chart);
-              }
-              if (!createdId && chart && typeof chart.createOverlay === 'function') {
-                // Fallback overlay names
-                ['horizontalRay', 'priceLine'].some(function(name){
-                  try {
-                    createdId = chart.createOverlay({
-                      name: name,
-                      lock: true,
-                      styles: {
-                        line: { style: 'dashed', dashedValue: [4, 2], size: 1, color: color },
-                        text: { show: true, text: label, color: '#FFFFFF', backgroundColor: '#686D76', borderColor: '#686D76', borderSize: 1, borderRadius: 2, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2 }
-                      },
-                      points: [{ value: Number(price) }]
-                    });
-                    return !!createdId;
-                  } catch(_) { return false; }
-                });
-              }
-              if (createdId) {
-                window.__KLP__.levelOverlayIds.push(createdId);
-              }
-            }
-            function applyLevels(levels){
-              try {
-                removeExistingLevelOverlays();
-                if (!levels) return;
-                var entries = Array.isArray(levels.entries) ? levels.entries : [];
-                var exits = Array.isArray(levels.exits) ? levels.exits : [];
-                var tps = Array.isArray(levels.takeProfits) ? levels.takeProfits : [];
-                entries.forEach(function(p){ addLevel(p, 'ENTRY ' + Number(p).toFixed(2), '#2196F3'); });
-                exits.forEach(function(p){ addLevel(p, 'EXIT ' + Number(p).toFixed(2), '#F92855'); });
-                tps.forEach(function(p, i){ addLevel(p, 'TP' + (i+1) + ' ' + Number(p).toFixed(2), '#2DC08E'); });
-              } catch(e) { post({ warn: 'applyLevels failed: ' + (e && e.message || e) }); }
             }
 
             try { 
