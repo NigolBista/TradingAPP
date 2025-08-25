@@ -331,41 +331,9 @@ export default function KLineProChart({
             var style = CHART_TYPES[type] || CHART_TYPES.candle;
             post({ debug: 'Using style config:', style: style });
             
-            // Method 1: Try setStyleOptions
-            if (typeof chart.setStyleOptions === 'function') {
-              post({ debug: 'Trying setStyleOptions method' });
-              chart.setStyleOptions({ candle: style });
-            }
-            
-            // Method 2: Try setStyles
             if (typeof chart.setStyles === 'function') {
               post({ debug: 'Trying setStyles method' });
               chart.setStyles({ candle: style });
-            }
-            
-            // Method 3: Try direct chart type setting
-            var chartTypeMap = {
-              'line': 'area',           // line charts now use area type with transparent background
-              'candle': 'candle_solid', 
-              'area': 'area'
-            };
-            
-            var klineType = chartTypeMap[type] || 'candle_solid';
-            if (typeof chart.setMainChartType === 'function') {
-              post({ debug: 'Trying setMainChartType with: ' + klineType });
-              chart.setMainChartType(klineType);
-            }
-            
-            // Method 4: Try chart.chart if it exists (nested chart instance)
-            if (chart.chart) {
-              if (typeof chart.chart.setStyleOptions === 'function') {
-                post({ debug: 'Trying nested chart setStyleOptions' });
-                chart.chart.setStyleOptions({ candle: style });
-              }
-              if (typeof chart.chart.setMainChartType === 'function') {
-                post({ debug: 'Trying nested chart setMainChartType' });
-                chart.chart.setMainChartType(klineType);
-              }
             }
             
             post({ debug: 'Chart type application completed for: ' + type });
@@ -375,7 +343,6 @@ export default function KLineProChart({
         }
         function create(){
           try {
-            post({ debug: 'Starting chart creation with type: ' + INITIAL_CHART_TYPE });
             
             if (!window.klinechartspro) { 
               post({ warn: 'klinechartspro not loaded yet' });
@@ -388,8 +355,6 @@ export default function KLineProChart({
             )}) { post({ warn: 'Missing POLYGON_API_KEY (extra.polygonApiKey)' }); }
             
             const datafeed = new DefaultDatafeed(${JSON.stringify(apiKey)});
-            
-            post({ debug: 'Creating KLineChartPro instance...' });
             const chart = new KLineChartPro({
               container: document.getElementById('app'),
               theme: ${JSON.stringify(theme)},
@@ -434,6 +399,173 @@ export default function KLineProChart({
                   },
                   tickText: {
                     show: ${showYAxis}    // Controls tick text visibility
+                  }
+                },
+                crosshair: {
+                  show: true,
+                  horizontal: {
+                    show: true,
+                    line: {
+                      show: true,
+                      // 'solid' | 'dashed'
+                      style: 'dashed',
+                      dashedValue: [4, 2],
+                      size: 1,
+                      color: '#888888'
+                    },
+                    text: {
+                      show: true,
+                      // 'fill' | 'stroke' | 'stroke_fill'
+                      style: 'fill',
+                      color: '#FFFFFF',
+                      size: 12,
+                      family: 'Helvetica Neue',
+                      weight: 'normal',
+                      // 'solid' | 'dashed'
+                      borderStyle: 'solid',
+                      borderDashedValue: [2, 2],
+                      borderSize: 1,
+                      borderColor: '#686D76',
+                      borderRadius: 2,
+                      paddingLeft: 4,
+                      paddingRight: 4,
+                      paddingTop: 4,
+                      paddingBottom: 4,
+                      backgroundColor: '#686D76'
+                    },
+                    // e.g.
+                    // [{
+                    //    id: 'icon_id',
+                    //    position: 'left', // 'left' | 'middle' | 'right'
+                    //    marginLeft: 8,
+                    //    marginTop: 6,
+                    //    marginRight: 0,
+                    //    marginBottom: 0,
+                    //    paddingLeft: 1,
+                    //    paddingTop: 1,
+                    //    paddingRight: 1,
+                    //    paddingBottom: 1,
+                    //    size: 12,
+                    //    color: '#76808F',
+                    //    activeColor: '#76808F',
+                    //    backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                    //    activeBackgroundColor: 'rgba(33, 150, 243, 0.4)',
+                    //    type: 'path', // 'path', 'icon_font'
+                    //    content: {
+                    //      style: 'stroke', // 'stroke', 'fill'
+                    //      path: 'M6.81029,6.02908L11.7878,1.02746C12.0193,0.79483,12.0193,0.445881,11.7878,0.213247C11.5563,-0.019386,11.209,-0.019386,10.9775,0.213247L6,5.21486L1.02251,0.174475C0.790997,-0.0581583,0.44373,-0.0581583,0.212219,0.174475C-0.0192925,0.407108,-0.0192925,0.756058,0.212219,0.988691L5.18971,6.02908L0.173633,11.0307C-0.0578778,11.2633,-0.0578778,11.6123,0.173633,11.8449C0.289389,11.9612,0.44373,12,0.598071,12C0.752411,12,0.906752,11.9612,1.02251,11.8449L6,6.8433L10.9775,11.8449C11.0932,11.9612,11.2476,12,11.4019,12C11.5563,12,11.7106,11.9612,11.8264,11.8449C12.0579,11.6123,12.0579,11.2633,11.8264,11.0307L6.81029,6.02908Z',
+                    //      lineWidth: 1,
+                    //    }
+                    // }]
+                    features: []
+                  },
+                  vertical: {
+                    show: true,
+                    line: {
+                      show: true,
+                      // 'solid'|'dashed'
+                      style: 'dashed',
+                      dashedValue: [4, 2],
+                      size: 1,
+                      color: '#888888'
+                    },
+                    text: {
+                      show: true,
+                      // 'fill' | 'stroke' | 'stroke_fill'
+                      style: 'fill',
+                      color: '#FFFFFF',
+                      size: 12,
+                      family: 'Helvetica Neue',
+                      weight: 'normal',
+                      // 'solid' | 'dashed'
+                      borderStyle: 'solid',
+                      borderDashedValue: [2, 2],
+                      borderSize: 1,
+                      borderColor: '#686D76',
+                      borderRadius: 2,
+                      paddingLeft: 4,
+                      paddingRight: 4,
+                      paddingTop: 4,
+                      paddingBottom: 4,
+                      backgroundColor: '#686D76'
+                    }
+                  }
+                },
+                overlay: {
+                  point: {
+                    color: '#1677FF',
+                    borderColor: 'rgba(22, 119, 255, 0.35)',
+                    borderSize: 1,
+                    radius: 5,
+                    activeColor: '#1677FF',
+                    activeBorderColor: 'rgba(22, 119, 255, 0.35)',
+                    activeBorderSize: 3,
+                    activeRadius: 5
+                  },
+                  line: {
+                    // 'solid' | 'dashed'
+                    style: 'solid',
+                    smooth: false,
+                    color: '#1677FF',
+                    size: 1,
+                    dashedValue: [2, 2]
+                  },
+                  rect: {
+                    // 'fill' | 'stroke' | 'stroke_fill'
+                    style: 'fill',
+                    color: 'rgba(22, 119, 255, 0.25)',
+                    borderColor: '#1677FF',
+                    borderSize: 1,
+                    borderRadius: 0,
+                    // 'solid' | 'dashed'
+                    borderStyle: 'solid',
+                    borderDashedValue: [2, 2]
+                  },
+                  polygon: {
+                    // 'fill' | 'stroke' | 'stroke_fill'
+                    style: 'fill',
+                    color: '#1677FF',
+                    borderColor: '#1677FF',
+                    borderSize: 1,
+                    // 'solid' | 'dashed'
+                    borderStyle: 'solid',
+                    borderDashedValue: [2, 2]
+                  },
+                  circle: {
+                    // 'fill' | 'stroke' | 'stroke_fill'
+                    style: 'fill',
+                    color: 'rgba(22, 119, 255, 0.25)',
+                    borderColor: '#1677FF',
+                    borderSize: 1,
+                    // 'solid' | 'dashed'
+                    borderStyle: 'solid',
+                    borderDashedValue: [2, 2]
+                  },
+                  arc: {
+                    // 'solid' | 'dashed'
+                    style: 'solid',
+                    color: '#1677FF',
+                    size: 1,
+                    dashedValue: [2, 2]
+                  },
+                  text: {
+                    // 'fill' | 'stroke' | 'stroke_fill'
+                    style: 'fill',
+                    color: '#FFFFFF',
+                    size: 12,
+                    family: 'Helvetica Neue',
+                    weight: 'normal',
+                    // 'solid' | 'dashed'
+                    borderStyle: 'solid',
+                    borderDashedValue: [2, 2],
+                    borderSize: 0,
+                    borderRadius: 2,
+                    borderColor: '#1677FF',
+                    paddingLeft: 0,
+                    paddingRight: 0,
+                    paddingTop: 0,
+                    paddingBottom: 0,
+                    backgroundColor: '#1677FF'
                   }
                 },
                 grid: { 
@@ -481,36 +613,12 @@ export default function KLineProChart({
             });
 
             post({ debug: 'Chart instance created successfully' });
-            
-            // Log available methods on the chart instance
-            if (chart) {
-              var methods = [];
-              for (var prop in chart) {
-                if (typeof chart[prop] === 'function') {
-                  methods.push(prop);
-                }
-              }
-              post({ debug: 'Available chart methods:', methods: methods.slice(0, 10) }); // Log first 10 methods
-            }
+
 
             // Apply initial chart type with multiple attempts
             try { 
               post({ debug: 'Applying initial chart type: ' + INITIAL_CHART_TYPE });
               applyChartType(chart, INITIAL_CHART_TYPE); 
-              
-              // Try again after delays to ensure chart is fully initialized
-              setTimeout(function(){ 
-                post({ debug: 'Retry 1: Applying chart type after 100ms' });
-                applyChartType(chart, INITIAL_CHART_TYPE); 
-              }, 100);
-              setTimeout(function(){ 
-                post({ debug: 'Retry 2: Applying chart type after 300ms' });
-                applyChartType(chart, INITIAL_CHART_TYPE); 
-              }, 300);
-              setTimeout(function(){ 
-                post({ debug: 'Retry 3: Applying chart type after 1000ms' });
-                applyChartType(chart, INITIAL_CHART_TYPE); 
-              }, 1000);
             } catch(e) {
               post({ error: 'Initial chart type application failed: ' + (e && e.message || e) });
             }
