@@ -12,10 +12,10 @@ export const StripeProvider: React.FC<Props> = ({ children }) => {
   return (
     <RNStripeProvider
       publishableKey={stripePublishableKey || "pk_test_123"}
-      urlScheme="gpt5"
+      urlScheme="TradingApp"
       merchantIdentifier={
         (Constants.expoConfig?.ios as any)?.bundleIdentifier ||
-        "merchant.com.example.gpt5"
+        "merchant.com.example.TradingApp"
       }
     >
       <>{children}</>

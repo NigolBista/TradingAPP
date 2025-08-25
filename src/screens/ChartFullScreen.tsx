@@ -877,6 +877,22 @@ export default function ChartFullScreen() {
           hideIndicatorPane
           showYAxis={true}
           showGrid
+          levels={{
+            entries: effectiveLevels?.entry
+              ? [effectiveLevels.entry]
+              : undefined,
+            exits: effectiveLevels?.exit ? [effectiveLevels.exit] : undefined,
+            takeProfits:
+              Array.isArray(aiMeta?.targets) && aiMeta?.targets.length > 0
+                ? aiMeta?.targets
+                : effectiveLevels?.entryExtended ||
+                  effectiveLevels?.exitExtended
+                ? ([
+                    effectiveLevels?.entryExtended,
+                    effectiveLevels?.exitExtended,
+                  ].filter(Boolean) as number[])
+                : undefined,
+          }}
         />
         <Pressable
           onPress={handleAnalyzePress}

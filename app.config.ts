@@ -4,9 +4,9 @@ import { ExpoConfig, ConfigContext } from "expo/config";
 export default ({ config }: ConfigContext): ExpoConfig =>
   ({
     ...config,
-    name: "GPT5",
-    slug: "GPT5",
-    scheme: "gpt5",
+    name: "TradingApp",
+    slug: "TradingApp",
+    scheme: "TradingApp",
     orientation: "portrait",
     newArchEnabled: true,
     icon: "./assets/icon.png",
@@ -23,7 +23,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
         "@stripe/stripe-react-native",
         {
           merchantIdentifier:
-            process.env.STRIPE_MERCHANT_ID || "merchant.com.example.gpt5",
+            process.env.STRIPE_MERCHANT_ID || "merchant.com.example.TradingApp",
           merchantCountryCode: process.env.STRIPE_MERCHANT_COUNTRY || "US",
           enableGooglePay: true,
           googlePayEnvironment: process.env.GOOGLE_PAY_ENV || "Test",
@@ -39,10 +39,10 @@ export default ({ config }: ConfigContext): ExpoConfig =>
     ],
     ios: {
       supportsTablet: true,
-      bundleIdentifier: process.env.IOS_BUNDLE_ID || "com.example.gpt5",
+      bundleIdentifier: process.env.IOS_BUNDLE_ID || "com.example.TradingApp",
     },
     android: {
-      package: process.env.ANDROID_PACKAGE || "com.example.gpt5",
+      package: process.env.ANDROID_PACKAGE || "com.example.TradingApp",
       adaptiveIcon: {
         foregroundImage: "./assets/adaptive-icon.png",
         backgroundColor: "#0A0F1C",

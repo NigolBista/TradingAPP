@@ -118,7 +118,7 @@ class PlaidIntegrationService {
         body: JSON.stringify({
           client_id: plaidClientId,
           secret: plaidSecret,
-          client_name: "GPT5 Trading App",
+          client_name: "TradingApp Trading App",
           country_codes: ["US"],
           language: "en",
           user: {
