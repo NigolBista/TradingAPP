@@ -876,6 +876,7 @@ export default function ChartFullScreen() {
           hideVolumePane
           hideIndicatorPane
           showYAxis={true}
+          showGrid
         />
         <Pressable
           onPress={handleAnalyzePress}

@@ -16,6 +16,7 @@ interface Props {
   hideIndicatorPane?: boolean;
   chartType?: "candle" | "line" | "area";
   showYAxis?: boolean; // Controls yAxis visibility - defaults to false
+  showGrid?: boolean;
 }
 
 // Canonical timeframe map for display and datafeed period settings
@@ -106,6 +107,7 @@ export default function KLineProChart({
   hideIndicatorPane = false,
   chartType,
   showYAxis = false,
+  showGrid = false,
 }: Props) {
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
@@ -232,8 +234,17 @@ export default function KLineProChart({
             type: 'candle_solid',
             tooltip: { showRule: 'none' },
             priceMark: {
-              show: false,
-              last: { show: false },
+              show: true,
+              last: {
+                show: true,
+                line: {
+                  show: true,
+                  style: 'dashed',
+                  dashedValue: [4, 4],
+                  size: 1
+                },
+                text: { show: true }
+              },
               high: { show: false },
               low: { show: false }
             }
@@ -248,8 +259,17 @@ export default function KLineProChart({
             },
             tooltip: { showRule: 'none' },
             priceMark: {
-              show: false,
-              last: { show: false },
+              show: true,
+              last: {
+                show: true,
+                line: {
+                  show: true,
+                  style: 'dashed',
+                  dashedValue: [4, 4],
+                  size: 1
+                },
+                text: { show: true }
+              },
               high: { show: false },
               low: { show: false }
             }
@@ -264,8 +284,17 @@ export default function KLineProChart({
             },
             tooltip: { showRule: 'none' },
             priceMark: {
-              show: false,
-              last: { show: false },
+              show: true,
+              last: {
+                show: true,
+                line: {
+                  show: true,
+                  style: 'dashed',
+                  dashedValue: [4, 4],
+                  size: 1
+                },
+                text: { show: true }
+              },
               high: { show: false },
               low: { show: false }
             }
@@ -361,19 +390,7 @@ export default function KLineProChart({
               styles: {
                 candle: Object.assign({}, CHART_TYPES[INITIAL_CHART_TYPE] || CHART_TYPES.candle, {
                   tooltip: {
-                    showRule: 'none'  // Hides the tooltip that shows OHLC values
-                  },
-                  priceMark: {
-                    show: false,      // Hides all price marks
-                    last: {
-                      show: false    // Hides the last price mark
-                    },
-                    high: {
-                      show: false    // Hides the high price mark
-                    },
-                    low: {
-                      show: false    // Hides the low price mark
-                    }
+                    showRule: 'none'
                   }
                 }),
                 xAxis: { 
@@ -401,7 +418,27 @@ export default function KLineProChart({
                     show: ${showYAxis}    // Controls tick text visibility
                   }
                 },
-                grid: { show: false },
+                grid: { 
+                  show: ${showGrid},
+                  horizontal: {
+                    show: ${showGrid},
+                    size: 1,
+                    color: ${JSON.stringify(
+                      theme === "dark" ? "#2a2a2a" : "#EDEDED"
+                    )},
+                    style: 'dashed',
+                    dashedValue: [2, 2]
+                  },
+                  vertical: {
+                    show: ${showGrid},
+                    size: 1,
+                    color: ${JSON.stringify(
+                      theme === "dark" ? "#2a2a2a" : "#EDEDED"
+                    )},
+                    style: 'dashed',
+                    dashedValue: [2, 2]
+                  }
+                },
                 indicator: { show: false }
               },
               drawingBarVisible: false, // Hide drawing tools
