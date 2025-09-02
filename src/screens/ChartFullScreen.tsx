@@ -397,7 +397,7 @@ export default function ChartFullScreen() {
 
   // Infinite history handler - TradingView style
   const handleLoadMoreData = useCallback(
-    async (numberOfBars: number) => {
+    async (numberOfBars: number, toMs?: number) => {
       if (!data.length) return [];
 
       // Rate limiting: prevent requests more frequent than every 500ms
@@ -419,9 +419,10 @@ export default function ChartFullScreen() {
 
         // Return a promise that resolves after the delay
         return new Promise<LWCDatum[]>((resolve) => {
+          const toParam = toMs;
           historicalRequestTimeoutRef.current = setTimeout(async () => {
             try {
-              const result = await handleLoadMoreData(numberOfBars);
+              const result = await handleLoadMoreData(numberOfBars, toParam);
               resolve(result);
             } catch (error) {
               console.warn("Delayed historical data request failed:", error);
@@ -434,7 +435,7 @@ export default function ChartFullScreen() {
       lastHistoricalRequestRef.current = now;
 
       // Get the earliest date from current data (already in milliseconds)
-      const earliestTime = data[0].time;
+      const earliestTime = typeof toMs === "number" ? toMs : data[0].time;
       const to = earliestTime - 1;
 
       // Calculate how much historical data to fetch based on timeframe
