@@ -1203,6 +1203,11 @@ export default function StockDetailScreen() {
               chartType={
                 chartType === "candlestick" ? "candle" : (chartType as any)
               }
+              showVolume={false}
+              showMA={false}
+              showAxisText={false}
+              showTopInfo={false}
+              showGrid={false}
             />
           </View>
 

@@ -8,6 +8,11 @@ interface Props {
   height?: number;
   theme?: "dark" | "light";
   chartType?: "candle" | "line" | "area";
+  showVolume?: boolean;
+  showMA?: boolean;
+  showAxisText?: boolean;
+  showTopInfo?: boolean;
+  showGrid?: boolean;
 }
 
 export default function SimpleKLineChart({
@@ -16,6 +21,11 @@ export default function SimpleKLineChart({
   height = 280,
   theme = "dark",
   chartType = "candle",
+  showVolume = true,
+  showMA = true,
+  showAxisText = true,
+  showTopInfo = true,
+  showGrid = true,
 }: Props) {
   const webRef = useRef<WebView>(null);
 
@@ -46,6 +56,11 @@ export default function SimpleKLineChart({
         var SYMBOL = ${JSON.stringify(safeSymbol)};
         var CHART_TYPE = ${JSON.stringify(ct)}; // 'candle' | 'line' | 'area'
         var TF = ${JSON.stringify(timeframe)};
+        var SHOW_VOL = ${JSON.stringify(showVolume)};
+        var SHOW_MA = ${JSON.stringify(showMA)};
+        var SHOW_AXIS_TEXT = ${JSON.stringify(showAxisText)};
+        var SHOW_TOP_INFO = ${JSON.stringify(showTopInfo)};
+        var SHOW_GRID = ${JSON.stringify(showGrid)};
 
         function mapPeriod(tf){
           try {
@@ -67,7 +82,25 @@ export default function SimpleKLineChart({
         function applyChartType(chart, t){
           try {
             var type = (t === 'candle') ? 'candle_solid' : 'area';
-            var opts = { candle: { type: type } };
+            var opts = { 
+              candle: { type: type },
+              xAxis: { tickText: { show: SHOW_AXIS_TEXT } },
+              yAxis: { tickText: { show: SHOW_AXIS_TEXT } },
+              crosshair: {
+                horizontal: { text: { show: SHOW_TOP_INFO } },
+                vertical: { text: { show: SHOW_TOP_INFO } }
+              },
+              grid: {
+                horizontal: { show: SHOW_GRID, display: SHOW_GRID },
+                vertical: { show: SHOW_GRID, display: SHOW_GRID }
+              }
+            };
+            if (!SHOW_TOP_INFO) {
+              // Hide OHLC/time/volume header tooltip text
+              opts.candle.tooltip = { showRule: 'none' };
+              // Also hide indicator tooltips if the lib supports it
+              opts.indicator = Object.assign({}, (opts.indicator || {}), { tooltip: { showRule: 'none' } });
+            }
             if (typeof chart.setStyles === 'function') chart.setStyles(opts);
             else if (typeof chart.setStyleOptions === 'function') chart.setStyleOptions(opts);
           } catch (e) { post({ warn: 'applyChartType failed', message: String(e && e.message || e) }); }
@@ -77,8 +110,8 @@ export default function SimpleKLineChart({
           try {
             if (!window.klinecharts || !window.klinecharts.init) { return false; }
             var chart = window.klinecharts.init('k-line-chart');
-            try { chart.createIndicator && chart.createIndicator('MA', false, { id: 'candle_pane' }); } catch(_){}
-            try { chart.createIndicator && chart.createIndicator('VOL'); } catch(_){}
+            if (SHOW_MA) { try { chart.createIndicator && chart.createIndicator('MA', false, { id: 'candle_pane' }); } catch(_){} }
+            if (SHOW_VOL) { try { chart.createIndicator && chart.createIndicator('VOL'); } catch(_){} }
             applyChartType(chart, CHART_TYPE);
 
             // Set symbol and period

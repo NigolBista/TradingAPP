@@ -871,6 +871,10 @@ export default function ChartFullScreen() {
           chartType={
             chartType === "candlestick" ? "candle" : (chartType as any)
           }
+          showVolume={true}
+          showMA={true}
+          showAxisText={true}
+          showTopInfo={true}
         />
         <Pressable
           onPress={handleAnalyzePress}
