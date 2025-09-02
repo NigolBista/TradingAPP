@@ -103,12 +103,14 @@ export default function TradingViewChart({
     return "candlestick";
   }, [interval]);
 
-  async function handleLoadMoreData(requestedBars: number) {
+  async function handleLoadMoreData(requestedBars: number, toMs?: number) {
     if (loadingHistoryRef.current) return []; // throttle duplicate requests
     loadingHistoryRef.current = true;
     try {
       const earliestMs =
-        data.length > 0
+        typeof toMs === "number"
+          ? toMs
+          : data.length > 0
           ? Math.min(
               ...data.map((d) =>
                 typeof d.time === "number" ? d.time : +new Date(d.time)

@@ -60,7 +60,7 @@ interface Props {
   // Notify RN when visible time range changes (ms)
   onVisibleRangeChange?: (range: { fromMs: number; toMs: number }) => void;
   // Infinite history callback: called when more data is needed
-  onLoadMoreData?: (numberOfBars: number) => Promise<LWCDatum[]>;
+  onLoadMoreData?: (numberOfBars: number, to?: number) => Promise<LWCDatum[]>;
   // Notify when the web chart is ready
   onReady?: () => void;
   // Real-time updates
@@ -1275,21 +1275,24 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
         });
       } catch(_) {}
 
-      // Infinite history - exactly like TradingView example
+      // Infinite history with early prefetch
       let historyInFlight = false;
       let lastHistoryAt = 0;
+      const HISTORY_BATCH = 500;
+      const PREFETCH_THRESHOLD = 50;
       try {
         chart.timeScale().subscribeVisibleLogicalRangeChange((logicalRange) => {
           if (!logicalRange || !raw || raw.length === 0) return;
           const now = Date.now();
-          // near the left edge AND not spamming
-          if (logicalRange.from < 5 && !historyInFlight && now - lastHistoryAt > 800) {
+          // Prefetch when nearing the left edge and throttle requests
+          if (logicalRange.from < PREFETCH_THRESHOLD && !historyInFlight && now - lastHistoryAt > 800) {
             historyInFlight = true;
             lastHistoryAt = now;
             try {
+              const earliest = raw[0] ? raw[0].time * 1000 : undefined;
               window.ReactNativeWebView && window.ReactNativeWebView.postMessage(
                 JSON.stringify({
-                  loadMoreData: { numberOfBars: 200 }
+                  loadMoreData: { numberOfBars: HISTORY_BATCH, toMs: earliest }
                 })
               );
             } catch(_) {}
@@ -1710,9 +1713,10 @@ const LightweightCandles = React.forwardRef<LightweightCandlesHandle, Props>(
                 // Defer historical data application to React Native side.
                 // RN updates the `data` prop, and this component will handle
                 // left-extensions via the optimized update effect (appendLeft).
-                onLoadMoreData(msg.loadMoreData.numberOfBars).catch((e) =>
-                  console.warn("Load more data failed:", e)
-                );
+                onLoadMoreData(
+                  msg.loadMoreData.numberOfBars,
+                  msg.loadMoreData.toMs
+                ).catch((e) => console.warn("Load more data failed:", e));
               } else {
                 console.log("LightweightCandles WebView message:", msg);
               }
