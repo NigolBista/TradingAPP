@@ -28,6 +28,7 @@ import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { getUpcomingFedEvents } from "../services/federalReserve";
+import { fetchCandles } from "../services/marketProviders";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -268,11 +269,70 @@ export default function ChartFullScreen() {
   async function performAnalysis(isAutoAnalysis: boolean = false) {
     try {
       setAnalyzing(true);
-      // Skip explicit candle fetching; use only quotes/news context for AI
-      const d: any[] = [];
-      const h1: any[] = [];
-      const m15: any[] = [];
-      const m5: any[] = [];
+      // Fetch a compact, mode-specific candle window to avoid flooding AI with history
+      let d: any[] = [];
+      let h1: any[] = [];
+      let m15: any[] = [];
+      let m5: any[] = [];
+      let m1: any[] = [];
+
+      const pace = isAutoAnalysis ? tradePace : tradePace; // honor current selection
+      try {
+        if (pace === "scalp") {
+          const [c1, c5, c15, c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "1", limit: 120 }), // ~2 hours of 1m
+            fetchCandles(symbol, { resolution: "5", limit: 60 }), // ~5 hours of 5m
+            fetchCandles(symbol, { resolution: "15", limit: 32 }), // ~8 hours of 15m
+            fetchCandles(symbol, { resolution: "1H", limit: 24 }), // 1 day of 1h
+            fetchCandles(symbol, { resolution: "D", limit: 20 }), // ~1 month of daily
+          ]);
+          m1 = c1;
+          m5 = c5;
+          m15 = c15;
+          h1 = c60;
+          d = cd;
+        } else if (pace === "day") {
+          const [c5, c15, c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "5", limit: 78 }), // 1 trading day (5m)
+            fetchCandles(symbol, { resolution: "15", limit: 52 }), // ~2 trading days (15m)
+            fetchCandles(symbol, { resolution: "1H", limit: 48 }), // ~2 trading days (1h)
+            fetchCandles(symbol, { resolution: "D", limit: 45 }), // ~2 months (daily)
+          ]);
+          m5 = c5;
+          m15 = c15;
+          h1 = c60;
+          d = cd;
+        } else if (pace === "swing") {
+          const [c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "1H", limit: 200 }), // ~6-8 weeks hourly
+            fetchCandles(symbol, { resolution: "D", limit: 180 }), // ~9 months daily
+          ]);
+          h1 = c60;
+          d = cd;
+          // Provide small intraday context for entry refinement
+          const [c15, c5] = await Promise.all([
+            fetchCandles(symbol, { resolution: "15", limit: 32 }),
+            fetchCandles(symbol, { resolution: "5", limit: 60 }),
+          ]);
+          m15 = c15;
+          m5 = c5;
+        } else {
+          // default (auto): balanced small set
+          const [c5, c15, c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "5", limit: 78 }),
+            fetchCandles(symbol, { resolution: "15", limit: 40 }),
+            fetchCandles(symbol, { resolution: "1H", limit: 72 }),
+            fetchCandles(symbol, { resolution: "D", limit: 120 }),
+          ]);
+          m5 = c5;
+          m15 = c15;
+          h1 = c60;
+          d = cd;
+        }
+      } catch (err) {
+        // If candle fetching fails, proceed with minimal arrays
+        console.warn("Candle fetch failed for AI analysis:", err);
+      }
 
       // Context fetches - comprehensive for auto-analysis, user-controlled for manual
       const shouldFetchContext =
@@ -371,43 +431,57 @@ export default function ChartFullScreen() {
       // Enhanced context for comprehensive analysis
       const analysisMode = isAutoAnalysis ? "auto" : mode;
 
+      const candleData: Record<string, any[]> = {};
+      if (d && d.length)
+        candleData["1d"] = d.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (h1 && h1.length)
+        candleData["1h"] = h1.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (m15 && m15.length)
+        candleData["15m"] = m15.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (m5 && m5.length)
+        candleData["5m"] = m5.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (m1 && m1.length)
+        candleData["1m"] = m1.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+
       const output = await runAIStrategy({
         symbol,
         mode: analysisMode,
-        candleData: {
-          "1d": d.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-          "1h": h1.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-          "15m": m15.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-          "5m": m5.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          })),
-        },
+        candleData,
         indicators: {},
         context: {
           userBias: "neutral",
