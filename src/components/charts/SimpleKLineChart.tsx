@@ -1,6 +1,7 @@
 import React, { useMemo, useRef } from "react";
 import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
+import Constants from "expo-constants";
 
 interface Props {
   symbol: string;
@@ -43,6 +44,8 @@ export default function SimpleKLineChart({
   levels,
 }: Props) {
   const webRef = useRef<WebView>(null);
+  const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
+    ?.polygonApiKey;
 
   const html = useMemo(() => {
     const safeSymbol = (symbol || "AAPL").toUpperCase();
@@ -87,6 +90,7 @@ export default function SimpleKLineChart({
         var SHOW_X_AXIS_TEXT = ${JSON.stringify(showXAxisText)};
         var SHOW_LAST_PRICE_LABEL = ${JSON.stringify(showLastPriceLabel)};
         var LEVELS = ${JSON.stringify(levels || {})};
+        var POLY_API_KEY = ${JSON.stringify(polygonApiKey || "")};
 
         function mapPeriod(tf){
           try {
@@ -151,6 +155,20 @@ export default function SimpleKLineChart({
           } catch (e) { post({ warn: 'applyChartType failed', message: String(e && e.message || e) }); }
         }
 
+        function periodToMs(p){
+          try {
+            var m = (p && p.span) || 1;
+            var t = (p && p.type) || 'day';
+            if (t === 'minute') return m * 60 * 1000;
+            if (t === 'hour') return m * 60 * 60 * 1000;
+            if (t === 'day') return m * 24 * 60 * 60 * 1000;
+            if (t === 'week') return m * 7 * 24 * 60 * 60 * 1000;
+            if (t === 'month') return m * 30 * 24 * 60 * 60 * 1000;
+            if (t === 'year') return m * 365 * 24 * 60 * 60 * 1000;
+            return m * 24 * 60 * 60 * 1000;
+          } catch(_) { return 24 * 60 * 60 * 1000; }
+        }
+
         function create(){
           try {
             if (!window.klinecharts || !window.klinecharts.init) { return false; }
@@ -167,42 +185,51 @@ export default function SimpleKLineChart({
               try { chart.setPeriod(mapPeriod(TF)); } catch(_){}
             }
 
-            // v10: Use data loader for demo data
+            // v10: Use data loader backed by Polygon.io
             if (typeof chart.setDataLoader === 'function') {
               chart.setDataLoader({
                 getBars: function(ctx){
                   try {
                     var callback = ctx && ctx.callback ? ctx.callback : function(){};
-                    fetch('https://klinecharts.com/datas/kline.json')
+                    var p = mapPeriod(TF);
+                    var to = Date.now();
+                    var from = to - 500 * periodToMs(p);
+                    if (!POLY_API_KEY) { post({ warn: 'Missing Polygon API key' }); callback([]); return; }
+                    var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) +
+                              '/range/' + p.span + '/' + p.type + '/' + from + '/' + to +
+                              '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
+                    fetch(url)
                       .then(function(res){ return res.json(); })
-                      .then(function(list){
-                        // Ensure field names match expected schema
-                        var out = Array.isArray(list) ? list.map(function(d){
-                          if (d.timestamp) return d;
-                          // Map common aliases if needed
-                          return {
-                            timestamp: d.time || d.t || 0,
-                            open: d.open || d.o,
-                            high: d.high || d.h,
-                            low: d.low || d.l,
-                            close: d.close || d.c,
-                            volume: d.volume || d.v || 0
-                          };
-                        }) : [];
+                      .then(function(result){
+                        var list = (result && result.results) || [];
+                        var out = list.map(function(d){
+                          return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw };
+                        });
                         callback(out);
                       })
-                      .catch(function(err){ post({ error: 'data_load_failed', message: String(err && err.message || err) }); });
+                      .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); callback([]); });
                   } catch (e) { post({ error: 'getBars_failed', message: String(e && e.message || e) }); }
                 }
               });
             } else {
-              // Fallback to immediate apply if loader not available
-              fetch('https://klinecharts.com/datas/kline.json')
-                .then(function(res){ return res.json(); })
-                .then(function(list){
-                  try { chart.applyNewData(list || []); } catch(e) { post({ error: 'applyNewData failed', message: String(e && e.message || e) }); }
-                })
-                .catch(function(err){ post({ error: 'data_load_failed', message: String(err && err.message || err) }); });
+              // Fallback: try Polygon once
+              (function(){
+                var p = mapPeriod(TF);
+                var to = Date.now();
+                var from = to - 500 * periodToMs(p);
+                if (!POLY_API_KEY) return;
+                var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) +
+                          '/range/' + p.span + '/' + p.type + '/' + from + '/' + to +
+                          '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
+                fetch(url)
+                  .then(function(res){ return res.json(); })
+                  .then(function(result){
+                    var list = (result && result.results) || [];
+                    var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
+                    try { chart.applyNewData(out || []); } catch(e) { post({ error: 'applyNewData failed', message: String(e && e.message || e) }); }
+                  })
+                  .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); });
+              })();
             }
 
             // Levels overlay helpers
@@ -240,10 +267,16 @@ export default function SimpleKLineChart({
             function applyLevels(levels){
               try {
                 clearLevels();
-                if (!levels) return;
-                var entries = Array.isArray(levels.entries) ? levels.entries : [];
-                var exits = Array.isArray(levels.exits) ? levels.exits : [];
-                var tps = Array.isArray(levels.takeProfits) ? levels.takeProfits : [];
+                var entries = Array.isArray(levels && levels.entries) ? levels.entries : [];
+                var exits = Array.isArray(levels && levels.exits) ? levels.exits : [];
+                var tps = Array.isArray(levels && levels.takeProfits) ? levels.takeProfits : [];
+                // Fallback to dummy placeholder levels around mock data anchor when nothing provided
+                if (!entries.length && !exits.length && !tps.length) {
+                  var anchor = 11349.50;
+                  entries = [anchor];
+                  exits = [anchor - 10];
+                  tps = [anchor + 10, anchor + 20];
+                }
                 entries.forEach(function(p){ addPriceLine(p, '#10B981', 'Entry'); });
                 exits.forEach(function(p){ addPriceLine(p, '#EF4444', 'Exit'); });
                 tps.forEach(function(p, i){ addPriceLine(p, '#3B82F6', 'TP' + (i+1)); });

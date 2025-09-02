@@ -354,12 +354,103 @@ export default function KLineProChart({
               return false; 
             }
             
-            const { KLineChartPro, DefaultDatafeed } = window.klinechartspro;
+            const { KLineChartPro } = window.klinechartspro;
+            // Custom Polygon-backed Datafeed compatible with Pro's Datafeed interface
+            class PolygonDatafeed {
+              constructor(apiKey) {
+                this._apiKey = apiKey;
+                this._prevSymbolMarket = undefined;
+                this._ws = null;
+              }
+              async searchSymbols(search) {
+                try {
+                  const url = 'https://api.polygon.io/v3/reference/tickers?apiKey=' + encodeURIComponent(this._apiKey) + '&active=true&search=' + encodeURIComponent(search || '');
+                  const res = await fetch(url);
+                  const result = await res.json();
+                  return (result.results || []).map(function(data){
+                    return {
+                      ticker: data.ticker,
+                      name: data.name,
+                      shortName: data.ticker,
+                      market: data.market,
+                      exchange: data.primary_exchange,
+                      priceCurrency: data.currency_name,
+                      type: data.type,
+                      logo: 'data:image/png;'
+                    };
+                  });
+                } catch (e) { return []; }
+              }
+              async getHistoryKLineData(symbol, period, from, to) {
+                try {
+                  const url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(symbol.ticker) +
+                              '/range/' + String(period.multiplier) + '/' + String(period.timespan) + '/' + String(from) + '/' + String(to) +
+                              '?apiKey=' + encodeURIComponent(this._apiKey);
+                  const res = await fetch(url);
+                  const result = await res.json();
+                  return (result.results || []).map(function(d){
+                    return {
+                      timestamp: d.t,
+                      open: d.o,
+                      high: d.h,
+                      low: d.l,
+                      close: d.c,
+                      volume: d.v,
+                      turnover: d.vw
+                    };
+                  });
+                } catch (e) { return []; }
+              }
+              subscribe(symbol, period, callback) {
+                try {
+                  if (this._prevSymbolMarket !== symbol.market) {
+                    if (this._ws && this._ws.close) { try { this._ws.close(); } catch(_){} }
+                    this._ws = new WebSocket('wss://delayed.polygon.io/' + String(symbol.market || 'stocks'));
+                    this._ws.onopen = () => {
+                      try { this._ws && this._ws.send(JSON.stringify({ action: 'auth', params: this._apiKey })); } catch(_){}
+                    };
+                    this._ws.onmessage = (event) => {
+                      try {
+                        const result = JSON.parse(event.data);
+                        if (Array.isArray(result) && result.length > 0) {
+                          const first = result[0];
+                          if (first.ev === 'status') {
+                            if (first.status === 'auth_success') {
+                              try { this._ws && this._ws.send(JSON.stringify({ action: 'subscribe', params: 'T.' + symbol.ticker })); } catch(_){}
+                            }
+                          } else {
+                            // Simple mapping when a trade event arrives; adapt as needed for aggregate channels
+                            const msg = Array.isArray(result) ? result[0] : result;
+                            if (msg && (msg.sym || msg.ticker)) {
+                              callback({
+                                timestamp: msg.s || msg.t,
+                                open: msg.o || msg.p || msg.price,
+                                high: msg.h || msg.p || msg.price,
+                                low: msg.l || msg.p || msg.price,
+                                close: msg.c || msg.p || msg.price,
+                                volume: msg.v,
+                                turnover: msg.vw
+                              });
+                            }
+                          }
+                        }
+                      } catch(_){}
+                    };
+                  } else {
+                    try { this._ws && this._ws.send(JSON.stringify({ action: 'subscribe', params: 'T.' + symbol.ticker })); } catch(_){}
+                  }
+                  this._prevSymbolMarket = symbol.market;
+                } catch(_){}
+              }
+              unsubscribe(symbol, period) {
+                try { this._ws && this._ws.send(JSON.stringify({ action: 'unsubscribe', params: 'T.' + symbol.ticker })); } catch(_){}
+              }
+            }
             if (!${JSON.stringify(
               !!apiKey
             )}) { post({ warn: 'Missing POLYGON_API_KEY (extra.polygonApiKey)' }); }
             
-            const datafeed = new DefaultDatafeed(${JSON.stringify(apiKey)});
+            const datafeed = new PolygonDatafeed(${JSON.stringify(apiKey)});
             const chart = new KLineChartPro({
               container: document.getElementById('app'),
               theme: ${JSON.stringify(theme)},
