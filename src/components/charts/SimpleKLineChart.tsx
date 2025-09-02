@@ -10,9 +10,12 @@ interface Props {
   chartType?: "candle" | "line" | "area";
   showVolume?: boolean;
   showMA?: boolean;
-  showAxisText?: boolean;
   showTopInfo?: boolean;
   showGrid?: boolean;
+  showPriceAxisLine?: boolean;
+  showTimeAxisLine?: boolean;
+  showPriceAxisText?: boolean;
+  showTimeAxisText?: boolean;
 }
 
 export default function SimpleKLineChart({
@@ -23,15 +26,24 @@ export default function SimpleKLineChart({
   chartType = "candle",
   showVolume = true,
   showMA = true,
-  showAxisText = true,
   showTopInfo = true,
   showGrid = true,
+  showPriceAxisLine = true,
+  showTimeAxisLine = true,
+  showPriceAxisText,
+  showTimeAxisText,
 }: Props) {
   const webRef = useRef<WebView>(null);
 
   const html = useMemo(() => {
     const safeSymbol = (symbol || "AAPL").toUpperCase();
     const ct = chartType;
+    // Precompute axis text defaults (granular only)
+    const showYAxisText =
+      typeof showPriceAxisText === "boolean" ? showPriceAxisText : true;
+    const showXAxisText =
+      typeof showTimeAxisText === "boolean" ? showTimeAxisText : true;
+
     return `<!doctype html>
 <html>
   <head>
@@ -58,9 +70,12 @@ export default function SimpleKLineChart({
         var TF = ${JSON.stringify(timeframe)};
         var SHOW_VOL = ${JSON.stringify(showVolume)};
         var SHOW_MA = ${JSON.stringify(showMA)};
-        var SHOW_AXIS_TEXT = ${JSON.stringify(showAxisText)};
         var SHOW_TOP_INFO = ${JSON.stringify(showTopInfo)};
         var SHOW_GRID = ${JSON.stringify(showGrid)};
+        var SHOW_Y_AXIS_LINE = ${JSON.stringify(showPriceAxisLine)};
+        var SHOW_X_AXIS_LINE = ${JSON.stringify(showTimeAxisLine)};
+        var SHOW_Y_AXIS_TEXT = ${JSON.stringify(showYAxisText)};
+        var SHOW_X_AXIS_TEXT = ${JSON.stringify(showXAxisText)};
 
         function mapPeriod(tf){
           try {
@@ -84,8 +99,16 @@ export default function SimpleKLineChart({
             var type = (t === 'candle') ? 'candle_solid' : 'area';
             var opts = { 
               candle: { type: type },
-              xAxis: { tickText: { show: SHOW_AXIS_TEXT } },
-              yAxis: { tickText: { show: SHOW_AXIS_TEXT } },
+              xAxis: { 
+                tickText: { show: SHOW_X_AXIS_TEXT },
+                axisLine: { show: SHOW_X_AXIS_LINE },
+                tickLine: { show: false }
+              },
+              yAxis: { 
+                tickText: { show: SHOW_Y_AXIS_TEXT },
+                axisLine: { show: SHOW_Y_AXIS_LINE },
+                tickLine: { show: false }
+              },
               crosshair: {
                 horizontal: { text: { show: SHOW_TOP_INFO } },
                 vertical: { text: { show: SHOW_TOP_INFO } }
@@ -175,7 +198,15 @@ export default function SimpleKLineChart({
     </script>
   </body>
 </html>`;
-  }, [symbol, timeframe, height, theme, chartType]);
+  }, [
+    symbol,
+    timeframe,
+    height,
+    theme,
+    chartType,
+    showPriceAxisText,
+    showTimeAxisText,
+  ]);
 
   return (
     <View style={[styles.container, { height }]}>

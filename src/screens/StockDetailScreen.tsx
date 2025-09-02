@@ -1205,9 +1205,12 @@ export default function StockDetailScreen() {
               }
               showVolume={false}
               showMA={false}
-              showAxisText={false}
               showTopInfo={false}
               showGrid={false}
+              showPriceAxisLine={false}
+              showTimeAxisLine={false}
+              showPriceAxisText={false}
+              showTimeAxisText={true}
             />
           </View>
 

@@ -873,8 +873,9 @@ export default function ChartFullScreen() {
           }
           showVolume={true}
           showMA={true}
-          showAxisText={true}
           showTopInfo={true}
+          showPriceAxisText={true}
+          showTimeAxisText={true}
         />
         <Pressable
           onPress={handleAnalyzePress}
