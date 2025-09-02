@@ -18,6 +18,11 @@ interface Props {
   showTimeAxisText?: boolean;
   showLastPriceLabel?: boolean;
   flushRightEdge?: boolean;
+  levels?: {
+    entries?: number[];
+    exits?: number[];
+    takeProfits?: number[];
+  };
 }
 
 export default function SimpleKLineChart({
@@ -35,6 +40,7 @@ export default function SimpleKLineChart({
   showPriceAxisText,
   showTimeAxisText,
   showLastPriceLabel = true,
+  levels,
 }: Props) {
   const webRef = useRef<WebView>(null);
 
@@ -80,6 +86,7 @@ export default function SimpleKLineChart({
         var SHOW_Y_AXIS_TEXT = ${JSON.stringify(showYAxisText)};
         var SHOW_X_AXIS_TEXT = ${JSON.stringify(showXAxisText)};
         var SHOW_LAST_PRICE_LABEL = ${JSON.stringify(showLastPriceLabel)};
+        var LEVELS = ${JSON.stringify(levels || {})};
 
         function mapPeriod(tf){
           try {
@@ -198,11 +205,61 @@ export default function SimpleKLineChart({
                 .catch(function(err){ post({ error: 'data_load_failed', message: String(err && err.message || err) }); });
             }
 
+            // Levels overlay helpers
+            function clearLevels(){
+              try {
+                var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.levelOverlayIds) || [];
+                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') {
+                  ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} });
+                }
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.levelOverlayIds = [];
+              } catch(_){}
+            }
+            function addPriceLine(price, color, label){
+              try {
+                if (!price || isNaN(price)) return;
+                var opts = {
+                  name: 'horizontalStraightLine',
+                  lock: true,
+                  extend: 'none',
+                  points: [{ value: Number(price) }],
+                  styles: {
+                    line: { color: color, size: 1, style: 'dashed', dashedValue: [4, 2] },
+                    text: { show: true, color: '#FFFFFF', size: 11, backgroundColor: color, borderColor: color, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 3, text: String(label) + ' ' + Number(price).toFixed(2) }
+                  }
+                };
+                var id;
+                if (chart && typeof chart.createOverlay === 'function') {
+                  id = chart.createOverlay(opts);
+                }
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat([id]);
+              } catch(e){ post({ warn: 'addPriceLine failed', message: String(e && e.message || e) }); }
+            }
+            function applyLevels(levels){
+              try {
+                clearLevels();
+                if (!levels) return;
+                var entries = Array.isArray(levels.entries) ? levels.entries : [];
+                var exits = Array.isArray(levels.exits) ? levels.exits : [];
+                var tps = Array.isArray(levels.takeProfits) ? levels.takeProfits : [];
+                entries.forEach(function(p){ addPriceLine(p, '#10B981', 'Entry'); });
+                exits.forEach(function(p){ addPriceLine(p, '#EF4444', 'Exit'); });
+                tps.forEach(function(p, i){ addPriceLine(p, '#3B82F6', 'TP' + (i+1)); });
+              } catch(e){ post({ warn: 'applyLevels failed', message: String(e && e.message || e) }); }
+            }
+
             window.__SIMPLE_KLINE__ = {
-              setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} }
+              setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} },
+              setLevels: function(lvls){ try { applyLevels(lvls); } catch(_){} },
+              levelOverlayIds: []
             };
 
             post({ ready: true, symbol: SYMBOL });
+
+            // Apply initial levels if provided
+            try { applyLevels(LEVELS); } catch(_){}
             return true;
           } catch (err) { post({ error: String(err && err.message || err) }); return false; }
         }
@@ -221,6 +278,7 @@ export default function SimpleKLineChart({
     chartType,
     showPriceAxisText,
     showTimeAxisText,
+    levels,
   ]);
 
   return (

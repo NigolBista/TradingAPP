@@ -876,6 +876,24 @@ export default function ChartFullScreen() {
           showTopInfo={true}
           showPriceAxisText={true}
           showTimeAxisText={true}
+          levels={{
+            entries: [
+              ...(currentTradePlan?.entry ? [currentTradePlan.entry] : []),
+              ...(currentTradePlan?.lateEntry
+                ? [currentTradePlan.lateEntry]
+                : []),
+            ],
+            exits: [
+              ...(currentTradePlan?.stop ? [currentTradePlan.stop] : []),
+              ...(currentTradePlan?.exit ? [currentTradePlan.exit] : []),
+              ...(currentTradePlan?.lateExit
+                ? [currentTradePlan.lateExit]
+                : []),
+            ],
+            takeProfits: [
+              ...((currentTradePlan?.targets || []).slice(0, 3) as number[]),
+            ],
+          }}
         />
         <Pressable
           onPress={handleAnalyzePress}
