@@ -23,6 +23,13 @@ interface Props {
     entries?: number[];
     exits?: number[];
     takeProfits?: number[];
+    // Enhanced level types for detailed labeling
+    entry?: number;
+    lateEntry?: number;
+    exit?: number;
+    lateExit?: number;
+    stop?: number;
+    targets?: number[];
   };
 }
 
@@ -190,6 +197,66 @@ export default function SimpleKLineChart({
         function create(){
           try {
             if (!window.klinecharts || !window.klinecharts.init) { return false; }
+            
+            // Register custom labeled line overlay
+            if (window.klinecharts.registerOverlay && !window.__LABELED_LINE_REGISTERED__) {
+              window.klinecharts.registerOverlay({
+                name: 'labeledHorizontalLine',
+                totalStep: 1,
+                createPointFigures: function({ coordinates, overlay, precision }) {
+                  var point = coordinates[0];
+                  if (!point) return [];
+                  
+                  var extendData = overlay.extendData || {};
+                  var label = extendData.label || '';
+                  var price = extendData.price || 0;
+                  var color = extendData.color || '#10B981';
+                  
+                  return [
+                    {
+                      type: 'line',
+                      attrs: {
+                        coordinates: [
+                          { x: 0, y: point.y },
+                          { x: 9999, y: point.y }
+                        ]
+                      },
+                      styles: {
+                        color: color,
+                        size: 2,
+                        style: 'dashed',
+                        dashedValue: [4, 2]
+                      }
+                    },
+                    {
+                      type: 'text',
+                      attrs: {
+                        x: point.x + 10,
+                        y: point.y - 5,
+                        text: label + ' $' + Number(price).toFixed(2),
+                        baseline: 'bottom',
+                        align: 'left'
+                      },
+                      styles: {
+                        color: '#FFFFFF',
+                        size: 11,
+                        backgroundColor: color,
+                        borderColor: color,
+                        borderSize: 1,
+                        borderRadius: 3,
+                        paddingLeft: 4,
+                        paddingRight: 4,
+                        paddingTop: 2,
+                        paddingBottom: 2
+                      }
+                    }
+                  ];
+                }
+              });
+              window.__LABELED_LINE_REGISTERED__ = true;
+              post({ debug: 'Custom labeled line overlay registered' });
+            }
+            
             var chart = window.klinecharts.init('k-line-chart');
             if (SHOW_MA) { try { chart.createIndicator && chart.createIndicator('MA', false, { id: 'candle_pane' }); } catch(_){} }
             if (SHOW_VOL) { try { chart.createIndicator && chart.createIndicator('VOL'); } catch(_){} }
@@ -264,40 +331,174 @@ export default function SimpleKLineChart({
             function addPriceLine(price, color, label){
               try {
                 if (!price || isNaN(price)) return;
-                var opts = {
+                
+                // Debug logging
+                post({ debug: 'Creating price line', price: price, label: label, color: color });
+                
+                // Try multiple approaches for text labels
+                
+                // Approach 1: Try horizontalStraightLine with text (original approach)
+                var lineOpts = {
                   name: 'horizontalStraightLine',
                   lock: true,
                   extend: 'none',
                   points: [{ value: Number(price) }],
                   styles: {
-                    line: { color: color, size: 1, style: 'dashed', dashedValue: [4, 2] },
-                    text: { show: true, color: '#FFFFFF', size: 11, backgroundColor: color, borderColor: color, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 3, text: String(label) + ' ' + Number(price).toFixed(2) }
+                    line: { 
+                      color: color, 
+                      size: 2, 
+                      style: 'dashed', 
+                      dashedValue: [4, 2] 
+                    },
+                    text: { 
+                      show: true, 
+                      color: '#FFFFFF', 
+                      size: 12, 
+                      backgroundColor: color, 
+                      borderColor: color, 
+                      paddingLeft: 6, 
+                      paddingRight: 6, 
+                      paddingTop: 3, 
+                      paddingBottom: 3, 
+                      borderRadius: 4, 
+                      text: String(label) + ' $' + Number(price).toFixed(2)
+                    }
                   }
                 };
-                var id;
+                
+                var lineId;
                 if (chart && typeof chart.createOverlay === 'function') {
-                  id = chart.createOverlay(opts);
+                  lineId = chart.createOverlay(lineOpts);
+                  post({ debug: 'Line overlay created', id: lineId });
                 }
+                
+                // Approach 2: Try custom labeled line overlay
+                var customOpts = {
+                  name: 'labeledHorizontalLine',
+                  lock: true,
+                  points: [{ value: Number(price) }],
+                  extendData: {
+                    label: String(label),
+                    price: Number(price),
+                    color: color
+                  }
+                };
+                
+                var customId;
+                try {
+                  if (chart && typeof chart.createOverlay === 'function') {
+                    customId = chart.createOverlay(customOpts);
+                    post({ debug: 'Custom labeled overlay created', id: customId });
+                  }
+                } catch(customError) {
+                  post({ debug: 'Custom overlay failed', error: String(customError) });
+                }
+                
+                // Approach 3: Create a separate text overlay if the line doesn't support text
+                var textOpts = {
+                  name: 'text',
+                  lock: true,
+                  points: [{ value: Number(price), timestamp: Date.now() }],
+                  styles: {
+                    text: {
+                      color: '#FFFFFF',
+                      size: 11,
+                      backgroundColor: color,
+                      borderColor: color,
+                      paddingLeft: 4,
+                      paddingRight: 4,
+                      paddingTop: 2,
+                      paddingBottom: 2,
+                      borderRadius: 3
+                    }
+                  },
+                  extendData: {
+                    text: String(label) + ' $' + Number(price).toFixed(2)
+                  }
+                };
+                
+                var textId;
+                try {
+                  if (chart && typeof chart.createOverlay === 'function') {
+                    textId = chart.createOverlay(textOpts);
+                    post({ debug: 'Text overlay created', id: textId });
+                  }
+                } catch(textError) {
+                  post({ debug: 'Text overlay failed', error: String(textError) });
+                }
+                
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat([id]);
-              } catch(e){ post({ warn: 'addPriceLine failed', message: String(e && e.message || e) }); }
+                var ids = [lineId, customId, textId].filter(function(id) { return id !== undefined; });
+                window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids);
+                
+              } catch(e){ 
+                post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); 
+              }
             }
             function applyLevels(levels){
               try {
                 clearLevels();
-                var entries = Array.isArray(levels && levels.entries) ? levels.entries : [];
-                var exits = Array.isArray(levels && levels.exits) ? levels.exits : [];
-                var tps = Array.isArray(levels && levels.takeProfits) ? levels.takeProfits : [];
-                // Fallback to dummy placeholder levels around mock data anchor when nothing provided
-                if (!entries.length && !exits.length && !tps.length) {
-                  var anchor = 11349.50;
-                  entries = [anchor];
-                  exits = [anchor - 10];
-                  tps = [anchor + 10, anchor + 20];
+                
+                // Debug logging
+                post({ debug: 'applyLevels called', levels: JSON.stringify(levels) });
+                
+                // Enhanced level handling with specific labels
+                var hasDetailedLevels = levels && (
+                  levels.entry !== undefined || levels.lateEntry !== undefined ||
+                  levels.exit !== undefined || levels.lateExit !== undefined ||
+                  levels.stop !== undefined || (levels.targets && levels.targets.length > 0)
+                );
+                
+                post({ debug: 'hasDetailedLevels', value: hasDetailedLevels });
+                
+                if (hasDetailedLevels) {
+                  // Use detailed level information with specific labels
+                  if (levels.entry !== undefined && levels.entry !== null) {
+                    addPriceLine(levels.entry, '#10B981', 'Entry');
+                  }
+                  if (levels.lateEntry !== undefined && levels.lateEntry !== null) {
+                    addPriceLine(levels.lateEntry, '#059669', 'Late Entry');
+                  }
+                  if (levels.exit !== undefined && levels.exit !== null) {
+                    addPriceLine(levels.exit, '#EF4444', 'Exit');
+                  }
+                  if (levels.lateExit !== undefined && levels.lateExit !== null) {
+                    addPriceLine(levels.lateExit, '#DC2626', 'Extended Stop');
+                  }
+                  if (levels.stop !== undefined && levels.stop !== null) {
+                    addPriceLine(levels.stop, '#EF4444', 'Stop Loss');
+                  }
+                  if (levels.targets && Array.isArray(levels.targets)) {
+                    levels.targets.forEach(function(target, i) {
+                      if (target !== undefined && target !== null) {
+                        addPriceLine(target, '#3B82F6', 'Target ' + (i + 1));
+                      }
+                    });
+                  }
+                } else {
+                  // Fallback to legacy array-based levels
+                  var entries = Array.isArray(levels && levels.entries) ? levels.entries : [];
+                  var exits = Array.isArray(levels && levels.exits) ? levels.exits : [];
+                  var tps = Array.isArray(levels && levels.takeProfits) ? levels.takeProfits : [];
+                  
+                  // Fallback to dummy placeholder levels around mock data anchor when nothing provided
+                  if (!entries.length && !exits.length && !tps.length) {
+                    var anchor = 11349.50;
+                    entries = [anchor];
+                    exits = [anchor - 10];
+                    tps = [anchor + 10, anchor + 20];
+                  }
+                  
+                  entries.forEach(function(p, i){ 
+                    var label = entries.length === 1 ? 'Entry' : 'Entry ' + (i + 1);
+                    addPriceLine(p, '#10B981', label); 
+                  });
+                  exits.forEach(function(p, i){ 
+                    var label = exits.length === 1 ? 'Exit' : 'Exit ' + (i + 1);
+                    addPriceLine(p, '#EF4444', label); 
+                  });
+                  tps.forEach(function(p, i){ addPriceLine(p, '#3B82F6', 'TP' + (i+1)); });
                 }
-                entries.forEach(function(p){ addPriceLine(p, '#10B981', 'Entry'); });
-                exits.forEach(function(p){ addPriceLine(p, '#EF4444', 'Exit'); });
-                tps.forEach(function(p, i){ addPriceLine(p, '#3B82F6', 'TP' + (i+1)); });
               } catch(e){ post({ warn: 'applyLevels failed', message: String(e && e.message || e) }); }
             }
 

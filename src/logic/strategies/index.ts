@@ -19,16 +19,21 @@ You must reply with ONLY valid JSON that strictly matches this TypeScript interf
   "strategyChosen": string,              // one of: day_trade | swing_trade | trend_follow | mean_reversion | breakout
   "side": "long" | "short",
   "entry": number,
-  "lateEntry"?: number,
+  "lateEntry"?: number,                  // optional for advanced strategies
   "exit": number,
-  "lateExit"?: number,
+  "lateExit"?: number,                   // optional for advanced strategies
   "stop": number,
-  "targets"?: number[],                  // up to 3 profit targets
+  "targets"?: number[],                  // 1-3 profit targets based on complexity
   "confidence": number,                  // 0-100
   "riskReward"?: number,                 // e.g. 1.5 = 1:1.5 RR
   "why": string[],                       // concise bullet reasons used
   "tradePlanNotes"?: string[]            // constraints, caveats
-}`;
+}
+
+IMPORTANT: Adjust your response based on the user's strategy complexity preference:
+- SIMPLE: Provide only entry, stop, and 1 target. Do not include lateEntry, exit, or lateExit.
+- PARTIAL: Provide entry, stop, and up to 2 targets. Do not include lateEntry, exit, or lateExit.
+- ADVANCED: Provide entry, lateEntry (breakout level), stop, lateExit (extended stop), and up to 3 targets. For longs: lateEntry > entry. For shorts: lateEntry < entry.`;
 
 export const DAY_TRADE_PROMPT: StrategyPrompt = {
   key: "day_trade",

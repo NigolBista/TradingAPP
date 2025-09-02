@@ -23,12 +23,32 @@ import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
 // Remove direct candle fetching; KLinePro handles candles internally via Polygon
 import { fetchNews as fetchSymbolNews } from "../services/newsProviders";
-import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
+import {
+  runAIStrategy,
+  aiOutputToTradePlan,
+  applyComplexityToPlan,
+} from "../logic/aiStrategyEngine";
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
+import { useUserStore } from "../store/userStore";
+import { StrategyComplexity } from "../logic/types";
+import { STRATEGY_COMPLEXITY_CONFIGS } from "../logic/strategyComplexity";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import { fetchCandles } from "../services/marketProviders";
+
+function getExampleSetup(complexity: StrategyComplexity): string {
+  switch (complexity) {
+    case "simple":
+      return "Entry: $150.00 • Stop Loss: $148.00 • Target: $154.00";
+    case "partial":
+      return "Entry: $150.00 • Stop Loss: $148.00 • TP1: $153.00 • TP2: $155.00";
+    case "advanced":
+      return "Entry: $150.00 • Late Entry: $150.45 • Stop Loss: $148.00 • Extended Stop: $147.50 • TP1: $152.25 • TP2: $153.75 • TP3: $155.25";
+    default:
+      return "";
+  }
+}
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -39,6 +59,7 @@ export default function ChartFullScreen() {
   const symbol: string = route.params?.symbol || "AAPL";
   const { addAnalysisMessage } = useChatStore();
   const { cacheSignal, getCachedSignal } = useSignalCacheStore();
+  const { profile, setProfile } = useUserStore();
   const [chartType, setChartType] = useState<ChartType>(
     (route.params?.chartType as ChartType) || "candlestick"
   );
@@ -187,6 +208,25 @@ export default function ChartFullScreen() {
     });
   };
 
+  const showComplexityBottomSheetWithTab = () => {
+    setShowComplexityBottomSheet(true);
+    Animated.timing(complexityBottomSheetAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const hideComplexityBottomSheet = () => {
+    Animated.timing(complexityBottomSheetAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start(() => {
+      setShowComplexityBottomSheet(false);
+    });
+  };
+
   const [tradePace, setTradePace] = useState<
     "auto" | "day" | "scalp" | "swing"
   >((initialAnalysisContext?.tradePace as any) || "auto");
@@ -209,6 +249,13 @@ export default function ChartFullScreen() {
   const [hasExistingReasoning, setHasExistingReasoning] = useState<boolean>(
     !!initialAiMeta
   );
+
+  // Strategy complexity state
+  const [showComplexityBottomSheet, setShowComplexityBottomSheet] =
+    useState<boolean>(false);
+  const [complexityBottomSheetAnim] = useState(new Animated.Value(0));
+  const [selectedComplexity, setSelectedComplexity] =
+    useState<StrategyComplexity>(profile.strategyComplexity || "advanced");
 
   const chartHeight = Math.max(0, height - insets.top - insets.bottom - 60); // Account for header
 
@@ -486,6 +533,14 @@ export default function ChartFullScreen() {
         context: {
           userBias: "neutral",
           strategyPreference: analysisMode,
+          complexity: selectedComplexity,
+          riskTolerance:
+            profile.riskPerTradePct && profile.riskPerTradePct <= 1
+              ? "conservative"
+              : profile.riskPerTradePct && profile.riskPerTradePct <= 2
+              ? "moderate"
+              : "aggressive",
+          preferredRiskReward: profile.preferredRiskReward || desiredRR,
           userPreferences: {
             pace: isAutoAnalysis ? "auto" : tradePace,
             desiredRR: isAutoAnalysis ? 2.0 : desiredRR, // Higher R:R for auto-analysis
@@ -509,7 +564,7 @@ export default function ChartFullScreen() {
       });
 
       if (output) {
-        const tp = aiOutputToTradePlan(output);
+        const tp = aiOutputToTradePlan(output, selectedComplexity);
         setCurrentTradePlan(tp);
         const newAiMeta = {
           strategyChosen: String(output.strategyChosen),
@@ -609,30 +664,7 @@ export default function ChartFullScreen() {
     }
   }, [data, dayUp]);
 
-  const effectiveLevels = useMemo(() => {
-    if (
-      levels &&
-      (levels.entry ||
-        levels.exit ||
-        levels.entryExtended ||
-        levels.exitExtended)
-    ) {
-      return levels;
-    }
-    if (data && data.length > 0) {
-      const last = data[data.length - 1];
-      const close = Number(last.close) || 0;
-      if (!close) return undefined;
-      const delta = close * 0.01; // 1% bands default
-      return {
-        entry: close + delta * 0.5,
-        entryExtended: close + delta * 1.0,
-        exit: Math.max(0, close - delta * 0.5),
-        exitExtended: Math.max(0, close - delta * 1.0),
-      };
-    }
-    return undefined;
-  }, [levels, data]);
+  // Removed unused effectiveLevels; chart levels are derived from currentTradePlan
 
   async function loadStockName() {
     try {
@@ -701,242 +733,7 @@ export default function ChartFullScreen() {
 
       {/* Chart */}
       <View style={{ flex: 1 }}>
-        {/* Floating toggles bar (grouped) */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{
-            paddingHorizontal: 12,
-            alignItems: "center",
-          }}
-          style={{ position: "absolute", left: 0, right: 0, top: 8, zIndex: 5 }}
-        >
-          {/* Group: Mode */}
-          <View
-            style={{
-              padding: 8,
-              paddingTop: 6,
-              borderRadius: 12,
-              marginRight: 8,
-              backgroundColor: "rgba(0,0,0,0.35)",
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.08)",
-            }}
-          >
-            <Text
-              style={{
-                color: "#9CA3AF",
-                fontSize: 11,
-                fontWeight: "700",
-                marginBottom: 4,
-              }}
-            >
-              Mode
-            </Text>
-            <View style={{ flexDirection: "row" }}>
-              {/* Order: Scalp, Day, Swing, Auto */}
-              <Pressable
-                onPress={() => {
-                  setMode("auto");
-                  setTradePace("auto");
-                }}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 12,
-                  marginRight: 6,
-                  backgroundColor:
-                    tradePace === "auto" ? "#111827" : "rgba(0,0,0,0.5)",
-                  borderWidth: 1,
-                  borderColor:
-                    tradePace === "auto" ? "#6B7280" : "rgba(255,255,255,0.08)",
-                }}
-              >
-                <Text
-                  style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}
-                >
-                  Auto
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setMode("day_trade");
-                  setTradePace("scalp");
-                }}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 12,
-                  marginRight: 6,
-                  backgroundColor:
-                    tradePace === "scalp" ? "#111827" : "rgba(0,0,0,0.5)",
-                  borderWidth: 1,
-                  borderColor:
-                    tradePace === "scalp"
-                      ? "#6B7280"
-                      : "rgba(255,255,255,0.08)",
-                }}
-              >
-                <Text
-                  style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}
-                >
-                  Scalp
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setMode("day_trade");
-                  setTradePace("day");
-                }}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 12,
-                  marginRight: 6,
-                  backgroundColor:
-                    tradePace === "day" ? "#111827" : "rgba(0,0,0,0.5)",
-                  borderWidth: 1,
-                  borderColor:
-                    tradePace === "day" ? "#6B7280" : "rgba(255,255,255,0.08)",
-                }}
-              >
-                <Text
-                  style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}
-                >
-                  Day
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setMode("swing_trade");
-                  setTradePace("swing");
-                }}
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 12,
-                  marginRight: 6,
-                  backgroundColor:
-                    tradePace === "swing" ? "#111827" : "rgba(0,0,0,0.5)",
-                  borderWidth: 1,
-                  borderColor:
-                    tradePace === "swing"
-                      ? "#6B7280"
-                      : "rgba(255,255,255,0.08)",
-                }}
-              >
-                <Text
-                  style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}
-                >
-                  Swing
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Group: R:R */}
-          <View
-            style={{
-              padding: 8,
-              paddingTop: 6,
-              borderRadius: 12,
-              marginRight: 8,
-              backgroundColor: "rgba(0,0,0,0.35)",
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.08)",
-            }}
-          >
-            <Text
-              style={{
-                color: "#9CA3AF",
-                fontSize: 11,
-                fontWeight: "700",
-                marginBottom: 4,
-              }}
-            >
-              R:R
-            </Text>
-            <View style={{ flexDirection: "row" }}>
-              {[1.0, 1.5, 2.0, 3.0].map((rr) => (
-                <Pressable
-                  key={rr}
-                  onPress={() => setDesiredRR(rr)}
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    borderRadius: 12,
-                    marginRight: 6,
-                    backgroundColor:
-                      desiredRR === rr ? "#0F172A" : "rgba(0,0,0,0.5)",
-                    borderWidth: 1,
-                    borderColor:
-                      desiredRR === rr ? "#334155" : "rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <Text
-                    style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}
-                  >{`1:${rr}`}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Group: Include */}
-          <View
-            style={{
-              padding: 8,
-              paddingTop: 6,
-              borderRadius: 12,
-              marginRight: 8,
-              backgroundColor: "rgba(0,0,0,0.35)",
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.08)",
-            }}
-          >
-            <Text
-              style={{
-                color: "#9CA3AF",
-                fontSize: 11,
-                fontWeight: "700",
-                marginBottom: 4,
-              }}
-            >
-              Include
-            </Text>
-            <View style={{ flexDirection: "row" }}>
-              <Pressable
-                onPress={() =>
-                  setContextMode(
-                    contextMode === "news_sentiment"
-                      ? "price_action"
-                      : "news_sentiment"
-                  )
-                }
-                style={{
-                  paddingHorizontal: 10,
-                  paddingVertical: 6,
-                  borderRadius: 12,
-                  marginRight: 6,
-                  backgroundColor:
-                    contextMode === "news_sentiment"
-                      ? "#2563EB"
-                      : "rgba(0,0,0,0.5)",
-                  borderWidth: 1,
-                  borderColor:
-                    contextMode === "news_sentiment"
-                      ? "#2563EB"
-                      : "rgba(255,255,255,0.08)",
-                }}
-              >
-                <Text
-                  style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}
-                >
-                  News + Sentiment
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </ScrollView>
+        {/* Controls moved to Strategy Complexity bottom sheet */}
         <SimpleKLineChart
           symbol={symbol}
           timeframe={extendedTf as any}
@@ -950,25 +747,58 @@ export default function ChartFullScreen() {
           showTopInfo={true}
           showPriceAxisText={true}
           showTimeAxisText={true}
-          levels={{
-            entries: [
-              ...(currentTradePlan?.entry ? [currentTradePlan.entry] : []),
-              ...(currentTradePlan?.lateEntry
-                ? [currentTradePlan.lateEntry]
-                : []),
-            ],
-            exits: [
-              ...(currentTradePlan?.stop ? [currentTradePlan.stop] : []),
-              ...(currentTradePlan?.exit ? [currentTradePlan.exit] : []),
-              ...(currentTradePlan?.lateExit
-                ? [currentTradePlan.lateExit]
-                : []),
-            ],
-            takeProfits: [
-              ...((currentTradePlan?.targets || []).slice(0, 3) as number[]),
-            ],
-          }}
+          levels={
+            currentTradePlan
+              ? {
+                  entry: currentTradePlan.entry,
+                  lateEntry: currentTradePlan.lateEntry,
+                  exit: currentTradePlan.exit,
+                  lateExit: currentTradePlan.lateExit,
+                  stop: currentTradePlan.stop,
+                  targets: (currentTradePlan.targets || []).slice(
+                    0,
+                    3
+                  ) as number[],
+                }
+              : undefined
+          }
         />
+
+        {/* Strategy Complexity Button */}
+        <Pressable
+          onPress={showComplexityBottomSheetWithTab}
+          style={{
+            position: "absolute",
+            right: 16,
+            bottom: insets.bottom + 130,
+            backgroundColor: "rgba(0,212,170,0.9)",
+            borderRadius: 16,
+            paddingVertical: 8,
+            paddingHorizontal: 12,
+            flexDirection: "row",
+            alignItems: "center",
+            shadowColor: "#00D4AA",
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 0.6,
+            shadowRadius: 12,
+            elevation: 8,
+          }}
+          hitSlop={8}
+        >
+          <Ionicons name="settings-outline" size={16} color="#fff" />
+          <Text
+            style={{
+              color: "#fff",
+              fontWeight: "600",
+              fontSize: 12,
+              marginLeft: 4,
+            }}
+          >
+            {selectedComplexity.charAt(0).toUpperCase() +
+              selectedComplexity.slice(1)}
+          </Text>
+        </Pressable>
+
         <Pressable
           onPress={handleAnalyzePress}
           disabled={analyzing}
@@ -1454,6 +1284,492 @@ export default function ChartFullScreen() {
                         )}
                       </View>
                     </View>
+                  </View>
+                </ScrollView>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Strategy Complexity Bottom Sheet */}
+      {showComplexityBottomSheet && (
+        <Modal
+          visible={showComplexityBottomSheet}
+          transparent
+          animationType="none"
+          onRequestClose={hideComplexityBottomSheet}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+            onPress={hideComplexityBottomSheet}
+          >
+            <Animated.View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 40,
+                maxHeight: Dimensions.get("window").height * 0.8,
+                transform: [
+                  {
+                    translateY: complexityBottomSheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable>
+                {/* Handle Bar */}
+                <View
+                  style={{
+                    alignItems: "center",
+                    paddingBottom: 20,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 4,
+                      backgroundColor: "#666",
+                      borderRadius: 2,
+                    }}
+                  />
+                </View>
+
+                {/* Header */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    paddingBottom: 20,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 20,
+                      fontWeight: "700",
+                      color: "#fff",
+                    }}
+                  >
+                    Strategy Complexity
+                  </Text>
+                  <Pressable
+                    onPress={hideComplexityBottomSheet}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={24} color="#fff" />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={{ paddingHorizontal: 20 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* Mode Controls */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        color: "#9CA3AF",
+                        fontSize: 11,
+                        fontWeight: "700",
+                        marginBottom: 8,
+                      }}
+                    >
+                      Mode
+                    </Text>
+                    <View
+                      style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                    >
+                      {[
+                        { label: "Auto", pace: "auto", mode: "auto" },
+                        { label: "Scalp", pace: "scalp", mode: "day_trade" },
+                        { label: "Day", pace: "day", mode: "day_trade" },
+                        { label: "Swing", pace: "swing", mode: "swing_trade" },
+                      ].map((m) => (
+                        <Pressable
+                          key={m.label}
+                          onPress={() => {
+                            setMode(m.mode as any);
+                            setTradePace(m.pace as any);
+                          }}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            borderRadius: 12,
+                            backgroundColor:
+                              m.pace === tradePace ||
+                              (m.mode === mode && m.pace === "auto")
+                                ? "#111827"
+                                : "rgba(0,0,0,0.5)",
+                            borderWidth: 1,
+                            borderColor:
+                              m.pace === tradePace ||
+                              (m.mode === mode && m.pace === "auto")
+                                ? "#6B7280"
+                                : "rgba(255,255,255,0.08)",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: "#fff",
+                              fontWeight: "600",
+                              fontSize: 12,
+                            }}
+                          >
+                            {m.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* R:R Controls */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        color: "#9CA3AF",
+                        fontSize: 11,
+                        fontWeight: "700",
+                        marginBottom: 8,
+                      }}
+                    >
+                      R:R
+                    </Text>
+                    <View
+                      style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                    >
+                      {[1.0, 1.5, 2.0, 3.0].map((rr) => (
+                        <Pressable
+                          key={rr}
+                          onPress={() => setDesiredRR(rr)}
+                          style={{
+                            paddingHorizontal: 12,
+                            paddingVertical: 8,
+                            borderRadius: 12,
+                            backgroundColor:
+                              desiredRR === rr ? "#0F172A" : "rgba(0,0,0,0.5)",
+                            borderWidth: 1,
+                            borderColor:
+                              desiredRR === rr
+                                ? "#334155"
+                                : "rgba(255,255,255,0.08)",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: "#fff",
+                              fontWeight: "600",
+                              fontSize: 12,
+                            }}
+                          >{`1:${rr}`}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Include Controls */}
+                  <View style={{ marginBottom: 16 }}>
+                    <Text
+                      style={{
+                        color: "#9CA3AF",
+                        fontSize: 11,
+                        fontWeight: "700",
+                        marginBottom: 8,
+                      }}
+                    >
+                      Include
+                    </Text>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <Pressable
+                        onPress={() =>
+                          setContextMode(
+                            contextMode === "news_sentiment"
+                              ? "price_action"
+                              : "news_sentiment"
+                          )
+                        }
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 12,
+                          backgroundColor:
+                            contextMode === "news_sentiment"
+                              ? "#2563EB"
+                              : "rgba(0,0,0,0.5)",
+                          borderWidth: 1,
+                          borderColor:
+                            contextMode === "news_sentiment"
+                              ? "#2563EB"
+                              : "rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontWeight: "600",
+                            fontSize: 12,
+                          }}
+                        >
+                          News + Sentiment
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: "#888",
+                      textAlign: "center",
+                      marginBottom: 20,
+                    }}
+                  >
+                    Choose your preferred trading strategy complexity level
+                  </Text>
+
+                  {/* Strategy Options */}
+                  {Object.entries(STRATEGY_COMPLEXITY_CONFIGS).map(
+                    ([key, config]) => {
+                      const complexity = key as StrategyComplexity;
+                      const isSelected = selectedComplexity === complexity;
+
+                      return (
+                        <Pressable
+                          key={complexity}
+                          onPress={() => {
+                            try {
+                              setSelectedComplexity(complexity);
+                              // Re-apply constraints to current plan immediately so chart updates
+                              setCurrentTradePlan((prev: any) =>
+                                prev
+                                  ? applyComplexityToPlan(prev, complexity)
+                                  : prev
+                              );
+                              // Optionally save to user profile
+                              if (profile.autoApplyComplexity) {
+                                setProfile({ strategyComplexity: complexity });
+                              }
+                            } finally {
+                              hideComplexityBottomSheet();
+                            }
+                          }}
+                          style={{
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: isSelected ? "#00D4AA" : "#333",
+                            padding: 16,
+                            marginBottom: 12,
+                            backgroundColor: isSelected
+                              ? "rgba(0,212,170,0.1)"
+                              : "#2a2a2a",
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 8,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 18,
+                                fontWeight: "600",
+                                color: isSelected ? "#00D4AA" : "#fff",
+                              }}
+                            >
+                              {complexity.charAt(0).toUpperCase() +
+                                complexity.slice(1)}
+                            </Text>
+                            {isSelected && (
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={20}
+                                color="#00D4AA"
+                              />
+                            )}
+                          </View>
+
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              color: "#ccc",
+                              marginBottom: 12,
+                            }}
+                          >
+                            {config.description}
+                          </Text>
+
+                          {/* Features */}
+                          <View style={{ marginBottom: 12 }}>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: "600",
+                                color: "#888",
+                                marginBottom: 8,
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              Features:
+                            </Text>
+                            <View style={{ gap: 4 }}>
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                }}
+                              >
+                                <Ionicons
+                                  name={
+                                    config.features.multipleEntries
+                                      ? "checkmark-circle"
+                                      : "close-circle"
+                                  }
+                                  size={16}
+                                  color={
+                                    config.features.multipleEntries
+                                      ? "#00D4AA"
+                                      : "#888"
+                                  }
+                                />
+                                <Text
+                                  style={{
+                                    fontSize: 13,
+                                    color: config.features.multipleEntries
+                                      ? "#fff"
+                                      : "#888",
+                                  }}
+                                >
+                                  Multiple Entries
+                                </Text>
+                              </View>
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                }}
+                              >
+                                <Ionicons
+                                  name={
+                                    config.features.multipleExits
+                                      ? "checkmark-circle"
+                                      : "close-circle"
+                                  }
+                                  size={16}
+                                  color={
+                                    config.features.multipleExits
+                                      ? "#00D4AA"
+                                      : "#888"
+                                  }
+                                />
+                                <Text
+                                  style={{
+                                    fontSize: 13,
+                                    color: config.features.multipleExits
+                                      ? "#fff"
+                                      : "#888",
+                                  }}
+                                >
+                                  Multiple Exits
+                                </Text>
+                              </View>
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                  gap: 8,
+                                }}
+                              >
+                                <Ionicons
+                                  name="checkmark-circle"
+                                  size={16}
+                                  color="#00D4AA"
+                                />
+                                <Text style={{ fontSize: 13, color: "#fff" }}>
+                                  Up to {config.features.maxTargets} Target
+                                  {config.features.maxTargets > 1 ? "s" : ""}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          {/* Example */}
+                          <View
+                            style={{
+                              backgroundColor: "#1a1a1a",
+                              borderRadius: 8,
+                              padding: 12,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                fontWeight: "600",
+                                color: "#888",
+                                marginBottom: 4,
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              Example Setup:
+                            </Text>
+                            <Text
+                              style={{
+                                fontSize: 12,
+                                color: "#fff",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {getExampleSetup(complexity)}
+                            </Text>
+                          </View>
+                        </Pressable>
+                      );
+                    }
+                  )}
+
+                  {/* Info Box */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "flex-start",
+                      gap: 8,
+                      padding: 12,
+                      backgroundColor: "rgba(0,212,170,0.1)",
+                      borderRadius: 8,
+                      borderLeftWidth: 3,
+                      borderLeftColor: "#00D4AA",
+                      marginBottom: 20,
+                    }}
+                  >
+                    <Ionicons
+                      name="information-circle-outline"
+                      size={20}
+                      color="#00D4AA"
+                    />
+                    <Text
+                      style={{
+                        flex: 1,
+                        fontSize: 12,
+                        color: "#fff",
+                        lineHeight: 16,
+                      }}
+                    >
+                      You can change this setting anytime in your profile or
+                      before each analysis.
+                    </Text>
                   </View>
                 </ScrollView>
               </Pressable>
