@@ -167,6 +167,11 @@ export default function KLineProChart({
         theme === "dark" ? "#0a0a0a" : "#ffffff"
       }; width: 100%; height: 100%; box-sizing: border-box; }
       #app { width: 100%; height: ${height}px; overflow: hidden; }
+
+      /* Ensure all chart elements can handle custom touch gestures */
+      .klinecharts-pro, .klinecharts-pro * {
+        touch-action: none;
+      }
       
       /* KLine Pro CSS variable overrides */
       .klinecharts-pro {
@@ -734,7 +739,7 @@ export default function KLineProChart({
         domStorageEnabled
         startInLoadingState={false}
         scalesPageToFit={false}
-        scrollEnabled={false}
+        scrollEnabled
         onMessage={(e) => {
           try {
             const msg = JSON.parse(e.nativeEvent.data);
