@@ -140,8 +140,26 @@ export default function SimpleKLineChart({
                 vertical: { text: { show: SHOW_TOP_INFO } }
               },
               grid: {
-                horizontal: { show: SHOW_GRID, display: SHOW_GRID },
-                vertical: { show: SHOW_GRID, display: SHOW_GRID }
+                horizontal: {
+                  show: SHOW_GRID,
+                  display: SHOW_GRID,
+                  size: 1,
+                  color: ${JSON.stringify(
+                    theme === "dark" ? "rgba(255,255,255,0.06)" : "#EDEDED"
+                  )},
+                  style: 'dashed',
+                  dashedValue: [2, 2]
+                },
+                vertical: {
+                  show: SHOW_GRID,
+                  display: SHOW_GRID,
+                  size: 1,
+                  color: ${JSON.stringify(
+                    theme === "dark" ? "rgba(255,255,255,0.06)" : "#EDEDED"
+                  )},
+                  style: 'dashed',
+                  dashedValue: [2, 2]
+                }
               }
             };
             if (!SHOW_TOP_INFO) {
