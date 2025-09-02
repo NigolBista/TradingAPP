@@ -1211,6 +1211,7 @@ export default function StockDetailScreen() {
               showTimeAxisLine={false}
               showPriceAxisText={false}
               showTimeAxisText={true}
+              showLastPriceLabel={false}
             />
           </View>
 

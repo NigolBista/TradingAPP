@@ -16,6 +16,8 @@ interface Props {
   showTimeAxisLine?: boolean;
   showPriceAxisText?: boolean;
   showTimeAxisText?: boolean;
+  showLastPriceLabel?: boolean;
+  flushRightEdge?: boolean;
 }
 
 export default function SimpleKLineChart({
@@ -32,6 +34,7 @@ export default function SimpleKLineChart({
   showTimeAxisLine = true,
   showPriceAxisText,
   showTimeAxisText,
+  showLastPriceLabel = true,
 }: Props) {
   const webRef = useRef<WebView>(null);
 
@@ -76,6 +79,7 @@ export default function SimpleKLineChart({
         var SHOW_X_AXIS_LINE = ${JSON.stringify(showTimeAxisLine)};
         var SHOW_Y_AXIS_TEXT = ${JSON.stringify(showYAxisText)};
         var SHOW_X_AXIS_TEXT = ${JSON.stringify(showXAxisText)};
+        var SHOW_LAST_PRICE_LABEL = ${JSON.stringify(showLastPriceLabel)};
 
         function mapPeriod(tf){
           try {
@@ -98,7 +102,18 @@ export default function SimpleKLineChart({
           try {
             var type = (t === 'candle') ? 'candle_solid' : 'area';
             var opts = { 
-              candle: { type: type },
+              candle: { 
+                type: type,
+                priceMark: {
+                  last: {
+                    show: SHOW_LAST_PRICE_LABEL,
+                    line: { show: SHOW_LAST_PRICE_LABEL },
+                    text: { show: SHOW_LAST_PRICE_LABEL }
+                  },
+                  high: { show: false },
+                  low: { show: false }
+                }
+              },
               xAxis: { 
                 tickText: { show: SHOW_X_AXIS_TEXT },
                 axisLine: { show: SHOW_X_AXIS_LINE },
