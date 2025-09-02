@@ -15,7 +15,7 @@ import {
 import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
-import KLineProChart from "../components/charts/KLineProChart";
+import SimpleKLineChart from "../components/charts/SimpleKLineChart";
 import ChartSettingsModal, {
   type ChartType,
 } from "../components/charts/ChartSettingsModal";
@@ -1194,20 +1194,15 @@ export default function StockDetailScreen() {
         <View style={styles.chartSection}>
           {/* Chart */}
           <View style={styles.chartContainer}>
-            <KLineProChart
+            <SimpleKLineChart
               key={`${symbol}-${extendedTf}-${chartType}`}
               symbol={symbol}
               timeframe={extendedTf}
               height={280}
               theme="dark"
-              locale="en-US"
-              market="stocks"
               chartType={
                 chartType === "candlestick" ? "candle" : (chartType as any)
               }
-              minimalUi
-              hideVolumePane
-              hideIndicatorPane
             />
           </View>
 

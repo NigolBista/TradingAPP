@@ -14,7 +14,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import KLineProChart from "../components/charts/KLineProChart";
+import SimpleKLineChart from "../components/charts/SimpleKLineChart";
 // Removed viewportBars usage; we'll lazy-load via timeRangeChange
 import { type ChartType } from "../components/charts/ChartSettingsModal";
 import { ExtendedTimeframe } from "../components/charts/TimeframePickerModal";
@@ -863,36 +863,14 @@ export default function ChartFullScreen() {
             </View>
           </View>
         </ScrollView>
-        <KLineProChart
+        <SimpleKLineChart
           symbol={symbol}
           timeframe={extendedTf as any}
           height={chartHeight}
           theme={scheme === "dark" ? "dark" : "light"}
-          locale="en-US"
-          market="stocks"
           chartType={
             chartType === "candlestick" ? "candle" : (chartType as any)
           }
-          hideVolumePane
-          hideIndicatorPane
-          showYAxis={true}
-          showGrid
-          levels={{
-            entries: effectiveLevels?.entry
-              ? [effectiveLevels.entry]
-              : undefined,
-            exits: effectiveLevels?.exit ? [effectiveLevels.exit] : undefined,
-            takeProfits:
-              Array.isArray(aiMeta?.targets) && aiMeta?.targets.length > 0
-                ? aiMeta?.targets
-                : effectiveLevels?.entryExtended ||
-                  effectiveLevels?.exitExtended
-                ? ([
-                    effectiveLevels?.entryExtended,
-                    effectiveLevels?.exitExtended,
-                  ].filter(Boolean) as number[])
-                : undefined,
-          }}
         />
         <Pressable
           onPress={handleAnalyzePress}
