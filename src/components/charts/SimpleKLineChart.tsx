@@ -663,7 +663,7 @@ export default function SimpleKLineChart({
                 window.__SIMPLE_KLINE__.indicatorIds = [];
                 
                 // More aggressive fallback: try multiple removal methods
-                var commonNames = ['MA', 'EMA', 'SMA', 'BOLL', 'BBI', 'SAR', 'VOL', 'MACD', 'KDJ', 'RSI', 'BIAS', 'BRAR', 'CCI', 'CR', 'DMA', 'DMI', 'KD', 'PSY', 'TRIX', 'VR', 'WR', 'MTM', 'EMV', 'TEMA', 'TRIPLE_EMA'];
+                var commonNames = ['MA', 'EMA', 'SMA', 'BOLL', 'BBI', 'SAR', 'VOL', 'MACD', 'KDJ', 'RSI', 'BIAS', 'BRAR', 'CCI', 'CR', 'DMA', 'DMI', 'KD', 'PSY', 'TRIX', 'VR', 'WR', 'MTM', 'EMV', 'TEMA', 'TRIPLE_EMA', 'VWAP', 'ROC', 'PVT', 'AO'];
                 commonNames.forEach(function(name) {
                   try { 
                     chart.removeIndicator(name); 
@@ -700,7 +700,8 @@ export default function SimpleKLineChart({
               try {
                 if (!cfg || !cfg.name) return;
                 var nm = String(cfg.name).toUpperCase();
-                var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA'];
+                post({ debug: 'Attempting to create indicator', name: nm, config: cfg });
+                var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA','BIAS'];
                 var wantsOverlay = !!cfg.overlay || overlayCompat.indexOf(nm) >= 0;
                 var options = {};
                 if (wantsOverlay) { options.id = 'candle_pane'; }
@@ -752,7 +753,12 @@ export default function SimpleKLineChart({
                 try {
                   if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                   window.__SIMPLE_KLINE__.indicatorIds = window.__SIMPLE_KLINE__.indicatorIds || [];
-                  if (created) { window.__SIMPLE_KLINE__.indicatorIds.push(created); }
+                  if (created) { 
+                    window.__SIMPLE_KLINE__.indicatorIds.push(created);
+                    post({ debug: 'Successfully created indicator', name: nm, id: created });
+                  } else {
+                    post({ warn: 'Failed to create indicator', name: nm });
+                  }
                 } catch(_) {}
                 return created;
               } catch(err) {

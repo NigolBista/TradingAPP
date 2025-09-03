@@ -229,12 +229,30 @@ export const BUILTIN_INDICATORS: Array<{
     defaultColor: "#93C5FD",
   },
   {
-    name: "AVP",
-    title: "Average Price",
+    name: "VWAP",
+    title: "Volume Weighted Average Price",
     description:
-      "Session average price line; similar in spirit to VWAP without volume weighting.",
+      "Volume weighted average price line; shows the average price weighted by volume.",
     compatOverlay: false,
     defaultColor: "#FDE68A",
+  },
+  {
+    name: "BIAS",
+    title: "Bias Ratio",
+    description:
+      "Measures the deviation of current price from its moving average; positive values indicate bullish bias.",
+    defaultParams: [6, 12, 24],
+    compatOverlay: false,
+    defaultColor: "#10B981",
+  },
+  {
+    name: "CCI",
+    title: "Commodity Channel Index",
+    description:
+      "Identifies cyclical trends and overbought/oversold conditions; values above 100 suggest overbought, below -100 oversold.",
+    defaultParams: [14],
+    compatOverlay: false,
+    defaultColor: "#8B5CF6",
   },
 ];
 
