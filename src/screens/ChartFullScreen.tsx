@@ -21,7 +21,25 @@ import SimpleKLineChart, {
 // Removed viewportBars usage; we'll lazy-load via timeRangeChange
 import { type ChartType } from "../components/charts/ChartSettingsModal";
 import { ExtendedTimeframe } from "../components/charts/TimeframePickerModal";
-import StockSearchBar from "../components/common/StockSearchBar";
+// UI components extracted from monolith
+import ChartHeader from "./ChartFullScreen/ChartHeader";
+import IndicatorsAccordion from "./ChartFullScreen/IndicatorsAccordion";
+import OHLCRow from "./ChartFullScreen/OHLCRow";
+import TimeframeBar from "./ChartFullScreen/TimeframeBar";
+import UnifiedBottomSheet from "./ChartFullScreen/UnifiedBottomSheet";
+import ComplexityBottomSheet from "./ChartFullScreen/ComplexityBottomSheet";
+import ReasoningBottomSheet from "./ChartFullScreen/ReasoningBottomSheet";
+import IndicatorsSheet from "./ChartFullScreen/IndicatorsSheet";
+import IndicatorConfigModal from "./ChartFullScreen/IndicatorConfigModal";
+import LineStyleModal from "./ChartFullScreen/LineStyleModal";
+import CustomRRModal from "./ChartFullScreen/CustomRRModal";
+// Indicator helpers
+import {
+  toggleIndicatorInList,
+  updateIndicatorLineInList,
+  addIndicatorParamInList,
+  removeIndicatorParamInList,
+} from "./ChartFullScreen/indicators";
 import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
 // Remove direct candle fetching; KLinePro handles candles internally via Polygon
@@ -44,6 +62,7 @@ import {
   fetchCandlesForTimeframe,
   type Candle,
 } from "../services/marketProviders";
+import { timeframeSpacingMs } from "./ChartFullScreen/utils";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -93,42 +112,6 @@ export default function ChartFullScreen() {
     (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
   );
   const [stockName, setStockName] = useState<string>("");
-  function timeframeSpacingMs(tf: ExtendedTimeframe): number {
-    switch (tf) {
-      case "1m":
-        return 60_000;
-      case "2m":
-        return 120_000;
-      case "3m":
-        return 180_000;
-      case "5m":
-        return 300_000;
-      case "10m":
-        return 600_000;
-      case "15m":
-        return 900_000;
-      case "30m":
-        return 1_800_000;
-      case "1h":
-        return 3_600_000;
-      case "2h":
-        return 7_200_000;
-      case "4h":
-        return 14_400_000;
-      case "1D":
-        return 86_400_000;
-      case "1W":
-        return 7 * 86_400_000;
-      case "1M":
-      case "3M":
-      case "1Y":
-      case "5Y":
-      case "ALL":
-        return 30 * 86_400_000;
-      default:
-        return 60_000;
-    }
-  }
   React.useEffect(() => {
     try {
       if (initialDataParam && initialDataParam.length >= 2) {
@@ -157,7 +140,7 @@ export default function ChartFullScreen() {
 
   // Additional state variables
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
-  const [bottomSheetAnim] = useState(new Animated.Value(0));
+  // migrated animations handled in extracted components
   const [analyzing, setAnalyzing] = useState<boolean>(false);
   const [currentTradePlan, setCurrentTradePlan] = useState<any | undefined>(
     initialTradePlan
@@ -168,11 +151,10 @@ export default function ChartFullScreen() {
   // Indicators state
   const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
   const [showIndicatorsSheet, setShowIndicatorsSheet] = useState(false);
-  const [indicatorsSheetAnim] = useState(new Animated.Value(0));
+  // migrated animations handled in extracted components
   const [showIndicatorsAccordion, setShowIndicatorsAccordion] = useState(false);
   const [showIndicatorConfigModal, setShowIndicatorConfigModal] =
     useState<boolean>(false);
-  const [indicatorConfigAnim] = useState(new Animated.Value(0));
   const [indicatorToEdit, setIndicatorToEdit] =
     useState<IndicatorConfig | null>(null);
   const [configSelectedIndex, setConfigSelectedIndex] = useState<number>(0);
@@ -205,40 +187,18 @@ export default function ChartFullScreen() {
 
   const showUnifiedBottomSheetWithTab = () => {
     setShowUnifiedBottomSheet(true);
-    Animated.timing(bottomSheetAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
   };
 
   const hideBottomSheet = () => {
-    Animated.timing(bottomSheetAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start(() => {
-      setShowUnifiedBottomSheet(false);
-    });
+    setShowUnifiedBottomSheet(false);
   };
 
   const showComplexityBottomSheetWithTab = () => {
     setShowComplexityBottomSheet(true);
-    Animated.timing(complexityBottomSheetAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
   };
 
   const hideComplexityBottomSheet = () => {
-    Animated.timing(complexityBottomSheetAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start(() => {
-      setShowComplexityBottomSheet(false);
-    });
+    setShowComplexityBottomSheet(false);
   };
 
   const [tradePace, setTradePace] = useState<
@@ -270,13 +230,13 @@ export default function ChartFullScreen() {
   // Strategy complexity state
   const [showComplexityBottomSheet, setShowComplexityBottomSheet] =
     useState<boolean>(false);
-  const [complexityBottomSheetAnim] = useState(new Animated.Value(0));
+  // migrated animations handled in extracted components
   const [selectedComplexity, setSelectedComplexity] =
     useState<StrategyComplexity>(profile.strategyComplexity || "advanced");
   // Reasoning bottom sheet state
   const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
     useState<boolean>(false);
-  const [reasoningBottomSheetAnim] = useState(new Animated.Value(0));
+  // migrated animations handled in extracted components
 
   const headerHeight = 52;
   const ohlcRowHeight = 24;
@@ -916,11 +876,7 @@ export default function ChartFullScreen() {
   }
 
   function toggleIndicator(name: string) {
-    setIndicators((prev) => {
-      const exists = prev.find((i) => i.name === name);
-      if (exists) return prev.filter((i) => i.name !== name);
-      return prev.concat(getDefaultIndicator(name));
-    });
+    setIndicators((prev) => toggleIndicatorInList(prev as any, name) as any);
   }
 
   function updateIndicator(name: string, updates: Partial<IndicatorConfig>) {
@@ -934,23 +890,15 @@ export default function ChartFullScreen() {
     lineIndex: number,
     updates: Partial<{ color: string; size: number; style: string }>
   ) {
-    setIndicators((prev) => {
-      return prev.map((ind) => {
-        if (ind.name !== name) return ind;
-        const count = Array.isArray(ind.calcParams) ? ind.calcParams.length : 1;
-        const lines = Array.isArray((ind.styles as any)?.lines)
-          ? ((ind.styles as any).lines as any[]).slice()
-          : buildDefaultLines(count);
-        const idx = Math.max(0, Math.min(lineIndex, count - 1));
-        const current = lines[idx] || {
-          color: "#00D4AA",
-          size: 1,
-          style: "solid",
-        };
-        lines[idx] = { ...current, ...updates };
-        return { ...ind, styles: { ...(ind.styles as any), lines } } as any;
-      });
-    });
+    setIndicators(
+      (prev) =>
+        updateIndicatorLineInList(
+          prev as any,
+          name,
+          lineIndex,
+          updates as any
+        ) as any
+    );
   }
 
   function openLineStyleEditor(index: number) {
@@ -973,89 +921,37 @@ export default function ChartFullScreen() {
       setNewParamValue(count > 0 ? Number(ind?.calcParams?.[0] ?? 9) : 9);
     } catch {}
     setShowIndicatorConfigModal(true);
-    Animated.timing(indicatorConfigAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
   }
 
   function closeIndicatorConfig() {
-    Animated.timing(indicatorConfigAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start(() => {
-      setShowIndicatorConfigModal(false);
-      setIndicatorToEdit(null);
-    });
+    setShowIndicatorConfigModal(false);
+    setIndicatorToEdit(null);
   }
 
   function addIndicatorParam(name: string, value: number) {
     if (!Number.isFinite(value) || value <= 0) return;
     setIndicators((prev) => {
-      return prev.map((ind) => {
-        if (ind.name !== name) return ind;
-        const params = Array.isArray(ind.calcParams)
-          ? (ind.calcParams as any[]).slice()
-          : [];
-        if (params.includes(value)) return ind;
-        params.push(Math.floor(value));
-        params.sort((a: any, b: any) => Number(a) - Number(b));
-        const count = params.length;
-        const lines = Array.isArray((ind.styles as any)?.lines)
-          ? ((ind.styles as any).lines as any[]).slice()
-          : buildDefaultLines(count);
-        while (lines.length < count) {
-          lines.push({ color: "#00D4AA", size: 1, style: "solid" });
-        }
-        setConfigSelectedIndex(Math.max(0, params.indexOf(value)));
-        return {
-          ...ind,
-          calcParams: params,
-          styles: { ...(ind.styles as any), lines },
-        } as any;
-      });
+      const { list, newIndex } = addIndicatorParamInList(
+        prev as any,
+        name,
+        Math.floor(value)
+      );
+      setConfigSelectedIndex(newIndex);
+      return list as any;
     });
   }
 
   function removeIndicatorParam(name: string, value: number) {
-    setIndicators((prev) => {
-      return prev.map((ind) => {
-        if (ind.name !== name) return ind;
-        const params = Array.isArray(ind.calcParams)
-          ? (ind.calcParams as any[]).slice()
-          : [];
-        const idx = params.indexOf(value as any);
-        if (idx === -1) return ind;
-        params.splice(idx, 1);
-        const lines = Array.isArray((ind.styles as any)?.lines)
-          ? ((ind.styles as any).lines as any[]).slice()
-          : [];
-        if (idx >= 0 && idx < lines.length) lines.splice(idx, 1);
-        return {
-          ...ind,
-          calcParams: params,
-          styles: { ...(ind.styles as any), lines },
-        } as any;
-      });
-    });
+    setIndicators(
+      (prev) => removeIndicatorParamInList(prev as any, name, value) as any
+    );
   }
 
   const openIndicatorsSheet = () => {
     setShowIndicatorsSheet(true);
-    Animated.timing(indicatorsSheetAnim, {
-      toValue: 1,
-      duration: 300,
-      useNativeDriver: false,
-    }).start();
   };
   const closeIndicatorsSheet = () => {
-    Animated.timing(indicatorsSheetAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: false,
-    }).start(() => setShowIndicatorsSheet(false));
+    setShowIndicatorsSheet(false);
   };
 
   function parseNumberList(input: string): number[] | undefined {
@@ -1090,17 +986,7 @@ export default function ChartFullScreen() {
     };
   }, [symbol, extendedTf]);
 
-  function formatPrice(n?: number) {
-    if (typeof n !== "number" || !Number.isFinite(n)) return "-";
-    return `$${n.toFixed(2)}`;
-  }
-  function formatVolume(n?: number) {
-    if (typeof n !== "number" || !Number.isFinite(n)) return "-";
-    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
-    return String(n);
-  }
+  // formatting moved to utils; keep local wrappers if needed later
 
   // Simulate streaming text output
   function simulateStreamingText(fullText: string) {
@@ -1131,557 +1017,61 @@ export default function ChartFullScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
-      <View style={styles.header}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </Pressable>
-        <View style={styles.headerCenter}>
-          <StockSearchBar
-            currentSymbol={symbol}
-            currentStockName={stockName || "Loading..."}
-          />
-        </View>
-        <View style={{ flexDirection: "row", alignItems: "center" }}>
-          <Pressable
-            onPress={() => setShowIndicatorsAccordion((v) => !v)}
-            style={{ paddingHorizontal: 8, paddingVertical: 6, marginRight: 4 }}
-            hitSlop={8}
-          >
-            <Ionicons name="funnel" size={20} color="#fff" />
-          </Pressable>
-          <View style={{ width: 8 }} />
-        </View>
-      </View>
+      <ChartHeader
+        onBack={() => navigation.goBack()}
+        symbol={symbol}
+        stockName={stockName}
+        onToggleIndicatorsAccordion={() =>
+          setShowIndicatorsAccordion((v) => !v)
+        }
+      />
 
       {showIndicatorsAccordion && (
-        <View
-          style={{
-            backgroundColor: "#0f0f0f",
-            borderBottomWidth: 1,
-            borderBottomColor: "#2a2a2a",
-            paddingHorizontal: 12,
-            paddingVertical: 10,
-            gap: 10,
-          }}
-        >
-          {/* Active indicators with quick access to settings */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-            >
-              {indicators.length === 0 ? (
-                <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-                  No indicators selected
-                </Text>
-              ) : (
-                indicators.map((cfg) => {
-                  return (
-                    <View
-                      key={`chip-${cfg.name}`}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        paddingVertical: 6,
-                        paddingHorizontal: 8,
-                        backgroundColor: "#1a1a1a",
-                        borderRadius: 14,
-                        borderWidth: 1,
-                        borderColor: "#333",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: "#fff",
-                          fontWeight: "700",
-                          marginRight: 6,
-                        }}
-                      >
-                        {cfg.name}
-                      </Text>
-                      <Pressable
-                        onPress={() => openIndicatorConfig(cfg.name)}
-                        style={{ padding: 4 }}
-                      >
-                        <Ionicons
-                          name="settings-outline"
-                          size={14}
-                          color="#ccc"
-                        />
-                      </Pressable>
-                      <Pressable
-                        onPress={() => toggleIndicator(cfg.name)}
-                        style={{ marginLeft: 8, padding: 4 }}
-                      >
-                        <Ionicons name="close" size={14} color="#ccc" />
-                      </Pressable>
-                    </View>
-                  );
-                })
-              )}
-              <Pressable
-                onPress={openIndicatorsSheet}
-                style={{
-                  paddingVertical: 8,
-                  paddingHorizontal: 10,
-                  backgroundColor: "#00D4AA",
-                  borderRadius: 12,
-                  marginLeft: 8,
-                }}
-              >
-                <Text style={{ color: "#000", fontWeight: "700" }}>Add</Text>
-              </Pressable>
-            </View>
-          </ScrollView>
-        </View>
+        <IndicatorsAccordion
+          indicators={indicators}
+          onOpenConfig={(name) => openIndicatorConfig(name)}
+          onToggleIndicator={(name) => toggleIndicator(name)}
+          onOpenAddSheet={openIndicatorsSheet}
+        />
       )}
 
       {/* Indicator Config Modal */}
-      {showIndicatorConfigModal && indicatorToEdit && (
-        <Modal
-          visible={showIndicatorConfigModal}
-          transparent
-          animationType="none"
-          onRequestClose={closeIndicatorConfig}
-        >
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.5)",
-              justifyContent: "flex-end",
-            }}
-            onPress={closeIndicatorConfig}
-          >
-            <Animated.View
-              style={{
-                backgroundColor: "#1a1a1a",
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                paddingTop: 20,
-                paddingBottom: 24,
-                maxHeight: Dimensions.get("window").height * 0.6,
-                transform: [
-                  {
-                    translateY: indicatorConfigAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [400, 0],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <Pressable>
-                <View style={{ alignItems: "center", paddingBottom: 10 }}>
-                  <View
-                    style={{
-                      width: 40,
-                      height: 4,
-                      backgroundColor: "#666",
-                      borderRadius: 2,
-                    }}
-                  />
-                </View>
-
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingHorizontal: 20,
-                    marginBottom: 8,
-                  }}
-                >
-                  <Text
-                    style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}
-                  >
-                    {indicatorToEdit.name} Settings
-                  </Text>
-                  <Pressable
-                    onPress={closeIndicatorConfig}
-                    style={{ padding: 4 }}
-                  >
-                    <Ionicons name="close" size={20} color="#fff" />
-                  </Pressable>
-                </View>
-
-                <ScrollView
-                  style={{ paddingHorizontal: 20 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {/* Per-line items list; tap to edit details in a separate modal */}
-                  {Array.isArray(indicatorToEdit.calcParams) ? (
-                    indicatorToEdit.calcParams.map((_: any, idx: number) => {
-                      const lines =
-                        (indicatorToEdit.styles as any)?.lines || [];
-                      const current = lines[idx] || {
-                        color: "#00D4AA",
-                        size: 1,
-                        style: "solid",
-                      };
-                      return (
-                        <Pressable
-                          key={`line-${idx}`}
-                          onPress={() => openLineStyleEditor(idx)}
-                          style={{
-                            borderWidth: 1,
-                            borderColor: "#333",
-                            borderRadius: 12,
-                            padding: 12,
-                            marginBottom: 10,
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
-                          <View>
-                            <Text
-                              style={{
-                                color: "#fff",
-                                fontWeight: "700",
-                                marginBottom: 6,
-                              }}
-                            >
-                              Line {idx + 1}
-                            </Text>
-                            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-                              Tap to edit color, thickness, style
-                            </Text>
-                          </View>
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              alignItems: "center",
-                            }}
-                          >
-                            <View
-                              style={{
-                                width: 18,
-                                height: 18,
-                                borderRadius: 18,
-                                backgroundColor: current.color,
-                                marginRight: 10,
-                              }}
-                            />
-                            <View
-                              style={{
-                                width: 40,
-                                borderBottomWidth: current.size,
-                                borderBottomColor: current.color,
-                                borderStyle: current.style as any,
-                                marginRight: 8,
-                              }}
-                            />
-                            <Ionicons
-                              name="chevron-forward"
-                              size={18}
-                              color="#888"
-                            />
-                          </View>
-                        </Pressable>
-                      );
-                    })
-                  ) : (
-                    <Pressable
-                      onPress={() => openLineStyleEditor(0)}
-                      style={{
-                        borderWidth: 1,
-                        borderColor: "#333",
-                        borderRadius: 12,
-                        padding: 12,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <View>
-                        <Text
-                          style={{
-                            color: "#fff",
-                            fontWeight: "700",
-                            marginBottom: 6,
-                          }}
-                        >
-                          Line
-                        </Text>
-                        <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-                          Tap to edit color, thickness, style
-                        </Text>
-                      </View>
-                      <View
-                        style={{ flexDirection: "row", alignItems: "center" }}
-                      >
-                        <View
-                          style={{
-                            width: 18,
-                            height: 18,
-                            borderRadius: 18,
-                            backgroundColor:
-                              (indicatorToEdit.styles as any)?.lines?.[0]
-                                ?.color || "#00D4AA",
-                            marginRight: 10,
-                          }}
-                        />
-                        <View
-                          style={{
-                            width: 40,
-                            borderBottomWidth:
-                              (indicatorToEdit.styles as any)?.lines?.[0]
-                                ?.size || 1,
-                            borderBottomColor:
-                              (indicatorToEdit.styles as any)?.lines?.[0]
-                                ?.color || "#00D4AA",
-                            borderStyle: (((indicatorToEdit.styles as any)
-                              ?.lines?.[0]?.style as any) || "solid") as any,
-                            marginRight: 8,
-                          }}
-                        />
-                        <Ionicons
-                          name="chevron-forward"
-                          size={18}
-                          color="#888"
-                        />
-                      </View>
-                    </Pressable>
-                  )}
-                </ScrollView>
-              </Pressable>
-            </Animated.View>
-          </Pressable>
-        </Modal>
-      )}
+      <IndicatorConfigModal
+        visible={showIndicatorConfigModal && !!indicatorToEdit}
+        onClose={closeIndicatorConfig}
+        indicator={indicatorToEdit}
+        newParamValue={newParamValue}
+        setNewParamValue={setNewParamValue}
+        onAddParam={addIndicatorParam}
+        onOpenLineStyleEditor={openLineStyleEditor}
+      />
       {/* Line Style Sub-Modal */}
-      {showLineStyleModal && indicatorToEdit && (
-        <Modal
-          visible={showLineStyleModal}
-          transparent
-          animationType="fade"
-          onRequestClose={closeLineStyleEditor}
-        >
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.6)",
-              justifyContent: "flex-end",
-            }}
-            onPress={closeLineStyleEditor}
-          >
-            <View
-              style={{
-                backgroundColor: "#1a1a1a",
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                paddingTop: 20,
-                paddingBottom: 24,
-                maxHeight: Dimensions.get("window").height * 0.55,
-              }}
-            >
-              <Pressable>
-                <View style={{ alignItems: "center", paddingBottom: 10 }}>
-                  <View
-                    style={{
-                      width: 40,
-                      height: 4,
-                      backgroundColor: "#666",
-                      borderRadius: 2,
-                    }}
-                  />
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingHorizontal: 20,
-                    marginBottom: 8,
-                  }}
-                >
-                  <Text style={{ color: "#fff", fontWeight: "700" }}>
-                    Line {lineStyleEditIndex + 1}
-                  </Text>
-                  <Pressable
-                    onPress={closeLineStyleEditor}
-                    style={{ padding: 4 }}
-                  >
-                    <Ionicons name="close" size={20} color="#fff" />
-                  </Pressable>
-                </View>
-
-                {/* Editor Body */}
-                <ScrollView style={{ paddingHorizontal: 20 }}>
-                  {/* Color grid */}
-                  <Text style={{ color: "#9CA3AF", marginBottom: 8 }}>
-                    Color
-                  </Text>
-                  <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                    {[
-                      "#111827",
-                      "#1F2937",
-                      "#374151",
-                      "#4B5563",
-                      "#60A5FA",
-                      "#A78BFA",
-                      "#F472B6",
-                      "#F87171",
-                      "#F59E0B",
-                      "#FBBF24",
-                      "#34D399",
-                      "#22D3EE",
-                      "#10B981",
-                      "#3B82F6",
-                      "#EF4444",
-                      "#FDE047",
-                    ].map((sw) => (
-                      <Pressable
-                        key={`style-color-${sw}`}
-                        onPress={() =>
-                          updateIndicatorLine(
-                            indicatorToEdit.name,
-                            lineStyleEditIndex,
-                            {
-                              color: sw,
-                            }
-                          )
-                        }
-                        style={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: 14,
-                          backgroundColor: sw,
-                          marginRight: 10,
-                          marginBottom: 10,
-                          borderWidth: 1,
-                          borderColor: "#111",
-                        }}
-                      />
-                    ))}
-                  </View>
-
-                  {/* Thickness */}
-                  <Text
-                    style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}
-                  >
-                    Thickness
-                  </Text>
-                  <View style={{ flexDirection: "row", marginBottom: 8 }}>
-                    {[1, 2, 3, 4].map((th) => (
-                      <Pressable
-                        key={`style-th-${th}`}
-                        onPress={() =>
-                          updateIndicatorLine(
-                            indicatorToEdit.name,
-                            lineStyleEditIndex,
-                            {
-                              size: th,
-                            }
-                          )
-                        }
-                        style={{
-                          paddingHorizontal: 10,
-                          paddingVertical: 8,
-                          borderRadius: 10,
-                          marginRight: 8,
-                          backgroundColor: "#111827",
-                          borderWidth: 1,
-                          borderColor: "#333",
-                        }}
-                      >
-                        <Text style={{ color: "#fff", fontWeight: "700" }}>
-                          {th}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-
-                  {/* Style */}
-                  <Text
-                    style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}
-                  >
-                    Style
-                  </Text>
-                  <View style={{ flexDirection: "row" }}>
-                    {[
-                      { k: "solid", label: "Solid" },
-                      { k: "dashed", label: "Dashed" },
-                      { k: "dotted", label: "Dotted" },
-                    ].map((opt) => (
-                      <Pressable
-                        key={`style-st-${opt.k}`}
-                        onPress={() =>
-                          updateIndicatorLine(
-                            indicatorToEdit.name,
-                            lineStyleEditIndex,
-                            { style: opt.k }
-                          )
-                        }
-                        style={{
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
-                          borderRadius: 10,
-                          marginRight: 8,
-                          backgroundColor: "#111827",
-                          borderWidth: 1,
-                          borderColor: "#333",
-                        }}
-                      >
-                        <Text style={{ color: "#fff", fontWeight: "700" }}>
-                          {opt.label}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </View>
-                </ScrollView>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Modal>
-      )}
+      <LineStyleModal
+        visible={showLineStyleModal && !!indicatorToEdit}
+        onClose={closeLineStyleEditor}
+        title={`${indicatorToEdit?.name || ""}${
+          Array.isArray(indicatorToEdit?.calcParams)
+            ? String(indicatorToEdit?.calcParams?.[lineStyleEditIndex] ?? "")
+            : ""
+        }`}
+        onUpdateColor={(hex) =>
+          updateIndicatorLine(indicatorToEdit!.name, lineStyleEditIndex, {
+            color: hex,
+          })
+        }
+        onUpdateThickness={(n) =>
+          updateIndicatorLine(indicatorToEdit!.name, lineStyleEditIndex, {
+            size: n,
+          })
+        }
+        onUpdateStyle={(s) =>
+          updateIndicatorLine(indicatorToEdit!.name, lineStyleEditIndex, {
+            style: s,
+          })
+        }
+      />
       {/* OHLCV Row */}
-      <View
-        style={{
-          paddingHorizontal: 12,
-          paddingVertical: 6,
-          borderBottomWidth: 1,
-          borderBottomColor: "#1f2937",
-          backgroundColor: "#0a0a0a",
-        }}
-      >
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={{ flexDirection: "row", gap: 14 }}>
-            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-              O{" "}
-              <Text style={{ color: "#10B981" }}>
-                {formatPrice(lastCandle?.open)}
-              </Text>
-            </Text>
-            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-              H{" "}
-              <Text style={{ color: "#10B981" }}>
-                {formatPrice(lastCandle?.high)}
-              </Text>
-            </Text>
-            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-              L{" "}
-              <Text style={{ color: "#EF4444" }}>
-                {formatPrice(lastCandle?.low)}
-              </Text>
-            </Text>
-            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-              C{" "}
-              <Text style={{ color: "#E5E7EB" }}>
-                {formatPrice(lastCandle?.close)}
-              </Text>
-            </Text>
-            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-              V{" "}
-              <Text style={{ color: "#E5E7EB" }}>
-                {formatVolume(lastCandle?.volume)}
-              </Text>
-            </Text>
-          </View>
-        </ScrollView>
-      </View>
+      <OHLCRow lastCandle={lastCandle} />
 
       {/* Chart */}
       <View style={{ marginBottom: 8 }}>
@@ -1719,396 +1109,38 @@ export default function ChartFullScreen() {
       </View>
 
       {/* Timeframe Chips - below chart */}
-      <View style={styles.timeframeBar}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.rangeSwitcherScroll}
-        >
-          {pinned.map((tf) => (
-            <Pressable
-              key={tf}
-              onPress={() => handleTimeframeChange(tf)}
-              style={[styles.tfChip, extendedTf === tf && styles.tfChipActive]}
-            >
-              <Text
-                style={[
-                  styles.tfChipText,
-                  extendedTf === tf && styles.tfChipTextActive,
-                ]}
-              >
-                {tf}
-              </Text>
-            </Pressable>
-          ))}
-          <Pressable
-            onPress={showUnifiedBottomSheetWithTab}
-            style={[styles.tfChip, styles.tfMoreChip]}
-            hitSlop={10}
-          >
-            <Ionicons name="options" size={16} color="#fff" />
-          </Pressable>
-        </ScrollView>
-      </View>
+      <TimeframeBar
+        pinned={pinned as any}
+        extendedTf={extendedTf as any}
+        onChangeTimeframe={(tf) => handleTimeframeChange(tf as any)}
+        onOpenMore={showUnifiedBottomSheetWithTab}
+      />
 
       {/* Unified Bottom Sheet */}
-      {showUnifiedBottomSheet && (
-        <Modal
-          visible={showUnifiedBottomSheet}
-          transparent
-          animationType="none"
-          onRequestClose={hideBottomSheet}
-        >
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.5)",
-              justifyContent: "flex-end",
-            }}
-            onPress={hideBottomSheet}
-          >
-            <Animated.View
-              style={{
-                backgroundColor: "#1a1a1a",
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                paddingTop: 20,
-                paddingBottom: 40,
-                maxHeight: Dimensions.get("window").height * 0.8,
-                transform: [
-                  {
-                    translateY: bottomSheetAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [400, 0],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <Pressable>
-                {/* Handle Bar */}
-                <View
-                  style={{
-                    width: 40,
-                    height: 4,
-                    backgroundColor: "#666",
-                    borderRadius: 2,
-                    alignSelf: "center",
-                    marginBottom: 20,
-                  }}
-                />
-
-                <ScrollView
-                  style={{ maxHeight: 600 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {/* Chart Type Row */}
-                  <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
-                    <Text style={styles.timeframeSectionTitle}>Chart Type</Text>
-                    <View style={styles.chartTypeRow}>
-                      {[
-                        {
-                          type: "line" as ChartType,
-                          label: "Line",
-                          icon: "trending-up",
-                        },
-                        {
-                          type: "candlestick" as ChartType,
-                          label: "Candles",
-                          icon: "bar-chart",
-                        },
-                        {
-                          type: "area" as ChartType,
-                          label: "Area",
-                          icon: "analytics",
-                        },
-                      ].map((item) => (
-                        <Pressable
-                          key={item.type}
-                          onPress={() => {
-                            setChartType(item.type);
-                            hideBottomSheet();
-                          }}
-                          style={[
-                            styles.chartTypeButton,
-                            chartType === item.type &&
-                              styles.chartTypeButtonActive,
-                          ]}
-                        >
-                          <Ionicons
-                            name={item.icon as any}
-                            size={20}
-                            color={chartType === item.type ? "#000" : "#fff"}
-                            style={{ marginBottom: 4 }}
-                          />
-                          <Text
-                            style={[
-                              styles.chartTypeButtonText,
-                              chartType === item.type &&
-                                styles.chartTypeButtonTextActive,
-                            ]}
-                          >
-                            {item.label}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Timeframe Sections */}
-                  <View style={{ paddingHorizontal: 20 }}>
-                    {/* Minutes */}
-                    <View style={{ marginBottom: 24 }}>
-                      <Text style={styles.timeframeSectionTitle}>Minutes</Text>
-                      <View style={styles.timeframeGrid}>
-                        {["1m", "2m", "3m", "5m", "10m", "15m", "30m"].map(
-                          (tf) => {
-                            const isSelected = extendedTf === tf;
-                            const isPinned = pinned.includes(
-                              tf as ExtendedTimeframe
-                            );
-                            return (
-                              <Pressable
-                                key={tf}
-                                onPress={async () => {
-                                  const success = await toggle(
-                                    tf as ExtendedTimeframe
-                                  );
-                                  if (!success) {
-                                    setPinError(
-                                      "You can pin up to 10 timeframes"
-                                    );
-                                    setTimeout(() => setPinError(null), 2000);
-                                  }
-                                }}
-                                style={[
-                                  styles.timeframeButton,
-                                  isSelected && styles.timeframeButtonActive,
-                                  isPinned && styles.timeframeButtonPinned,
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.timeframeButtonText,
-                                    isSelected &&
-                                      styles.timeframeButtonTextActive,
-                                    isPinned &&
-                                      styles.timeframeButtonTextPinned,
-                                  ]}
-                                >
-                                  {tf}
-                                </Text>
-                              </Pressable>
-                            );
-                          }
-                        )}
-                      </View>
-                    </View>
-
-                    {/* Hours */}
-                    <View style={{ marginBottom: 24 }}>
-                      <Text style={styles.timeframeSectionTitle}>Hours</Text>
-                      <View style={styles.timeframeGrid}>
-                        {["1h", "2h", "4h"].map((tf) => {
-                          const isSelected = extendedTf === tf;
-                          const isPinned = pinned.includes(
-                            tf as ExtendedTimeframe
-                          );
-                          return (
-                            <Pressable
-                              key={tf}
-                              onPress={() => {
-                                toggle(tf as ExtendedTimeframe);
-                              }}
-                              style={[
-                                styles.timeframeButton,
-                                isSelected && styles.timeframeButtonActive,
-                                isPinned && styles.timeframeButtonPinned,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.timeframeButtonText,
-                                  isSelected &&
-                                    styles.timeframeButtonTextActive,
-                                  isPinned && styles.timeframeButtonTextPinned,
-                                ]}
-                              >
-                                {tf}
-                              </Text>
-                            </Pressable>
-                          );
-                        })}
-                      </View>
-                    </View>
-
-                    {/* Days */}
-                    <View style={{ marginBottom: 24 }}>
-                      <Text style={styles.timeframeSectionTitle}>Days</Text>
-                      <View style={styles.timeframeGrid}>
-                        {["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "ALL"].map(
-                          (tf) => {
-                            const isSelected = extendedTf === tf;
-                            const isPinned = pinned.includes(
-                              tf as ExtendedTimeframe
-                            );
-                            return (
-                              <Pressable
-                                key={tf}
-                                onPress={() => {
-                                  toggle(tf as ExtendedTimeframe);
-                                }}
-                                style={[
-                                  styles.timeframeButton,
-                                  isSelected && styles.timeframeButtonActive,
-                                  isPinned && styles.timeframeButtonPinned,
-                                ]}
-                              >
-                                <Text
-                                  style={[
-                                    styles.timeframeButtonText,
-                                    isSelected &&
-                                      styles.timeframeButtonTextActive,
-                                    isPinned &&
-                                      styles.timeframeButtonTextPinned,
-                                  ]}
-                                >
-                                  {tf}
-                                </Text>
-                              </Pressable>
-                            );
-                          }
-                        )}
-                      </View>
-                    </View>
-                  </View>
-                </ScrollView>
-              </Pressable>
-            </Animated.View>
-          </Pressable>
-        </Modal>
-      )}
+      <UnifiedBottomSheet
+        visible={showUnifiedBottomSheet}
+        onClose={hideBottomSheet}
+        chartType={chartType}
+        onSelectChartType={setChartType}
+        extendedTf={extendedTf as any}
+        pinned={pinned as any}
+        onTogglePin={async (tf) => {
+          const success = await toggle(tf);
+          if (!success) {
+            setPinError("You can pin up to 10 timeframes");
+            setTimeout(() => setPinError(null), 2000);
+          }
+          return success;
+        }}
+      />
 
       {/* Reasoning Bottom Sheet */}
-      {showReasoningBottomSheet && (
-        <Modal
-          visible={showReasoningBottomSheet}
-          transparent
-          animationType="none"
-          onRequestClose={() => {
-            Animated.timing(reasoningBottomSheetAnim, {
-              toValue: 0,
-              duration: 300,
-              useNativeDriver: false,
-            }).start(() => setShowReasoningBottomSheet(false));
-          }}
-        >
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.5)",
-              justifyContent: "flex-end",
-            }}
-            onPress={() => {
-              Animated.timing(reasoningBottomSheetAnim, {
-                toValue: 0,
-                duration: 300,
-                useNativeDriver: false,
-              }).start(() => setShowReasoningBottomSheet(false));
-            }}
-          >
-            <Animated.View
-              style={{
-                backgroundColor: "#1a1a1a",
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                paddingTop: 20,
-                paddingBottom: 40,
-                maxHeight: Dimensions.get("window").height * 0.8,
-                transform: [
-                  {
-                    translateY: reasoningBottomSheetAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [400, 0],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <Pressable>
-                {/* Handle Bar */}
-                <View
-                  style={{
-                    width: 40,
-                    height: 4,
-                    backgroundColor: "#666",
-                    borderRadius: 2,
-                    alignSelf: "center",
-                    marginBottom: 20,
-                  }}
-                />
-
-                {/* Header */}
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingHorizontal: 20,
-                    paddingBottom: 12,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 18,
-                      fontWeight: "700",
-                      color: "#fff",
-                    }}
-                  >
-                    Reasoning
-                  </Text>
-                  <Pressable
-                    onPress={() => {
-                      Animated.timing(reasoningBottomSheetAnim, {
-                        toValue: 0,
-                        duration: 300,
-                        useNativeDriver: false,
-                      }).start(() => setShowReasoningBottomSheet(false));
-                    }}
-                    style={{ padding: 4 }}
-                  >
-                    <Ionicons name="close" size={24} color="#fff" />
-                  </Pressable>
-                </View>
-
-                <ScrollView
-                  style={{ paddingHorizontal: 20 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {isStreaming ? (
-                    <Text
-                      style={{
-                        color: "#9CA3AF",
-                        fontSize: 12,
-                        marginBottom: 12,
-                      }}
-                    >
-                      Streaming reasoning…
-                    </Text>
-                  ) : null}
-                  <Text
-                    style={{ color: "#E5E7EB", fontSize: 14, lineHeight: 20 }}
-                  >
-                    {streamingText && streamingText.length > 0
-                      ? streamingText
-                      : "No reasoning available yet. Run Analyze to generate insights."}
-                  </Text>
-                </ScrollView>
-              </Pressable>
-            </Animated.View>
-          </Pressable>
-        </Modal>
-      )}
+      <ReasoningBottomSheet
+        visible={showReasoningBottomSheet}
+        onClose={() => setShowReasoningBottomSheet(false)}
+        isStreaming={isStreaming}
+        streamingText={streamingText}
+      />
 
       {/* Bottom Navigation - Reasoning, Analyze (center), Strategy (right) */}
       <View
@@ -2133,11 +1165,6 @@ export default function ChartFullScreen() {
             onPress={() => {
               if (!aiMeta && !isStreaming && !streamingText) return;
               setShowReasoningBottomSheet(true);
-              Animated.timing(reasoningBottomSheetAnim, {
-                toValue: 1,
-                duration: 300,
-                useNativeDriver: false,
-              }).start();
             }}
             disabled={!aiMeta && !isStreaming && !streamingText}
             style={{
@@ -2239,424 +1266,34 @@ export default function ChartFullScreen() {
       </View>
 
       {/* Strategy Complexity Bottom Sheet */}
-      {showComplexityBottomSheet && (
-        <Modal
-          visible={showComplexityBottomSheet}
-          transparent
-          animationType="none"
-          onRequestClose={hideComplexityBottomSheet}
-        >
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.5)",
-              justifyContent: "flex-end",
-            }}
-            onPress={hideComplexityBottomSheet}
-          >
-            <Animated.View
-              style={{
-                backgroundColor: "#1a1a1a",
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                paddingTop: 20,
-                paddingBottom: 40,
-                maxHeight: Dimensions.get("window").height * 0.8,
-                transform: [
-                  {
-                    translateY: complexityBottomSheetAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [400, 0],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <Pressable>
-                {/* Handle Bar */}
-                <View
-                  style={{
-                    alignItems: "center",
-                    paddingBottom: 20,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 40,
-                      height: 4,
-                      backgroundColor: "#666",
-                      borderRadius: 2,
-                    }}
-                  />
-                </View>
-
-                {/* Header */}
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    paddingHorizontal: 20,
-                    paddingBottom: 20,
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 20,
-                      fontWeight: "700",
-                      color: "#fff",
-                    }}
-                  >
-                    Strategy Complexity
-                  </Text>
-                  <Pressable
-                    onPress={hideComplexityBottomSheet}
-                    style={{ padding: 4 }}
-                  >
-                    <Ionicons name="close" size={24} color="#fff" />
-                  </Pressable>
-                </View>
-
-                <ScrollView
-                  style={{ paddingHorizontal: 20 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {/* Mode + Include + R:R (Day/Swing) */}
-                  <View style={{ marginBottom: 16 }}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        marginBottom: 8,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: "#9CA3AF",
-                          fontSize: 11,
-                          fontWeight: "700",
-                        }}
-                      >
-                        Mode
-                      </Text>
-                      <Text
-                        style={{
-                          color: "#9CA3AF",
-                          fontSize: 11,
-                          fontWeight: "700",
-                        }}
-                      >
-                        Include
-                      </Text>
-                    </View>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          backgroundColor: "#111827",
-                          borderRadius: 10,
-                          padding: 4,
-                        }}
-                      >
-                        <Pressable
-                          onPress={() => {
-                            setTradeMode("day");
-                            setMode("day_trade");
-                            setTradePace("day");
-                          }}
-                          style={{
-                            paddingVertical: 8,
-                            paddingHorizontal: 12,
-                            borderRadius: 8,
-                            backgroundColor:
-                              tradeMode === "day" ? "#00D4AA" : "transparent",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: tradeMode === "day" ? "#000" : "#ccc",
-                              fontWeight: "700",
-                              fontSize: 12,
-                            }}
-                          >
-                            Day
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => {
-                            setTradeMode("swing");
-                            setMode("swing_trade");
-                            setTradePace("swing");
-                          }}
-                          style={{
-                            marginLeft: 4,
-                            paddingVertical: 8,
-                            paddingHorizontal: 12,
-                            borderRadius: 8,
-                            backgroundColor:
-                              tradeMode === "swing" ? "#00D4AA" : "transparent",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: tradeMode === "swing" ? "#000" : "#ccc",
-                              fontWeight: "700",
-                              fontSize: 12,
-                            }}
-                          >
-                            Swing
-                          </Text>
-                        </Pressable>
-                      </View>
-                      <Pressable
-                        onPress={() =>
-                          setContextMode(
-                            contextMode === "news_sentiment"
-                              ? "price_action"
-                              : "news_sentiment"
-                          )
-                        }
-                        style={{
-                          paddingHorizontal: 12,
-                          paddingVertical: 8,
-                          borderRadius: 12,
-                          backgroundColor:
-                            contextMode === "news_sentiment"
-                              ? "#2563EB"
-                              : "#111827",
-                          borderWidth: 1,
-                          borderColor:
-                            contextMode === "news_sentiment"
-                              ? "#2563EB"
-                              : "#333",
-                        }}
-                      >
-                        <Text
-                          style={{
-                            color: "#fff",
-                            fontWeight: "600",
-                            fontSize: 12,
-                          }}
-                        >
-                          News + Sentiment
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-
-                  <Text
-                    style={{
-                      fontSize: 14,
-                      color: "#888",
-                      textAlign: "center",
-                      marginBottom: 20,
-                    }}
-                  >
-                    Choose your preferred trading strategy complexity level
-                  </Text>
-
-                  {/* Strategy Options */}
-                  {Object.entries(STRATEGY_COMPLEXITY_CONFIGS).map(
-                    ([key, config]) => {
-                      const complexity = key as StrategyComplexity;
-                      const isSelected = selectedComplexity === complexity;
-
-                      return (
-                        <Pressable
-                          key={complexity}
-                          onPress={() => {
-                            try {
-                              setSelectedComplexity(complexity);
-                              // Re-apply constraints to current plan immediately so chart updates
-                              setCurrentTradePlan((prev: any) =>
-                                prev
-                                  ? applyComplexityToPlan(prev, complexity)
-                                  : prev
-                              );
-                              // Optionally save to user profile
-                              if (profile.autoApplyComplexity) {
-                                setProfile({ strategyComplexity: complexity });
-                              }
-                            } finally {
-                              hideComplexityBottomSheet();
-                            }
-                          }}
-                          style={{
-                            borderRadius: 12,
-                            borderWidth: 1,
-                            borderColor: isSelected ? "#00D4AA" : "#333",
-                            padding: 16,
-                            marginBottom: 12,
-                            backgroundColor: isSelected
-                              ? "rgba(0,212,170,0.1)"
-                              : "#2a2a2a",
-                          }}
-                        >
-                          <View
-                            style={{
-                              flexDirection: "row",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              marginBottom: 8,
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontSize: 18,
-                                fontWeight: "600",
-                                color: isSelected ? "#00D4AA" : "#fff",
-                              }}
-                            >
-                              {complexity.charAt(0).toUpperCase() +
-                                complexity.slice(1)}
-                            </Text>
-                            {isSelected && (
-                              <Ionicons
-                                name="checkmark-circle"
-                                size={20}
-                                color="#00D4AA"
-                              />
-                            )}
-                          </View>
-
-                          <Text
-                            style={{
-                              fontSize: 14,
-                              color: "#ccc",
-                              marginBottom: 12,
-                            }}
-                          >
-                            {config.description}
-                          </Text>
-                        </Pressable>
-                      );
-                    }
-                  )}
-                </ScrollView>
-              </Pressable>
-            </Animated.View>
-          </Pressable>
-        </Modal>
-      )}
+      <ComplexityBottomSheet
+        visible={showComplexityBottomSheet}
+        onClose={hideComplexityBottomSheet}
+        selectedComplexity={selectedComplexity}
+        onSelectComplexity={(c) => {
+          setSelectedComplexity(c);
+          setCurrentTradePlan((prev: any) =>
+            prev ? applyComplexityToPlan(prev, c) : prev
+          );
+        }}
+        profile={profile}
+        onSaveComplexityToProfile={(c) => setProfile({ strategyComplexity: c })}
+        tradeMode={tradeMode}
+        setTradeMode={setTradeMode}
+        setMode={setMode}
+        tradePace={tradePace}
+        setTradePace={setTradePace}
+        contextMode={contextMode}
+        setContextMode={setContextMode}
+      />
 
       {/* Indicators Bottom Sheet */}
-      {showIndicatorsSheet && (
-        <Modal
-          visible={showIndicatorsSheet}
-          transparent
-          animationType="none"
-          onRequestClose={closeIndicatorsSheet}
-        >
-          <Pressable
-            style={{
-              flex: 1,
-              backgroundColor: "rgba(0,0,0,0.5)",
-              justifyContent: "flex-end",
-            }}
-            onPress={closeIndicatorsSheet}
-          >
-            <Animated.View
-              style={{
-                backgroundColor: "#1a1a1a",
-                borderTopLeftRadius: 20,
-                borderTopRightRadius: 20,
-                paddingTop: 20,
-                paddingBottom: 40,
-                maxHeight: Dimensions.get("window").height * 0.85,
-                transform: [
-                  {
-                    translateY: indicatorsSheetAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [400, 0],
-                    }),
-                  },
-                ],
-              }}
-            >
-              <Pressable>
-                {/* Handle Bar */}
-                <View
-                  style={{
-                    width: 40,
-                    height: 4,
-                    backgroundColor: "#666",
-                    borderRadius: 2,
-                    alignSelf: "center",
-                    marginBottom: 16,
-                  }}
-                />
-
-                {/* Header */}
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    paddingHorizontal: 20,
-                    marginBottom: 12,
-                  }}
-                >
-                  <Text
-                    style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}
-                  >
-                    Indicators
-                  </Text>
-                  <Pressable
-                    onPress={closeIndicatorsSheet}
-                    style={{ padding: 4 }}
-                  >
-                    <Ionicons name="close" size={22} color="#fff" />
-                  </Pressable>
-                </View>
-
-                <ScrollView
-                  style={{ paddingHorizontal: 20 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  <Text
-                    style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 10 }}
-                  >
-                    Tap to toggle. Select to configure periods and color.
-                    Overlay is supported on MA, EMA, SMA, BBI, BOLL, SAR.
-                  </Text>
-                  {/* Grid of built-ins */}
-                  <View style={styles.timeframeGrid}>
-                    {BUILTIN_INDICATORS.map((ind) => {
-                      const selected = isSelectedIndicator(ind.name);
-                      return (
-                        <Pressable
-                          key={ind.name}
-                          onPress={() => toggleIndicator(ind.name)}
-                          style={[
-                            styles.timeframeButton,
-                            selected && styles.timeframeButtonActive,
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.timeframeButtonText,
-                              selected && styles.timeframeButtonTextActive,
-                            ]}
-                          >
-                            {ind.name}
-                          </Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </ScrollView>
-              </Pressable>
-            </Animated.View>
-          </Pressable>
-        </Modal>
-      )}
+      <IndicatorsSheet
+        visible={showIndicatorsSheet}
+        onClose={closeIndicatorsSheet}
+        indicators={indicators}
+        onToggleIndicator={toggleIndicator}
+      />
 
       {/* Custom R:R Modal */}
       <Modal
