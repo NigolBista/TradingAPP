@@ -19,13 +19,23 @@ import WatchlistScreen from "../screens/WatchlistScreen";
 import AIInsightsScreen from "../screens/AIInsightsScreen";
 import JourneyScreen from "../screens/JourneyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+// Portfolio functionality moved to Dashboard
+import BrokerageAccountsScreen from "../screens/BrokerageAccountsScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
 import MarketScreenerScreen from "../screens/MarketScreenerScreen";
 import StockDetailScreen from "../screens/StockDetailScreen";
 import SignalsFeedScreen from "../screens/SignalsFeedScreen";
-import NewsInsightsScreen from "../screens/NewsInsightsScreen";
+import FocusScreen from "../screens/FocusScreen";
+import MarketOverviewScreen from "../screens/MarketOverviewScreen";
+import MarketOverviewTabScreen from "../screens/MarketOverviewTabScreen";
+import FederalReserveScreen from "../screens/FederalReserveScreen";
+import DecalpXScreen from "../screens/DecalpXScreen";
+import MarketOverviewPage from "../screens/MarketOverviewPage";
+import EarningsCalendarScreen from "../screens/EarningsCalendarScreen";
+import ChatScreen from "../screens/ChatScreen";
 import { useAuth } from "../providers/AuthProvider";
+import { useTheme } from "../providers/ThemeProvider";
 
 const Tab = createBottomTabNavigator();
 const RootStack = createNativeStackNavigator();
@@ -36,14 +46,12 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff",
-  },
-  loadingContainerDark: {
-    backgroundColor: "#000000",
   },
 });
 
 function Tabs() {
+  const { theme } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -52,7 +60,7 @@ function Tabs() {
 
           switch (route.name) {
             case "Dashboard":
-              iconName = focused ? "analytics" : "analytics-outline";
+              iconName = focused ? "wallet" : "wallet-outline";
               break;
             case "Watchlist":
               iconName = focused ? "list" : "list-outline";
@@ -63,11 +71,11 @@ function Tabs() {
             case "AI Insights":
               iconName = focused ? "sparkles" : "sparkles-outline";
               break;
-            case "Signals":
-              iconName = focused ? "radio" : "radio-outline";
+            case "Market":
+              iconName = focused ? "trending-up" : "trending-up-outline";
               break;
-            case "News":
-              iconName = focused ? "newspaper" : "newspaper-outline";
+            case "Focus":
+              iconName = focused ? "flag" : "flag-outline";
               break;
             case "Profile":
               iconName = focused ? "person" : "person-outline";
@@ -79,18 +87,18 @@ function Tabs() {
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         headerShown: false,
-        tabBarActiveTintColor: "#6366f1",
-        tabBarInactiveTintColor: "#9ca3af",
+        tabBarActiveTintColor: theme.colors.primary,
+        tabBarInactiveTintColor: theme.colors.textSecondary,
         tabBarStyle: {
-          backgroundColor: "#ffffff",
-          borderTopColor: "#e5e7eb",
+          backgroundColor: theme.colors.background,
+          borderTopWidth: 0,
         },
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
       <Tab.Screen name="Watchlist" component={WatchlistScreen} />
-      <Tab.Screen name="Signals" component={SignalsFeedScreen} />
-      <Tab.Screen name="News" component={NewsInsightsScreen} />
+      <Tab.Screen name="Market" component={MarketOverviewTabScreen} />
+      <Tab.Screen name="Focus" component={FocusScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
     </Tab.Navigator>
   );
@@ -108,6 +116,7 @@ function AuthRoutes() {
 export default function RootNavigation() {
   const scheme = useColorScheme();
   const { user, loading } = useAuth();
+  const { theme } = useTheme();
 
   if (loading) {
     function LoadingScreen() {
@@ -115,10 +124,10 @@ export default function RootNavigation() {
         <View
           style={[
             styles.loadingContainer,
-            scheme === "dark" && styles.loadingContainerDark,
+            { backgroundColor: theme.colors.background },
           ]}
         >
-          <ActivityIndicator size="large" color="#6366f1" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       );
     }
@@ -145,6 +154,40 @@ export default function RootNavigation() {
           <RootStack.Screen name="Scanner" component={MarketScreenerScreen} />
           <RootStack.Screen name="Journey" component={JourneyScreen} />
           <RootStack.Screen name="AIInsights" component={AIInsightsScreen} />
+          <RootStack.Screen
+            name="BrokerageAccounts"
+            component={BrokerageAccountsScreen}
+          />
+          <RootStack.Screen
+            name="MarketOverview"
+            component={MarketOverviewScreen}
+            options={{ headerShown: true, title: "Market Overview" }}
+          />
+          <RootStack.Screen
+            name="FederalReserve"
+            component={FederalReserveScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="DecalpX"
+            component={DecalpXScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="MarketOverviewPage"
+            component={MarketOverviewPage}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="EarningsCalendar"
+            component={EarningsCalendarScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="Chat"
+            component={ChatScreen}
+            options={{ headerShown: false }}
+          />
         </RootStack.Navigator>
       ) : (
         <AuthRoutes />

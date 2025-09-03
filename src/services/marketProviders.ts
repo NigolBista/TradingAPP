@@ -1,5 +1,7 @@
+// market-data-only.ts
 import Constants from "expo-constants";
 
+/** Basic OHLCV candle */
 export type Candle = {
   time: number; // epoch ms
   open: number;
@@ -9,437 +11,693 @@ export type Candle = {
   volume?: number;
 };
 
-async function fetchJson(url: string, headers: Record<string, string> = {}) {
-  const res = await fetch(url, { headers });
+/** Webull-like timeframe options shown in your UI */
+export type ExtendedTimeframe =
+  | "1m"
+  | "2m"
+  | "3m"
+  | "5m"
+  | "10m"
+  | "15m"
+  | "30m"
+  | "1h"
+  | "2h"
+  | "4h"
+  | "1D"
+  | "1W"
+  | "1M"
+  | "3M"
+  | "1Y"
+  | "5Y"
+  | "ALL";
+
+/** MarketData.app resolutions */
+export type MarketDataResolution =
+  | "1"
+  | "5"
+  | "15"
+  | "30"
+  | "1H"
+  | "D"
+  | "W"
+  | "M";
+
+type ProviderType = "marketData" | "polygon";
+
+function getSelectedProvider(override?: ProviderType): ProviderType {
+  const cfg = (Constants.expoConfig?.extra as any) || {};
+  const envProvider = (cfg.marketProvider as ProviderType) || "marketData";
+  return (override as ProviderType) || envProvider;
+}
+
+/** Small helper */
+async function fetchJson(
+  url: string,
+  headers: Record<string, string>,
+  signal?: AbortSignal
+) {
+  const res = await fetch(url, { headers, signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
 
-// Lightweight Yahoo Finance candles (no key required) using rapid endpoints via query1.finance.yahoo.com
-export async function fetchYahooCandles(
-  symbol: string,
-  range: string = "1mo",
-  interval: string = "1d"
-): Promise<Candle[]> {
-  const yahooKey = (Constants.expoConfig?.extra as any)?.yahooApiKey;
-  const url = yahooKey
-    ? `https://yfapi.net/v8/finance/chart/${encodeURIComponent(
-        symbol
-      )}?range=${range}&interval=${interval}`
-    : `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
-        symbol
-      )}?range=${range}&interval=${interval}`;
-  const headers: Record<string, string> = yahooKey
-    ? { "x-api-key": String(yahooKey) }
-    : {};
-  const json = await fetchJson(url, headers);
-  const result = json?.chart?.result?.[0];
-  if (!result) return [];
-  const ts: number[] = result.timestamp || [];
-  const o = result.indicators?.quote?.[0]?.open || [];
-  const h = result.indicators?.quote?.[0]?.high || [];
-  const l = result.indicators?.quote?.[0]?.low || [];
-  const c = result.indicators?.quote?.[0]?.close || [];
-  const v = result.indicators?.quote?.[0]?.volume || [];
-  const candles: Candle[] = ts.map((t: number, i: number) => ({
-    time: t * 1000,
-    open: o[i],
-    high: h[i],
-    low: l[i],
-    close: c[i],
-    volume: v[i],
-  }));
-  return candles.filter(
-    (k) => Number.isFinite(k.open) && Number.isFinite(k.close)
-  );
+/** Polygon helpers */
+function polygonApiKey(): string | undefined {
+  const cfg = (Constants.expoConfig?.extra as any) || {};
+  return cfg.polygonApiKey as string | undefined;
 }
 
-function mapResolutionToYahoo(resolution?: MarketDataResolution): {
-  interval: string;
-  range: string;
+function mapResolutionToPolygon(resolution: MarketDataResolution): {
+  multiplier: number;
+  timespan: "minute" | "hour" | "day" | "week" | "month";
 } {
   switch (resolution) {
     case "1":
-      return { interval: "1m", range: "5d" };
+      return { multiplier: 1, timespan: "minute" };
     case "5":
-      return { interval: "5m", range: "1mo" };
+      return { multiplier: 5, timespan: "minute" };
     case "15":
-      return { interval: "15m", range: "1mo" };
+      return { multiplier: 15, timespan: "minute" };
     case "30":
-      return { interval: "30m", range: "1mo" };
+      return { multiplier: 30, timespan: "minute" };
     case "1H":
-      return { interval: "60m", range: "3mo" };
+      return { multiplier: 1, timespan: "hour" };
+    case "D":
+      return { multiplier: 1, timespan: "day" };
     case "W":
-      return { interval: "1wk", range: "3y" };
-    case "M":
-      return { interval: "1mo", range: "10y" };
-    case "D":
-    default:
-      return { interval: "1d", range: "1y" };
-  }
-}
-
-function mapResolutionToAlphaVantage(
-  resolution?: MarketDataResolution
-): AlphaVantageInterval {
-  switch (resolution) {
-    case "1":
-      return "1min";
-    case "5":
-      return "5min";
-    case "15":
-      return "15min";
-    case "30":
-      return "30min";
-    case "1H":
-      return "60min";
-    case "D":
-    default:
-      return "daily";
-  }
-}
-
-function mapResolutionToPolygonTimespan(
-  resolution?: MarketDataResolution
-): string {
-  switch (resolution) {
-    case "1":
-    case "5":
-    case "15":
-    case "30":
-      return "minute";
-    case "1H":
-      return "hour";
-    case "D":
-    case "W":
+      return { multiplier: 1, timespan: "week" };
     case "M":
     default:
-      return "day";
+      return { multiplier: 1, timespan: "month" };
   }
 }
 
-// Polygon.io (requires API key). If not present, falls back to Yahoo.
-export async function fetchPolygonCandles(
+function toIsoDateUTC(d: Date): string {
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+async function fetchPolygonCandles(
   symbol: string,
-  timespan: string = "day",
-  limit: number = 120
+  resolution: MarketDataResolution,
+  limit: number
 ): Promise<Candle[]> {
-  const apiKey = (Constants.expoConfig?.extra as any)?.polygonApiKey;
-  if (!apiKey) return fetchYahooCandles(symbol);
+  const key = polygonApiKey();
+  if (!key) {
+    throw new Error("Polygon API key missing. Set extra.polygonApiKey.");
+  }
+
+  const { multiplier, timespan } = mapResolutionToPolygon(resolution);
   const to = new Date();
-  const from = new Date();
-  from.setDate(to.getDate() - limit * 2);
-  const format = (d: Date) => d.toISOString().split("T")[0];
+  const baseDaysBack = computeDaysBack(resolution, limit);
+  const from = new Date(to.getTime() - baseDaysBack * 24 * 60 * 60 * 1000);
+
   const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(
     symbol
-  )}/range/1/${timespan}/${format(from)}/${format(
+  )}/range/${multiplier}/${timespan}/${toIsoDateUTC(from)}/${toIsoDateUTC(
     to
-  )}?adjusted=true&sort=asc&limit=${limit}&apiKey=${apiKey}`;
-  const json = await fetchJson(url);
-  const results = json?.results || [];
-  return results.map((r: any) => ({
-    time: r.t,
-    open: r.o,
-    high: r.h,
-    low: r.l,
-    close: r.c,
-    volume: r.v,
-  }));
+  )}?adjusted=true&sort=asc&limit=${Math.max(
+    1,
+    limit
+  )}&apiKey=${encodeURIComponent(key)}`;
+
+  // Debug: show the date range being requested
+  try {
+    // Use ISO UTC dates for clarity
+    const fromStr = toIsoDateUTC(from);
+    const toStr = toIsoDateUTC(to);
+    console.log(
+      `\ud83d\udcf1 Polygon API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit})`
+    );
+  } catch (_) {
+    // no-op
+  }
+
+  const json = await fetchJson(url, { "Content-Type": "application/json" });
+  const results = (json?.results || []) as any[];
+  const candles: Candle[] = results
+    .map((r) => ({
+      time: Number(r.t),
+      open: Number(r.o),
+      high: Number(r.h),
+      low: Number(r.l),
+      close: Number(r.c),
+      volume: Number(r.v),
+    }))
+    .filter((k) => Number.isFinite(k.open) && Number.isFinite(k.close))
+    .sort((a, b) => a.time - b.time);
+
+  return candles.length > limit ? candles.slice(-limit) : candles;
 }
 
-// MarketData.app resolutions
-export type MarketDataResolution =
-  | "1" // 1 minute
-  | "5" // 5 minutes
-  | "15" // 15 minutes
-  | "30" // 30 minutes
-  | "1H" // 1 hour
-  | "D" // 1 day
-  | "W" // 1 week
-  | "M"; // 1 month
+async function fetchPolygonCandlesWindow(
+  symbol: string,
+  resolution: MarketDataResolution,
+  fromMs: number,
+  toMs: number,
+  limit: number,
+  signal?: AbortSignal
+): Promise<Candle[]> {
+  const key = polygonApiKey();
+  if (!key) {
+    throw new Error("Polygon API key missing. Set extra.polygonApiKey.");
+  }
 
-// MarketData.app candles (requires API token)
+  const { multiplier, timespan } = mapResolutionToPolygon(resolution);
+  const minMs = Math.min(fromMs, toMs);
+  const maxMs = Math.max(fromMs, toMs);
+  const from = new Date(minMs);
+  const to = new Date(maxMs);
+
+  const url = `https://api.polygon.io/v2/aggs/ticker/${encodeURIComponent(
+    symbol
+  )}/range/${multiplier}/${timespan}/${toIsoDateUTC(from)}/${toIsoDateUTC(
+    to
+  )}?adjusted=true&sort=asc&limit=${Math.max(
+    1,
+    limit
+  )}&apiKey=${encodeURIComponent(key)}`;
+
+  // Debug: show the date range being requested
+  try {
+    const fromStr = toIsoDateUTC(from);
+    const toStr = toIsoDateUTC(to);
+    console.log(
+      `\ud83d\udcf1 Polygon API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit})`
+    );
+  } catch (_) {
+    // no-op
+  }
+
+  const json = await fetchJson(
+    url,
+    { "Content-Type": "application/json" },
+    signal
+  );
+  const results = (json?.results || []) as any[];
+  const candles: Candle[] = results
+    .map((r) => ({
+      time: Number(r.t),
+      open: Number(r.o),
+      high: Number(r.h),
+      low: Number(r.l),
+      close: Number(r.c),
+      volume: Number(r.v),
+    }))
+    .filter((k) => Number.isFinite(k.open) && Number.isFinite(k.close))
+    .sort((a, b) => a.time - b.time);
+
+  return candles.length > limit ? candles.slice(-limit) : candles;
+}
+
+/** Group lower-timeframe candles into larger buckets */
+export function aggregateCandles(candles: Candle[], group: number): Candle[] {
+  if (group <= 1) return candles;
+  const out: Candle[] = [];
+  for (let i = 0; i < candles.length; i += group) {
+    const slice = candles.slice(i, i + group);
+    if (!slice.length) continue;
+    out.push({
+      time: slice[0].time,
+      open: slice[0].open,
+      high: Math.max(...slice.map((c) => c.high)),
+      low: Math.min(...slice.map((c) => c.low)),
+      close: slice[slice.length - 1].close,
+      volume: slice.reduce((s, c) => s + (c.volume || 0), 0),
+    });
+  }
+  return out;
+}
+
+/** Map UI timeframe → base resolution + grouping factor.
+ *  (Use coarser bases for larger ranges to keep payloads tiny.)
+ */
+export function mapExtendedTimeframe(tf: ExtendedTimeframe): {
+  base: MarketDataResolution;
+  group: number;
+} {
+  switch (tf) {
+    // minute groupings
+    case "1m":
+      return { base: "1", group: 1 };
+    case "2m":
+      return { base: "1", group: 2 };
+    case "3m":
+      return { base: "1", group: 3 };
+    case "5m":
+      return { base: "5", group: 1 };
+    case "10m":
+      return { base: "5", group: 2 };
+    case "15m":
+      return { base: "15", group: 1 };
+    case "30m":
+      return { base: "30", group: 1 };
+
+    // hour groupings - use native hourly data when available
+    case "1h":
+      return { base: "1H", group: 1 }; // Native 1-hour data
+    case "2h":
+      return { base: "1H", group: 2 }; // 2×1h = 2h
+    case "4h":
+      return { base: "1H", group: 4 }; // 4×1h = 4h
+
+    // higher level: intraday feel for 1D, then daily/weekly/monthly
+    case "1D":
+      return { base: "1", group: 1 }; // 1-minute data for full trading day (390 bars)
+    case "1W":
+      return { base: "D", group: 1 }; // Daily data for weekly view
+    case "1M":
+      return { base: "D", group: 1 }; // Daily data for monthly view
+    case "3M":
+      return { base: "D", group: 1 }; // Daily data for 3-month view
+    case "1Y":
+      return { base: "D", group: 1 }; // Daily data for 1-year view
+    case "5Y":
+      return { base: "W", group: 1 }; // Weekly data for 5-year view
+    case "ALL":
+    default:
+      return { base: "M", group: 1 };
+  }
+}
+
+/** Professional trading platform data targets per timeframe */
+function desiredOutputBars(tf: ExtendedTimeframe): number {
+  switch (tf) {
+    // Minute timeframes - show enough data for meaningful analysis
+    case "1m":
+      return 390; // Full trading day (6.5 hours)
+    case "2m":
+      return 195; // Full trading day in 2m intervals
+    case "3m":
+      return 130; // Full trading day in 3m intervals
+    case "5m":
+      return 390; // 2 full trading days for pattern analysis
+    case "10m":
+      return 195; // 2 full trading days in 10m intervals
+    case "15m":
+      return 130; // 2 full trading days in 15m intervals
+    case "30m":
+      return 65; // 2 full trading days in 30m intervals
+
+    // Hour timeframes - show weeks/months of data
+    case "1h":
+      return 156; // ~1 month of hourly data (24 trading days)
+    case "2h":
+      return 78; // ~1 month of 2h data
+    case "4h":
+      return 120; // ~2 months of 4h data
+
+    // Daily and longer timeframes
+    case "1D":
+      return 390; // full trading day in 1-minute bars (6.5 hours * 60 minutes)
+    case "1W":
+      return 7; // 1 week of daily data
+    case "1M":
+      return 22; // ~1 month of daily data (trading days)
+    case "3M":
+      return 66; // ~3 months of daily data
+    case "1Y":
+      return 252; // ~1 trading year of daily data
+    case "5Y":
+      return 260; // ~5 years of weekly data
+    case "ALL":
+      return 600; // Maximum historical view (monthly data)
+    default:
+      return 200;
+  }
+}
+
+/** Bars per day helper (approx; for from/to window sizing only) */
+function barsPerTradingDay(res: MarketDataResolution): number {
+  switch (res) {
+    case "1":
+      return 390; // 6.5h * 60
+    case "5":
+      return 78;
+    case "15":
+      return 26;
+    case "30":
+      return 13;
+    case "1H":
+      return 7; // ~6.5h -> 7 rounded
+    case "D":
+      return 1;
+    case "W":
+      return 1 / 5; // 1 bar per ~5 trading days
+    case "M":
+      return 1 / 21; // 1 bar per ~21 trading days
+  }
+}
+
+/** Choose a compact server window that still guarantees enough base bars */
+function computeDaysBack(
+  base: MarketDataResolution,
+  baseLimit: number
+): number {
+  const bpd = barsPerTradingDay(base);
+  // Convert desired bars to trading days, then to calendar days with cushion
+  const tradingDaysNeeded = baseLimit / Math.max(bpd, 0.0001);
+  // Add ~40% cushion for weekends/holidays and any server-side filtering
+  const calendarDays = Math.ceil(((tradingDaysNeeded * 7) / 5) * 1.4);
+  // Lower bound to avoid zero-day ranges
+  return Math.max(calendarDays, 2);
+}
+
+/** MarketData.app — the only network we hit now */
 export async function fetchMarketDataCandles(
   symbol: string,
-  resolution: MarketDataResolution = "D",
-  limit: number = 120
+  resolution: MarketDataResolution,
+  limit: number,
+  includeExtendedHours: boolean = true
 ): Promise<Candle[]> {
   const apiToken = (Constants.expoConfig?.extra as any)?.marketDataApiToken;
-  console.log(`MarketData API Token available: ${!!apiToken}`);
-
   if (!apiToken) {
     throw new Error(
       "MarketData API token missing. Set extra.marketDataApiToken."
     );
   }
 
-  // Calculate date range for historical data
   const to = new Date();
-  const from = new Date();
-
-  // Adjust date range based on resolution
-  const daysBack =
-    resolution === "1" ||
-    resolution === "5" ||
-    resolution === "15" ||
-    resolution === "30"
-      ? 30
-      : resolution === "1H"
-      ? 120
-      : resolution === "D"
-      ? 365
-      : resolution === "W"
-      ? 365 * 2
-      : 365 * 5; // Monthly
-
-  from.setDate(to.getDate() - daysBack);
+  const baseDaysBack = computeDaysBack(resolution, limit);
+  const from = new Date(to.getTime() - baseDaysBack * 24 * 60 * 60 * 1000);
 
   const formatDate = (d: Date) => d.toISOString().split("T")[0];
+  const fromStr = formatDate(from);
+  const toStr = formatDate(to);
 
-  const url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
+  // Build URL with extended hours parameter
+  let url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
     symbol
-  )}/?from=${formatDate(from)}&to=${formatDate(to)}&limit=${limit}`;
+  )}/?from=${fromStr}&to=${toStr}&limit=${limit}`;
 
-  console.log(`Fetching MarketData candles from: ${url}`);
-
-  try {
-    const headers = {
-      Authorization: `Bearer ${apiToken}`,
-      "Content-Type": "application/json",
-    };
-
-    const json = await fetchJson(url, headers);
-    console.log(`MarketData response status:`, json?.s);
-
-    // Check for API errors
-    if (json?.s !== "ok") {
-      const errorMsg = json?.errmsg || "Unknown error";
-      console.warn("MarketData API error:", errorMsg);
-      console.warn("Full response:", JSON.stringify(json, null, 2));
-      return [];
-    }
-
-    const timestamps = json.t || [];
-    const opens = json.o || [];
-    const highs = json.h || [];
-    const lows = json.l || [];
-    const closes = json.c || [];
-    const volumes = json.v || [];
-
-    if (timestamps.length === 0) {
-      console.warn(`No data found for symbol: ${symbol}`);
-      return [];
-    }
-
-    console.log(`Found ${timestamps.length} data points for ${symbol}`);
-
-    const candles: Candle[] = timestamps
-      .map((t: number, i: number) => ({
-        time: t * 1000, // Convert Unix timestamp to milliseconds
-        open: opens[i],
-        high: highs[i],
-        low: lows[i],
-        close: closes[i],
-        volume: volumes[i],
-      }))
-      .filter(
-        (c: Candle) => Number.isFinite(c.open) && Number.isFinite(c.close)
-      )
-      .sort((a: Candle, b: Candle) => a.time - b.time);
-
-    console.log(`Successfully parsed ${candles.length} candles for ${symbol}`);
-    return candles;
-  } catch (error) {
-    console.error("MarketData API error:", error);
-    throw error;
+  // Add extended hours parameter - MarketData.app includes extended hours by default
+  // but we can be explicit about it for clarity
+  if (includeExtendedHours) {
+    url += "&extended=true";
   }
+
+  // Debug: show the date range being requested
+  console.log(
+    `\ud83d\udce1 API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit})`
+  );
+
+  const headers = {
+    Authorization: `Bearer ${apiToken}`,
+    "Content-Type": "application/json",
+  };
+
+  const json = await fetchJson(url, headers);
+
+  if (json?.s !== "ok") {
+    const errorMsg = json?.errmsg || "Unknown MarketData error";
+    throw new Error(errorMsg);
+  }
+
+  const t = json.t || [];
+  const o = json.o || [];
+  const h = json.h || [];
+  const l = json.l || [];
+  const c = json.c || [];
+  const v = json.v || [];
+
+  const candles: Candle[] = t
+    .map((ts: number, i: number) => ({
+      time: ts * 1000,
+      open: o[i],
+      high: h[i],
+      low: l[i],
+      close: c[i],
+      volume: v[i],
+    }))
+    .filter((k: Candle) => Number.isFinite(k.open) && Number.isFinite(k.close))
+    .sort((a: Candle, b: Candle) => a.time - b.time);
+
+  // Extra safety — server respects limit, but trim if needed
+  return candles.length > limit ? candles.slice(-limit) : candles;
 }
 
-// Alpha Vantage TIME_SERIES_DAILY, WEEKLY, MONTHLY (non-adjusted) or INTRADAY
-export type AlphaVantageInterval =
-  | "1min"
-  | "5min"
-  | "15min"
-  | "30min"
-  | "60min"
-  | "daily"
-  | "weekly"
-  | "monthly";
-
-export async function fetchAlphaVantageCandles(
+/** MarketData.app windowed fetch (by explicit from/to) */
+export async function fetchMarketDataCandlesWindow(
   symbol: string,
-  interval: AlphaVantageInterval = "daily",
-  outputSize: "compact" | "full" = "compact"
+  resolution: MarketDataResolution,
+  fromMs: number,
+  toMs: number,
+  limit: number,
+  signal?: AbortSignal,
+  includeExtendedHours: boolean = true
 ): Promise<Candle[]> {
-  const apiKey = (Constants.expoConfig?.extra as any)?.alphaVantageApiKey;
-  console.log(`Alpha Vantage API Key available: ${!!apiKey}`);
-
-  if (!apiKey) {
-    console.log("No Alpha Vantage API key found, falling back to Yahoo");
-    return fetchYahooCandles(symbol);
+  const apiToken = (Constants.expoConfig?.extra as any)?.marketDataApiToken;
+  if (!apiToken) {
+    throw new Error(
+      "MarketData API token missing. Set extra.marketDataApiToken."
+    );
   }
 
-  let url: string;
-  if (interval === "daily") {
-    url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${encodeURIComponent(
-      symbol
-    )}&outputsize=${outputSize}&apikey=${apiKey}`;
-  } else if (interval === "weekly") {
-    url = `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=${encodeURIComponent(
-      symbol
-    )}&apikey=${apiKey}`;
-  } else if (interval === "monthly") {
-    url = `https://www.alphavantage.co/query?function=TIME_SERIES_MONTHLY&symbol=${encodeURIComponent(
-      symbol
-    )}&apikey=${apiKey}`;
-  } else {
-    url = `https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=${encodeURIComponent(
-      symbol
-    )}&interval=${interval}&outputsize=${outputSize}&apikey=${apiKey}`;
+  // Validate date range
+  const minMs = Math.min(fromMs, toMs);
+  const maxMs = Math.max(fromMs, toMs);
+  const now = Date.now();
+
+  // Ensure dates are reasonable (not too far in the past or future)
+  const fiveYearsAgo = now - 5 * 365 * 24 * 60 * 60 * 1000;
+  const oneWeekFromNow = now + 7 * 24 * 60 * 60 * 1000;
+
+  const validFromMs = Math.max(minMs, fiveYearsAgo);
+  const validToMs = Math.min(maxMs, oneWeekFromNow);
+
+  const from = new Date(validFromMs);
+  const to = new Date(validToMs);
+
+  // Ensure proper date formatting for API - use UTC to avoid timezone issues
+  const formatDate = (d: Date) => {
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const fromStr = formatDate(from);
+  const toStr = formatDate(to);
+
+  // Build URL with extended hours parameter
+  let url = `https://api.marketdata.app/v1/stocks/candles/${resolution}/${encodeURIComponent(
+    symbol
+  )}/?from=${fromStr}&to=${toStr}&limit=${limit}`;
+
+  // Add extended hours parameter
+  if (includeExtendedHours) {
+    url += "&extended=true";
   }
 
   console.log(
-    `Fetching Alpha Vantage data from: ${url.replace(apiKey, "API_KEY_HIDDEN")}`
+    `📡 API Request: ${symbol} ${resolution} from ${fromStr} to ${toStr} (limit: ${limit}, extended: ${includeExtendedHours})`
   );
 
-  const json = await fetchJson(url);
-  console.log(`Alpha Vantage response keys:`, Object.keys(json));
+  const headers = {
+    Authorization: `Bearer ${apiToken}`,
+    "Content-Type": "application/json",
+  };
 
-  // Check for API errors
-  if (json?.Note || json?.Information || json?.["Error Message"]) {
-    const errorMsg = json?.Note || json?.Information || json?.["Error Message"];
-    console.warn("Alpha Vantage API error:", errorMsg);
-    console.warn("Full response:", JSON.stringify(json, null, 2));
-    return [];
+  const json = await fetchJson(url, headers, signal);
+
+  if (json?.s !== "ok") {
+    const errorMsg = json?.errmsg || "Unknown MarketData error";
+    console.error(`❌ API Error for ${symbol}:`, errorMsg, { url });
+    throw new Error(errorMsg);
   }
 
-  // Determine the correct key for the time series data
-  const key =
-    interval === "daily"
-      ? "Time Series (Daily)"
-      : interval === "weekly"
-      ? "Weekly Time Series"
-      : interval === "monthly"
-      ? "Monthly Time Series"
-      : `Time Series (${interval})`;
+  const t = json.t || [];
+  const o = json.o || [];
+  const h = json.h || [];
+  const l = json.l || [];
+  const c = json.c || [];
+  const v = json.v || [];
 
-  console.log(`Looking for key: "${key}"`);
-  const series = json[key] || {};
+  const candles: Candle[] = t
+    .map((ts: number, i: number) => ({
+      time: ts * 1000,
+      open: o[i],
+      high: h[i],
+      low: l[i],
+      close: c[i],
+      volume: v[i],
+    }))
+    .filter((k: Candle) => Number.isFinite(k.open) && Number.isFinite(k.close))
+    .sort((a: Candle, b: Candle) => a.time - b.time);
 
-  if (Object.keys(series).length === 0) {
-    console.warn(
-      `No data found for key "${key}". Available keys:`,
-      Object.keys(json)
-    );
-    console.warn("Full JSON response:", JSON.stringify(json, null, 2));
-    return [];
-  }
+  console.log(
+    `✅ API Response: ${symbol} ${resolution} returned ${candles.length} candles`
+  );
 
-  const entries = Object.entries(series) as [string, any][];
-  console.log(`Found ${entries.length} data points for ${symbol}`);
-
-  const candles: Candle[] = entries
-    .map(([date, v]) => {
-      // Handle non-adjusted data format
-      const open = parseFloat(v["1. open"]);
-      const high = parseFloat(v["2. high"]);
-      const low = parseFloat(v["3. low"]);
-      const close = parseFloat(v["4. close"]);
-      const volume = parseFloat(v["5. volume"]) || undefined;
-
-      return {
-        time: new Date(date).getTime(),
-        open,
-        high,
-        low,
-        close,
-        volume,
-      };
-    })
-    .filter((c) => Number.isFinite(c.open) && Number.isFinite(c.close))
-    .sort((a, b) => a.time - b.time);
-
-  console.log(`Successfully parsed ${candles.length} candles for ${symbol}`);
-  return candles;
+  // Extra safety — server respects limit, but trim if needed
+  return candles.length > limit ? candles.slice(-limit) : candles;
 }
 
-export interface FetchCandlesOptions {
-  interval?: AlphaVantageInterval;
-  resolution?: MarketDataResolution;
-  outputSize?: "compact" | "full";
-  providerOverride?: "polygon" | "alphaVantage" | "yahoo" | "marketData";
-}
-
-// Simple in-memory cache to avoid redundant API calls
-type CacheKey = string;
-const candleCache: Map<CacheKey, { ts: number; candles: Candle[] }> = new Map();
-const inflight: Map<CacheKey, Promise<Candle[]>> = new Map();
-const DEFAULT_TTL_MS = 60_000; // 1 minute, suitable for intraday pulls
-
-function cacheKey(
+/** Public entry that your UI should call for timeframe-based charts */
+export async function fetchCandlesForTimeframe(
   symbol: string,
-  provider: string,
-  options: FetchCandlesOptions
-): string {
-  return `${provider}|${symbol}|${
-    options.resolution || options.interval || "D"
-  }|${options.outputSize || "compact"}`;
+  timeframe: ExtendedTimeframe,
+  opts?: {
+    outBars?: number;
+    baseCushion?: number;
+    includeExtendedHours?: boolean;
+  }
+): Promise<Candle[]> {
+  const { base, group } = mapExtendedTimeframe(timeframe);
+  const provider = getSelectedProvider();
+
+  // How many *output* bars we want after grouping
+  const outBars = opts?.outBars ?? desiredOutputBars(timeframe);
+
+  // Fetch enough *base* bars to build those output bars, with small cushion
+  const BASE_CUSHION = opts?.baseCushion ?? 1.2;
+  const MAX_BASE = 1200; // hard cap to keep payloads snappy
+  const baseLimit = Math.min(
+    Math.ceil(outBars * group * BASE_CUSHION),
+    MAX_BASE
+  );
+
+  const baseCandles = await fetchCandles(symbol, {
+    resolution: base,
+    limit: baseLimit,
+    providerOverride: provider,
+    includeExtendedHours: opts?.includeExtendedHours,
+  });
+  return aggregateCandles(baseCandles, group).slice(-outBars);
 }
 
+/** Convenience: resolution to milliseconds */
+export function resolutionToMs(resolution: MarketDataResolution): number {
+  switch (resolution) {
+    case "1":
+      return 60_000;
+    case "5":
+      return 5 * 60_000;
+    case "15":
+      return 15 * 60_000;
+    case "30":
+      return 30 * 60_000;
+    case "1H":
+      return 60 * 60_000;
+    case "D":
+      return 24 * 60 * 60_000;
+    case "W":
+      return 7 * 24 * 60 * 60_000;
+    case "M":
+      return 30 * 24 * 60 * 60_000; // approx
+  }
+}
+
+/** Windowed timeframe fetch honoring from/to and output bar budget */
+export async function fetchCandlesForTimeframeWindow(
+  symbol: string,
+  timeframe: ExtendedTimeframe,
+  fromMs: number,
+  toMs: number,
+  opts?: {
+    outBars?: number;
+    baseCushion?: number;
+    includeExtendedHours?: boolean;
+  },
+  signal?: AbortSignal
+): Promise<Candle[]> {
+  const { base, group } = mapExtendedTimeframe(timeframe);
+  const provider = getSelectedProvider();
+  const outBars = opts?.outBars ?? desiredOutputBars(timeframe);
+  const BASE_CUSHION = opts?.baseCushion ?? 1.2;
+  const MAX_BASE = 1200;
+  const baseLimit = Math.min(
+    Math.ceil(outBars * group * BASE_CUSHION),
+    MAX_BASE
+  );
+
+  const baseCandles =
+    provider === "polygon"
+      ? await fetchPolygonCandlesWindow(
+          symbol,
+          base,
+          fromMs,
+          toMs,
+          baseLimit,
+          signal
+        )
+      : await fetchMarketDataCandlesWindow(
+          symbol,
+          base,
+          fromMs,
+          toMs,
+          baseLimit,
+          signal,
+          opts?.includeExtendedHours
+        );
+
+  // Aggregate to target frame and trim to requested time window
+  const aggregated = aggregateCandles(baseCandles, group);
+  const minMs = Math.min(fromMs, toMs);
+  const maxMs = Math.max(fromMs, toMs);
+  const windowed = aggregated.filter((c) => c.time >= minMs && c.time <= maxMs);
+
+  // Respect outBars budget if needed
+  return windowed.length > outBars ? windowed.slice(-outBars) : windowed;
+}
+
+/** Minimal options (provider removed) */
+export interface FetchCandlesOptions {
+  resolution?: MarketDataResolution;
+  limit?: number;
+  providerOverride?: ProviderType;
+  includeExtendedHours?: boolean;
+}
+
+/* ---------- ultra-simple in-memory cache ---------- */
+type CacheKey = string;
+const candleCache = new Map<CacheKey, { ts: number; candles: Candle[] }>();
+const inflight = new Map<CacheKey, Promise<Candle[]>>();
+const DEFAULT_TTL_MS = 60_000; // 1 minute — great for intraday pulls
+
+function cacheKey(symbol: string, options: FetchCandlesOptions): string {
+  const p = options.providerOverride || getSelectedProvider();
+  const extended = options.includeExtendedHours ?? true;
+  return `${symbol}|${p}|${options.resolution || "D"}|${
+    options.limit || "default"
+  }|ext:${extended}`;
+}
+
+/** Direct MarketData fetch with caching */
 export async function fetchCandles(
   symbol: string,
   options: FetchCandlesOptions = {}
 ): Promise<Candle[]> {
-  const provider =
-    options.providerOverride ||
-    (Constants.expoConfig?.extra as any)?.marketProvider ||
-    "marketData"; // Default to MarketData.app
+  const resolution = options.resolution || "D";
+  const limit = options.limit || 120;
+  const includeExtendedHours = options.includeExtendedHours ?? true;
+  const provider = getSelectedProvider(options.providerOverride);
 
-  const key = cacheKey(symbol, provider, options);
-  const ttl = DEFAULT_TTL_MS;
+  const key = cacheKey(symbol, { resolution, limit, includeExtendedHours });
 
-  // Serve from cache if fresh
+  // Serve fresh cache
   const cached = candleCache.get(key);
-  if (cached && Date.now() - cached.ts < ttl) {
+  if (cached && Date.now() - cached.ts < DEFAULT_TTL_MS) {
     return cached.candles;
   }
 
-  // De-duplicate concurrent requests
+  // Deduplicate concurrent requests
   const existing = inflight.get(key);
   if (existing) return existing;
 
-  const fetchPromise = (async () => {
+  const p = (async () => {
     try {
-      let candles: Candle[] = [];
-      if (provider === "marketData") {
-        candles = await fetchMarketDataCandles(
-          symbol,
-          options.resolution || "D"
-        );
-      } else if (provider === "polygon") {
-        const ts = mapResolutionToPolygonTimespan(options.resolution);
-        candles = await fetchPolygonCandles(symbol, ts);
-      } else if (provider === "alphaVantage") {
-        const interval =
-          options.interval || mapResolutionToAlphaVantage(options.resolution);
-        candles = await fetchAlphaVantageCandles(
-          symbol,
-          interval,
-          options.outputSize || "compact"
-        );
-      } else {
-        const { interval, range } = mapResolutionToYahoo(
-          options.resolution as any
-        );
-        candles = await fetchYahooCandles(symbol, range, interval);
-      }
-
-      // Validate response
-      if (!candles || candles.length === 0) {
-        throw new Error(
-          `No candles returned for ${symbol} from provider ${provider}`
-        );
-      }
+      const candles =
+        provider === "polygon"
+          ? await fetchPolygonCandles(symbol, resolution, limit)
+          : await fetchMarketDataCandles(
+              symbol,
+              resolution,
+              limit,
+              includeExtendedHours
+            );
       candleCache.set(key, { ts: Date.now(), candles });
       return candles;
     } finally {
@@ -447,64 +705,6 @@ export async function fetchCandles(
     }
   })();
 
-  inflight.set(key, fetchPromise);
-  return fetchPromise;
-}
-
-export type NewsItem = {
-  id: string;
-  title: string;
-  url: string;
-  source?: string;
-  publishedAt?: string;
-  summary?: string;
-};
-
-// Fast public news for testing: Yahoo Finance RSS → JSON via yarr (no key)
-export async function fetchNews(symbol: string): Promise<NewsItem[]> {
-  const newsApiKey = (Constants.expoConfig?.extra as any)?.newsApiKey;
-  if (newsApiKey) {
-    // Example: GNews API (fast and simple for testing)
-    const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(
-      symbol
-    )}&lang=en&country=us&max=15&token=${newsApiKey}`;
-    try {
-      const json = await fetchJson(url);
-      const articles = json?.articles || [];
-      return articles.map((a: any, idx: number) => ({
-        id: a.url || `${symbol}-${idx}`,
-        title: a.title,
-        url: a.url,
-        source: a.source?.name,
-        publishedAt: a.publishedAt,
-        summary: a.description,
-      }));
-    } catch (e) {
-      // fall through to RSS fallback
-    }
-  }
-
-  const rssUrl = `https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(
-    symbol
-  )}&lang=en-US`;
-  const resp = await fetch(rssUrl);
-  const xml = await resp.text();
-  const items = Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/g)).slice(
-    0,
-    15
-  );
-  return items.map(([, block], idx) => {
-    const get = (tag: string) =>
-      block.match(new RegExp(`<${tag}>([\s\S]*?)<\\/${tag}>`))?.[1] || "";
-    const title = get("title").replace(/<!\[CDATA\[|\]\]>/g, "");
-    const link = get("link");
-    const pubDate = get("pubDate");
-    return {
-      id: `${symbol}-${idx}`,
-      title,
-      url: link,
-      source: "Yahoo Finance",
-      publishedAt: pubDate,
-    } as NewsItem;
-  });
+  inflight.set(key, p);
+  return p;
 }

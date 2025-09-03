@@ -8,6 +8,7 @@ import {
   Switch,
   Modal,
   Image,
+  StyleSheet,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,11 +25,12 @@ import {
   cancelAllScheduledNotifications,
 } from "../services/notifications";
 
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuth();
   const profile = useUserStore((state) => state.profile);
   const setProfile = useUserStore((state) => state.setProfile);
-  const { theme, themeMode, setThemeMode } = useTheme();
+  const { theme, themeMode, setThemeMode, isDark } = useTheme();
+  const styles = createStyles(theme);
 
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
@@ -134,25 +136,25 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View className="flex-1 bg-gray-50 dark:bg-gray-900">
+    <View style={styles.container}>
       {/* Header */}
       <LinearGradient
-        colors={["#667eea", "#764ba2"]}
+        colors={isDark ? ["#1a1a1a", "#2a2a2a"] : ["#667eea", "#764ba2"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        className="px-4 pt-12 pb-6"
+        style={styles.header}
       >
-        <View className="flex-row items-center">
-          <View className="w-16 h-16 bg-white/20 rounded-full items-center justify-center mr-4">
-            <Text className="text-2xl font-bold text-white">
+        <View style={styles.headerContent}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>
               {profile?.email?.charAt(0).toUpperCase() || "U"}
             </Text>
           </View>
-          <View className="flex-1">
-            <Text className="text-2xl font-bold text-white">
+          <View style={styles.userInfo}>
+            <Text style={styles.userName}>
               {profile?.email?.split("@")[0] || "User"}
             </Text>
-            <Text className="text-white/80">
+            <Text style={styles.userSubtitle}>
               {profile?.subscriptionTier || "Free"} Plan •{" "}
               {profile?.skillLevel || "Beginner"}
             </Text>
@@ -161,38 +163,30 @@ export default function ProfileScreen() {
       </LinearGradient>
 
       <ScrollView
-        className="flex-1 px-4 -mt-4"
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
       >
         {/* Profile Info */}
-        <Card variant="elevated" className="mb-4">
-          <View className="flex-row items-center justify-between">
-            <View className="flex-1">
-              <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Profile Information
-              </Text>
-              <View className="space-y-2">
-                <View className="flex-row">
-                  <Text className="text-gray-500 dark:text-gray-400 w-24">
-                    Email:
-                  </Text>
-                  <Text className="text-gray-900 dark:text-white flex-1">
+        <Card variant="elevated" style={styles.card}>
+          <View style={styles.profileRow}>
+            <View style={styles.profileInfo}>
+              <Text style={styles.sectionTitle}>Profile Information</Text>
+              <View style={styles.infoContainer}>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Email:</Text>
+                  <Text style={styles.infoValue}>
                     {profile?.email || "Not set"}
                   </Text>
                 </View>
-                <View className="flex-row">
-                  <Text className="text-gray-500 dark:text-gray-400 w-24">
-                    Level:
-                  </Text>
-                  <Text className="text-gray-900 dark:text-white flex-1">
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Level:</Text>
+                  <Text style={styles.infoValue}>
                     {profile?.skillLevel || "Not set"}
                   </Text>
                 </View>
-                <View className="flex-row">
-                  <Text className="text-gray-500 dark:text-gray-400 w-24">
-                    Type:
-                  </Text>
-                  <Text className="text-gray-900 dark:text-white flex-1">
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>Type:</Text>
+                  <Text style={styles.infoValue}>
                     {profile?.traderType || "Not set"}
                   </Text>
                 </View>
@@ -200,79 +194,157 @@ export default function ProfileScreen() {
             </View>
             <Pressable
               onPress={() => setShowEditProfile(true)}
-              className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg"
+              style={styles.editButton}
             >
-              <Ionicons name="pencil" size={20} color="#6366f1" />
+              <Ionicons name="pencil" size={20} color={theme.colors.primary} />
             </Pressable>
           </View>
         </Card>
 
         {/* Quick Actions */}
-        <Card variant="elevated" className="mb-4">
-          <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Quick Actions
-          </Text>
-          <View className="space-y-3">
+        <Card variant="elevated" style={styles.card}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <View style={styles.actionsContainer}>
             <Pressable
               onPress={() => setShowSubscription(true)}
-              className="flex-row items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700"
+              style={styles.actionItem}
             >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-lg items-center justify-center mr-3">
-                  <Ionicons name="star" size={20} color="#8b5cf6" />
+              <View style={styles.actionLeft}>
+                <View style={[styles.actionIcon, styles.subscriptionIcon]}>
+                  <Ionicons
+                    name="star"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
                 </View>
                 <View>
-                  <Text className="font-medium text-gray-900 dark:text-white">
-                    Subscription
-                  </Text>
-                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                  <Text style={styles.actionTitle}>Subscription</Text>
+                  <Text style={styles.actionSubtitle}>
                     Manage your plan and billing
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
 
             <Pressable
               onPress={() => setShowPreferences(true)}
-              className="flex-row items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700"
+              style={styles.actionItem}
             >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg items-center justify-center mr-3">
-                  <Ionicons name="settings" size={20} color="#3b82f6" />
+              <View style={styles.actionLeft}>
+                <View style={[styles.actionIcon, styles.preferencesIcon]}>
+                  <Ionicons
+                    name="settings"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
                 </View>
                 <View>
-                  <Text className="font-medium text-gray-900 dark:text-white">
-                    Preferences
-                  </Text>
-                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                  <Text style={styles.actionTitle}>Preferences</Text>
+                  <Text style={styles.actionSubtitle}>
                     Notifications and app settings
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={() => navigation.navigate("BrokerageAccounts")}
+              style={styles.actionItem}
+            >
+              <View style={styles.actionLeft}>
+                <View
+                  style={[
+                    styles.actionIcon,
+                    { backgroundColor: theme.colors.surface },
+                  ]}
+                >
+                  <Ionicons
+                    name="trending-up"
+                    size={20}
+                    color={theme.colors.success}
+                  />
+                </View>
+                <View>
+                  <Text style={styles.actionTitle}>Brokerage Accounts</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Connect your brokerage accounts
+                  </Text>
+                </View>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
 
             <Pressable
               onPress={() =>
                 Alert.alert("Help", "Contact support at support@tradegpt.com")
               }
-              className="flex-row items-center justify-between py-3 border-b border-gray-200 dark:border-gray-700"
+              style={styles.actionItem}
             >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg items-center justify-center mr-3">
-                  <Ionicons name="help-circle" size={20} color="#16a34a" />
+              <View style={styles.actionLeft}>
+                <View style={[styles.actionIcon, styles.helpIcon]}>
+                  <Ionicons
+                    name="help-circle"
+                    size={20}
+                    color={theme.colors.success}
+                  />
                 </View>
                 <View>
-                  <Text className="font-medium text-gray-900 dark:text-white">
-                    Help & Support
-                  </Text>
-                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                  <Text style={styles.actionTitle}>Help & Support</Text>
+                  <Text style={styles.actionSubtitle}>
                     Get help and contact support
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={() => navigation.navigate("StockNewsApiDemo")}
+              style={styles.actionItem}
+            >
+              <View style={styles.actionLeft}>
+                <View
+                  style={[
+                    styles.actionIcon,
+                    { backgroundColor: theme.colors.surface },
+                  ]}
+                >
+                  <Ionicons
+                    name="newspaper"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
+                </View>
+                <View>
+                  <Text style={styles.actionTitle}>Stock News API Demo</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Explore Stock News API features
+                  </Text>
+                </View>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
 
             <Pressable
@@ -282,38 +354,44 @@ export default function ProfileScreen() {
                   "View our privacy policy at tradegpt.com/privacy"
                 )
               }
-              className="flex-row items-center justify-between py-3"
+              style={[styles.actionItem, { borderBottomWidth: 0 }]}
             >
-              <View className="flex-row items-center">
-                <View className="w-10 h-10 bg-orange-100 dark:bg-orange-900/30 rounded-lg items-center justify-center mr-3">
-                  <Ionicons name="shield-checkmark" size={20} color="#ea580c" />
+              <View style={styles.actionLeft}>
+                <View style={[styles.actionIcon, styles.privacyIcon]}>
+                  <Ionicons
+                    name="shield-checkmark"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
                 </View>
                 <View>
-                  <Text className="font-medium text-gray-900 dark:text-white">
-                    Privacy & Security
-                  </Text>
-                  <Text className="text-sm text-gray-500 dark:text-gray-400">
+                  <Text style={styles.actionTitle}>Privacy & Security</Text>
+                  <Text style={styles.actionSubtitle}>
                     Privacy policy and data settings
                   </Text>
                 </View>
               </View>
-              <Ionicons name="chevron-forward" size={20} color="#6b7280" />
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
             </Pressable>
           </View>
         </Card>
 
         {/* Current Plan Features */}
-        <Card variant="elevated" className="mb-4">
-          <Text className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-            Your Plan Features
-          </Text>
-          <View className="space-y-2">
+        <Card variant="elevated" style={styles.card}>
+          <Text style={styles.sectionTitle}>Your Plan Features</Text>
+          <View style={styles.planContainer}>
             {getCurrentSubscriptionFeatures().map((feature, index) => (
-              <View key={index} className="flex-row items-center">
-                <Ionicons name="checkmark-circle" size={16} color="#16a34a" />
-                <Text className="ml-2 text-gray-700 dark:text-gray-300">
-                  {feature}
-                </Text>
+              <View key={index} style={styles.planItem}>
+                <Ionicons
+                  name="checkmark-circle"
+                  size={16}
+                  color={theme.colors.success}
+                />
+                <Text style={styles.planText}>{feature}</Text>
               </View>
             ))}
           </View>
@@ -325,7 +403,7 @@ export default function ProfileScreen() {
           variant="outline"
           icon="log-out"
           onPress={handleLogout}
-          className="mb-8 border-red-500 dark:border-red-400"
+          style={{ marginBottom: 32, borderColor: theme.colors.error }}
         />
       </ScrollView>
 
@@ -333,87 +411,97 @@ export default function ProfileScreen() {
       <Modal
         visible={showEditProfile}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowEditProfile(false)}
       >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-gray-800 rounded-t-3xl p-6">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-900 dark:text-white">
-                Edit Profile
-              </Text>
+        <View
+          style={[
+            styles.modalContainer,
+            { justifyContent: "center", alignItems: "center" },
+          ]}
+        >
+          <View style={[styles.modalContent, styles.centerModalCard]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Profile</Text>
               <Pressable onPress={() => setShowEditProfile(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
               </Pressable>
             </View>
 
-            <Input
-              label="Email"
-              value={editEmail}
-              onChangeText={setEditEmail}
-              keyboardType="email-address"
-              className="mb-4"
+            <View style={styles.formGroup}>
+              <Input
+                label="Email"
+                value={editEmail}
+                onChangeText={setEditEmail}
+                keyboardType="email-address"
+              />
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.groupLabel}>Skill Level</Text>
+              <View style={styles.segmentList}>
+                {skillLevels.map((level) => {
+                  const active = editSkillLevel === level;
+                  return (
+                    <Pressable
+                      key={level}
+                      onPress={() => setEditSkillLevel(level)}
+                      style={[
+                        styles.segmentItem,
+                        active && styles.segmentItemActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          active && styles.segmentTextActive,
+                        ]}
+                      >
+                        {level}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <View style={styles.formGroup}>
+              <Text style={styles.groupLabel}>Trader Type</Text>
+              <View style={styles.segmentList}>
+                {traderTypes.map((type) => {
+                  const active = editTraderType === type;
+                  return (
+                    <Pressable
+                      key={type}
+                      onPress={() => setEditTraderType(type)}
+                      style={[
+                        styles.segmentItem,
+                        active && styles.segmentItemActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentText,
+                          active && styles.segmentTextActive,
+                        ]}
+                      >
+                        {type}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+
+            <Button
+              title="Save Changes"
+              onPress={saveProfile}
+              style={{ marginTop: 8 }}
             />
-
-            <View className="mb-4">
-              <Text className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Skill Level
-              </Text>
-              <View className="flex-row flex-wrap gap-2">
-                {skillLevels.map((level) => (
-                  <Pressable
-                    key={level}
-                    onPress={() => setEditSkillLevel(level)}
-                    className={`px-3 py-2 rounded-lg border ${
-                      editSkillLevel === level
-                        ? "bg-indigo-600 border-indigo-600"
-                        : "bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"
-                    }`}
-                  >
-                    <Text
-                      className={`text-sm ${
-                        editSkillLevel === level
-                          ? "text-white"
-                          : "text-gray-700 dark:text-gray-300"
-                      }`}
-                    >
-                      {level}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <View className="mb-6">
-              <Text className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Trader Type
-              </Text>
-              <View className="flex-row flex-wrap gap-2">
-                {traderTypes.map((type) => (
-                  <Pressable
-                    key={type}
-                    onPress={() => setEditTraderType(type)}
-                    className={`px-3 py-2 rounded-lg border ${
-                      editTraderType === type
-                        ? "bg-indigo-600 border-indigo-600"
-                        : "bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"
-                    }`}
-                  >
-                    <Text
-                      className={`text-sm ${
-                        editTraderType === type
-                          ? "text-white"
-                          : "text-gray-700 dark:text-gray-300"
-                      }`}
-                    >
-                      {type}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </View>
-
-            <Button title="Save Changes" onPress={saveProfile} />
           </View>
         </View>
       </Modal>
@@ -422,186 +510,181 @@ export default function ProfileScreen() {
       <Modal
         visible={showPreferences}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setShowPreferences(false)}
       >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-gray-800 rounded-t-3xl p-6 max-h-[80%]">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-900 dark:text-white">
-                Preferences
-              </Text>
+        <View
+          style={[
+            styles.modalContainer,
+            { justifyContent: "center", alignItems: "center" },
+          ]}
+        >
+          <View
+            style={[
+              styles.modalContent,
+              styles.centerModalCard,
+              styles.modalScrollView,
+            ]}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Preferences</Text>
               <Pressable onPress={() => setShowPreferences(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
               </Pressable>
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View className="space-y-4">
-                <View className="flex-row justify-between items-center">
-                  <View>
-                    <Text className="font-medium text-gray-900 dark:text-white">
-                      Push Notifications
-                    </Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-400">
-                      Receive notifications on your device
-                    </Text>
-                  </View>
-                  <Switch
-                    value={pushNotifications}
-                    onValueChange={async (v) => {
-                      setPushNotifications(v);
-                      setProfile({ notificationsEnabled: v });
-                      if (v) {
-                        // Schedule notifications when enabled
-                        if (dailyBriefTime) {
-                          const [hour, minute] = dailyBriefTime.split(":");
-                          await scheduleDailyBriefing(
-                            parseInt(hour),
-                            parseInt(minute)
-                          );
+              <View style={{ gap: 16 }}>
+                {/* Notifications Group */}
+                <View style={styles.settingsCard}>
+                  <Text style={styles.groupLabel}>Notifications</Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>
+                        Push Notifications
+                      </Text>
+                      <Text style={styles.settingSubtitle}>
+                        Receive notifications on your device
+                      </Text>
+                    </View>
+                    <Switch
+                      value={pushNotifications}
+                      onValueChange={async (v) => {
+                        setPushNotifications(v);
+                        setProfile({ notificationsEnabled: v });
+                        if (v) {
+                          if (dailyBriefTime) {
+                            const [hour, minute] = dailyBriefTime.split(":");
+                            await scheduleDailyBriefing(
+                              parseInt(hour),
+                              parseInt(minute)
+                            );
+                          }
+                          if (weeklyDigest) await scheduleWeeklyDigest();
+                          if (educationalTips) await scheduleEducationalTip();
+                        } else {
+                          await cancelAllScheduledNotifications();
                         }
-                        if (weeklyDigest) {
-                          await scheduleWeeklyDigest();
-                        }
-                        if (educationalTips) {
-                          await scheduleEducationalTip();
-                        }
-                      } else {
-                        await cancelAllScheduledNotifications();
-                      }
-                    }}
-                  />
-                </View>
-
-                <View className="flex-row justify-between items-center">
-                  <View>
-                    <Text className="font-medium text-gray-900 dark:text-white">
-                      Email Notifications
-                    </Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-400">
-                      Receive updates via email
-                    </Text>
+                      }}
+                    />
                   </View>
-                  <Switch
-                    value={emailNotifications}
-                    onValueChange={setEmailNotifications}
-                  />
-                </View>
-
-                <View className="flex-row justify-between items-center">
-                  <View>
-                    <Text className="font-medium text-gray-900 dark:text-white">
-                      Price Alerts
-                    </Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-400">
-                      Get notified when prices hit your targets
-                    </Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>
+                        Email Notifications
+                      </Text>
+                      <Text style={styles.settingSubtitle}>
+                        Receive updates via email
+                      </Text>
+                    </View>
+                    <Switch
+                      value={emailNotifications}
+                      onValueChange={setEmailNotifications}
+                    />
                   </View>
-                  <Switch value={priceAlerts} onValueChange={setPriceAlerts} />
-                </View>
-
-                <View className="flex-row justify-between items-center">
-                  <View>
-                    <Text className="font-medium text-gray-900 dark:text-white">
-                      Market Open Alerts
-                    </Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-400">
-                      Daily market opening notifications
-                    </Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>Price Alerts</Text>
+                      <Text style={styles.settingSubtitle}>
+                        Notify when prices hit your targets
+                      </Text>
+                    </View>
+                    <Switch
+                      value={priceAlerts}
+                      onValueChange={setPriceAlerts}
+                    />
                   </View>
-                  <Switch value={marketOpen} onValueChange={setMarketOpen} />
-                </View>
-
-                <View className="flex-row justify-between items-center">
-                  <View>
-                    <Text className="font-medium text-gray-900 dark:text-white">
-                      Weekly Market Digest
-                    </Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-400">
-                      Weekly outlook every Monday morning
-                    </Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>
+                        Market Open Alerts
+                      </Text>
+                      <Text style={styles.settingSubtitle}>
+                        Daily market opening notifications
+                      </Text>
+                    </View>
+                    <Switch value={marketOpen} onValueChange={setMarketOpen} />
                   </View>
-                  <Switch
-                    value={weeklyDigest}
-                    onValueChange={setWeeklyDigest}
-                  />
-                </View>
-
-                <View className="flex-row justify-between items-center">
-                  <View>
-                    <Text className="font-medium text-gray-900 dark:text-white">
-                      Educational Tips
-                    </Text>
-                    <Text className="text-sm text-gray-500 dark:text-gray-400">
-                      Daily trading tips and insights
-                    </Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>
+                        Weekly Market Digest
+                      </Text>
+                      <Text style={styles.settingSubtitle}>
+                        Weekly outlook every Monday morning
+                      </Text>
+                    </View>
+                    <Switch
+                      value={weeklyDigest}
+                      onValueChange={setWeeklyDigest}
+                    />
                   </View>
-                  <Switch
-                    value={educationalTips}
-                    onValueChange={setEducationalTips}
-                  />
+                  <View style={[styles.settingRow, { borderBottomWidth: 0 }]}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>Educational Tips</Text>
+                      <Text style={styles.settingSubtitle}>
+                        Daily trading tips and insights
+                      </Text>
+                    </View>
+                    <Switch
+                      value={educationalTips}
+                      onValueChange={setEducationalTips}
+                    />
+                  </View>
                 </View>
 
-                <View>
-                  <Text className="font-medium text-gray-900 dark:text-white mb-2">
-                    Daily Brief Time
-                  </Text>
+                {/* Schedule Group */}
+                <View style={styles.settingsCard}>
+                  <Text style={styles.groupLabel}>Schedule</Text>
                   <Input
-                    label="Time (HH:MM)"
+                    label="Daily Brief Time (HH:MM)"
                     value={dailyBriefTime}
                     onChangeText={setDailyBriefTime}
                     placeholder="8:00"
-                    className="mb-3"
                   />
                 </View>
 
-                <View>
-                  <Text className="font-medium text-gray-900 dark:text-white mb-3">
-                    Theme
-                  </Text>
-                  <View className="flex-row space-x-2">
+                {/* Appearance Group */}
+                <View style={styles.settingsCard}>
+                  <Text style={styles.groupLabel}>Appearance</Text>
+                  <View style={styles.segmentList}>
                     {(["system", "light", "dark"] as ThemeMode[]).map(
-                      (mode) => (
-                        <Pressable
-                          key={mode}
-                          onPress={() => setThemeMode(mode)}
-                          style={{
-                            flex: 1,
-                            paddingVertical: 8,
-                            paddingHorizontal: 12,
-                            borderRadius: 8,
-                            borderWidth: 1,
-                            borderColor:
-                              themeMode === mode ? "#00D4AA" : "#333333",
-                            backgroundColor:
-                              themeMode === mode ? "#00D4AA20" : "transparent",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              textAlign: "center",
-                              fontSize: 14,
-                              fontWeight: "500",
-                              color: themeMode === mode ? "#00D4AA" : "#ffffff",
-                              textTransform: "capitalize",
-                            }}
+                      (mode) => {
+                        const active = themeMode === mode;
+                        return (
+                          <Pressable
+                            key={mode}
+                            onPress={() => setThemeMode(mode)}
+                            style={[
+                              styles.segmentItem,
+                              active && styles.segmentItemActive,
+                            ]}
                           >
-                            {mode}
-                          </Text>
-                        </Pressable>
-                      )
+                            <Text
+                              style={[
+                                styles.segmentText,
+                                active && styles.segmentTextActive,
+                              ]}
+                            >
+                              {mode}
+                            </Text>
+                          </Pressable>
+                        );
+                      }
                     )}
                   </View>
-                  <Text className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                  <Text style={styles.settingSubtitle}>
                     Choose your app's appearance
                   </Text>
                 </View>
 
-                <View>
-                  <Text className="font-medium text-gray-900 dark:text-white mb-2">
-                    Trading Preferences
-                  </Text>
+                {/* Trading Preferences */}
+                <View style={styles.settingsCard}>
+                  <Text style={styles.groupLabel}>Trading Preferences</Text>
                   <Input
                     label="Account Size (USD)"
                     value={accountSize}
@@ -611,7 +694,6 @@ export default function ProfileScreen() {
                       const n = parseFloat(t);
                       if (!Number.isNaN(n)) setProfile({ accountSize: n });
                     }}
-                    className="mb-3"
                   />
                   <Input
                     label="Risk per trade (%)"
@@ -622,7 +704,6 @@ export default function ProfileScreen() {
                       const n = parseFloat(t);
                       if (!Number.isNaN(n)) setProfile({ riskPerTradePct: n });
                     }}
-                    className="mb-3"
                   />
                   <Input
                     label="Signal confidence threshold (%)"
@@ -649,14 +730,16 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={() => setShowSubscription(false)}
       >
-        <View className="flex-1 bg-black/50 justify-end">
-          <View className="bg-white dark:bg-gray-800 rounded-t-3xl p-6 max-h-[90%]">
-            <View className="flex-row justify-between items-center mb-6">
-              <Text className="text-xl font-bold text-gray-900 dark:text-white">
-                Subscription Plans
-              </Text>
+        <View style={styles.modalContainer}>
+          <View style={[styles.modalContent, { maxHeight: "90%" }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Subscription Plans</Text>
               <Pressable onPress={() => setShowSubscription(false)}>
-                <Ionicons name="close" size={24} color="#6b7280" />
+                <Ionicons
+                  name="close"
+                  size={24}
+                  color={theme.colors.textSecondary}
+                />
               </Pressable>
             </View>
 
@@ -673,41 +756,39 @@ export default function ProfileScreen() {
                 return (
                   <View
                     key={plan}
-                    className={`border rounded-xl p-4 mb-4 ${
-                      isCurrentPlan
-                        ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
-                        : "border-gray-200 dark:border-gray-700"
-                    }`}
+                    style={[
+                      styles.subscriptionCard,
+                      {
+                        borderColor: isCurrentPlan
+                          ? theme.colors.primary
+                          : theme.colors.border,
+                        backgroundColor: isCurrentPlan
+                          ? theme.colors.surface
+                          : theme.colors.card,
+                      },
+                    ]}
                   >
-                    <View className="flex-row justify-between items-center mb-3">
+                    <View style={styles.subscriptionHeader}>
                       <View>
-                        <Text className="text-lg font-bold text-gray-900 dark:text-white">
-                          {plan}
-                        </Text>
-                        <Text className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
-                          {price}
-                        </Text>
+                        <Text style={styles.subscriptionTitle}>{plan}</Text>
+                        <Text style={styles.subscriptionPrice}>{price}</Text>
                       </View>
                       {isCurrentPlan && (
-                        <View className="bg-indigo-600 px-3 py-1 rounded-full">
-                          <Text className="text-white text-sm font-medium">
-                            Current
-                          </Text>
+                        <View style={styles.currentBadge}>
+                          <Text style={styles.currentBadgeText}>Current</Text>
                         </View>
                       )}
                     </View>
 
-                    <View className="space-y-2 mb-4">
+                    <View style={styles.featuresList}>
                       {features.map((feature, index) => (
-                        <View key={index} className="flex-row items-center">
+                        <View key={index} style={styles.featureItem}>
                           <Ionicons
                             name="checkmark"
                             size={16}
-                            color="#16a34a"
+                            color={theme.colors.success}
                           />
-                          <Text className="ml-2 text-gray-700 dark:text-gray-300 text-sm">
-                            {feature}
-                          </Text>
+                          <Text style={styles.featureText}>{feature}</Text>
                         </View>
                       ))}
                     </View>
@@ -731,3 +812,286 @@ export default function ProfileScreen() {
     </View>
   );
 }
+
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    header: {
+      paddingHorizontal: 16,
+      paddingTop: 48,
+      paddingBottom: 24,
+    },
+    headerContent: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    avatar: {
+      width: 64,
+      height: 64,
+      backgroundColor: "rgba(255, 255, 255, 0.2)",
+      borderRadius: 32,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 16,
+    },
+    avatarText: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: "#ffffff",
+    },
+    userInfo: {
+      flex: 1,
+    },
+    userName: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: "#ffffff",
+    },
+    userSubtitle: {
+      color: "rgba(255, 255, 255, 0.8)",
+    },
+    scrollView: {
+      flex: 1,
+      paddingHorizontal: 16,
+      marginTop: -16,
+      backgroundColor: theme.colors.background,
+    },
+    card: {
+      marginBottom: 16,
+    },
+    profileRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    profileInfo: {
+      flex: 1,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    infoContainer: {
+      gap: 8,
+    },
+    infoRow: {
+      flexDirection: "row",
+    },
+    infoLabel: {
+      color: theme.colors.textSecondary,
+      width: 96,
+    },
+    infoValue: {
+      color: theme.colors.text,
+      flex: 1,
+    },
+    editButton: {
+      padding: 8,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 8,
+    },
+    actionsContainer: {
+      gap: 12,
+    },
+    actionItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    actionLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    actionIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 8,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+    subscriptionIcon: {
+      backgroundColor: theme.colors.surface,
+    },
+    preferencesIcon: {
+      backgroundColor: theme.colors.surface,
+    },
+    helpIcon: {
+      backgroundColor: theme.colors.surface,
+    },
+    privacyIcon: {
+      backgroundColor: theme.colors.surface,
+    },
+    planContainer: {
+      gap: 8,
+    },
+    planItem: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    planText: {
+      marginLeft: 8,
+      color: theme.colors.text,
+    },
+    modalScrollView: {
+      maxHeight: "80%",
+    },
+    settingsCard: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    settingRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    settingLeft: { flex: 1, paddingRight: 12 },
+    settingTitle: { fontSize: 15, fontWeight: "500", color: theme.colors.text },
+    settingSubtitle: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+    },
+    preferencesContainer: {
+      gap: 16,
+    },
+    preferenceItem: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    preferenceLeft: {
+      flex: 1,
+    },
+    preferenceTitle: {
+      fontSize: 16,
+      fontWeight: "500",
+      color: theme.colors.text,
+    },
+    preferenceSubtitle: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+    },
+    inputContainer: {
+      marginBottom: 12,
+    },
+    themeContainer: {
+      flexDirection: "row",
+      gap: 8,
+    },
+    subscriptionCard: {
+      borderWidth: 1,
+      borderRadius: 12,
+      padding: 16,
+      marginBottom: 16,
+    },
+    subscriptionHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 12,
+    },
+    subscriptionTitle: {
+      fontSize: 18,
+      fontWeight: "bold",
+      color: theme.colors.text,
+    },
+    subscriptionPrice: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: theme.colors.primary,
+    },
+    currentBadge: {
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 16,
+    },
+    currentBadgeText: {
+      color: "#ffffff",
+      fontSize: 12,
+      fontWeight: "500",
+    },
+    featuresList: {
+      gap: 8,
+      marginBottom: 16,
+    },
+    featureItem: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    featureText: {
+      marginLeft: 8,
+      fontSize: 14,
+      color: theme.colors.text,
+    },
+    actionTitle: {
+      fontSize: 16,
+      fontWeight: "500",
+      color: theme.colors.text,
+    },
+    actionSubtitle: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+    },
+    modalContainer: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      justifyContent: "flex-end",
+    },
+    modalContent: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 20,
+      padding: 20,
+    },
+    centerModalCard: {
+      width: "90%",
+      maxWidth: 420,
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 24,
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: "bold",
+      color: theme.colors.text,
+    },
+    formGroup: { marginBottom: 12 },
+    groupLabel: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginBottom: 8,
+    },
+    segmentList: { gap: 8 },
+    segmentItem: {
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.card,
+    },
+    segmentItemActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    segmentText: { fontSize: 14, color: theme.colors.text },
+    segmentTextActive: { color: "#ffffff", fontWeight: "600" },
+  });

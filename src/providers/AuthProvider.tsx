@@ -84,7 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   function demoLogin() {
-    const demo: AuthUser = { id: "demo-user", email: "demo@gpt5.app" };
+    const demo: AuthUser = { id: "demo-user", email: "demo@TradingApp.app" };
     setUser(demo);
     setProfile({
       email: demo.email,

@@ -1,34 +1,709 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import {
   View,
   Pressable,
   StyleSheet,
   useWindowDimensions,
   Text,
+  ScrollView,
+  useColorScheme,
+  Modal,
+  TextInput,
+  Animated,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import TradingViewChart from "../components/charts/TradingViewChart";
-import AdvancedTradingChart from "../components/charts/AdvancedTradingChart";
+import SimpleKLineChart, {
+  type IndicatorConfig,
+} from "../components/charts/SimpleKLineChart";
+// Removed viewportBars usage; we'll lazy-load via timeRangeChange
+import { type ChartType } from "../components/charts/ChartSettingsModal";
+import { ExtendedTimeframe } from "../components/charts/TimeframePickerModal";
 import StockSearchBar from "../components/common/StockSearchBar";
 import { searchStocksAutocomplete } from "../services/stockData";
+import { useTimeframeStore } from "../store/timeframeStore";
+// Remove direct candle fetching; KLinePro handles candles internally via Polygon
+import { fetchNews as fetchSymbolNews } from "../services/newsProviders";
+import {
+  runAIStrategy,
+  aiOutputToTradePlan,
+  applyComplexityToPlan,
+} from "../logic/aiStrategyEngine";
+// Removed on-the-fly plan generation imports
+import { useChatStore } from "../store/chatStore";
+import { useSignalCacheStore } from "../store/signalCacheStore";
+import { useUserStore } from "../store/userStore";
+import { StrategyComplexity } from "../logic/types";
+import { STRATEGY_COMPLEXITY_CONFIGS } from "../logic/strategyComplexity";
+import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
+import { getUpcomingFedEvents } from "../services/federalReserve";
+import {
+  fetchCandles,
+  fetchCandlesForTimeframe,
+  type Candle,
+} from "../services/marketProviders";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { width, height } = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const scheme = useColorScheme();
   const symbol: string = route.params?.symbol || "AAPL";
-  const chartType: string = route.params?.chartType || "line";
+  const { addAnalysisMessage } = useChatStore();
+  const { cacheSignal, getCachedSignal } = useSignalCacheStore();
+  const { profile, setProfile } = useUserStore();
+  const [chartType, setChartType] = useState<ChartType>(
+    (route.params?.chartType as ChartType) || "candlestick"
+  );
   const timeframe: string = route.params?.timeframe || "1D";
-  const [stockName, setStockName] = useState<string>("");
+  const initialTimeframe: string | undefined = route.params?.initialTimeframe;
+  const isDayUp: boolean | undefined = route.params?.isDayUp;
+  const [dayUp, setDayUp] = useState<boolean | undefined>(isDayUp);
+  const initialDataParam: any[] | undefined = route.params?.initialData;
+  const levels = route.params?.levels;
+  const initialTradePlan: any | undefined = route.params?.tradePlan;
+  const initialAiMeta:
+    | undefined
+    | {
+        strategyChosen?: string;
+        side?: "long" | "short";
+        confidence?: number;
+        why?: string[];
+        notes?: string[];
+        targets?: number[];
+        riskReward?: number;
+      } = route.params?.ai;
+  const initialAnalysisContext = route.params?.analysisContext;
+  const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
+    useTimeframeStore();
+  const [pinError, setPinError] = useState<string | null>(null);
+  const chartRef = React.useRef<any>(null);
+  const barSpacingRef = React.useRef<number>(60_000);
 
-  const chartHeight = Math.max(0, height - insets.top - insets.bottom - 60); // Account for header
+  // Rate limiting state for historical data requests
+  const lastHistoricalRequestRef = useRef<number>(0);
+  const historicalRequestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // State variables
+  const [data, setData] = useState<any[]>(initialDataParam || []);
+  const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
+    (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
+  );
+  const [stockName, setStockName] = useState<string>("");
+  function timeframeSpacingMs(tf: ExtendedTimeframe): number {
+    switch (tf) {
+      case "1m":
+        return 60_000;
+      case "2m":
+        return 120_000;
+      case "3m":
+        return 180_000;
+      case "5m":
+        return 300_000;
+      case "10m":
+        return 600_000;
+      case "15m":
+        return 900_000;
+      case "30m":
+        return 1_800_000;
+      case "1h":
+        return 3_600_000;
+      case "2h":
+        return 7_200_000;
+      case "4h":
+        return 14_400_000;
+      case "1D":
+        return 86_400_000;
+      case "1W":
+        return 7 * 86_400_000;
+      case "1M":
+      case "3M":
+      case "1Y":
+      case "5Y":
+      case "ALL":
+        return 30 * 86_400_000;
+      default:
+        return 60_000;
+    }
+  }
+  React.useEffect(() => {
+    try {
+      if (initialDataParam && initialDataParam.length >= 2) {
+        const last = initialDataParam[initialDataParam.length - 1];
+        const prev = initialDataParam[initialDataParam.length - 2];
+        const inferred = Math.max(1, last.time - prev.time);
+        barSpacingRef.current = inferred;
+      }
+    } catch {}
+  }, []);
+  React.useEffect(() => {
+    try {
+      if (data && data.length >= 2) {
+        const last = data[data.length - 1];
+        const prev = data[data.length - 2];
+        const inferred = Math.max(1, last.time - prev.time);
+        barSpacingRef.current = inferred;
+      } else {
+        barSpacingRef.current = timeframeSpacingMs(extendedTf);
+      }
+    } catch {
+      barSpacingRef.current = timeframeSpacingMs(extendedTf);
+    }
+  }, [data, extendedTf]);
+  // Real-time logic is now handled by AmChartsCandles component itself
+
+  // Additional state variables
+  const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
+  const [bottomSheetAnim] = useState(new Animated.Value(0));
+  const [analyzing, setAnalyzing] = useState<boolean>(false);
+  const [currentTradePlan, setCurrentTradePlan] = useState<any | undefined>(
+    initialTradePlan
+  );
+  const [showMA, setShowMA] = useState<boolean>(false);
+  const [showVolume, setShowVolume] = useState<boolean>(false);
+  const [indicatorsExpanded, setIndicatorsExpanded] = useState<boolean>(false);
+  // Indicators state
+  const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
+  const [showIndicatorsSheet, setShowIndicatorsSheet] = useState(false);
+  const [indicatorsSheetAnim] = useState(new Animated.Value(0));
+  const [showIndicatorsAccordion, setShowIndicatorsAccordion] = useState(false);
+  const [showIndicatorConfigModal, setShowIndicatorConfigModal] =
+    useState<boolean>(false);
+  const [indicatorConfigAnim] = useState(new Animated.Value(0));
+  const [indicatorToEdit, setIndicatorToEdit] =
+    useState<IndicatorConfig | null>(null);
+  const [configSelectedIndex, setConfigSelectedIndex] = useState<number>(0);
+  const [newParamValue, setNewParamValue] = useState<number>(9);
+  // Sub-editor for per-line style (color/thickness/style)
+  const [showLineStyleModal, setShowLineStyleModal] = useState<boolean>(false);
+  const [lineStyleEditIndex, setLineStyleEditIndex] = useState<number>(0);
+  const [lastCandle, setLastCandle] = useState<Candle | null>(null);
+  const [aiMeta, setAiMeta] = useState<
+    | undefined
+    | {
+        strategyChosen?: string;
+        side?: "long" | "short";
+        confidence?: number;
+        why?: string[];
+        notes?: string[];
+        targets?: number[];
+        riskReward?: number;
+      }
+  >(initialAiMeta);
+  // Remove explicit sentiment; use bias with neutral
+  // Initialize state from analysis context if coming from chat
+  const [mode, setMode] = useState<"auto" | "day_trade" | "swing_trade">(
+    initialAnalysisContext?.mode === "day_trade"
+      ? "day_trade"
+      : initialAnalysisContext?.mode === "swing_trade"
+      ? "swing_trade"
+      : "auto"
+  );
+
+  const showUnifiedBottomSheetWithTab = () => {
+    setShowUnifiedBottomSheet(true);
+    Animated.timing(bottomSheetAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const hideBottomSheet = () => {
+    Animated.timing(bottomSheetAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start(() => {
+      setShowUnifiedBottomSheet(false);
+    });
+  };
+
+  const showComplexityBottomSheetWithTab = () => {
+    setShowComplexityBottomSheet(true);
+    Animated.timing(complexityBottomSheetAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const hideComplexityBottomSheet = () => {
+    Animated.timing(complexityBottomSheetAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start(() => {
+      setShowComplexityBottomSheet(false);
+    });
+  };
+
+  const [tradePace, setTradePace] = useState<
+    "auto" | "day" | "scalp" | "swing"
+  >((initialAnalysisContext?.tradePace as any) || "auto");
+  const [desiredRR, setDesiredRR] = useState<number>(
+    initialAnalysisContext?.desiredRR || 1.5
+  );
+  const [contextMode, setContextMode] = useState<
+    "price_action" | "news_sentiment"
+  >((initialAnalysisContext?.contextMode as any) || "price_action");
+  // Simplified: mode is UI-only; analysis runs when user presses Analyze
+  const [tradeMode, setTradeMode] = useState<"day" | "swing">("day");
+  const [showCustomRrModal, setShowCustomRrModal] = useState<boolean>(false);
+
+  // Auto-analysis and streaming output
+  const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState<boolean>(
+    !!initialAnalysisContext || !!initialAiMeta // Skip auto-analysis if we have existing analysis data
+  );
+  const [streamingText, setStreamingText] = useState<string>("");
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
+
+  // Reasoning box visibility control
+  const [showReasoning, setShowReasoning] = useState<boolean>(false);
+  const [hasExistingReasoning, setHasExistingReasoning] = useState<boolean>(
+    !!initialAiMeta
+  );
+
+  // Strategy complexity state
+  const [showComplexityBottomSheet, setShowComplexityBottomSheet] =
+    useState<boolean>(false);
+  const [complexityBottomSheetAnim] = useState(new Animated.Value(0));
+  const [selectedComplexity, setSelectedComplexity] =
+    useState<StrategyComplexity>(profile.strategyComplexity || "advanced");
+  // Reasoning bottom sheet state
+  const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
+    useState<boolean>(false);
+  const [reasoningBottomSheetAnim] = useState(new Animated.Value(0));
+
+  const headerHeight = 52;
+  const ohlcRowHeight = 24;
+  const indicatorBarHeight = indicatorsExpanded ? 88 : 28;
+  const timeframeRowHeight = 48;
+  const bottomNavHeight = 56;
+  const chartHeight = Math.max(
+    120,
+    height -
+      insets.top -
+      insets.bottom -
+      headerHeight -
+      ohlcRowHeight -
+      indicatorBarHeight -
+      timeframeRowHeight -
+      bottomNavHeight -
+      8
+  );
 
   useEffect(() => {
     loadStockName();
+    hydrate();
+    // Only reset auto-analysis flag if we don't have existing analysis data
+    if (!initialAnalysisContext && !initialAiMeta) {
+      setHasAutoAnalyzed(false);
+    }
   }, [symbol]);
+
+  // Fallback: if no isDayUp provided, hydrate from cached quotes
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (typeof isDayUp === "boolean") {
+        setDayUp(isDayUp);
+        return;
+      }
+      try {
+        const q: SimpleQuote = await fetchSingleQuote(symbol);
+        if (q && mounted) {
+          if (typeof q.change === "number") setDayUp(q.change >= 0);
+          else if (typeof q.changePercent === "number")
+            setDayUp(q.changePercent >= 0);
+        }
+      } catch {}
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [symbol, isDayUp]);
+
+  // Update timeframe when store is hydrated
+  useEffect(() => {
+    if (defaultTimeframe && !initialAnalysisContext) {
+      setExtendedTf(defaultTimeframe);
+    }
+  }, [defaultTimeframe, initialAnalysisContext]);
+
+  // Initialize streaming text for existing analysis
+  useEffect(() => {
+    if (initialAiMeta && initialAiMeta.why && initialAiMeta.notes) {
+      const reasoningText =
+        (initialAiMeta.why || []).join(". ") +
+        (initialAiMeta.notes ? ". " + initialAiMeta.notes.join(". ") : "");
+
+      if (reasoningText) {
+        // Set the text immediately without streaming for existing analysis
+        setStreamingText(reasoningText);
+        setIsStreaming(false);
+      }
+    }
+  }, [initialAiMeta]);
+
+  // Core analysis function
+  async function performAnalysis(isAutoAnalysis: boolean = false) {
+    try {
+      setAnalyzing(true);
+      // Fetch a compact, mode-specific candle window to avoid flooding AI with history
+      let d: any[] = [];
+      let h1: any[] = [];
+      let m15: any[] = [];
+      let m5: any[] = [];
+      let m1: any[] = [];
+
+      const pace = isAutoAnalysis ? tradePace : tradePace; // honor current selection
+      try {
+        if (pace === "scalp") {
+          const [c1, c5, c15, c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "1", limit: 120 }), // ~2 hours of 1m
+            fetchCandles(symbol, { resolution: "5", limit: 60 }), // ~5 hours of 5m
+            fetchCandles(symbol, { resolution: "15", limit: 32 }), // ~8 hours of 15m
+            fetchCandles(symbol, { resolution: "1H", limit: 24 }), // 1 day of 1h
+            fetchCandles(symbol, { resolution: "D", limit: 20 }), // ~1 month of daily
+          ]);
+          m1 = c1;
+          m5 = c5;
+          m15 = c15;
+          h1 = c60;
+          d = cd;
+        } else if (pace === "day") {
+          const [c5, c15, c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "5", limit: 78 }), // 1 trading day (5m)
+            fetchCandles(symbol, { resolution: "15", limit: 52 }), // ~2 trading days (15m)
+            fetchCandles(symbol, { resolution: "1H", limit: 48 }), // ~2 trading days (1h)
+            fetchCandles(symbol, { resolution: "D", limit: 45 }), // ~2 months (daily)
+          ]);
+          m5 = c5;
+          m15 = c15;
+          h1 = c60;
+          d = cd;
+        } else if (pace === "swing") {
+          const [c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "1H", limit: 200 }), // ~6-8 weeks hourly
+            fetchCandles(symbol, { resolution: "D", limit: 180 }), // ~9 months daily
+          ]);
+          h1 = c60;
+          d = cd;
+          // Provide small intraday context for entry refinement
+          const [c15, c5] = await Promise.all([
+            fetchCandles(symbol, { resolution: "15", limit: 32 }),
+            fetchCandles(symbol, { resolution: "5", limit: 60 }),
+          ]);
+          m15 = c15;
+          m5 = c5;
+        } else {
+          // default (auto): balanced small set
+          const [c5, c15, c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "5", limit: 78 }),
+            fetchCandles(symbol, { resolution: "15", limit: 40 }),
+            fetchCandles(symbol, { resolution: "1H", limit: 72 }),
+            fetchCandles(symbol, { resolution: "D", limit: 120 }),
+          ]);
+          m5 = c5;
+          m15 = c15;
+          h1 = c60;
+          d = cd;
+        }
+      } catch (err) {
+        // If candle fetching fails, proceed with minimal arrays
+        console.warn("Candle fetch failed for AI analysis:", err);
+      }
+
+      // Context fetches - comprehensive for auto-analysis, user-controlled for manual
+      const shouldFetchContext =
+        isAutoAnalysis || contextMode === "news_sentiment";
+      let newsBrief: any[] | undefined = undefined;
+      let marketNewsBrief: any[] | undefined = undefined;
+      let fedBrief: any[] | undefined = undefined;
+      let vixSnapshot:
+        | { value: number; bucket: "low" | "moderate" | "high" }
+        | undefined = undefined;
+
+      // Fetch symbol news
+      if (shouldFetchContext) {
+        try {
+          const news = await fetchSymbolNews(symbol);
+          newsBrief = (news || []).slice(0, 5).map((n: any) => ({
+            title: n.title,
+            summary: (n.summary || "").slice(0, 180),
+            source: n.source,
+            publishedAt: n.publishedAt,
+          }));
+        } catch {}
+
+        // For auto-analysis, also fetch comprehensive macro context
+        if (isAutoAnalysis) {
+          // Fetch market news
+          try {
+            const marketNews = await fetchSymbolNews("SPY"); // Use SPY as market proxy
+            marketNewsBrief = (marketNews || []).slice(0, 3).map((n: any) => ({
+              title: n.title,
+              summary: (n.summary || "").slice(0, 120),
+              source: n.source,
+            }));
+          } catch {}
+
+          // Fetch FOMC events
+          try {
+            const events = await getUpcomingFedEvents();
+            fedBrief = (events || []).slice(0, 3).map((e: any) => ({
+              title: e.title,
+              date: e.date,
+              impact: e.impact,
+              type: e.type,
+            }));
+          } catch {}
+
+          // Fetch VIX snapshot
+          try {
+            const val = 0;
+            const bucket = val < 15 ? "low" : val <= 25 ? "moderate" : "high";
+            vixSnapshot = { value: val, bucket };
+          } catch {}
+        }
+      }
+
+      // Derive sentiment from news
+      let sentimentSummary:
+        | { label: "bullish" | "bearish" | "neutral"; score: number }
+        | undefined = undefined;
+      if (shouldFetchContext && newsBrief && newsBrief.length > 0) {
+        const positives = [
+          "beat",
+          "surge",
+          "optimistic",
+          "strong",
+          "growth",
+          "record",
+          "win",
+          "rally",
+        ];
+        const negatives = [
+          "miss",
+          "drop",
+          "cut",
+          "weak",
+          "fell",
+          "loss",
+          "selloff",
+          "concern",
+        ];
+        let score = 0;
+        for (const n of newsBrief) {
+          const text = `${n.title} ${n.summary}`.toLowerCase();
+          positives.forEach((w) => {
+            if (text.includes(w)) score += 1;
+          });
+          negatives.forEach((w) => {
+            if (text.includes(w)) score -= 1;
+          });
+        }
+        const label =
+          score > 1 ? "bullish" : score < -1 ? "bearish" : "neutral";
+        sentimentSummary = { label, score };
+      }
+
+      // Enhanced context for comprehensive analysis
+      const analysisMode = isAutoAnalysis ? "auto" : mode;
+
+      const candleData: Record<string, any[]> = {};
+      if (d && d.length)
+        candleData["1d"] = d.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (h1 && h1.length)
+        candleData["1h"] = h1.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (m15 && m15.length)
+        candleData["15m"] = m15.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (m5 && m5.length)
+        candleData["5m"] = m5.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (m1 && m1.length)
+        candleData["1m"] = m1.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+
+      const output = await runAIStrategy({
+        symbol,
+        mode: analysisMode,
+        candleData,
+        indicators: {},
+        context: {
+          userBias: "neutral",
+          strategyPreference: analysisMode,
+          complexity: selectedComplexity,
+          riskTolerance:
+            profile.riskPerTradePct && profile.riskPerTradePct <= 1
+              ? "conservative"
+              : profile.riskPerTradePct && profile.riskPerTradePct <= 2
+              ? "moderate"
+              : "aggressive",
+          preferredRiskReward: profile.preferredRiskReward || desiredRR,
+          userPreferences: {
+            pace: isAutoAnalysis ? "auto" : tradePace,
+            desiredRR: isAutoAnalysis ? 2.0 : desiredRR, // Higher R:R for auto-analysis
+          },
+          includeFlags: {
+            macro: isAutoAnalysis,
+            sentiment: shouldFetchContext,
+            vix: isAutoAnalysis,
+            fomc: isAutoAnalysis,
+            market: isAutoAnalysis,
+            fundamentals: true,
+          },
+          news: newsBrief,
+          marketNews: marketNewsBrief,
+          fedEvents: fedBrief,
+          sentimentSummary,
+          vix: vixSnapshot,
+          fundamentals: { level: isAutoAnalysis ? "comprehensive" : "neutral" },
+          analysisType: isAutoAnalysis ? "comprehensive_auto" : "user_directed",
+        },
+      });
+
+      if (output) {
+        const tp = aiOutputToTradePlan(output, selectedComplexity);
+        setCurrentTradePlan(tp);
+        const newAiMeta = {
+          strategyChosen: String(output.strategyChosen),
+          side: output.side,
+          confidence: output.confidence,
+          why: output.why || [],
+          notes: output.tradePlanNotes || [],
+          targets: output.targets || [],
+          riskReward: output.riskReward,
+        };
+        setAiMeta(newAiMeta);
+
+        // Create streaming text from reasoning
+        const reasoningText =
+          (output.why || []).join(". ") +
+          (output.tradePlanNotes
+            ? ". " + output.tradePlanNotes.join(". ")
+            : "");
+
+        if (reasoningText) {
+          simulateStreamingText(reasoningText);
+        }
+
+        // Show reasoning box when new analysis is done
+        setShowReasoning(true);
+        setHasExistingReasoning(true);
+
+        // For manual analysis (not auto), move current cached signal to history first
+        if (!isAutoAnalysis) {
+          const currentCached = getCachedSignal(symbol);
+          if (currentCached) {
+            addAnalysisMessage({
+              symbol: currentCached.symbol,
+              strategy: currentCached.aiMeta?.strategyChosen,
+              side: currentCached.aiMeta?.side,
+              entry: currentCached.tradePlan?.entry,
+              lateEntry: currentCached.tradePlan?.lateEntry,
+              exit: currentCached.tradePlan?.exit,
+              lateExit: currentCached.tradePlan?.lateExit,
+              stop: currentCached.tradePlan?.stop,
+              targets: currentCached.aiMeta?.targets,
+              riskReward: currentCached.aiMeta?.riskReward,
+              confidence: currentCached.aiMeta?.confidence,
+              why: currentCached.aiMeta?.why,
+              tradePlan: currentCached.tradePlan,
+              aiMeta: currentCached.aiMeta,
+              analysisContext: currentCached.analysisContext,
+            });
+          }
+        }
+
+        // Cache the new signal (but don't add to history - it becomes the new "current")
+        const cachedSignalData = {
+          symbol,
+          timestamp: Date.now(),
+          tradePlan: tp,
+          aiMeta: newAiMeta,
+          analysisContext: {
+            mode: analysisMode,
+            tradePace: isAutoAnalysis ? "auto" : tradePace,
+            desiredRR: isAutoAnalysis ? 2.0 : desiredRR,
+            contextMode,
+            isAutoAnalysis,
+          },
+          rawAnalysisOutput: output,
+        };
+        cacheSignal(cachedSignalData);
+      }
+    } catch (error) {
+      console.warn("AI analysis failed:", error);
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  // Auto-analysis on data load
+  useEffect(() => {
+    if (data.length > 0 && !hasAutoAnalyzed && !analyzing) {
+      setHasAutoAnalyzed(true);
+      // Delay slightly to ensure chart is rendered
+      setTimeout(() => {
+        performAnalysis(true);
+      }, 500);
+    }
+  }, [data, hasAutoAnalyzed, analyzing]);
+
+  // No candle fetching; chart is rendered by KLinePro
+
+  // Removed on-the-fly plan generation to avoid auto-analysis side effects
+
+  // Final fallback: derive direction from loaded data if still unknown
+  useEffect(() => {
+    if (typeof dayUp === "boolean") return;
+    if (!data || data.length < 2) return;
+    const first = data[0]?.close;
+    const last = data[data.length - 1]?.close;
+    if (typeof first === "number" && typeof last === "number") {
+      setDayUp(last >= first);
+    }
+  }, [data, dayUp]);
+
+  // Removed unused effectiveLevels; chart levels are derived from currentTradePlan
 
   async function loadStockName() {
     try {
@@ -39,6 +714,418 @@ export default function ChartFullScreen() {
     } catch (error) {
       console.error("Failed to load stock name:", error);
     }
+  }
+
+  // Handle timeframe change and save as default
+  async function handleTimeframeChange(tf: ExtendedTimeframe) {
+    setExtendedTf(tf);
+    setDefaultTimeframe(tf); // Save as user's preferred default
+
+    // Reset view state for new timeframe
+    // Immediately fetch data for the new timeframe using smart candle manager
+  }
+
+  // Indicator helpers
+  const BUILTIN_INDICATORS: Array<{
+    name: string;
+    defaultParams?: any;
+    compatOverlay?: boolean;
+    defaultColor?: string;
+  }> = [
+    {
+      name: "MA",
+      defaultParams: [5, 10, 30, 60],
+      compatOverlay: true,
+      defaultColor: "#3B82F6",
+    },
+    {
+      name: "EMA",
+      defaultParams: [6, 12, 20],
+      compatOverlay: true,
+      defaultColor: "#22D3EE",
+    },
+    {
+      name: "SMA",
+      defaultParams: [12, 2],
+      compatOverlay: true,
+      defaultColor: "#EAB308",
+    },
+    {
+      name: "BBI",
+      defaultParams: [3, 6, 12, 24],
+      compatOverlay: true,
+      defaultColor: "#A78BFA",
+    },
+    {
+      name: "BOLL",
+      defaultParams: [20, 2],
+      compatOverlay: true,
+      defaultColor: "#F59E0B",
+    },
+    {
+      name: "VOL",
+      defaultParams: [5, 10, 20],
+      compatOverlay: false,
+      defaultColor: "#6EE7B7",
+    },
+    {
+      name: "MACD",
+      defaultParams: [12, 26, 9],
+      compatOverlay: false,
+      defaultColor: "#60A5FA",
+    },
+    {
+      name: "KDJ",
+      defaultParams: [9, 3, 3],
+      compatOverlay: false,
+      defaultColor: "#34D399",
+    },
+    {
+      name: "RSI",
+      defaultParams: [6, 12, 24],
+      compatOverlay: false,
+      defaultColor: "#F472B6",
+    },
+    {
+      name: "SAR",
+      defaultParams: [2, 2, 20],
+      compatOverlay: true,
+      defaultColor: "#FB7185",
+    },
+    {
+      name: "OBV",
+      defaultParams: [30],
+      compatOverlay: false,
+      defaultColor: "#93C5FD",
+    },
+    {
+      name: "DMA",
+      defaultParams: [10, 50, 10],
+      compatOverlay: false,
+      defaultColor: "#67E8F9",
+    },
+    {
+      name: "TRIX",
+      defaultParams: [12, 20],
+      compatOverlay: false,
+      defaultColor: "#FDE047",
+    },
+    {
+      name: "BRAR",
+      defaultParams: [26],
+      compatOverlay: false,
+      defaultColor: "#FCA5A5",
+    },
+    {
+      name: "VR",
+      defaultParams: [24, 30],
+      compatOverlay: false,
+      defaultColor: "#A7F3D0",
+    },
+    {
+      name: "WR",
+      defaultParams: [6, 10, 14],
+      compatOverlay: false,
+      defaultColor: "#F9A8D4",
+    },
+    {
+      name: "MTM",
+      defaultParams: [6, 10],
+      compatOverlay: false,
+      defaultColor: "#C4B5FD",
+    },
+    {
+      name: "EMV",
+      defaultParams: [14, 9],
+      compatOverlay: false,
+      defaultColor: "#FDBA74",
+    },
+    {
+      name: "DMI",
+      defaultParams: [14, 6],
+      compatOverlay: false,
+      defaultColor: "#86EFAC",
+    },
+    {
+      name: "CR",
+      defaultParams: [26, 10, 20, 40, 60],
+      compatOverlay: false,
+      defaultColor: "#FDA4AF",
+    },
+    {
+      name: "PSY",
+      defaultParams: [12, 6],
+      compatOverlay: false,
+      defaultColor: "#FDE68A",
+    },
+    {
+      name: "AO",
+      defaultParams: [5, 34],
+      compatOverlay: false,
+      defaultColor: "#A5B4FC",
+    },
+    {
+      name: "ROC",
+      defaultParams: [12, 6],
+      compatOverlay: false,
+      defaultColor: "#FCA5A5",
+    },
+    { name: "PVT", compatOverlay: false, defaultColor: "#93C5FD" },
+    { name: "AVP", compatOverlay: false, defaultColor: "#FDE68A" },
+  ];
+
+  function buildDefaultLines(count: number, baseColor?: string) {
+    const palette = [
+      "#10B981",
+      "#3B82F6",
+      "#F59E0B",
+      "#EF4444",
+      "#A78BFA",
+      "#22D3EE",
+      "#F472B6",
+      "#FDE047",
+    ];
+    const out: any[] = [];
+    for (let i = 0; i < Math.max(1, count); i++) {
+      out.push({
+        color: i === 0 && baseColor ? baseColor : palette[i % palette.length],
+        size: 1,
+        style: "solid",
+      });
+    }
+    return out;
+  }
+
+  function getDefaultIndicator(name: string): IndicatorConfig {
+    const meta = BUILTIN_INDICATORS.find((i) => i.name === name);
+    const params = meta?.defaultParams;
+    const lines = Array.isArray(params)
+      ? buildDefaultLines(params.length, meta?.defaultColor)
+      : buildDefaultLines(1, meta?.defaultColor);
+    return {
+      id: `${name}-${Date.now()}`,
+      name,
+      overlay: !!meta?.compatOverlay,
+      calcParams: params,
+      styles: { lines },
+    };
+  }
+
+  function isSelectedIndicator(name: string): boolean {
+    return indicators.some((i) => i.name === name);
+  }
+
+  function toggleIndicator(name: string) {
+    setIndicators((prev) => {
+      const exists = prev.find((i) => i.name === name);
+      if (exists) return prev.filter((i) => i.name !== name);
+      return prev.concat(getDefaultIndicator(name));
+    });
+  }
+
+  function updateIndicator(name: string, updates: Partial<IndicatorConfig>) {
+    setIndicators((prev) =>
+      prev.map((i) => (i.name === name ? { ...i, ...updates } : i))
+    );
+  }
+
+  function updateIndicatorLine(
+    name: string,
+    lineIndex: number,
+    updates: Partial<{ color: string; size: number; style: string }>
+  ) {
+    setIndicators((prev) => {
+      return prev.map((ind) => {
+        if (ind.name !== name) return ind;
+        const count = Array.isArray(ind.calcParams) ? ind.calcParams.length : 1;
+        const lines = Array.isArray((ind.styles as any)?.lines)
+          ? ((ind.styles as any).lines as any[]).slice()
+          : buildDefaultLines(count);
+        const idx = Math.max(0, Math.min(lineIndex, count - 1));
+        const current = lines[idx] || {
+          color: "#00D4AA",
+          size: 1,
+          style: "solid",
+        };
+        lines[idx] = { ...current, ...updates };
+        return { ...ind, styles: { ...(ind.styles as any), lines } } as any;
+      });
+    });
+  }
+
+  function openLineStyleEditor(index: number) {
+    setLineStyleEditIndex(index);
+    setShowLineStyleModal(true);
+  }
+
+  function closeLineStyleEditor() {
+    setShowLineStyleModal(false);
+  }
+
+  function openIndicatorConfig(name: string) {
+    const ind = indicators.find((i) => i.name === name) || null;
+    setIndicatorToEdit(ind);
+    try {
+      const count = Array.isArray(ind?.calcParams)
+        ? (ind!.calcParams as any[]).length
+        : 1;
+      setConfigSelectedIndex(count > 0 ? 0 : 0);
+      setNewParamValue(count > 0 ? Number(ind?.calcParams?.[0] ?? 9) : 9);
+    } catch {}
+    setShowIndicatorConfigModal(true);
+    Animated.timing(indicatorConfigAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }
+
+  function closeIndicatorConfig() {
+    Animated.timing(indicatorConfigAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start(() => {
+      setShowIndicatorConfigModal(false);
+      setIndicatorToEdit(null);
+    });
+  }
+
+  function addIndicatorParam(name: string, value: number) {
+    if (!Number.isFinite(value) || value <= 0) return;
+    setIndicators((prev) => {
+      return prev.map((ind) => {
+        if (ind.name !== name) return ind;
+        const params = Array.isArray(ind.calcParams)
+          ? (ind.calcParams as any[]).slice()
+          : [];
+        if (params.includes(value)) return ind;
+        params.push(Math.floor(value));
+        params.sort((a: any, b: any) => Number(a) - Number(b));
+        const count = params.length;
+        const lines = Array.isArray((ind.styles as any)?.lines)
+          ? ((ind.styles as any).lines as any[]).slice()
+          : buildDefaultLines(count);
+        while (lines.length < count) {
+          lines.push({ color: "#00D4AA", size: 1, style: "solid" });
+        }
+        setConfigSelectedIndex(Math.max(0, params.indexOf(value)));
+        return {
+          ...ind,
+          calcParams: params,
+          styles: { ...(ind.styles as any), lines },
+        } as any;
+      });
+    });
+  }
+
+  function removeIndicatorParam(name: string, value: number) {
+    setIndicators((prev) => {
+      return prev.map((ind) => {
+        if (ind.name !== name) return ind;
+        const params = Array.isArray(ind.calcParams)
+          ? (ind.calcParams as any[]).slice()
+          : [];
+        const idx = params.indexOf(value as any);
+        if (idx === -1) return ind;
+        params.splice(idx, 1);
+        const lines = Array.isArray((ind.styles as any)?.lines)
+          ? ((ind.styles as any).lines as any[]).slice()
+          : [];
+        if (idx >= 0 && idx < lines.length) lines.splice(idx, 1);
+        return {
+          ...ind,
+          calcParams: params,
+          styles: { ...(ind.styles as any), lines },
+        } as any;
+      });
+    });
+  }
+
+  const openIndicatorsSheet = () => {
+    setShowIndicatorsSheet(true);
+    Animated.timing(indicatorsSheetAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  };
+  const closeIndicatorsSheet = () => {
+    Animated.timing(indicatorsSheetAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start(() => setShowIndicatorsSheet(false));
+  };
+
+  function parseNumberList(input: string): number[] | undefined {
+    try {
+      const parts = input
+        .split(/[ ,]+/)
+        .map((t) => Number(t.trim()))
+        .filter((n) => Number.isFinite(n));
+      return parts.length ? parts : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  // Fetch last candle for OHLCV row when symbol or timeframe changes
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const candles = await fetchCandlesForTimeframe(symbol, extendedTf, {
+          includeExtendedHours: true,
+        });
+        if (!cancelled && candles && candles.length > 0) {
+          setLastCandle(candles[candles.length - 1]);
+        }
+      } catch (e) {
+        if (!cancelled) setLastCandle(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, extendedTf]);
+
+  function formatPrice(n?: number) {
+    if (typeof n !== "number" || !Number.isFinite(n)) return "-";
+    return `$${n.toFixed(2)}`;
+  }
+  function formatVolume(n?: number) {
+    if (typeof n !== "number" || !Number.isFinite(n)) return "-";
+    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+    return String(n);
+  }
+
+  // Simulate streaming text output
+  function simulateStreamingText(fullText: string) {
+    setIsStreaming(true);
+    setStreamingText("");
+
+    const words = fullText.split(" ");
+    let currentIndex = 0;
+
+    const interval = setInterval(() => {
+      if (currentIndex < words.length) {
+        setStreamingText(
+          (prev) => prev + (currentIndex === 0 ? "" : " ") + words[currentIndex]
+        );
+        currentIndex++;
+      } else {
+        setIsStreaming(false);
+        clearInterval(interval);
+      }
+    }, 80); // Adjust speed as needed
+  }
+
+  // Manual analysis (called by user button press)
+  async function handleAnalyzePress() {
+    return performAnalysis(false);
   }
 
   return (
@@ -57,13 +1144,1637 @@ export default function ChartFullScreen() {
             currentStockName={stockName || "Loading..."}
           />
         </View>
-        <View style={{ width: 40 }} />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Pressable
+            onPress={() => setShowIndicatorsAccordion((v) => !v)}
+            style={{ paddingHorizontal: 8, paddingVertical: 6, marginRight: 4 }}
+            hitSlop={8}
+          >
+            <Ionicons name="funnel" size={20} color="#fff" />
+          </Pressable>
+          <View style={{ width: 8 }} />
+        </View>
+      </View>
+
+      {showIndicatorsAccordion && (
+        <View
+          style={{
+            backgroundColor: "#0f0f0f",
+            borderBottomWidth: 1,
+            borderBottomColor: "#2a2a2a",
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            gap: 10,
+          }}
+        >
+          {/* Active indicators with quick access to settings */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              {indicators.length === 0 ? (
+                <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+                  No indicators selected
+                </Text>
+              ) : (
+                indicators.map((cfg) => {
+                  return (
+                    <View
+                      key={`chip-${cfg.name}`}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        paddingVertical: 6,
+                        paddingHorizontal: 8,
+                        backgroundColor: "#1a1a1a",
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: "#333",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontWeight: "700",
+                          marginRight: 6,
+                        }}
+                      >
+                        {cfg.name}
+                      </Text>
+                      <Pressable
+                        onPress={() => openIndicatorConfig(cfg.name)}
+                        style={{ padding: 4 }}
+                      >
+                        <Ionicons
+                          name="settings-outline"
+                          size={14}
+                          color="#ccc"
+                        />
+                      </Pressable>
+                      <Pressable
+                        onPress={() => toggleIndicator(cfg.name)}
+                        style={{ marginLeft: 8, padding: 4 }}
+                      >
+                        <Ionicons name="close" size={14} color="#ccc" />
+                      </Pressable>
+                    </View>
+                  );
+                })
+              )}
+              <Pressable
+                onPress={openIndicatorsSheet}
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 10,
+                  backgroundColor: "#00D4AA",
+                  borderRadius: 12,
+                  marginLeft: 8,
+                }}
+              >
+                <Text style={{ color: "#000", fontWeight: "700" }}>Add</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Indicator Config Modal */}
+      {showIndicatorConfigModal && indicatorToEdit && (
+        <Modal
+          visible={showIndicatorConfigModal}
+          transparent
+          animationType="none"
+          onRequestClose={closeIndicatorConfig}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+            onPress={closeIndicatorConfig}
+          >
+            <Animated.View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 24,
+                maxHeight: Dimensions.get("window").height * 0.6,
+                transform: [
+                  {
+                    translateY: indicatorConfigAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable>
+                <View style={{ alignItems: "center", paddingBottom: 10 }}>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 4,
+                      backgroundColor: "#666",
+                      borderRadius: 2,
+                    }}
+                  />
+                </View>
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text
+                    style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}
+                  >
+                    {indicatorToEdit.name} Settings
+                  </Text>
+                  <Pressable
+                    onPress={closeIndicatorConfig}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={20} color="#fff" />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={{ paddingHorizontal: 20 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* Per-line items list; tap to edit details in a separate modal */}
+                  {Array.isArray(indicatorToEdit.calcParams) ? (
+                    indicatorToEdit.calcParams.map((_: any, idx: number) => {
+                      const lines =
+                        (indicatorToEdit.styles as any)?.lines || [];
+                      const current = lines[idx] || {
+                        color: "#00D4AA",
+                        size: 1,
+                        style: "solid",
+                      };
+                      return (
+                        <Pressable
+                          key={`line-${idx}`}
+                          onPress={() => openLineStyleEditor(idx)}
+                          style={{
+                            borderWidth: 1,
+                            borderColor: "#333",
+                            borderRadius: 12,
+                            padding: 12,
+                            marginBottom: 10,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <View>
+                            <Text
+                              style={{
+                                color: "#fff",
+                                fontWeight: "700",
+                                marginBottom: 6,
+                              }}
+                            >
+                              Line {idx + 1}
+                            </Text>
+                            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+                              Tap to edit color, thickness, style
+                            </Text>
+                          </View>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                            }}
+                          >
+                            <View
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 18,
+                                backgroundColor: current.color,
+                                marginRight: 10,
+                              }}
+                            />
+                            <View
+                              style={{
+                                width: 40,
+                                borderBottomWidth: current.size,
+                                borderBottomColor: current.color,
+                                borderStyle: current.style as any,
+                                marginRight: 8,
+                              }}
+                            />
+                            <Ionicons
+                              name="chevron-forward"
+                              size={18}
+                              color="#888"
+                            />
+                          </View>
+                        </Pressable>
+                      );
+                    })
+                  ) : (
+                    <Pressable
+                      onPress={() => openLineStyleEditor(0)}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: "#333",
+                        borderRadius: 12,
+                        padding: 12,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <View>
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontWeight: "700",
+                            marginBottom: 6,
+                          }}
+                        >
+                          Line
+                        </Text>
+                        <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+                          Tap to edit color, thickness, style
+                        </Text>
+                      </View>
+                      <View
+                        style={{ flexDirection: "row", alignItems: "center" }}
+                      >
+                        <View
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 18,
+                            backgroundColor:
+                              (indicatorToEdit.styles as any)?.lines?.[0]
+                                ?.color || "#00D4AA",
+                            marginRight: 10,
+                          }}
+                        />
+                        <View
+                          style={{
+                            width: 40,
+                            borderBottomWidth:
+                              (indicatorToEdit.styles as any)?.lines?.[0]
+                                ?.size || 1,
+                            borderBottomColor:
+                              (indicatorToEdit.styles as any)?.lines?.[0]
+                                ?.color || "#00D4AA",
+                            borderStyle: (((indicatorToEdit.styles as any)
+                              ?.lines?.[0]?.style as any) || "solid") as any,
+                            marginRight: 8,
+                          }}
+                        />
+                        <Ionicons
+                          name="chevron-forward"
+                          size={18}
+                          color="#888"
+                        />
+                      </View>
+                    </Pressable>
+                  )}
+                </ScrollView>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
+      {/* Line Style Sub-Modal */}
+      {showLineStyleModal && indicatorToEdit && (
+        <Modal
+          visible={showLineStyleModal}
+          transparent
+          animationType="fade"
+          onRequestClose={closeLineStyleEditor}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              justifyContent: "flex-end",
+            }}
+            onPress={closeLineStyleEditor}
+          >
+            <View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 24,
+                maxHeight: Dimensions.get("window").height * 0.55,
+              }}
+            >
+              <Pressable>
+                <View style={{ alignItems: "center", paddingBottom: 10 }}>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 4,
+                      backgroundColor: "#666",
+                      borderRadius: 2,
+                    }}
+                  />
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "700" }}>
+                    Line {lineStyleEditIndex + 1}
+                  </Text>
+                  <Pressable
+                    onPress={closeLineStyleEditor}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={20} color="#fff" />
+                  </Pressable>
+                </View>
+
+                {/* Editor Body */}
+                <ScrollView style={{ paddingHorizontal: 20 }}>
+                  {/* Color grid */}
+                  <Text style={{ color: "#9CA3AF", marginBottom: 8 }}>
+                    Color
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                    {[
+                      "#111827",
+                      "#1F2937",
+                      "#374151",
+                      "#4B5563",
+                      "#60A5FA",
+                      "#A78BFA",
+                      "#F472B6",
+                      "#F87171",
+                      "#F59E0B",
+                      "#FBBF24",
+                      "#34D399",
+                      "#22D3EE",
+                      "#10B981",
+                      "#3B82F6",
+                      "#EF4444",
+                      "#FDE047",
+                    ].map((sw) => (
+                      <Pressable
+                        key={`style-color-${sw}`}
+                        onPress={() =>
+                          updateIndicatorLine(
+                            indicatorToEdit.name,
+                            lineStyleEditIndex,
+                            {
+                              color: sw,
+                            }
+                          )
+                        }
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 14,
+                          backgroundColor: sw,
+                          marginRight: 10,
+                          marginBottom: 10,
+                          borderWidth: 1,
+                          borderColor: "#111",
+                        }}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Thickness */}
+                  <Text
+                    style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}
+                  >
+                    Thickness
+                  </Text>
+                  <View style={{ flexDirection: "row", marginBottom: 8 }}>
+                    {[1, 2, 3, 4].map((th) => (
+                      <Pressable
+                        key={`style-th-${th}`}
+                        onPress={() =>
+                          updateIndicatorLine(
+                            indicatorToEdit.name,
+                            lineStyleEditIndex,
+                            {
+                              size: th,
+                            }
+                          )
+                        }
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          borderRadius: 10,
+                          marginRight: 8,
+                          backgroundColor: "#111827",
+                          borderWidth: 1,
+                          borderColor: "#333",
+                        }}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "700" }}>
+                          {th}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  {/* Style */}
+                  <Text
+                    style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}
+                  >
+                    Style
+                  </Text>
+                  <View style={{ flexDirection: "row" }}>
+                    {[
+                      { k: "solid", label: "Solid" },
+                      { k: "dashed", label: "Dashed" },
+                      { k: "dotted", label: "Dotted" },
+                    ].map((opt) => (
+                      <Pressable
+                        key={`style-st-${opt.k}`}
+                        onPress={() =>
+                          updateIndicatorLine(
+                            indicatorToEdit.name,
+                            lineStyleEditIndex,
+                            { style: opt.k }
+                          )
+                        }
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 10,
+                          marginRight: 8,
+                          backgroundColor: "#111827",
+                          borderWidth: 1,
+                          borderColor: "#333",
+                        }}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "700" }}>
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
+      {/* OHLCV Row */}
+      <View
+        style={{
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          borderBottomWidth: 1,
+          borderBottomColor: "#1f2937",
+          backgroundColor: "#0a0a0a",
+        }}
+      >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ flexDirection: "row", gap: 14 }}>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              O{" "}
+              <Text style={{ color: "#10B981" }}>
+                {formatPrice(lastCandle?.open)}
+              </Text>
+            </Text>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              H{" "}
+              <Text style={{ color: "#10B981" }}>
+                {formatPrice(lastCandle?.high)}
+              </Text>
+            </Text>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              L{" "}
+              <Text style={{ color: "#EF4444" }}>
+                {formatPrice(lastCandle?.low)}
+              </Text>
+            </Text>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              C{" "}
+              <Text style={{ color: "#E5E7EB" }}>
+                {formatPrice(lastCandle?.close)}
+              </Text>
+            </Text>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              V{" "}
+              <Text style={{ color: "#E5E7EB" }}>
+                {formatVolume(lastCandle?.volume)}
+              </Text>
+            </Text>
+          </View>
+        </ScrollView>
       </View>
 
       {/* Chart */}
-      <View style={{ flex: 1 }}>
-        <TradingViewChart symbol={symbol} height={chartHeight} />
+      <View style={{ marginBottom: 8 }}>
+        {/* Controls moved to Strategy Complexity bottom sheet */}
+        <SimpleKLineChart
+          symbol={symbol}
+          timeframe={extendedTf as any}
+          height={chartHeight}
+          theme={scheme === "dark" ? "dark" : "light"}
+          chartType={
+            chartType === "candlestick" ? "candle" : (chartType as any)
+          }
+          showVolume={showVolume}
+          showMA={showMA}
+          showTopInfo={false}
+          showPriceAxisText={true}
+          showTimeAxisText={true}
+          indicators={indicators}
+          levels={
+            currentTradePlan
+              ? {
+                  entry: currentTradePlan.entry,
+                  lateEntry: currentTradePlan.lateEntry,
+                  exit: currentTradePlan.exit,
+                  lateExit: currentTradePlan.lateExit,
+                  stop: currentTradePlan.stop,
+                  targets: (currentTradePlan.targets || []).slice(
+                    0,
+                    3
+                  ) as number[],
+                }
+              : undefined
+          }
+        />
       </View>
+
+      {/* Timeframe Chips - below chart */}
+      <View style={styles.timeframeBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rangeSwitcherScroll}
+        >
+          {pinned.map((tf) => (
+            <Pressable
+              key={tf}
+              onPress={() => handleTimeframeChange(tf)}
+              style={[styles.tfChip, extendedTf === tf && styles.tfChipActive]}
+            >
+              <Text
+                style={[
+                  styles.tfChipText,
+                  extendedTf === tf && styles.tfChipTextActive,
+                ]}
+              >
+                {tf}
+              </Text>
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={showUnifiedBottomSheetWithTab}
+            style={[styles.tfChip, styles.tfMoreChip]}
+            hitSlop={10}
+          >
+            <Ionicons name="options" size={16} color="#fff" />
+          </Pressable>
+        </ScrollView>
+      </View>
+
+      {/* Unified Bottom Sheet */}
+      {showUnifiedBottomSheet && (
+        <Modal
+          visible={showUnifiedBottomSheet}
+          transparent
+          animationType="none"
+          onRequestClose={hideBottomSheet}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+            onPress={hideBottomSheet}
+          >
+            <Animated.View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 40,
+                maxHeight: Dimensions.get("window").height * 0.8,
+                transform: [
+                  {
+                    translateY: bottomSheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable>
+                {/* Handle Bar */}
+                <View
+                  style={{
+                    width: 40,
+                    height: 4,
+                    backgroundColor: "#666",
+                    borderRadius: 2,
+                    alignSelf: "center",
+                    marginBottom: 20,
+                  }}
+                />
+
+                <ScrollView
+                  style={{ maxHeight: 600 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* Chart Type Row */}
+                  <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
+                    <Text style={styles.timeframeSectionTitle}>Chart Type</Text>
+                    <View style={styles.chartTypeRow}>
+                      {[
+                        {
+                          type: "line" as ChartType,
+                          label: "Line",
+                          icon: "trending-up",
+                        },
+                        {
+                          type: "candlestick" as ChartType,
+                          label: "Candles",
+                          icon: "bar-chart",
+                        },
+                        {
+                          type: "area" as ChartType,
+                          label: "Area",
+                          icon: "analytics",
+                        },
+                      ].map((item) => (
+                        <Pressable
+                          key={item.type}
+                          onPress={() => {
+                            setChartType(item.type);
+                            hideBottomSheet();
+                          }}
+                          style={[
+                            styles.chartTypeButton,
+                            chartType === item.type &&
+                              styles.chartTypeButtonActive,
+                          ]}
+                        >
+                          <Ionicons
+                            name={item.icon as any}
+                            size={20}
+                            color={chartType === item.type ? "#000" : "#fff"}
+                            style={{ marginBottom: 4 }}
+                          />
+                          <Text
+                            style={[
+                              styles.chartTypeButtonText,
+                              chartType === item.type &&
+                                styles.chartTypeButtonTextActive,
+                            ]}
+                          >
+                            {item.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Timeframe Sections */}
+                  <View style={{ paddingHorizontal: 20 }}>
+                    {/* Minutes */}
+                    <View style={{ marginBottom: 24 }}>
+                      <Text style={styles.timeframeSectionTitle}>Minutes</Text>
+                      <View style={styles.timeframeGrid}>
+                        {["1m", "2m", "3m", "5m", "10m", "15m", "30m"].map(
+                          (tf) => {
+                            const isSelected = extendedTf === tf;
+                            const isPinned = pinned.includes(
+                              tf as ExtendedTimeframe
+                            );
+                            return (
+                              <Pressable
+                                key={tf}
+                                onPress={async () => {
+                                  const success = await toggle(
+                                    tf as ExtendedTimeframe
+                                  );
+                                  if (!success) {
+                                    setPinError(
+                                      "You can pin up to 10 timeframes"
+                                    );
+                                    setTimeout(() => setPinError(null), 2000);
+                                  }
+                                }}
+                                style={[
+                                  styles.timeframeButton,
+                                  isSelected && styles.timeframeButtonActive,
+                                  isPinned && styles.timeframeButtonPinned,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.timeframeButtonText,
+                                    isSelected &&
+                                      styles.timeframeButtonTextActive,
+                                    isPinned &&
+                                      styles.timeframeButtonTextPinned,
+                                  ]}
+                                >
+                                  {tf}
+                                </Text>
+                              </Pressable>
+                            );
+                          }
+                        )}
+                      </View>
+                    </View>
+
+                    {/* Hours */}
+                    <View style={{ marginBottom: 24 }}>
+                      <Text style={styles.timeframeSectionTitle}>Hours</Text>
+                      <View style={styles.timeframeGrid}>
+                        {["1h", "2h", "4h"].map((tf) => {
+                          const isSelected = extendedTf === tf;
+                          const isPinned = pinned.includes(
+                            tf as ExtendedTimeframe
+                          );
+                          return (
+                            <Pressable
+                              key={tf}
+                              onPress={() => {
+                                toggle(tf as ExtendedTimeframe);
+                              }}
+                              style={[
+                                styles.timeframeButton,
+                                isSelected && styles.timeframeButtonActive,
+                                isPinned && styles.timeframeButtonPinned,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.timeframeButtonText,
+                                  isSelected &&
+                                    styles.timeframeButtonTextActive,
+                                  isPinned && styles.timeframeButtonTextPinned,
+                                ]}
+                              >
+                                {tf}
+                              </Text>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    </View>
+
+                    {/* Days */}
+                    <View style={{ marginBottom: 24 }}>
+                      <Text style={styles.timeframeSectionTitle}>Days</Text>
+                      <View style={styles.timeframeGrid}>
+                        {["1D", "1W", "1M", "3M", "6M", "1Y", "5Y", "ALL"].map(
+                          (tf) => {
+                            const isSelected = extendedTf === tf;
+                            const isPinned = pinned.includes(
+                              tf as ExtendedTimeframe
+                            );
+                            return (
+                              <Pressable
+                                key={tf}
+                                onPress={() => {
+                                  toggle(tf as ExtendedTimeframe);
+                                }}
+                                style={[
+                                  styles.timeframeButton,
+                                  isSelected && styles.timeframeButtonActive,
+                                  isPinned && styles.timeframeButtonPinned,
+                                ]}
+                              >
+                                <Text
+                                  style={[
+                                    styles.timeframeButtonText,
+                                    isSelected &&
+                                      styles.timeframeButtonTextActive,
+                                    isPinned &&
+                                      styles.timeframeButtonTextPinned,
+                                  ]}
+                                >
+                                  {tf}
+                                </Text>
+                              </Pressable>
+                            );
+                          }
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                </ScrollView>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Reasoning Bottom Sheet */}
+      {showReasoningBottomSheet && (
+        <Modal
+          visible={showReasoningBottomSheet}
+          transparent
+          animationType="none"
+          onRequestClose={() => {
+            Animated.timing(reasoningBottomSheetAnim, {
+              toValue: 0,
+              duration: 300,
+              useNativeDriver: false,
+            }).start(() => setShowReasoningBottomSheet(false));
+          }}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+            onPress={() => {
+              Animated.timing(reasoningBottomSheetAnim, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: false,
+              }).start(() => setShowReasoningBottomSheet(false));
+            }}
+          >
+            <Animated.View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 40,
+                maxHeight: Dimensions.get("window").height * 0.8,
+                transform: [
+                  {
+                    translateY: reasoningBottomSheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable>
+                {/* Handle Bar */}
+                <View
+                  style={{
+                    width: 40,
+                    height: 4,
+                    backgroundColor: "#666",
+                    borderRadius: 2,
+                    alignSelf: "center",
+                    marginBottom: 20,
+                  }}
+                />
+
+                {/* Header */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    paddingBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "700",
+                      color: "#fff",
+                    }}
+                  >
+                    Reasoning
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      Animated.timing(reasoningBottomSheetAnim, {
+                        toValue: 0,
+                        duration: 300,
+                        useNativeDriver: false,
+                      }).start(() => setShowReasoningBottomSheet(false));
+                    }}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={24} color="#fff" />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={{ paddingHorizontal: 20 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {isStreaming ? (
+                    <Text
+                      style={{
+                        color: "#9CA3AF",
+                        fontSize: 12,
+                        marginBottom: 12,
+                      }}
+                    >
+                      Streaming reasoning…
+                    </Text>
+                  ) : null}
+                  <Text
+                    style={{ color: "#E5E7EB", fontSize: 14, lineHeight: 20 }}
+                  >
+                    {streamingText && streamingText.length > 0
+                      ? streamingText
+                      : "No reasoning available yet. Run Analyze to generate insights."}
+                  </Text>
+                </ScrollView>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Bottom Navigation - Reasoning, Analyze (center), Strategy (right) */}
+      <View
+        style={{
+          borderTopWidth: 1,
+          borderTopColor: "#2a2a2a",
+          backgroundColor: "#0a0a0a",
+          paddingTop: 8,
+          paddingBottom: Math.max(12, insets.bottom),
+          paddingHorizontal: 12,
+        }}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          {/* Reasoning */}
+          <Pressable
+            onPress={() => {
+              if (!aiMeta && !isStreaming && !streamingText) return;
+              setShowReasoningBottomSheet(true);
+              Animated.timing(reasoningBottomSheetAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: false,
+              }).start();
+            }}
+            disabled={!aiMeta && !isStreaming && !streamingText}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderRadius: 12,
+              backgroundColor: "transparent",
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.08)",
+              opacity: !aiMeta && !isStreaming && !streamingText ? 0.6 : 1,
+              minWidth: 110,
+            }}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="bulb"
+              size={16}
+              color="rgba(255,255,255,0.9)"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>
+              Reasoning
+            </Text>
+          </Pressable>
+
+          {/* Analyze (center) */}
+          <Pressable
+            onPress={handleAnalyzePress}
+            disabled={analyzing}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              paddingVertical: 12,
+              paddingHorizontal: 20,
+              borderRadius: 12,
+              backgroundColor: analyzing
+                ? "rgba(0,122,255,0.3)"
+                : "rgba(0,122,255,0.9)",
+              shadowColor: "#007AFF",
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: analyzing ? 0.4 : 0.8,
+              shadowRadius: analyzing ? 8 : 12,
+              minWidth: 140,
+            }}
+            hitSlop={10}
+          >
+            {analyzing ? (
+              <Text style={{ color: "#fff", fontWeight: "700" }}>
+                Analyzing…
+              </Text>
+            ) : (
+              <>
+                <Ionicons
+                  name="analytics"
+                  size={16}
+                  color="#fff"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={{ color: "#fff", fontWeight: "700" }}>
+                  Analyze
+                </Text>
+              </>
+            )}
+          </Pressable>
+          {/* Strategy Complexity */}
+          <Pressable
+            onPress={showComplexityBottomSheetWithTab}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderRadius: 12,
+              backgroundColor: "transparent",
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.08)",
+              minWidth: 110,
+            }}
+            hitSlop={8}
+          >
+            <Ionicons name="settings-outline" size={16} color="#fff" />
+            <Text
+              style={{
+                color: "#fff",
+                fontWeight: "600",
+                fontSize: 12,
+                marginLeft: 6,
+              }}
+              numberOfLines={1}
+            >
+              {selectedComplexity.charAt(0).toUpperCase() +
+                selectedComplexity.slice(1)}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Strategy Complexity Bottom Sheet */}
+      {showComplexityBottomSheet && (
+        <Modal
+          visible={showComplexityBottomSheet}
+          transparent
+          animationType="none"
+          onRequestClose={hideComplexityBottomSheet}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+            onPress={hideComplexityBottomSheet}
+          >
+            <Animated.View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 40,
+                maxHeight: Dimensions.get("window").height * 0.8,
+                transform: [
+                  {
+                    translateY: complexityBottomSheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable>
+                {/* Handle Bar */}
+                <View
+                  style={{
+                    alignItems: "center",
+                    paddingBottom: 20,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 40,
+                      height: 4,
+                      backgroundColor: "#666",
+                      borderRadius: 2,
+                    }}
+                  />
+                </View>
+
+                {/* Header */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    paddingBottom: 20,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 20,
+                      fontWeight: "700",
+                      color: "#fff",
+                    }}
+                  >
+                    Strategy Complexity
+                  </Text>
+                  <Pressable
+                    onPress={hideComplexityBottomSheet}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={24} color="#fff" />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={{ paddingHorizontal: 20 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* Mode + Include + R:R (Day/Swing) */}
+                  <View style={{ marginBottom: 16 }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#9CA3AF",
+                          fontSize: 11,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Mode
+                      </Text>
+                      <Text
+                        style={{
+                          color: "#9CA3AF",
+                          fontSize: 11,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Include
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          backgroundColor: "#111827",
+                          borderRadius: 10,
+                          padding: 4,
+                        }}
+                      >
+                        <Pressable
+                          onPress={() => {
+                            setTradeMode("day");
+                            setMode("day_trade");
+                            setTradePace("day");
+                          }}
+                          style={{
+                            paddingVertical: 8,
+                            paddingHorizontal: 12,
+                            borderRadius: 8,
+                            backgroundColor:
+                              tradeMode === "day" ? "#00D4AA" : "transparent",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: tradeMode === "day" ? "#000" : "#ccc",
+                              fontWeight: "700",
+                              fontSize: 12,
+                            }}
+                          >
+                            Day
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => {
+                            setTradeMode("swing");
+                            setMode("swing_trade");
+                            setTradePace("swing");
+                          }}
+                          style={{
+                            marginLeft: 4,
+                            paddingVertical: 8,
+                            paddingHorizontal: 12,
+                            borderRadius: 8,
+                            backgroundColor:
+                              tradeMode === "swing" ? "#00D4AA" : "transparent",
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: tradeMode === "swing" ? "#000" : "#ccc",
+                              fontWeight: "700",
+                              fontSize: 12,
+                            }}
+                          >
+                            Swing
+                          </Text>
+                        </Pressable>
+                      </View>
+                      <Pressable
+                        onPress={() =>
+                          setContextMode(
+                            contextMode === "news_sentiment"
+                              ? "price_action"
+                              : "news_sentiment"
+                          )
+                        }
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 12,
+                          backgroundColor:
+                            contextMode === "news_sentiment"
+                              ? "#2563EB"
+                              : "#111827",
+                          borderWidth: 1,
+                          borderColor:
+                            contextMode === "news_sentiment"
+                              ? "#2563EB"
+                              : "#333",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontWeight: "600",
+                            fontSize: 12,
+                          }}
+                        >
+                          News + Sentiment
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      color: "#888",
+                      textAlign: "center",
+                      marginBottom: 20,
+                    }}
+                  >
+                    Choose your preferred trading strategy complexity level
+                  </Text>
+
+                  {/* Strategy Options */}
+                  {Object.entries(STRATEGY_COMPLEXITY_CONFIGS).map(
+                    ([key, config]) => {
+                      const complexity = key as StrategyComplexity;
+                      const isSelected = selectedComplexity === complexity;
+
+                      return (
+                        <Pressable
+                          key={complexity}
+                          onPress={() => {
+                            try {
+                              setSelectedComplexity(complexity);
+                              // Re-apply constraints to current plan immediately so chart updates
+                              setCurrentTradePlan((prev: any) =>
+                                prev
+                                  ? applyComplexityToPlan(prev, complexity)
+                                  : prev
+                              );
+                              // Optionally save to user profile
+                              if (profile.autoApplyComplexity) {
+                                setProfile({ strategyComplexity: complexity });
+                              }
+                            } finally {
+                              hideComplexityBottomSheet();
+                            }
+                          }}
+                          style={{
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: isSelected ? "#00D4AA" : "#333",
+                            padding: 16,
+                            marginBottom: 12,
+                            backgroundColor: isSelected
+                              ? "rgba(0,212,170,0.1)"
+                              : "#2a2a2a",
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              marginBottom: 8,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontSize: 18,
+                                fontWeight: "600",
+                                color: isSelected ? "#00D4AA" : "#fff",
+                              }}
+                            >
+                              {complexity.charAt(0).toUpperCase() +
+                                complexity.slice(1)}
+                            </Text>
+                            {isSelected && (
+                              <Ionicons
+                                name="checkmark-circle"
+                                size={20}
+                                color="#00D4AA"
+                              />
+                            )}
+                          </View>
+
+                          <Text
+                            style={{
+                              fontSize: 14,
+                              color: "#ccc",
+                              marginBottom: 12,
+                            }}
+                          >
+                            {config.description}
+                          </Text>
+                        </Pressable>
+                      );
+                    }
+                  )}
+                </ScrollView>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Indicators Bottom Sheet */}
+      {showIndicatorsSheet && (
+        <Modal
+          visible={showIndicatorsSheet}
+          transparent
+          animationType="none"
+          onRequestClose={closeIndicatorsSheet}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+            onPress={closeIndicatorsSheet}
+          >
+            <Animated.View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 40,
+                maxHeight: Dimensions.get("window").height * 0.85,
+                transform: [
+                  {
+                    translateY: indicatorsSheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable>
+                {/* Handle Bar */}
+                <View
+                  style={{
+                    width: 40,
+                    height: 4,
+                    backgroundColor: "#666",
+                    borderRadius: 2,
+                    alignSelf: "center",
+                    marginBottom: 16,
+                  }}
+                />
+
+                {/* Header */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingHorizontal: 20,
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}
+                  >
+                    Indicators
+                  </Text>
+                  <Pressable
+                    onPress={closeIndicatorsSheet}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={22} color="#fff" />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={{ paddingHorizontal: 20 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text
+                    style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 10 }}
+                  >
+                    Tap to toggle. Select to configure periods and color.
+                    Overlay is supported on MA, EMA, SMA, BBI, BOLL, SAR.
+                  </Text>
+                  {/* Grid of built-ins */}
+                  <View style={styles.timeframeGrid}>
+                    {BUILTIN_INDICATORS.map((ind) => {
+                      const selected = isSelectedIndicator(ind.name);
+                      return (
+                        <Pressable
+                          key={ind.name}
+                          onPress={() => toggleIndicator(ind.name)}
+                          style={[
+                            styles.timeframeButton,
+                            selected && styles.timeframeButtonActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.timeframeButtonText,
+                              selected && styles.timeframeButtonTextActive,
+                            ]}
+                          >
+                            {ind.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Custom R:R Modal */}
+      <Modal
+        visible={showCustomRrModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCustomRrModal(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Pressable
+            onPress={() => setShowCustomRrModal(false)}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: "#1a1a1a",
+              borderRadius: 12,
+              margin: 20,
+              padding: 16,
+              width: "80%",
+              maxWidth: 360,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
+                Custom R:R
+              </Text>
+              <Pressable onPress={() => setShowCustomRrModal(false)}>
+                <Ionicons name="close" size={20} color="#888" />
+              </Pressable>
+            </View>
+            <Text style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 8 }}>
+              Enter desired risk-reward (e.g., 2.25 for 2.25:1):
+            </Text>
+            <TextInput
+              value={String(desiredRR ?? "")}
+              onChangeText={(txt) => {
+                const num = Number(txt);
+                if (Number.isFinite(num)) setDesiredRR(num);
+              }}
+              keyboardType="decimal-pad"
+              placeholder="2.0"
+              placeholderTextColor="#666"
+              style={{
+                backgroundColor: "#2a2a2a",
+                borderRadius: 8,
+                padding: 12,
+                color: "#fff",
+                fontSize: 16,
+              }}
+            />
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                marginTop: 12,
+              }}
+            >
+              <Pressable
+                onPress={() => setShowCustomRrModal(false)}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  backgroundColor: "#2a2a2a",
+                  borderRadius: 8,
+                  marginRight: 8,
+                }}
+              >
+                <Text
+                  style={{ color: "#ccc", fontSize: 14, fontWeight: "600" }}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const val = Number(desiredRR);
+                  if (Number.isFinite(val) && val > 0) {
+                    setShowCustomRrModal(false);
+                  }
+                }}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  backgroundColor: "#00D4AA",
+                  borderRadius: 8,
+                }}
+              >
+                <Text
+                  style={{ color: "#000", fontSize: 14, fontWeight: "700" }}
+                >
+                  Apply
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -78,13 +2789,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     backgroundColor: "#0a0a0a",
     borderBottomWidth: 1,
     borderBottomColor: "#2a2a2a",
   },
   backButton: {
-    padding: 8,
+    padding: 6,
   },
   headerCenter: {
     flex: 1,
@@ -97,5 +2808,119 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "#888",
+  },
+  timeframeBar: {
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#1f2937",
+    backgroundColor: "#0a0a0a",
+  },
+  rangeSwitcherContainer: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 24,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+  },
+  rangeSwitcherScroll: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexGrow: 1,
+  },
+  tfChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "transparent",
+    marginHorizontal: 4,
+  },
+  tfChipActive: {
+    backgroundColor: "#00D4AA",
+  },
+  tfChipText: {
+    color: "#e5e5e5",
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  tfChipTextActive: {
+    color: "#000",
+  },
+  tfMoreChip: {
+    backgroundColor: "#1f2937",
+  },
+  tfMoreText: {
+    color: "#fff",
+    fontSize: 14,
+    marginTop: -1,
+  },
+
+  timeframeSectionTitle: {
+    color: "#888",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 12,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  timeframeGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  timeframeButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: "#2a2a2a",
+    minWidth: 60,
+    alignItems: "center",
+  },
+  timeframeButtonActive: {
+    backgroundColor: "#00D4AA",
+  },
+  timeframeButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  timeframeButtonTextActive: {
+    color: "#000",
+  },
+  timeframeButtonPinned: {
+    borderColor: "#00D4AA",
+    borderWidth: 2,
+    backgroundColor: "#002921",
+  },
+  timeframeButtonTextPinned: {
+    color: "#00D4AA",
+  },
+  chartTypeRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  chartTypeButton: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#2a2a2a",
+    alignItems: "center",
+  },
+  chartTypeButtonActive: {
+    backgroundColor: "#00D4AA",
+  },
+  chartTypeButtonText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  chartTypeButtonTextActive: {
+    color: "#000",
   },
 });

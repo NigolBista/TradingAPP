@@ -3,6 +3,7 @@
 ## Quick Start
 
 ### 1. Install Dependencies
+
 ```bash
 npm install
 # or
@@ -16,48 +17,52 @@ Create or update `app.config.ts`:
 ```javascript
 export default {
   expo: {
-    name: "GPT5 Trading Platform",
-    slug: "gpt5-trading",
+    name: "TradingApp Trading Platform",
+    slug: "TradingApp-trading",
     // ... other expo config
   },
   extra: {
     // Required for real market data
     marketDataApiToken: "YOUR_MARKETDATA_TOKEN",
-    
+
     // Required for AI features
     openaiApiKey: "YOUR_OPENAI_API_KEY",
-    
+
     // Optional - fallback providers
     alphaVantageApiKey: "YOUR_ALPHAVANTAGE_KEY",
     yahooApiKey: "YOUR_YAHOO_KEY", // Usually not required
     newsApiKey: "YOUR_NEWS_API_KEY",
-    
+
     // Default market data provider
     marketProvider: "marketData", // or "alphaVantage", "yahoo"
-  }
+  },
 };
 ```
 
 ### 3. Get API Keys
 
 #### MarketData.app (Recommended - Free tier available)
+
 1. Visit [MarketData.app](https://marketdata.app)
 2. Sign up for free account
 3. Get API token from dashboard
 4. Add to `marketDataApiToken` in config
 
 #### OpenAI (Required for AI features)
+
 1. Visit [OpenAI Platform](https://platform.openai.com)
 2. Create account and get API key
 3. Add to `openaiApiKey` in config
 4. Ensure you have credits/billing set up
 
 #### Alpha Vantage (Optional - Backup provider)
+
 1. Visit [Alpha Vantage](https://www.alphavantage.co)
 2. Get free API key
 3. Add to `alphaVantageApiKey` in config
 
 #### News API (Optional - Enhanced news features)
+
 1. Visit [NewsAPI](https://newsapi.org)
 2. Get free API key
 3. Add to `newsApiKey` in config
@@ -70,7 +75,7 @@ npm start
 
 # For specific platforms
 npm run ios     # iOS Simulator
-npm run android # Android Emulator  
+npm run android # Android Emulator
 npm run web     # Web browser
 ```
 
@@ -81,12 +86,14 @@ npm run web     # Web browser
 The app supports multiple data providers with automatic fallbacks:
 
 1. **MarketData.app** (Primary)
+
    - ✅ Real-time data
    - ✅ Multiple timeframes
    - ✅ High reliability
    - ✅ Free tier available
 
 2. **Alpha Vantage** (Secondary)
+
    - ✅ Comprehensive coverage
    - ✅ News integration
    - ⚠️ Rate limits on free tier
@@ -110,6 +117,7 @@ extra: {
 ## 🎯 Features Configuration
 
 ### AI Analytics
+
 ```javascript
 // Enable/disable AI features
 extra: {
@@ -119,6 +127,7 @@ extra: {
 ```
 
 ### News Sentiment
+
 ```javascript
 // Enable enhanced news analysis
 extra: {
@@ -128,6 +137,7 @@ extra: {
 ```
 
 ### Real-time Updates
+
 ```javascript
 // Configure update frequency
 extra: {
@@ -139,6 +149,7 @@ extra: {
 ## 📱 Platform-Specific Setup
 
 ### iOS
+
 ```bash
 # Install iOS dependencies
 cd ios && pod install && cd ..
@@ -148,6 +159,7 @@ npm run ios
 ```
 
 ### Android
+
 ```bash
 # Ensure Android SDK is installed
 # Run on Android
@@ -155,6 +167,7 @@ npm run android
 ```
 
 ### Web
+
 ```bash
 # Run on web
 npm run web
@@ -165,22 +178,26 @@ npm run web
 ### Common Issues
 
 #### "No market data available"
+
 - ✅ Check API keys in `app.config.ts`
 - ✅ Verify internet connection
 - ✅ Check API provider status
 - ✅ Try switching to different provider
 
 #### "AI features not working"
+
 - ✅ Verify OpenAI API key is set
 - ✅ Check OpenAI account has credits
 - ✅ Ensure API key has correct permissions
 
 #### "Charts not loading"
+
 - ✅ Enable WebView in development
 - ✅ Check TradingView script loading
 - ✅ Verify symbol format (e.g., "NASDAQ:AAPL")
 
 #### "App crashes on startup"
+
 - ✅ Clear Expo cache: `expo r -c`
 - ✅ Reinstall dependencies: `rm -rf node_modules && npm install`
 - ✅ Check for syntax errors in config files
@@ -202,6 +219,7 @@ extra: {
 If app is slow:
 
 1. **Reduce scan frequency**:
+
 ```javascript
 extra: {
   scanInterval: 60000, // Scan every 60 seconds instead of 30
@@ -209,6 +227,7 @@ extra: {
 ```
 
 2. **Limit concurrent requests**:
+
 ```javascript
 extra: {
   maxConcurrentRequests: 3, // Reduce from default 5
@@ -216,6 +235,7 @@ extra: {
 ```
 
 3. **Disable heavy features temporarily**:
+
 ```javascript
 extra: {
   enableAI: false, // Disable AI features temporarily
@@ -226,6 +246,7 @@ extra: {
 ## 🔄 Updates & Maintenance
 
 ### Keeping Dependencies Updated
+
 ```bash
 # Check for updates
 npm outdated
@@ -238,11 +259,13 @@ npx expo install --fix
 ```
 
 ### API Key Rotation
+
 - Regularly rotate API keys for security
 - Monitor API usage and costs
 - Set up alerts for rate limit issues
 
 ### Performance Monitoring
+
 - Monitor app performance metrics
 - Check API response times
 - Optimize based on usage patterns
@@ -250,16 +273,19 @@ npx expo install --fix
 ## 📚 Additional Resources
 
 ### Documentation
+
 - [Expo Documentation](https://docs.expo.dev)
 - [React Native Documentation](https://reactnative.dev)
 - [TradingView Charting Library](https://www.tradingview.com/charting-library/)
 
 ### API Documentation
+
 - [MarketData.app API](https://docs.marketdata.app)
 - [Alpha Vantage API](https://www.alphavantage.co/documentation/)
 - [OpenAI API](https://platform.openai.com/docs)
 
 ### Support
+
 - Check GitHub issues for common problems
 - Review logs for specific error messages
 - Test with minimal configuration first

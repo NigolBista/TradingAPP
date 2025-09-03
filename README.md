@@ -1,4 +1,4 @@
-# GPT5 Trading Companion (Expo + Supabase + Stripe)
+# TradingApp Trading Companion (Expo + Supabase + Stripe)
 
 Production-ready starter implementing:
 
@@ -20,8 +20,8 @@ STRIPE_PUBLISHABLE_KEY=...
 OPENAI_API_KEY=...
 # Optional
 POLYGON_API_KEY=
-IOS_BUNDLE_ID=com.example.gpt5
-ANDROID_PACKAGE=com.example.gpt5
+IOS_BUNDLE_ID=com.example.TradingApp
+ANDROID_PACKAGE=com.example.TradingApp
 EAS_PROJECT_ID=
 ```
 
