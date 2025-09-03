@@ -8,6 +8,7 @@ import {
   ScrollView,
   useColorScheme,
   Modal,
+  TextInput,
   Animated,
   Dimensions,
 } from "react-native";
@@ -28,6 +29,7 @@ import {
   aiOutputToTradePlan,
   applyComplexityToPlan,
 } from "../logic/aiStrategyEngine";
+// Removed on-the-fly plan generation imports
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { useUserStore } from "../store/userStore";
@@ -36,19 +38,6 @@ import { STRATEGY_COMPLEXITY_CONFIGS } from "../logic/strategyComplexity";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import { fetchCandles } from "../services/marketProviders";
-
-function getExampleSetup(complexity: StrategyComplexity): string {
-  switch (complexity) {
-    case "simple":
-      return "Entry: $150.00 • Stop Loss: $148.00 • Target: $154.00";
-    case "partial":
-      return "Entry: $150.00 • Stop Loss: $148.00 • TP1: $153.00 • TP2: $155.00";
-    case "advanced":
-      return "Entry: $150.00 • Late Entry: $150.45 • Stop Loss: $148.00 • Extended Stop: $147.50 • TP1: $152.25 • TP2: $153.75 • TP3: $155.25";
-    default:
-      return "";
-  }
-}
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -236,6 +225,9 @@ export default function ChartFullScreen() {
   const [contextMode, setContextMode] = useState<
     "price_action" | "news_sentiment"
   >((initialAnalysisContext?.contextMode as any) || "price_action");
+  // Simplified: mode is UI-only; analysis runs when user presses Analyze
+  const [tradeMode, setTradeMode] = useState<"day" | "swing">("day");
+  const [showCustomRrModal, setShowCustomRrModal] = useState<boolean>(false);
 
   // Auto-analysis and streaming output
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState<boolean>(
@@ -653,6 +645,8 @@ export default function ChartFullScreen() {
 
   // No candle fetching; chart is rendered by KLinePro
 
+  // Removed on-the-fly plan generation to avoid auto-analysis side effects
+
   // Final fallback: derive direction from loaded data if still unknown
   useEffect(() => {
     if (typeof dayUp === "boolean") return;
@@ -744,7 +738,7 @@ export default function ChartFullScreen() {
           }
           showVolume={true}
           showMA={true}
-          showTopInfo={true}
+          showTopInfo={false}
           showPriceAxisText={true}
           showTimeAxisText={true}
           levels={
@@ -1375,121 +1369,100 @@ export default function ChartFullScreen() {
                   style={{ paddingHorizontal: 20 }}
                   showsVerticalScrollIndicator={false}
                 >
-                  {/* Mode Controls */}
+                  {/* Mode + Include + R:R (Day/Swing) */}
                   <View style={{ marginBottom: 16 }}>
-                    <Text
+                    <View
                       style={{
-                        color: "#9CA3AF",
-                        fontSize: 11,
-                        fontWeight: "700",
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
                         marginBottom: 8,
                       }}
                     >
-                      Mode
-                    </Text>
+                      <Text
+                        style={{
+                          color: "#9CA3AF",
+                          fontSize: 11,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Mode
+                      </Text>
+                      <Text
+                        style={{
+                          color: "#9CA3AF",
+                          fontSize: 11,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Include
+                      </Text>
+                    </View>
                     <View
-                      style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
                     >
-                      {[
-                        { label: "Auto", pace: "auto", mode: "auto" },
-                        { label: "Scalp", pace: "scalp", mode: "day_trade" },
-                        { label: "Day", pace: "day", mode: "day_trade" },
-                        { label: "Swing", pace: "swing", mode: "swing_trade" },
-                      ].map((m) => (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          backgroundColor: "#111827",
+                          borderRadius: 10,
+                          padding: 4,
+                        }}
+                      >
                         <Pressable
-                          key={m.label}
                           onPress={() => {
-                            setMode(m.mode as any);
-                            setTradePace(m.pace as any);
+                            setTradeMode("day");
+                            setMode("day_trade");
+                            setTradePace("day");
                           }}
                           style={{
-                            paddingHorizontal: 12,
                             paddingVertical: 8,
-                            borderRadius: 12,
+                            paddingHorizontal: 12,
+                            borderRadius: 8,
                             backgroundColor:
-                              m.pace === tradePace ||
-                              (m.mode === mode && m.pace === "auto")
-                                ? "#111827"
-                                : "rgba(0,0,0,0.5)",
-                            borderWidth: 1,
-                            borderColor:
-                              m.pace === tradePace ||
-                              (m.mode === mode && m.pace === "auto")
-                                ? "#6B7280"
-                                : "rgba(255,255,255,0.08)",
+                              tradeMode === "day" ? "#00D4AA" : "transparent",
                           }}
                         >
                           <Text
                             style={{
-                              color: "#fff",
-                              fontWeight: "600",
+                              color: tradeMode === "day" ? "#000" : "#ccc",
+                              fontWeight: "700",
                               fontSize: 12,
                             }}
                           >
-                            {m.label}
+                            Day
                           </Text>
                         </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* R:R Controls */}
-                  <View style={{ marginBottom: 16 }}>
-                    <Text
-                      style={{
-                        color: "#9CA3AF",
-                        fontSize: 11,
-                        fontWeight: "700",
-                        marginBottom: 8,
-                      }}
-                    >
-                      R:R
-                    </Text>
-                    <View
-                      style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
-                    >
-                      {[1.0, 1.5, 2.0, 3.0].map((rr) => (
                         <Pressable
-                          key={rr}
-                          onPress={() => setDesiredRR(rr)}
+                          onPress={() => {
+                            setTradeMode("swing");
+                            setMode("swing_trade");
+                            setTradePace("swing");
+                          }}
                           style={{
-                            paddingHorizontal: 12,
+                            marginLeft: 4,
                             paddingVertical: 8,
-                            borderRadius: 12,
+                            paddingHorizontal: 12,
+                            borderRadius: 8,
                             backgroundColor:
-                              desiredRR === rr ? "#0F172A" : "rgba(0,0,0,0.5)",
-                            borderWidth: 1,
-                            borderColor:
-                              desiredRR === rr
-                                ? "#334155"
-                                : "rgba(255,255,255,0.08)",
+                              tradeMode === "swing" ? "#00D4AA" : "transparent",
                           }}
                         >
                           <Text
                             style={{
-                              color: "#fff",
-                              fontWeight: "600",
+                              color: tradeMode === "swing" ? "#000" : "#ccc",
+                              fontWeight: "700",
                               fontSize: 12,
                             }}
-                          >{`1:${rr}`}</Text>
+                          >
+                            Swing
+                          </Text>
                         </Pressable>
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Include Controls */}
-                  <View style={{ marginBottom: 16 }}>
-                    <Text
-                      style={{
-                        color: "#9CA3AF",
-                        fontSize: 11,
-                        fontWeight: "700",
-                        marginBottom: 8,
-                      }}
-                    >
-                      Include
-                    </Text>
-                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      </View>
                       <Pressable
                         onPress={() =>
                           setContextMode(
@@ -1505,12 +1478,12 @@ export default function ChartFullScreen() {
                           backgroundColor:
                             contextMode === "news_sentiment"
                               ? "#2563EB"
-                              : "rgba(0,0,0,0.5)",
+                              : "#111827",
                           borderWidth: 1,
                           borderColor:
                             contextMode === "news_sentiment"
                               ? "#2563EB"
-                              : "rgba(255,255,255,0.08)",
+                              : "#333",
                         }}
                       >
                         <Text
@@ -1525,6 +1498,7 @@ export default function ChartFullScreen() {
                       </Pressable>
                     </View>
                   </View>
+
                   <Text
                     style={{
                       fontSize: 14,
@@ -1609,174 +1583,134 @@ export default function ChartFullScreen() {
                           >
                             {config.description}
                           </Text>
-
-                          {/* Features */}
-                          <View style={{ marginBottom: 12 }}>
-                            <Text
-                              style={{
-                                fontSize: 12,
-                                fontWeight: "600",
-                                color: "#888",
-                                marginBottom: 8,
-                                textTransform: "uppercase",
-                              }}
-                            >
-                              Features:
-                            </Text>
-                            <View style={{ gap: 4 }}>
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 8,
-                                }}
-                              >
-                                <Ionicons
-                                  name={
-                                    config.features.multipleEntries
-                                      ? "checkmark-circle"
-                                      : "close-circle"
-                                  }
-                                  size={16}
-                                  color={
-                                    config.features.multipleEntries
-                                      ? "#00D4AA"
-                                      : "#888"
-                                  }
-                                />
-                                <Text
-                                  style={{
-                                    fontSize: 13,
-                                    color: config.features.multipleEntries
-                                      ? "#fff"
-                                      : "#888",
-                                  }}
-                                >
-                                  Multiple Entries
-                                </Text>
-                              </View>
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 8,
-                                }}
-                              >
-                                <Ionicons
-                                  name={
-                                    config.features.multipleExits
-                                      ? "checkmark-circle"
-                                      : "close-circle"
-                                  }
-                                  size={16}
-                                  color={
-                                    config.features.multipleExits
-                                      ? "#00D4AA"
-                                      : "#888"
-                                  }
-                                />
-                                <Text
-                                  style={{
-                                    fontSize: 13,
-                                    color: config.features.multipleExits
-                                      ? "#fff"
-                                      : "#888",
-                                  }}
-                                >
-                                  Multiple Exits
-                                </Text>
-                              </View>
-                              <View
-                                style={{
-                                  flexDirection: "row",
-                                  alignItems: "center",
-                                  gap: 8,
-                                }}
-                              >
-                                <Ionicons
-                                  name="checkmark-circle"
-                                  size={16}
-                                  color="#00D4AA"
-                                />
-                                <Text style={{ fontSize: 13, color: "#fff" }}>
-                                  Up to {config.features.maxTargets} Target
-                                  {config.features.maxTargets > 1 ? "s" : ""}
-                                </Text>
-                              </View>
-                            </View>
-                          </View>
-
-                          {/* Example */}
-                          <View
-                            style={{
-                              backgroundColor: "#1a1a1a",
-                              borderRadius: 8,
-                              padding: 12,
-                            }}
-                          >
-                            <Text
-                              style={{
-                                fontSize: 12,
-                                fontWeight: "600",
-                                color: "#888",
-                                marginBottom: 4,
-                                textTransform: "uppercase",
-                              }}
-                            >
-                              Example Setup:
-                            </Text>
-                            <Text
-                              style={{
-                                fontSize: 12,
-                                color: "#fff",
-                                fontFamily: "monospace",
-                              }}
-                            >
-                              {getExampleSetup(complexity)}
-                            </Text>
-                          </View>
                         </Pressable>
                       );
                     }
                   )}
-
-                  {/* Info Box */}
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "flex-start",
-                      gap: 8,
-                      padding: 12,
-                      backgroundColor: "rgba(0,212,170,0.1)",
-                      borderRadius: 8,
-                      borderLeftWidth: 3,
-                      borderLeftColor: "#00D4AA",
-                      marginBottom: 20,
-                    }}
-                  >
-                    <Ionicons
-                      name="information-circle-outline"
-                      size={20}
-                      color="#00D4AA"
-                    />
-                    <Text
-                      style={{
-                        flex: 1,
-                        fontSize: 12,
-                        color: "#fff",
-                        lineHeight: 16,
-                      }}
-                    >
-                      You can change this setting anytime in your profile or
-                      before each analysis.
-                    </Text>
-                  </View>
                 </ScrollView>
               </Pressable>
             </Animated.View>
           </Pressable>
         </Modal>
       )}
+
+      {/* Custom R:R Modal */}
+      <Modal
+        visible={showCustomRrModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCustomRrModal(false)}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <Pressable
+            onPress={() => setShowCustomRrModal(false)}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+          />
+          <View
+            style={{
+              backgroundColor: "#1a1a1a",
+              borderRadius: 12,
+              margin: 20,
+              padding: 16,
+              width: "80%",
+              maxWidth: 360,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 8,
+              }}
+            >
+              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
+                Custom R:R
+              </Text>
+              <Pressable onPress={() => setShowCustomRrModal(false)}>
+                <Ionicons name="close" size={20} color="#888" />
+              </Pressable>
+            </View>
+            <Text style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 8 }}>
+              Enter desired risk-reward (e.g., 2.25 for 2.25:1):
+            </Text>
+            <TextInput
+              value={String(desiredRR ?? "")}
+              onChangeText={(txt) => {
+                const num = Number(txt);
+                if (Number.isFinite(num)) setDesiredRR(num);
+              }}
+              keyboardType="decimal-pad"
+              placeholder="2.0"
+              placeholderTextColor="#666"
+              style={{
+                backgroundColor: "#2a2a2a",
+                borderRadius: 8,
+                padding: 12,
+                color: "#fff",
+                fontSize: 16,
+              }}
+            />
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                marginTop: 12,
+              }}
+            >
+              <Pressable
+                onPress={() => setShowCustomRrModal(false)}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  backgroundColor: "#2a2a2a",
+                  borderRadius: 8,
+                  marginRight: 8,
+                }}
+              >
+                <Text
+                  style={{ color: "#ccc", fontSize: 14, fontWeight: "600" }}
+                >
+                  Cancel
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  const val = Number(desiredRR);
+                  if (Number.isFinite(val) && val > 0) {
+                    setShowCustomRrModal(false);
+                  }
+                }}
+                style={{
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  backgroundColor: "#00D4AA",
+                  borderRadius: 8,
+                }}
+              >
+                <Text
+                  style={{ color: "#000", fontSize: 14, fontWeight: "700" }}
+                >
+                  Apply
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

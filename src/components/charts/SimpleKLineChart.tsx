@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useEffect } from "react";
 import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
@@ -170,10 +170,9 @@ export default function SimpleKLineChart({
               }
             };
             if (!SHOW_TOP_INFO) {
-              // Hide OHLC/time/volume header tooltip text
+              // Hide only the candle (OHLC) header tooltip
+              // Keep indicator tooltips visible so MA/indicators still show values
               opts.candle.tooltip = { showRule: 'none' };
-              // Also hide indicator tooltips if the lib supports it
-              opts.indicator = Object.assign({}, (opts.indicator || {}), { tooltip: { showRule: 'none' } });
             }
             if (typeof chart.setStyles === 'function') chart.setStyles(opts);
             else if (typeof chart.setStyleOptions === 'function') chart.setStyleOptions(opts);
@@ -223,9 +222,9 @@ export default function SimpleKLineChart({
                       },
                       styles: {
                         color: color,
-                        size: 2,
+                        size: 1,
                         style: 'dashed',
-                        dashedValue: [4, 2]
+                        dashedValue: [10, 6]
                       }
                     },
                     {
@@ -346,9 +345,9 @@ export default function SimpleKLineChart({
                   styles: {
                     line: { 
                       color: color, 
-                      size: 2, 
+                      size: 1, 
                       style: 'dashed', 
-                      dashedValue: [4, 2] 
+                      dashedValue: [10, 6] 
                     },
                     text: { 
                       show: true, 
@@ -466,7 +465,7 @@ export default function SimpleKLineChart({
                     addPriceLine(levels.lateExit, '#DC2626', 'Extended Stop');
                   }
                   if (levels.stop !== undefined && levels.stop !== null) {
-                    addPriceLine(levels.stop, '#EF4444', 'Stop Loss');
+                    addPriceLine(levels.stop, '#EF4444', 'Stop');
                   }
                   if (levels.targets && Array.isArray(levels.targets)) {
                     levels.targets.forEach(function(target, i) {

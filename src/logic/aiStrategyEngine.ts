@@ -178,10 +178,15 @@ export async function runAIStrategy(
         console.log("❌ NO VALID PARSED RESULT - CONTINUING TO NEXT STRATEGY");
         continue;
       }
+      const desiredComplexity = (input.context?.complexity || "advanced") as
+        | "simple"
+        | "partial"
+        | "advanced";
+      const requireExit = desiredComplexity === "advanced";
       if (
         !Number.isFinite(parsed.entry) ||
-        !Number.isFinite(parsed.exit) ||
-        !Number.isFinite(parsed.stop)
+        !Number.isFinite(parsed.stop) ||
+        (requireExit && !Number.isFinite(parsed.exit))
       ) {
         console.log("❌ INVALID NUMERIC VALUES - CONTINUING TO NEXT STRATEGY");
         console.log(
@@ -193,6 +198,21 @@ export async function runAIStrategy(
           parsed.stop
         );
         continue;
+      }
+      // Ensure at least one target for partial/advanced. For partial, prefer two.
+      if (!parsed.targets || parsed.targets.length === 0) {
+        // Derive default targets from entry/stop distances
+        try {
+          const isLong = (parsed.side || "long") === "long";
+          const stopDistance = Math.abs(parsed.entry - parsed.stop);
+          const t1 = isLong
+            ? parsed.entry + stopDistance * 1.5
+            : parsed.entry - stopDistance * 1.5;
+          const t2 = isLong
+            ? parsed.entry + stopDistance * 2.5
+            : parsed.entry - stopDistance * 2.5;
+          parsed.targets = desiredComplexity === "partial" ? [t1, t2] : [t1];
+        } catch {}
       }
       console.log("🎉 FINAL SUCCESSFUL RESULT:");
       console.log(JSON.stringify(parsed, null, 2));
