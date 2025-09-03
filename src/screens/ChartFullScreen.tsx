@@ -15,7 +15,9 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import SimpleKLineChart from "../components/charts/SimpleKLineChart";
+import SimpleKLineChart, {
+  type IndicatorConfig,
+} from "../components/charts/SimpleKLineChart";
 // Removed viewportBars usage; we'll lazy-load via timeRangeChange
 import { type ChartType } from "../components/charts/ChartSettingsModal";
 import { ExtendedTimeframe } from "../components/charts/TimeframePickerModal";
@@ -160,9 +162,24 @@ export default function ChartFullScreen() {
   const [currentTradePlan, setCurrentTradePlan] = useState<any | undefined>(
     initialTradePlan
   );
-  const [showMA, setShowMA] = useState<boolean>(true);
-  const [showVolume, setShowVolume] = useState<boolean>(true);
+  const [showMA, setShowMA] = useState<boolean>(false);
+  const [showVolume, setShowVolume] = useState<boolean>(false);
   const [indicatorsExpanded, setIndicatorsExpanded] = useState<boolean>(false);
+  // Indicators state
+  const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
+  const [showIndicatorsSheet, setShowIndicatorsSheet] = useState(false);
+  const [indicatorsSheetAnim] = useState(new Animated.Value(0));
+  const [showIndicatorsAccordion, setShowIndicatorsAccordion] = useState(false);
+  const [showIndicatorConfigModal, setShowIndicatorConfigModal] =
+    useState<boolean>(false);
+  const [indicatorConfigAnim] = useState(new Animated.Value(0));
+  const [indicatorToEdit, setIndicatorToEdit] =
+    useState<IndicatorConfig | null>(null);
+  const [configSelectedIndex, setConfigSelectedIndex] = useState<number>(0);
+  const [newParamValue, setNewParamValue] = useState<number>(9);
+  // Sub-editor for per-line style (color/thickness/style)
+  const [showLineStyleModal, setShowLineStyleModal] = useState<boolean>(false);
+  const [lineStyleEditIndex, setLineStyleEditIndex] = useState<number>(0);
   const [lastCandle, setLastCandle] = useState<Candle | null>(null);
   const [aiMeta, setAiMeta] = useState<
     | undefined
@@ -708,6 +725,351 @@ export default function ChartFullScreen() {
     // Immediately fetch data for the new timeframe using smart candle manager
   }
 
+  // Indicator helpers
+  const BUILTIN_INDICATORS: Array<{
+    name: string;
+    defaultParams?: any;
+    compatOverlay?: boolean;
+    defaultColor?: string;
+  }> = [
+    {
+      name: "MA",
+      defaultParams: [5, 10, 30, 60],
+      compatOverlay: true,
+      defaultColor: "#3B82F6",
+    },
+    {
+      name: "EMA",
+      defaultParams: [6, 12, 20],
+      compatOverlay: true,
+      defaultColor: "#22D3EE",
+    },
+    {
+      name: "SMA",
+      defaultParams: [12, 2],
+      compatOverlay: true,
+      defaultColor: "#EAB308",
+    },
+    {
+      name: "BBI",
+      defaultParams: [3, 6, 12, 24],
+      compatOverlay: true,
+      defaultColor: "#A78BFA",
+    },
+    {
+      name: "BOLL",
+      defaultParams: [20, 2],
+      compatOverlay: true,
+      defaultColor: "#F59E0B",
+    },
+    {
+      name: "VOL",
+      defaultParams: [5, 10, 20],
+      compatOverlay: false,
+      defaultColor: "#6EE7B7",
+    },
+    {
+      name: "MACD",
+      defaultParams: [12, 26, 9],
+      compatOverlay: false,
+      defaultColor: "#60A5FA",
+    },
+    {
+      name: "KDJ",
+      defaultParams: [9, 3, 3],
+      compatOverlay: false,
+      defaultColor: "#34D399",
+    },
+    {
+      name: "RSI",
+      defaultParams: [6, 12, 24],
+      compatOverlay: false,
+      defaultColor: "#F472B6",
+    },
+    {
+      name: "SAR",
+      defaultParams: [2, 2, 20],
+      compatOverlay: true,
+      defaultColor: "#FB7185",
+    },
+    {
+      name: "OBV",
+      defaultParams: [30],
+      compatOverlay: false,
+      defaultColor: "#93C5FD",
+    },
+    {
+      name: "DMA",
+      defaultParams: [10, 50, 10],
+      compatOverlay: false,
+      defaultColor: "#67E8F9",
+    },
+    {
+      name: "TRIX",
+      defaultParams: [12, 20],
+      compatOverlay: false,
+      defaultColor: "#FDE047",
+    },
+    {
+      name: "BRAR",
+      defaultParams: [26],
+      compatOverlay: false,
+      defaultColor: "#FCA5A5",
+    },
+    {
+      name: "VR",
+      defaultParams: [24, 30],
+      compatOverlay: false,
+      defaultColor: "#A7F3D0",
+    },
+    {
+      name: "WR",
+      defaultParams: [6, 10, 14],
+      compatOverlay: false,
+      defaultColor: "#F9A8D4",
+    },
+    {
+      name: "MTM",
+      defaultParams: [6, 10],
+      compatOverlay: false,
+      defaultColor: "#C4B5FD",
+    },
+    {
+      name: "EMV",
+      defaultParams: [14, 9],
+      compatOverlay: false,
+      defaultColor: "#FDBA74",
+    },
+    {
+      name: "DMI",
+      defaultParams: [14, 6],
+      compatOverlay: false,
+      defaultColor: "#86EFAC",
+    },
+    {
+      name: "CR",
+      defaultParams: [26, 10, 20, 40, 60],
+      compatOverlay: false,
+      defaultColor: "#FDA4AF",
+    },
+    {
+      name: "PSY",
+      defaultParams: [12, 6],
+      compatOverlay: false,
+      defaultColor: "#FDE68A",
+    },
+    {
+      name: "AO",
+      defaultParams: [5, 34],
+      compatOverlay: false,
+      defaultColor: "#A5B4FC",
+    },
+    {
+      name: "ROC",
+      defaultParams: [12, 6],
+      compatOverlay: false,
+      defaultColor: "#FCA5A5",
+    },
+    { name: "PVT", compatOverlay: false, defaultColor: "#93C5FD" },
+    { name: "AVP", compatOverlay: false, defaultColor: "#FDE68A" },
+  ];
+
+  function buildDefaultLines(count: number, baseColor?: string) {
+    const palette = [
+      "#10B981",
+      "#3B82F6",
+      "#F59E0B",
+      "#EF4444",
+      "#A78BFA",
+      "#22D3EE",
+      "#F472B6",
+      "#FDE047",
+    ];
+    const out: any[] = [];
+    for (let i = 0; i < Math.max(1, count); i++) {
+      out.push({
+        color: i === 0 && baseColor ? baseColor : palette[i % palette.length],
+        size: 1,
+        style: "solid",
+      });
+    }
+    return out;
+  }
+
+  function getDefaultIndicator(name: string): IndicatorConfig {
+    const meta = BUILTIN_INDICATORS.find((i) => i.name === name);
+    const params = meta?.defaultParams;
+    const lines = Array.isArray(params)
+      ? buildDefaultLines(params.length, meta?.defaultColor)
+      : buildDefaultLines(1, meta?.defaultColor);
+    return {
+      id: `${name}-${Date.now()}`,
+      name,
+      overlay: !!meta?.compatOverlay,
+      calcParams: params,
+      styles: { lines },
+    };
+  }
+
+  function isSelectedIndicator(name: string): boolean {
+    return indicators.some((i) => i.name === name);
+  }
+
+  function toggleIndicator(name: string) {
+    setIndicators((prev) => {
+      const exists = prev.find((i) => i.name === name);
+      if (exists) return prev.filter((i) => i.name !== name);
+      return prev.concat(getDefaultIndicator(name));
+    });
+  }
+
+  function updateIndicator(name: string, updates: Partial<IndicatorConfig>) {
+    setIndicators((prev) =>
+      prev.map((i) => (i.name === name ? { ...i, ...updates } : i))
+    );
+  }
+
+  function updateIndicatorLine(
+    name: string,
+    lineIndex: number,
+    updates: Partial<{ color: string; size: number; style: string }>
+  ) {
+    setIndicators((prev) => {
+      return prev.map((ind) => {
+        if (ind.name !== name) return ind;
+        const count = Array.isArray(ind.calcParams) ? ind.calcParams.length : 1;
+        const lines = Array.isArray((ind.styles as any)?.lines)
+          ? ((ind.styles as any).lines as any[]).slice()
+          : buildDefaultLines(count);
+        const idx = Math.max(0, Math.min(lineIndex, count - 1));
+        const current = lines[idx] || {
+          color: "#00D4AA",
+          size: 1,
+          style: "solid",
+        };
+        lines[idx] = { ...current, ...updates };
+        return { ...ind, styles: { ...(ind.styles as any), lines } } as any;
+      });
+    });
+  }
+
+  function openLineStyleEditor(index: number) {
+    setLineStyleEditIndex(index);
+    setShowLineStyleModal(true);
+  }
+
+  function closeLineStyleEditor() {
+    setShowLineStyleModal(false);
+  }
+
+  function openIndicatorConfig(name: string) {
+    const ind = indicators.find((i) => i.name === name) || null;
+    setIndicatorToEdit(ind);
+    try {
+      const count = Array.isArray(ind?.calcParams)
+        ? (ind!.calcParams as any[]).length
+        : 1;
+      setConfigSelectedIndex(count > 0 ? 0 : 0);
+      setNewParamValue(count > 0 ? Number(ind?.calcParams?.[0] ?? 9) : 9);
+    } catch {}
+    setShowIndicatorConfigModal(true);
+    Animated.timing(indicatorConfigAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  }
+
+  function closeIndicatorConfig() {
+    Animated.timing(indicatorConfigAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start(() => {
+      setShowIndicatorConfigModal(false);
+      setIndicatorToEdit(null);
+    });
+  }
+
+  function addIndicatorParam(name: string, value: number) {
+    if (!Number.isFinite(value) || value <= 0) return;
+    setIndicators((prev) => {
+      return prev.map((ind) => {
+        if (ind.name !== name) return ind;
+        const params = Array.isArray(ind.calcParams)
+          ? (ind.calcParams as any[]).slice()
+          : [];
+        if (params.includes(value)) return ind;
+        params.push(Math.floor(value));
+        params.sort((a: any, b: any) => Number(a) - Number(b));
+        const count = params.length;
+        const lines = Array.isArray((ind.styles as any)?.lines)
+          ? ((ind.styles as any).lines as any[]).slice()
+          : buildDefaultLines(count);
+        while (lines.length < count) {
+          lines.push({ color: "#00D4AA", size: 1, style: "solid" });
+        }
+        setConfigSelectedIndex(Math.max(0, params.indexOf(value)));
+        return {
+          ...ind,
+          calcParams: params,
+          styles: { ...(ind.styles as any), lines },
+        } as any;
+      });
+    });
+  }
+
+  function removeIndicatorParam(name: string, value: number) {
+    setIndicators((prev) => {
+      return prev.map((ind) => {
+        if (ind.name !== name) return ind;
+        const params = Array.isArray(ind.calcParams)
+          ? (ind.calcParams as any[]).slice()
+          : [];
+        const idx = params.indexOf(value as any);
+        if (idx === -1) return ind;
+        params.splice(idx, 1);
+        const lines = Array.isArray((ind.styles as any)?.lines)
+          ? ((ind.styles as any).lines as any[]).slice()
+          : [];
+        if (idx >= 0 && idx < lines.length) lines.splice(idx, 1);
+        return {
+          ...ind,
+          calcParams: params,
+          styles: { ...(ind.styles as any), lines },
+        } as any;
+      });
+    });
+  }
+
+  const openIndicatorsSheet = () => {
+    setShowIndicatorsSheet(true);
+    Animated.timing(indicatorsSheetAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: false,
+    }).start();
+  };
+  const closeIndicatorsSheet = () => {
+    Animated.timing(indicatorsSheetAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: false,
+    }).start(() => setShowIndicatorsSheet(false));
+  };
+
+  function parseNumberList(input: string): number[] | undefined {
+    try {
+      const parts = input
+        .split(/[ ,]+/)
+        .map((t) => Number(t.trim()))
+        .filter((n) => Number.isFinite(n));
+      return parts.length ? parts : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   // Fetch last candle for OHLCV row when symbol or timeframe changes
   useEffect(() => {
     let cancelled = false;
@@ -782,9 +1144,499 @@ export default function ChartFullScreen() {
             currentStockName={stockName || "Loading..."}
           />
         </View>
-        <View style={{ width: 36 }} />
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          <Pressable
+            onPress={() => setShowIndicatorsAccordion((v) => !v)}
+            style={{ paddingHorizontal: 8, paddingVertical: 6, marginRight: 4 }}
+            hitSlop={8}
+          >
+            <Ionicons name="funnel" size={20} color="#fff" />
+          </Pressable>
+          <View style={{ width: 8 }} />
+        </View>
       </View>
 
+      {showIndicatorsAccordion && (
+        <View
+          style={{
+            backgroundColor: "#0f0f0f",
+            borderBottomWidth: 1,
+            borderBottomColor: "#2a2a2a",
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            gap: 10,
+          }}
+        >
+          {/* Active indicators with quick access to settings */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              {indicators.length === 0 ? (
+                <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+                  No indicators selected
+                </Text>
+              ) : (
+                indicators.map((cfg) => {
+                  return (
+                    <View
+                      key={`chip-${cfg.name}`}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        paddingVertical: 6,
+                        paddingHorizontal: 8,
+                        backgroundColor: "#1a1a1a",
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderColor: "#333",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#fff",
+                          fontWeight: "700",
+                          marginRight: 6,
+                        }}
+                      >
+                        {cfg.name}
+                      </Text>
+                      <Pressable
+                        onPress={() => openIndicatorConfig(cfg.name)}
+                        style={{ padding: 4 }}
+                      >
+                        <Ionicons
+                          name="settings-outline"
+                          size={14}
+                          color="#ccc"
+                        />
+                      </Pressable>
+                      <Pressable
+                        onPress={() => toggleIndicator(cfg.name)}
+                        style={{ marginLeft: 8, padding: 4 }}
+                      >
+                        <Ionicons name="close" size={14} color="#ccc" />
+                      </Pressable>
+                    </View>
+                  );
+                })
+              )}
+              <Pressable
+                onPress={openIndicatorsSheet}
+                style={{
+                  paddingVertical: 8,
+                  paddingHorizontal: 10,
+                  backgroundColor: "#00D4AA",
+                  borderRadius: 12,
+                  marginLeft: 8,
+                }}
+              >
+                <Text style={{ color: "#000", fontWeight: "700" }}>Add</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+        </View>
+      )}
+
+      {/* Indicator Config Modal */}
+      {showIndicatorConfigModal && indicatorToEdit && (
+        <Modal
+          visible={showIndicatorConfigModal}
+          transparent
+          animationType="none"
+          onRequestClose={closeIndicatorConfig}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+            onPress={closeIndicatorConfig}
+          >
+            <Animated.View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 24,
+                maxHeight: Dimensions.get("window").height * 0.6,
+                transform: [
+                  {
+                    translateY: indicatorConfigAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable>
+                <View style={{ alignItems: "center", paddingBottom: 10 }}>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 4,
+                      backgroundColor: "#666",
+                      borderRadius: 2,
+                    }}
+                  />
+                </View>
+
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text
+                    style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}
+                  >
+                    {indicatorToEdit.name} Settings
+                  </Text>
+                  <Pressable
+                    onPress={closeIndicatorConfig}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={20} color="#fff" />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={{ paddingHorizontal: 20 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {/* Per-line items list; tap to edit details in a separate modal */}
+                  {Array.isArray(indicatorToEdit.calcParams) ? (
+                    indicatorToEdit.calcParams.map((_: any, idx: number) => {
+                      const lines =
+                        (indicatorToEdit.styles as any)?.lines || [];
+                      const current = lines[idx] || {
+                        color: "#00D4AA",
+                        size: 1,
+                        style: "solid",
+                      };
+                      return (
+                        <Pressable
+                          key={`line-${idx}`}
+                          onPress={() => openLineStyleEditor(idx)}
+                          style={{
+                            borderWidth: 1,
+                            borderColor: "#333",
+                            borderRadius: 12,
+                            padding: 12,
+                            marginBottom: 10,
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <View>
+                            <Text
+                              style={{
+                                color: "#fff",
+                                fontWeight: "700",
+                                marginBottom: 6,
+                              }}
+                            >
+                              Line {idx + 1}
+                            </Text>
+                            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+                              Tap to edit color, thickness, style
+                            </Text>
+                          </View>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                            }}
+                          >
+                            <View
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: 18,
+                                backgroundColor: current.color,
+                                marginRight: 10,
+                              }}
+                            />
+                            <View
+                              style={{
+                                width: 40,
+                                borderBottomWidth: current.size,
+                                borderBottomColor: current.color,
+                                borderStyle: current.style as any,
+                                marginRight: 8,
+                              }}
+                            />
+                            <Ionicons
+                              name="chevron-forward"
+                              size={18}
+                              color="#888"
+                            />
+                          </View>
+                        </Pressable>
+                      );
+                    })
+                  ) : (
+                    <Pressable
+                      onPress={() => openLineStyleEditor(0)}
+                      style={{
+                        borderWidth: 1,
+                        borderColor: "#333",
+                        borderRadius: 12,
+                        padding: 12,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <View>
+                        <Text
+                          style={{
+                            color: "#fff",
+                            fontWeight: "700",
+                            marginBottom: 6,
+                          }}
+                        >
+                          Line
+                        </Text>
+                        <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+                          Tap to edit color, thickness, style
+                        </Text>
+                      </View>
+                      <View
+                        style={{ flexDirection: "row", alignItems: "center" }}
+                      >
+                        <View
+                          style={{
+                            width: 18,
+                            height: 18,
+                            borderRadius: 18,
+                            backgroundColor:
+                              (indicatorToEdit.styles as any)?.lines?.[0]
+                                ?.color || "#00D4AA",
+                            marginRight: 10,
+                          }}
+                        />
+                        <View
+                          style={{
+                            width: 40,
+                            borderBottomWidth:
+                              (indicatorToEdit.styles as any)?.lines?.[0]
+                                ?.size || 1,
+                            borderBottomColor:
+                              (indicatorToEdit.styles as any)?.lines?.[0]
+                                ?.color || "#00D4AA",
+                            borderStyle: (((indicatorToEdit.styles as any)
+                              ?.lines?.[0]?.style as any) || "solid") as any,
+                            marginRight: 8,
+                          }}
+                        />
+                        <Ionicons
+                          name="chevron-forward"
+                          size={18}
+                          color="#888"
+                        />
+                      </View>
+                    </Pressable>
+                  )}
+                </ScrollView>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
+      {/* Line Style Sub-Modal */}
+      {showLineStyleModal && indicatorToEdit && (
+        <Modal
+          visible={showLineStyleModal}
+          transparent
+          animationType="fade"
+          onRequestClose={closeLineStyleEditor}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.6)",
+              justifyContent: "flex-end",
+            }}
+            onPress={closeLineStyleEditor}
+          >
+            <View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 24,
+                maxHeight: Dimensions.get("window").height * 0.55,
+              }}
+            >
+              <Pressable>
+                <View style={{ alignItems: "center", paddingBottom: 10 }}>
+                  <View
+                    style={{
+                      width: 40,
+                      height: 4,
+                      backgroundColor: "#666",
+                      borderRadius: 2,
+                    }}
+                  />
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    marginBottom: 8,
+                  }}
+                >
+                  <Text style={{ color: "#fff", fontWeight: "700" }}>
+                    Line {lineStyleEditIndex + 1}
+                  </Text>
+                  <Pressable
+                    onPress={closeLineStyleEditor}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={20} color="#fff" />
+                  </Pressable>
+                </View>
+
+                {/* Editor Body */}
+                <ScrollView style={{ paddingHorizontal: 20 }}>
+                  {/* Color grid */}
+                  <Text style={{ color: "#9CA3AF", marginBottom: 8 }}>
+                    Color
+                  </Text>
+                  <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+                    {[
+                      "#111827",
+                      "#1F2937",
+                      "#374151",
+                      "#4B5563",
+                      "#60A5FA",
+                      "#A78BFA",
+                      "#F472B6",
+                      "#F87171",
+                      "#F59E0B",
+                      "#FBBF24",
+                      "#34D399",
+                      "#22D3EE",
+                      "#10B981",
+                      "#3B82F6",
+                      "#EF4444",
+                      "#FDE047",
+                    ].map((sw) => (
+                      <Pressable
+                        key={`style-color-${sw}`}
+                        onPress={() =>
+                          updateIndicatorLine(
+                            indicatorToEdit.name,
+                            lineStyleEditIndex,
+                            {
+                              color: sw,
+                            }
+                          )
+                        }
+                        style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: 14,
+                          backgroundColor: sw,
+                          marginRight: 10,
+                          marginBottom: 10,
+                          borderWidth: 1,
+                          borderColor: "#111",
+                        }}
+                      />
+                    ))}
+                  </View>
+
+                  {/* Thickness */}
+                  <Text
+                    style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}
+                  >
+                    Thickness
+                  </Text>
+                  <View style={{ flexDirection: "row", marginBottom: 8 }}>
+                    {[1, 2, 3, 4].map((th) => (
+                      <Pressable
+                        key={`style-th-${th}`}
+                        onPress={() =>
+                          updateIndicatorLine(
+                            indicatorToEdit.name,
+                            lineStyleEditIndex,
+                            {
+                              size: th,
+                            }
+                          )
+                        }
+                        style={{
+                          paddingHorizontal: 10,
+                          paddingVertical: 8,
+                          borderRadius: 10,
+                          marginRight: 8,
+                          backgroundColor: "#111827",
+                          borderWidth: 1,
+                          borderColor: "#333",
+                        }}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "700" }}>
+                          {th}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  {/* Style */}
+                  <Text
+                    style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}
+                  >
+                    Style
+                  </Text>
+                  <View style={{ flexDirection: "row" }}>
+                    {[
+                      { k: "solid", label: "Solid" },
+                      { k: "dashed", label: "Dashed" },
+                      { k: "dotted", label: "Dotted" },
+                    ].map((opt) => (
+                      <Pressable
+                        key={`style-st-${opt.k}`}
+                        onPress={() =>
+                          updateIndicatorLine(
+                            indicatorToEdit.name,
+                            lineStyleEditIndex,
+                            { style: opt.k }
+                          )
+                        }
+                        style={{
+                          paddingHorizontal: 12,
+                          paddingVertical: 8,
+                          borderRadius: 10,
+                          marginRight: 8,
+                          backgroundColor: "#111827",
+                          borderWidth: 1,
+                          borderColor: "#333",
+                        }}
+                      >
+                        <Text style={{ color: "#fff", fontWeight: "700" }}>
+                          {opt.label}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
       {/* OHLCV Row */}
       <View
         style={{
@@ -847,6 +1699,7 @@ export default function ChartFullScreen() {
           showTopInfo={false}
           showPriceAxisText={true}
           showTimeAxisText={true}
+          indicators={indicators}
           levels={
             currentTradePlan
               ? {
@@ -1257,7 +2110,7 @@ export default function ChartFullScreen() {
         </Modal>
       )}
 
-      {/* Bottom Navigation - Strategy, Analyze, Reasoning */}
+      {/* Bottom Navigation - Reasoning, Analyze (center), Strategy (right) */}
       <View
         style={{
           borderTopWidth: 1,
@@ -1686,6 +2539,118 @@ export default function ChartFullScreen() {
                       );
                     }
                   )}
+                </ScrollView>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Indicators Bottom Sheet */}
+      {showIndicatorsSheet && (
+        <Modal
+          visible={showIndicatorsSheet}
+          transparent
+          animationType="none"
+          onRequestClose={closeIndicatorsSheet}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+            onPress={closeIndicatorsSheet}
+          >
+            <Animated.View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 40,
+                maxHeight: Dimensions.get("window").height * 0.85,
+                transform: [
+                  {
+                    translateY: indicatorsSheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable>
+                {/* Handle Bar */}
+                <View
+                  style={{
+                    width: 40,
+                    height: 4,
+                    backgroundColor: "#666",
+                    borderRadius: 2,
+                    alignSelf: "center",
+                    marginBottom: 16,
+                  }}
+                />
+
+                {/* Header */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    paddingHorizontal: 20,
+                    marginBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}
+                  >
+                    Indicators
+                  </Text>
+                  <Pressable
+                    onPress={closeIndicatorsSheet}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={22} color="#fff" />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={{ paddingHorizontal: 20 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  <Text
+                    style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 10 }}
+                  >
+                    Tap to toggle. Select to configure periods and color.
+                    Overlay is supported on MA, EMA, SMA, BBI, BOLL, SAR.
+                  </Text>
+                  {/* Grid of built-ins */}
+                  <View style={styles.timeframeGrid}>
+                    {BUILTIN_INDICATORS.map((ind) => {
+                      const selected = isSelectedIndicator(ind.name);
+                      return (
+                        <Pressable
+                          key={ind.name}
+                          onPress={() => toggleIndicator(ind.name)}
+                          style={[
+                            styles.timeframeButton,
+                            selected && styles.timeframeButtonActive,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.timeframeButtonText,
+                              selected && styles.timeframeButtonTextActive,
+                            ]}
+                          >
+                            {ind.name}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </ScrollView>
               </Pressable>
             </Animated.View>

@@ -43,6 +43,16 @@ interface Props {
   }>;
   // Optional: simpler custom series (will be converted to OHLC with equal values)
   customData?: Array<{ time: number; value: number }>;
+  // New: dynamic indicators configuration
+  indicators?: IndicatorConfig[];
+}
+
+export interface IndicatorConfig {
+  id?: string;
+  name: string; // e.g., 'MA', 'EMA', 'MACD', 'RSI'
+  overlay?: boolean; // true to draw on candle pane when compatible
+  calcParams?: any; // e.g., [5,10,30,60]
+  styles?: any; // pass-through style object to klinecharts
 }
 
 export default function SimpleKLineChart({
@@ -63,6 +73,7 @@ export default function SimpleKLineChart({
   levels,
   customBars,
   customData,
+  indicators = [],
 }: Props) {
   const webRef = useRef<WebView>(null);
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
@@ -88,6 +99,22 @@ export default function SimpleKLineChart({
       return "0";
     }
   }, [customBars, customData]);
+
+  // Create a compact hash key for indicators so changes force a refresh
+  const indicatorsKey = useMemo(() => {
+    try {
+      if (!indicators || indicators.length === 0) return "none";
+      const norm = indicators.map((i) => ({
+        n: String(i.name || ""),
+        o: !!i.overlay,
+        p: i.calcParams,
+        s: i.styles,
+      }));
+      return JSON.stringify(norm);
+    } catch (_) {
+      return "err";
+    }
+  }, [indicators]);
 
   const html = useMemo(() => {
     const safeSymbol = (symbol || "AAPL").toUpperCase();
@@ -147,6 +174,7 @@ export default function SimpleKLineChart({
             };
           })
         )};
+        var INDICATORS = ${JSON.stringify(indicators || [])};
 
         function mapPeriod(tf){
           try {
@@ -316,6 +344,7 @@ export default function SimpleKLineChart({
             try {
               post({ debug: 'Chart init', symbol: SYMBOL, timeframe: TF, hasCustomBars: (CUSTOM_BARS||[]).length, hasCustomData: (CUSTOM_DATA||[]).length });
             } catch(_){ }
+            // Default toggles
             if (SHOW_MA) { try { chart.createIndicator && chart.createIndicator('MA', false, { id: 'candle_pane' }); } catch(_){} }
             if (SHOW_VOL) { try { chart.createIndicator && chart.createIndicator('VOL'); } catch(_){} }
             applyChartType(chart, CHART_TYPE);
@@ -616,6 +645,44 @@ export default function SimpleKLineChart({
               } catch(e){ post({ warn: 'applyLevels failed', message: String(e && e.message || e) }); }
             }
 
+            // Indicator creation helpers
+            function createIndicatorSafe(cfg){
+              try {
+                if (!cfg || !cfg.name) return;
+                var nm = String(cfg.name).toUpperCase();
+                var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA'];
+                var wantsOverlay = !!cfg.overlay || overlayCompat.indexOf(nm) >= 0;
+                var options = {};
+                if (wantsOverlay) { options.id = 'candle_pane'; }
+                if (cfg.styles) { options.styles = cfg.styles; }
+                if (cfg.calcParams) { options.calcParams = cfg.calcParams; }
+
+                var created = null;
+                try {
+                  if (typeof chart.createIndicator === 'function') {
+                    // Try signature: (name, isStack, options)
+                    created = chart.createIndicator(nm, false, options);
+                  }
+                } catch(e1) {
+                  try {
+                    // Try alternate signature: ({ name, id, styles, calcParams })
+                    created = chart.createIndicator(Object.assign({ name: nm }, options));
+                  } catch(e2) {
+                    post({ warn: 'createIndicator failed', name: nm, message: String((e2 && e2.message) || e2) });
+                  }
+                }
+                return created;
+              } catch(err) {
+                post({ warn: 'createIndicatorSafe exception', message: String(err && err.message || err) });
+              }
+            }
+
+            try {
+              if (Array.isArray(INDICATORS)) {
+                INDICATORS.forEach(function(ic){ createIndicatorSafe(ic); });
+              }
+            } catch(_) {}
+
             window.__SIMPLE_KLINE__ = {
               setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} },
               setLevels: function(lvls){ try { applyLevels(lvls); } catch(_){} },
@@ -647,13 +714,14 @@ export default function SimpleKLineChart({
     levels,
     customBars,
     customData,
+    indicatorsKey,
   ]);
 
   return (
     <View style={[styles.container, { height }]}>
       <WebView
         ref={webRef}
-        key={`${symbol}-${timeframe}-${chartType}-${dataKey}`}
+        key={`${symbol}-${timeframe}-${chartType}-${dataKey}-${indicatorsKey}`}
         originWhitelist={["*"]}
         source={{ html }}
         style={{ height, width: "100%" }}
