@@ -54,14 +54,17 @@ export default function IndicatorConfigScreen() {
   // Update indicator state when the screen regains focus (no polling to avoid freezes)
   useEffect(() => {
     const updateIndicator = () => {
-      const currentIndicator = getCurrentIndicator();
-      setIndicator(currentIndicator);
+      // Only update on initial focus, not when modal is open
+      if (!showLineStyleModal) {
+        const currentIndicator = getCurrentIndicator();
+        setIndicator(currentIndicator);
+      }
     };
     const unsubscribe = navigation.addListener("focus", updateIndicator);
     return () => {
       unsubscribe();
     };
-  }, [getCurrentIndicator, navigation]);
+  }, [getCurrentIndicator, navigation, showLineStyleModal]);
 
   const openLineStyleEditor = (index: number) => {
     setLineStyleEditIndex(index);
@@ -73,8 +76,10 @@ export default function IndicatorConfigScreen() {
   };
 
   const handleUpdateColor = (hex: string) => {
+    // Update parent state first
     onUpdateIndicatorLine(indicatorName, lineStyleEditIndex, { color: hex });
-    // Immediate local UI sync
+
+    // Update local state immediately for UI responsiveness
     setIndicator((prev) => {
       if (!prev) return prev;
       const lines = Array.isArray((prev.styles as any)?.lines)
@@ -91,7 +96,10 @@ export default function IndicatorConfigScreen() {
   };
 
   const handleUpdateThickness = (size: number) => {
+    // Update parent state first
     onUpdateIndicatorLine(indicatorName, lineStyleEditIndex, { size });
+
+    // Update local state immediately for UI responsiveness
     setIndicator((prev) => {
       if (!prev) return prev;
       const lines = Array.isArray((prev.styles as any)?.lines)
@@ -108,7 +116,7 @@ export default function IndicatorConfigScreen() {
   };
 
   const handleUpdateStyle = (style: string) => {
-    onUpdateIndicatorLine(indicatorName, lineStyleEditIndex, { style });
+    // Update local state first for immediate UI feedback
     setIndicator((prev) => {
       if (!prev) return prev;
       const lines = Array.isArray((prev.styles as any)?.lines)
@@ -122,6 +130,9 @@ export default function IndicatorConfigScreen() {
       lines[lineStyleEditIndex] = { ...current, style };
       return { ...prev, styles: { ...(prev.styles as any), lines } } as any;
     });
+
+    // Update parent state after local state
+    onUpdateIndicatorLine(indicatorName, lineStyleEditIndex, { style });
   };
 
   // Local helpers for immediate add/remove UI updates
@@ -230,6 +241,7 @@ export default function IndicatorConfigScreen() {
                   size: 1,
                   style: "solid",
                 };
+
                 const lineTitle = `${Number(period)}`;
                 const renderRightActions = () => (
                   <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -262,7 +274,7 @@ export default function IndicatorConfigScreen() {
                     ref={(r: any) => {
                       if (r) rowRefs.current[idx] = r;
                     }}
-                    key={`line-${idx}`}
+                    key={`line-${idx}-${current.style}-${current.color}-${current.size}`}
                     renderRightActions={renderRightActions}
                     rightThreshold={40}
                   >
@@ -312,15 +324,59 @@ export default function IndicatorConfigScreen() {
                             borderColor: "#333",
                           }}
                         />
-                        <View
-                          style={{
-                            width: 40,
-                            borderBottomWidth: current.size,
-                            borderBottomColor: current.color,
-                            borderStyle: current.style as any,
-                            marginRight: 8,
-                          }}
-                        />
+                        {current.style === "solid" ? (
+                          <View
+                            style={{
+                              width: 40,
+                              height: current.size,
+                              backgroundColor: current.color,
+                              borderRadius: current.size / 2,
+                              marginRight: 8,
+                            }}
+                          />
+                        ) : current.style === "dashed" ? (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              width: 40,
+                              marginRight: 8,
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            {Array.from({ length: 4 }, (_, i) => (
+                              <View
+                                key={i}
+                                style={{
+                                  width: 6,
+                                  height: current.size,
+                                  backgroundColor: current.color,
+                                  borderRadius: current.size / 2,
+                                }}
+                              />
+                            ))}
+                          </View>
+                        ) : (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              width: 40,
+                              marginRight: 8,
+                              justifyContent: "space-around",
+                            }}
+                          >
+                            {Array.from({ length: 5 }, (_, i) => (
+                              <View
+                                key={i}
+                                style={{
+                                  width: current.size,
+                                  height: current.size,
+                                  backgroundColor: current.color,
+                                  borderRadius: current.size / 2,
+                                }}
+                              />
+                            ))}
+                          </View>
+                        )}
                         <Ionicons
                           name="chevron-forward"
                           size={18}
@@ -374,19 +430,77 @@ export default function IndicatorConfigScreen() {
                       borderColor: "#333",
                     }}
                   />
-                  <View
-                    style={{
-                      width: 40,
-                      borderBottomWidth:
-                        (indicator.styles as any)?.lines?.[0]?.size || 1,
-                      borderBottomColor:
-                        (indicator.styles as any)?.lines?.[0]?.color ||
-                        "#00D4AA",
-                      borderStyle: (((indicator.styles as any)?.lines?.[0]
-                        ?.style as any) || "solid") as any,
-                      marginRight: 8,
-                    }}
-                  />
+                  {((indicator.styles as any)?.lines?.[0]?.style || "solid") ===
+                  "solid" ? (
+                    <View
+                      style={{
+                        width: 40,
+                        height:
+                          (indicator.styles as any)?.lines?.[0]?.size || 1,
+                        backgroundColor:
+                          (indicator.styles as any)?.lines?.[0]?.color ||
+                          "#00D4AA",
+                        borderRadius:
+                          ((indicator.styles as any)?.lines?.[0]?.size || 1) /
+                          2,
+                        marginRight: 8,
+                      }}
+                    />
+                  ) : ((indicator.styles as any)?.lines?.[0]?.style ||
+                      "solid") === "dashed" ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        width: 40,
+                        marginRight: 8,
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      {Array.from({ length: 4 }, (_, i) => (
+                        <View
+                          key={i}
+                          style={{
+                            width: 6,
+                            height:
+                              (indicator.styles as any)?.lines?.[0]?.size || 1,
+                            backgroundColor:
+                              (indicator.styles as any)?.lines?.[0]?.color ||
+                              "#00D4AA",
+                            borderRadius:
+                              ((indicator.styles as any)?.lines?.[0]?.size ||
+                                1) / 2,
+                          }}
+                        />
+                      ))}
+                    </View>
+                  ) : (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        width: 40,
+                        marginRight: 8,
+                        justifyContent: "space-around",
+                      }}
+                    >
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <View
+                          key={i}
+                          style={{
+                            width:
+                              (indicator.styles as any)?.lines?.[0]?.size || 1,
+                            height:
+                              (indicator.styles as any)?.lines?.[0]?.size || 1,
+                            backgroundColor:
+                              (indicator.styles as any)?.lines?.[0]?.color ||
+                              "#00D4AA",
+                            borderRadius:
+                              ((indicator.styles as any)?.lines?.[0]?.size ||
+                                1) / 2,
+                          }}
+                        />
+                      ))}
+                    </View>
+                  )}
                   <Ionicons name="chevron-forward" size={18} color="#888" />
                 </View>
               </Pressable>

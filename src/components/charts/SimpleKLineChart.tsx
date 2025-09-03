@@ -704,7 +704,35 @@ export default function SimpleKLineChart({
                 var wantsOverlay = !!cfg.overlay || overlayCompat.indexOf(nm) >= 0;
                 var options = {};
                 if (wantsOverlay) { options.id = 'candle_pane'; }
-                if (cfg.styles) { options.styles = cfg.styles; }
+                
+                // Process styles to handle line styles properly
+                if (cfg.styles && cfg.styles.lines) {
+                  var processedStyles = { lines: [] };
+                  cfg.styles.lines.forEach(function(line, index) {
+                    var lineStyle = {
+                      color: line.color || '#00D4AA',
+                      size: line.size || 1,
+                      style: line.style || 'solid'
+                    };
+                    
+                    // Convert style to chart library format
+                    if (line.style === 'dashed') {
+                      lineStyle.style = 'dashed';
+                      lineStyle.dashedValue = [5, 3]; // dash pattern
+                    } else if (line.style === 'dotted') {
+                      lineStyle.style = 'dashed';
+                      lineStyle.dashedValue = [1, 2]; // dot pattern
+                    } else {
+                      lineStyle.style = 'solid';
+                    }
+                    
+                    processedStyles.lines.push(lineStyle);
+                  });
+                  options.styles = processedStyles;
+                } else if (cfg.styles) {
+                  options.styles = cfg.styles;
+                }
+                
                 if (cfg.calcParams) { options.calcParams = cfg.calcParams; }
 
                 var created = null;
