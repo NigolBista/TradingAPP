@@ -37,7 +37,11 @@ import { StrategyComplexity } from "../logic/types";
 import { STRATEGY_COMPLEXITY_CONFIGS } from "../logic/strategyComplexity";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { getUpcomingFedEvents } from "../services/federalReserve";
-import { fetchCandles } from "../services/marketProviders";
+import {
+  fetchCandles,
+  fetchCandlesForTimeframe,
+  type Candle,
+} from "../services/marketProviders";
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -156,6 +160,10 @@ export default function ChartFullScreen() {
   const [currentTradePlan, setCurrentTradePlan] = useState<any | undefined>(
     initialTradePlan
   );
+  const [showMA, setShowMA] = useState<boolean>(true);
+  const [showVolume, setShowVolume] = useState<boolean>(true);
+  const [indicatorsExpanded, setIndicatorsExpanded] = useState<boolean>(false);
+  const [lastCandle, setLastCandle] = useState<Candle | null>(null);
   const [aiMeta, setAiMeta] = useState<
     | undefined
     | {
@@ -248,8 +256,28 @@ export default function ChartFullScreen() {
   const [complexityBottomSheetAnim] = useState(new Animated.Value(0));
   const [selectedComplexity, setSelectedComplexity] =
     useState<StrategyComplexity>(profile.strategyComplexity || "advanced");
+  // Reasoning bottom sheet state
+  const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
+    useState<boolean>(false);
+  const [reasoningBottomSheetAnim] = useState(new Animated.Value(0));
 
-  const chartHeight = Math.max(0, height - insets.top - insets.bottom - 60); // Account for header
+  const headerHeight = 60;
+  const ohlcRowHeight = 24;
+  const indicatorBarHeight = indicatorsExpanded ? 88 : 28;
+  const timeframeRowHeight = 48;
+  const bottomNavHeight = 56;
+  const chartHeight = Math.max(
+    120,
+    height -
+      insets.top -
+      insets.bottom -
+      headerHeight -
+      ohlcRowHeight -
+      indicatorBarHeight -
+      timeframeRowHeight -
+      bottomNavHeight -
+      8
+  );
 
   useEffect(() => {
     loadStockName();
@@ -680,6 +708,38 @@ export default function ChartFullScreen() {
     // Immediately fetch data for the new timeframe using smart candle manager
   }
 
+  // Fetch last candle for OHLCV row when symbol or timeframe changes
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const candles = await fetchCandlesForTimeframe(symbol, extendedTf, {
+          includeExtendedHours: true,
+        });
+        if (!cancelled && candles && candles.length > 0) {
+          setLastCandle(candles[candles.length - 1]);
+        }
+      } catch (e) {
+        if (!cancelled) setLastCandle(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [symbol, extendedTf]);
+
+  function formatPrice(n?: number) {
+    if (typeof n !== "number" || !Number.isFinite(n)) return "-";
+    return `$${n.toFixed(2)}`;
+  }
+  function formatVolume(n?: number) {
+    if (typeof n !== "number" || !Number.isFinite(n)) return "-";
+    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(2)}K`;
+    return String(n);
+  }
+
   // Simulate streaming text output
   function simulateStreamingText(fullText: string) {
     setIsStreaming(true);
@@ -725,8 +785,54 @@ export default function ChartFullScreen() {
         <View style={{ width: 40 }} />
       </View>
 
+      {/* OHLCV Row */}
+      <View
+        style={{
+          paddingHorizontal: 12,
+          paddingVertical: 6,
+          borderBottomWidth: 1,
+          borderBottomColor: "#1f2937",
+          backgroundColor: "#0a0a0a",
+        }}
+      >
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <View style={{ flexDirection: "row", gap: 14 }}>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              O{" "}
+              <Text style={{ color: "#10B981" }}>
+                {formatPrice(lastCandle?.open)}
+              </Text>
+            </Text>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              H{" "}
+              <Text style={{ color: "#10B981" }}>
+                {formatPrice(lastCandle?.high)}
+              </Text>
+            </Text>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              L{" "}
+              <Text style={{ color: "#EF4444" }}>
+                {formatPrice(lastCandle?.low)}
+              </Text>
+            </Text>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              C{" "}
+              <Text style={{ color: "#E5E7EB" }}>
+                {formatPrice(lastCandle?.close)}
+              </Text>
+            </Text>
+            <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
+              V{" "}
+              <Text style={{ color: "#E5E7EB" }}>
+                {formatVolume(lastCandle?.volume)}
+              </Text>
+            </Text>
+          </View>
+        </ScrollView>
+      </View>
+
       {/* Chart */}
-      <View style={{ flex: 1 }}>
+      <View style={{ marginBottom: 8 }}>
         {/* Controls moved to Strategy Complexity bottom sheet */}
         <SimpleKLineChart
           symbol={symbol}
@@ -736,8 +842,8 @@ export default function ChartFullScreen() {
           chartType={
             chartType === "candlestick" ? "candle" : (chartType as any)
           }
-          showVolume={true}
-          showMA={true}
+          showVolume={showVolume}
+          showMA={showMA}
           showTopInfo={false}
           showPriceAxisText={true}
           showTimeAxisText={true}
@@ -757,295 +863,39 @@ export default function ChartFullScreen() {
               : undefined
           }
         />
+      </View>
 
-        {/* Strategy Complexity Button */}
-        <Pressable
-          onPress={showComplexityBottomSheetWithTab}
-          style={{
-            position: "absolute",
-            right: 16,
-            bottom: insets.bottom + 130,
-            backgroundColor: "rgba(0,212,170,0.9)",
-            borderRadius: 16,
-            paddingVertical: 8,
-            paddingHorizontal: 12,
-            flexDirection: "row",
-            alignItems: "center",
-            shadowColor: "#00D4AA",
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 0.6,
-            shadowRadius: 12,
-            elevation: 8,
-          }}
-          hitSlop={8}
+      {/* Timeframe Chips - below chart */}
+      <View style={styles.timeframeBar}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rangeSwitcherScroll}
         >
-          <Ionicons name="settings-outline" size={16} color="#fff" />
-          <Text
-            style={{
-              color: "#fff",
-              fontWeight: "600",
-              fontSize: 12,
-              marginLeft: 4,
-            }}
-          >
-            {selectedComplexity.charAt(0).toUpperCase() +
-              selectedComplexity.slice(1)}
-          </Text>
-        </Pressable>
-
-        <Pressable
-          onPress={handleAnalyzePress}
-          disabled={analyzing}
-          style={{
-            position: "absolute",
-            right: 16,
-            bottom: insets.bottom + 72,
-            backgroundColor: analyzing
-              ? "rgba(0,122,255,0.3)"
-              : "rgba(0,122,255,0.9)",
-            borderRadius: 20,
-            paddingVertical: 10,
-            paddingHorizontal: 14,
-            flexDirection: "row",
-            alignItems: "center",
-            shadowColor: "#007AFF",
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: analyzing ? 0.4 : 0.8,
-            shadowRadius: analyzing ? 12 : 16,
-            elevation: 12,
-          }}
-          hitSlop={10}
-        >
-          {analyzing ? (
-            <Text style={{ color: "#fff", fontWeight: "600" }}>Analyzing…</Text>
-          ) : (
-            <>
-              <Ionicons
-                name="analytics"
-                size={16}
-                color="#fff"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={{ color: "#fff", fontWeight: "600" }}>Analyze</Text>
-            </>
-          )}
-        </Pressable>
-        {showReasoning && (aiMeta || isStreaming || streamingText) && (
-          <View
-            style={{
-              position: "absolute",
-              left: 12,
-              right: 12,
-              bottom: insets.bottom + 64,
-              backgroundColor: "rgba(17,24,39,0.9)",
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.08)",
-              padding: 12,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
+          {pinned.map((tf) => (
+            <Pressable
+              key={tf}
+              onPress={() => handleTimeframeChange(tf)}
+              style={[styles.tfChip, extendedTf === tf && styles.tfChipActive]}
             >
-              <View style={{ flexDirection: "row", alignItems: "center" }}>
-                {/* Signal Type Pill */}
-                {aiMeta?.side && (
-                  <View
-                    style={{
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 12,
-                      backgroundColor:
-                        aiMeta.side === "long"
-                          ? "rgba(16, 185, 129, 0.2)"
-                          : "rgba(239, 68, 68, 0.2)",
-                      borderWidth: 1,
-                      borderColor:
-                        aiMeta.side === "long"
-                          ? "rgba(16, 185, 129, 0.3)"
-                          : "rgba(239, 68, 68, 0.3)",
-                      marginRight: 8,
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: aiMeta.side === "long" ? "#10B981" : "#EF4444",
-                        fontSize: 11,
-                        fontWeight: "600",
-                      }}
-                    >
-                      {aiMeta.side === "long" ? "BUY" : "SHORT"}
-                    </Text>
-                  </View>
-                )}
-                <Text style={{ color: "#E5E7EB", fontWeight: "700" }}>
-                  {isStreaming && "●"}
-                </Text>
-              </View>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <Pressable
-                  onPress={() => (navigation as any).navigate("Chat")}
-                  style={{
-                    paddingHorizontal: 10,
-                    paddingVertical: 6,
-                    backgroundColor: "#111827",
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: "rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <Text
-                    style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}
-                  >
-                    Open in Chat
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => setShowReasoning(false)}
-                  style={{
-                    paddingHorizontal: 8,
-                    paddingVertical: 6,
-                    backgroundColor: "rgba(239, 68, 68, 0.2)",
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: "rgba(239, 68, 68, 0.3)",
-                  }}
-                >
-                  <Ionicons name="close" size={14} color="#EF4444" />
-                </Pressable>
-              </View>
-            </View>
-            {aiMeta && (
-              <View>
-                <Text style={{ color: "#9CA3AF", fontSize: 12, marginTop: 4 }}>
-                  {aiMeta.strategyChosen || "-"} ·{" "}
-                  {Math.round(aiMeta.confidence || 0)}% confidence
-                </Text>
-                {/* Show entry/exit info when loaded from existing strategy */}
-                {initialAnalysisContext && currentTradePlan && (
-                  <Text
-                    style={{ color: "#10B981", fontSize: 11, marginTop: 2 }}
-                  >
-                    Entry: ${currentTradePlan.entry?.toFixed(2)} · Stop: $
-                    {currentTradePlan.stop?.toFixed(2)} ·
-                    {currentTradePlan.targets &&
-                      currentTradePlan.targets.length > 0 &&
-                      `Target: $${currentTradePlan.targets[0].toFixed(2)}`}
-                  </Text>
-                )}
-              </View>
-            )}
-            {/* Streaming text display */}
-            {(isStreaming || streamingText) && (
-              <View style={{ marginTop: 8 }}>
-                <Text
-                  style={{ color: "#D1D5DB", fontSize: 12, lineHeight: 18 }}
-                >
-                  {streamingText}
-                  {isStreaming && <Text style={{ color: "#00D4AA" }}>|</Text>}
-                </Text>
-              </View>
-            )}
-            {/* Static reasoning points when not streaming */}
-            {!isStreaming &&
-              !streamingText &&
-              aiMeta?.why &&
-              aiMeta.why.length > 0 && (
-                <View style={{ marginTop: 8 }}>
-                  {aiMeta.why.slice(0, 3).map((w, i) => (
-                    <Text key={i} style={{ color: "#D1D5DB", fontSize: 12 }}>
-                      • {w}
-                    </Text>
-                  ))}
-                </View>
-              )}
-          </View>
-        )}
-
-        {/* Show Reasoning Button - appears when reasoning is hidden but exists */}
-        {!showReasoning && hasExistingReasoning && aiMeta && (
-          <Pressable
-            onPress={() => setShowReasoning(true)}
-            style={{
-              position: "absolute",
-              left: 16,
-              bottom: insets.bottom + 72,
-              backgroundColor: "transparent",
-              borderRadius: 20,
-              paddingVertical: 8,
-              paddingHorizontal: 12,
-              flexDirection: "row",
-              alignItems: "center",
-              borderWidth: 1.5,
-              borderColor: "rgba(255,255,255,0.6)",
-            }}
-            hitSlop={10}
-          >
-            <Ionicons
-              name="bulb"
-              size={16}
-              color="rgba(255,255,255,0.8)"
-              style={{ marginRight: 6 }}
-            />
-            <Text
-              style={{
-                color: "rgba(255,255,255,0.8)",
-                fontWeight: "600",
-                fontSize: 12,
-              }}
-            >
-              Reasoning
-            </Text>
-          </Pressable>
-        )}
-
-        {/* Unified Chart Controls */}
-        <View
-          style={[
-            styles.rangeSwitcherContainer,
-            { bottom: insets.bottom + 12 },
-          ]}
-        >
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.rangeSwitcherScroll}
-          >
-            {pinned.map((tf) => (
-              <Pressable
-                key={tf}
-                onPress={() => handleTimeframeChange(tf)}
+              <Text
                 style={[
-                  styles.tfChip,
-                  extendedTf === tf && styles.tfChipActive,
+                  styles.tfChipText,
+                  extendedTf === tf && styles.tfChipTextActive,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.tfChipText,
-                    extendedTf === tf && styles.tfChipTextActive,
-                  ]}
-                >
-                  {tf}
-                </Text>
-              </Pressable>
-            ))}
-
-            {/* Unified Settings Button */}
-            <Pressable
-              onPress={showUnifiedBottomSheetWithTab}
-              style={[styles.tfChip, styles.tfMoreChip]}
-              hitSlop={10}
-            >
-              <Ionicons name="options" size={16} color="#fff" />
+                {tf}
+              </Text>
             </Pressable>
-          </ScrollView>
-        </View>
-        {/* Removed left quick row to avoid duplicate controls; modal picker handles timeframe switching */}
+          ))}
+          <Pressable
+            onPress={showUnifiedBottomSheetWithTab}
+            style={[styles.tfChip, styles.tfMoreChip]}
+            hitSlop={10}
+          >
+            <Ionicons name="options" size={16} color="#fff" />
+          </Pressable>
+        </ScrollView>
       </View>
 
       {/* Unified Bottom Sheet */}
@@ -1285,6 +1135,256 @@ export default function ChartFullScreen() {
           </Pressable>
         </Modal>
       )}
+
+      {/* Reasoning Bottom Sheet */}
+      {showReasoningBottomSheet && (
+        <Modal
+          visible={showReasoningBottomSheet}
+          transparent
+          animationType="none"
+          onRequestClose={() => {
+            Animated.timing(reasoningBottomSheetAnim, {
+              toValue: 0,
+              duration: 300,
+              useNativeDriver: false,
+            }).start(() => setShowReasoningBottomSheet(false));
+          }}
+        >
+          <Pressable
+            style={{
+              flex: 1,
+              backgroundColor: "rgba(0,0,0,0.5)",
+              justifyContent: "flex-end",
+            }}
+            onPress={() => {
+              Animated.timing(reasoningBottomSheetAnim, {
+                toValue: 0,
+                duration: 300,
+                useNativeDriver: false,
+              }).start(() => setShowReasoningBottomSheet(false));
+            }}
+          >
+            <Animated.View
+              style={{
+                backgroundColor: "#1a1a1a",
+                borderTopLeftRadius: 20,
+                borderTopRightRadius: 20,
+                paddingTop: 20,
+                paddingBottom: 40,
+                maxHeight: Dimensions.get("window").height * 0.8,
+                transform: [
+                  {
+                    translateY: reasoningBottomSheetAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [400, 0],
+                    }),
+                  },
+                ],
+              }}
+            >
+              <Pressable>
+                {/* Handle Bar */}
+                <View
+                  style={{
+                    width: 40,
+                    height: 4,
+                    backgroundColor: "#666",
+                    borderRadius: 2,
+                    alignSelf: "center",
+                    marginBottom: 20,
+                  }}
+                />
+
+                {/* Header */}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    paddingHorizontal: 20,
+                    paddingBottom: 12,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "700",
+                      color: "#fff",
+                    }}
+                  >
+                    Reasoning
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      Animated.timing(reasoningBottomSheetAnim, {
+                        toValue: 0,
+                        duration: 300,
+                        useNativeDriver: false,
+                      }).start(() => setShowReasoningBottomSheet(false));
+                    }}
+                    style={{ padding: 4 }}
+                  >
+                    <Ionicons name="close" size={24} color="#fff" />
+                  </Pressable>
+                </View>
+
+                <ScrollView
+                  style={{ paddingHorizontal: 20 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {isStreaming ? (
+                    <Text
+                      style={{
+                        color: "#9CA3AF",
+                        fontSize: 12,
+                        marginBottom: 12,
+                      }}
+                    >
+                      Streaming reasoning…
+                    </Text>
+                  ) : null}
+                  <Text
+                    style={{ color: "#E5E7EB", fontSize: 14, lineHeight: 20 }}
+                  >
+                    {streamingText && streamingText.length > 0
+                      ? streamingText
+                      : "No reasoning available yet. Run Analyze to generate insights."}
+                  </Text>
+                </ScrollView>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
+
+      {/* Bottom Navigation - Strategy, Analyze, Reasoning */}
+      <View
+        style={{
+          borderTopWidth: 1,
+          borderTopColor: "#2a2a2a",
+          backgroundColor: "#0a0a0a",
+          paddingTop: 8,
+          paddingBottom: Math.max(12, insets.bottom),
+          paddingHorizontal: 12,
+        }}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          {/* Strategy Complexity */}
+          <Pressable
+            onPress={showComplexityBottomSheetWithTab}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderRadius: 12,
+              backgroundColor: "transparent",
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.08)",
+              minWidth: 110,
+            }}
+            hitSlop={8}
+          >
+            <Ionicons name="settings-outline" size={16} color="#fff" />
+            <Text
+              style={{
+                color: "#fff",
+                fontWeight: "600",
+                fontSize: 12,
+                marginLeft: 6,
+              }}
+              numberOfLines={1}
+            >
+              {selectedComplexity.charAt(0).toUpperCase() +
+                selectedComplexity.slice(1)}
+            </Text>
+          </Pressable>
+
+          {/* Analyze (center) */}
+          <Pressable
+            onPress={handleAnalyzePress}
+            disabled={analyzing}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              paddingVertical: 12,
+              paddingHorizontal: 20,
+              borderRadius: 12,
+              backgroundColor: analyzing
+                ? "rgba(0,122,255,0.3)"
+                : "rgba(0,122,255,0.9)",
+              shadowColor: "#007AFF",
+              shadowOffset: { width: 0, height: 0 },
+              shadowOpacity: analyzing ? 0.4 : 0.8,
+              shadowRadius: analyzing ? 8 : 12,
+              minWidth: 140,
+            }}
+            hitSlop={10}
+          >
+            {analyzing ? (
+              <Text style={{ color: "#fff", fontWeight: "700" }}>
+                Analyzing…
+              </Text>
+            ) : (
+              <>
+                <Ionicons
+                  name="analytics"
+                  size={16}
+                  color="#fff"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={{ color: "#fff", fontWeight: "700" }}>
+                  Analyze
+                </Text>
+              </>
+            )}
+          </Pressable>
+
+          {/* Reasoning */}
+          <Pressable
+            onPress={() => {
+              if (!aiMeta && !isStreaming && !streamingText) return;
+              setShowReasoningBottomSheet(true);
+              Animated.timing(reasoningBottomSheetAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: false,
+              }).start();
+            }}
+            disabled={!aiMeta && !isStreaming && !streamingText}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingVertical: 10,
+              paddingHorizontal: 12,
+              borderRadius: 12,
+              backgroundColor: "transparent",
+              borderWidth: 1,
+              borderColor: "rgba(255,255,255,0.08)",
+              opacity: !aiMeta && !isStreaming && !streamingText ? 0.6 : 1,
+              minWidth: 110,
+            }}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="bulb"
+              size={16}
+              color="rgba(255,255,255,0.9)"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>
+              Reasoning
+            </Text>
+          </Pressable>
+        </View>
+      </View>
 
       {/* Strategy Complexity Bottom Sheet */}
       {showComplexityBottomSheet && (
@@ -1744,6 +1844,13 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "500",
     color: "#888",
+  },
+  timeframeBar: {
+    paddingHorizontal: 6,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#1f2937",
+    backgroundColor: "#0a0a0a",
   },
   rangeSwitcherContainer: {
     position: "absolute",

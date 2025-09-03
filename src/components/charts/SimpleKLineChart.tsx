@@ -167,6 +167,13 @@ export default function SimpleKLineChart({
                   style: 'dashed',
                   dashedValue: [2, 2]
                 }
+              },
+              // Hide/darken the pane separator line between main and volume panes
+              separator: {
+                size: 1,
+                color: ${JSON.stringify(
+                  theme === "dark" ? "#0a0a0a" : "#ffffff"
+                )}
               }
             };
             if (!SHOW_TOP_INFO) {
