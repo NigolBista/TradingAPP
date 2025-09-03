@@ -32,7 +32,6 @@ import ReasoningBottomSheet from "./ChartFullScreen/ReasoningBottomSheet";
 import IndicatorsSheet from "./ChartFullScreen/IndicatorsSheet";
 import IndicatorConfigModal from "./ChartFullScreen/IndicatorConfigModal";
 import LineStyleModal from "./ChartFullScreen/LineStyleModal";
-import CustomRRModal from "./ChartFullScreen/CustomRRModal";
 // Indicator helpers
 import {
   toggleIndicatorInList,
@@ -54,7 +53,6 @@ import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { useUserStore } from "../store/userStore";
 import { StrategyComplexity } from "../logic/types";
-import { STRATEGY_COMPLEXITY_CONFIGS } from "../logic/strategyComplexity";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { getUpcomingFedEvents } from "../services/federalReserve";
 import {
@@ -77,12 +75,11 @@ export default function ChartFullScreen() {
   const [chartType, setChartType] = useState<ChartType>(
     (route.params?.chartType as ChartType) || "candlestick"
   );
-  const timeframe: string = route.params?.timeframe || "1D";
+
   const initialTimeframe: string | undefined = route.params?.initialTimeframe;
   const isDayUp: boolean | undefined = route.params?.isDayUp;
   const [dayUp, setDayUp] = useState<boolean | undefined>(isDayUp);
   const initialDataParam: any[] | undefined = route.params?.initialData;
-  const levels = route.params?.levels;
   const initialTradePlan: any | undefined = route.params?.tradePlan;
   const initialAiMeta:
     | undefined
@@ -685,204 +682,8 @@ export default function ChartFullScreen() {
     // Immediately fetch data for the new timeframe using smart candle manager
   }
 
-  // Indicator helpers
-  const BUILTIN_INDICATORS: Array<{
-    name: string;
-    defaultParams?: any;
-    compatOverlay?: boolean;
-    defaultColor?: string;
-  }> = [
-    {
-      name: "MA",
-      defaultParams: [5, 10, 30, 60],
-      compatOverlay: true,
-      defaultColor: "#3B82F6",
-    },
-    {
-      name: "EMA",
-      defaultParams: [6, 12, 20],
-      compatOverlay: true,
-      defaultColor: "#22D3EE",
-    },
-    {
-      name: "SMA",
-      defaultParams: [12, 2],
-      compatOverlay: true,
-      defaultColor: "#EAB308",
-    },
-    {
-      name: "BBI",
-      defaultParams: [3, 6, 12, 24],
-      compatOverlay: true,
-      defaultColor: "#A78BFA",
-    },
-    {
-      name: "BOLL",
-      defaultParams: [20, 2],
-      compatOverlay: true,
-      defaultColor: "#F59E0B",
-    },
-    {
-      name: "VOL",
-      defaultParams: [5, 10, 20],
-      compatOverlay: false,
-      defaultColor: "#6EE7B7",
-    },
-    {
-      name: "MACD",
-      defaultParams: [12, 26, 9],
-      compatOverlay: false,
-      defaultColor: "#60A5FA",
-    },
-    {
-      name: "KDJ",
-      defaultParams: [9, 3, 3],
-      compatOverlay: false,
-      defaultColor: "#34D399",
-    },
-    {
-      name: "RSI",
-      defaultParams: [6, 12, 24],
-      compatOverlay: false,
-      defaultColor: "#F472B6",
-    },
-    {
-      name: "SAR",
-      defaultParams: [2, 2, 20],
-      compatOverlay: true,
-      defaultColor: "#FB7185",
-    },
-    {
-      name: "OBV",
-      defaultParams: [30],
-      compatOverlay: false,
-      defaultColor: "#93C5FD",
-    },
-    {
-      name: "DMA",
-      defaultParams: [10, 50, 10],
-      compatOverlay: false,
-      defaultColor: "#67E8F9",
-    },
-    {
-      name: "TRIX",
-      defaultParams: [12, 20],
-      compatOverlay: false,
-      defaultColor: "#FDE047",
-    },
-    {
-      name: "BRAR",
-      defaultParams: [26],
-      compatOverlay: false,
-      defaultColor: "#FCA5A5",
-    },
-    {
-      name: "VR",
-      defaultParams: [24, 30],
-      compatOverlay: false,
-      defaultColor: "#A7F3D0",
-    },
-    {
-      name: "WR",
-      defaultParams: [6, 10, 14],
-      compatOverlay: false,
-      defaultColor: "#F9A8D4",
-    },
-    {
-      name: "MTM",
-      defaultParams: [6, 10],
-      compatOverlay: false,
-      defaultColor: "#C4B5FD",
-    },
-    {
-      name: "EMV",
-      defaultParams: [14, 9],
-      compatOverlay: false,
-      defaultColor: "#FDBA74",
-    },
-    {
-      name: "DMI",
-      defaultParams: [14, 6],
-      compatOverlay: false,
-      defaultColor: "#86EFAC",
-    },
-    {
-      name: "CR",
-      defaultParams: [26, 10, 20, 40, 60],
-      compatOverlay: false,
-      defaultColor: "#FDA4AF",
-    },
-    {
-      name: "PSY",
-      defaultParams: [12, 6],
-      compatOverlay: false,
-      defaultColor: "#FDE68A",
-    },
-    {
-      name: "AO",
-      defaultParams: [5, 34],
-      compatOverlay: false,
-      defaultColor: "#A5B4FC",
-    },
-    {
-      name: "ROC",
-      defaultParams: [12, 6],
-      compatOverlay: false,
-      defaultColor: "#FCA5A5",
-    },
-    { name: "PVT", compatOverlay: false, defaultColor: "#93C5FD" },
-    { name: "AVP", compatOverlay: false, defaultColor: "#FDE68A" },
-  ];
-
-  function buildDefaultLines(count: number, baseColor?: string) {
-    const palette = [
-      "#10B981",
-      "#3B82F6",
-      "#F59E0B",
-      "#EF4444",
-      "#A78BFA",
-      "#22D3EE",
-      "#F472B6",
-      "#FDE047",
-    ];
-    const out: any[] = [];
-    for (let i = 0; i < Math.max(1, count); i++) {
-      out.push({
-        color: i === 0 && baseColor ? baseColor : palette[i % palette.length],
-        size: 1,
-        style: "solid",
-      });
-    }
-    return out;
-  }
-
-  function getDefaultIndicator(name: string): IndicatorConfig {
-    const meta = BUILTIN_INDICATORS.find((i) => i.name === name);
-    const params = meta?.defaultParams;
-    const lines = Array.isArray(params)
-      ? buildDefaultLines(params.length, meta?.defaultColor)
-      : buildDefaultLines(1, meta?.defaultColor);
-    return {
-      id: `${name}-${Date.now()}`,
-      name,
-      overlay: !!meta?.compatOverlay,
-      calcParams: params,
-      styles: { lines },
-    };
-  }
-
-  function isSelectedIndicator(name: string): boolean {
-    return indicators.some((i) => i.name === name);
-  }
-
   function toggleIndicator(name: string) {
     setIndicators((prev) => toggleIndicatorInList(prev as any, name) as any);
-  }
-
-  function updateIndicator(name: string, updates: Partial<IndicatorConfig>) {
-    setIndicators((prev) =>
-      prev.map((i) => (i.name === name ? { ...i, ...updates } : i))
-    );
   }
 
   function updateIndicatorLine(
