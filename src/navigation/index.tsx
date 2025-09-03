@@ -34,6 +34,7 @@ import DecalpXScreen from "../screens/DecalpXScreen";
 import MarketOverviewPage from "../screens/MarketOverviewPage";
 import EarningsCalendarScreen from "../screens/EarningsCalendarScreen";
 import ChatScreen from "../screens/ChatScreen";
+import IndicatorConfigScreen from "../screens/IndicatorConfigScreen";
 import { useAuth } from "../providers/AuthProvider";
 import { useTheme } from "../providers/ThemeProvider";
 
@@ -186,6 +187,11 @@ export default function RootNavigation() {
           <RootStack.Screen
             name="Chat"
             component={ChatScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="IndicatorConfigScreen"
+            component={IndicatorConfigScreen}
             options={{ headerShown: false }}
           />
         </RootStack.Navigator>

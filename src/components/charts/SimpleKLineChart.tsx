@@ -76,6 +76,7 @@ export default function SimpleKLineChart({
   indicators = [],
 }: Props) {
   const webRef = useRef<WebView>(null);
+  const isReadyRef = useRef<boolean>(false);
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
 
@@ -646,6 +647,55 @@ export default function SimpleKLineChart({
             }
 
             // Indicator creation helpers
+            function clearAllIndicators(){
+              try {
+                post({ debug: 'Clearing all indicators' });
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                var ids = window.__SIMPLE_KLINE__.indicatorIds || [];
+                if (ids && ids.length && typeof chart.removeIndicator === 'function') {
+                  ids.forEach(function(id){
+                    try { 
+                      chart.removeIndicator(id); 
+                      post({ debug: 'Removed indicator by ID', id: id });
+                    } catch(_) {}
+                  });
+                }
+                window.__SIMPLE_KLINE__.indicatorIds = [];
+                
+                // More aggressive fallback: try multiple removal methods
+                var commonNames = ['MA', 'EMA', 'SMA', 'BOLL', 'BBI', 'SAR', 'VOL', 'MACD', 'KDJ', 'RSI', 'BIAS', 'BRAR', 'CCI', 'CR', 'DMA', 'DMI', 'KD', 'PSY', 'TRIX', 'VR', 'WR', 'MTM', 'EMV', 'TEMA', 'TRIPLE_EMA'];
+                commonNames.forEach(function(name) {
+                  try { 
+                    chart.removeIndicator(name); 
+                    post({ debug: 'Removed indicator by name', name: name });
+                  } catch(_) {}
+                });
+                
+                // Try getIndicators and remove everything
+                try {
+                  if (typeof chart.getIndicators === 'function') {
+                    var remaining = chart.getIndicators() || [];
+                    post({ debug: 'Found remaining indicators', count: remaining.length });
+                    remaining.forEach(function(ind){
+                      try {
+                        if (ind && ind.id) {
+                          chart.removeIndicator(ind.id);
+                          post({ debug: 'Removed remaining indicator by ID', id: ind.id });
+                        } else if (ind && ind.name) {
+                          chart.removeIndicator(ind.name);
+                          post({ debug: 'Removed remaining indicator by name', name: ind.name });
+                        }
+                      } catch(_) {}
+                    });
+                  }
+                } catch(_) {}
+                
+                post({ debug: 'Indicator clearing completed' });
+              } catch(e) {
+                post({ warn: 'clearAllIndicators failed', message: String(e && e.message || e) });
+              }
+            }
+
             function createIndicatorSafe(cfg){
               try {
                 if (!cfg || !cfg.name) return;
@@ -671,6 +721,11 @@ export default function SimpleKLineChart({
                     post({ warn: 'createIndicator failed', name: nm, message: String((e2 && e2.message) || e2) });
                   }
                 }
+                try {
+                  if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                  window.__SIMPLE_KLINE__.indicatorIds = window.__SIMPLE_KLINE__.indicatorIds || [];
+                  if (created) { window.__SIMPLE_KLINE__.indicatorIds.push(created); }
+                } catch(_) {}
                 return created;
               } catch(err) {
                 post({ warn: 'createIndicatorSafe exception', message: String(err && err.message || err) });
@@ -678,6 +733,10 @@ export default function SimpleKLineChart({
             }
 
             try {
+              // Clear all existing indicators first
+              clearAllIndicators();
+              
+              // Then create the new set of indicators
               if (Array.isArray(INDICATORS)) {
                 INDICATORS.forEach(function(ic){ createIndicatorSafe(ic); });
               }
@@ -686,6 +745,14 @@ export default function SimpleKLineChart({
             window.__SIMPLE_KLINE__ = {
               setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} },
               setLevels: function(lvls){ try { applyLevels(lvls); } catch(_){} },
+              setIndicators: function(list){
+                try {
+                  clearAllIndicators();
+                  if (Array.isArray(list)) {
+                    list.forEach(function(ic){ createIndicatorSafe(ic); });
+                  }
+                } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); }
+              },
               levelOverlayIds: []
             };
 
@@ -733,6 +800,9 @@ export default function SimpleKLineChart({
         onMessage={(event) => {
           try {
             const data = JSON.parse(event.nativeEvent.data || "{}");
+            if (data && data.ready) {
+              isReadyRef.current = true;
+            }
             if (data.error) {
               console.warn("[SimpleKLineChart:error]", data);
             } else if (data.warn) {

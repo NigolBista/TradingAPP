@@ -30,8 +30,8 @@ import UnifiedBottomSheet from "./ChartFullScreen/UnifiedBottomSheet";
 import ComplexityBottomSheet from "./ChartFullScreen/ComplexityBottomSheet";
 import ReasoningBottomSheet from "./ChartFullScreen/ReasoningBottomSheet";
 import IndicatorsSheet from "./ChartFullScreen/IndicatorsSheet";
-import IndicatorConfigModal from "./ChartFullScreen/IndicatorConfigModal";
-import LineStyleModal from "./ChartFullScreen/LineStyleModal";
+// Removed IndicatorConfigModal - now using IndicatorConfigScreen
+// LineStyleModal now imported in IndicatorConfigScreen
 // Indicator helpers
 import {
   toggleIndicatorInList,
@@ -150,15 +150,8 @@ export default function ChartFullScreen() {
   const [showIndicatorsSheet, setShowIndicatorsSheet] = useState(false);
   // migrated animations handled in extracted components
   const [showIndicatorsAccordion, setShowIndicatorsAccordion] = useState(false);
-  const [showIndicatorConfigModal, setShowIndicatorConfigModal] =
-    useState<boolean>(false);
-  const [indicatorToEdit, setIndicatorToEdit] =
-    useState<IndicatorConfig | null>(null);
-  const [configSelectedIndex, setConfigSelectedIndex] = useState<number>(0);
-  const [newParamValue, setNewParamValue] = useState<number>(9);
-  // Sub-editor for per-line style (color/thickness/style)
-  const [showLineStyleModal, setShowLineStyleModal] = useState<boolean>(false);
-  const [lineStyleEditIndex, setLineStyleEditIndex] = useState<number>(0);
+  // Removed indicator config modal state - now using screen navigation
+  // Line style editing now handled in IndicatorConfigScreen
   const [lastCandle, setLastCandle] = useState<Candle | null>(null);
   const [aiMeta, setAiMeta] = useState<
     | undefined
@@ -702,32 +695,33 @@ export default function ChartFullScreen() {
     );
   }
 
-  function openLineStyleEditor(index: number) {
-    setLineStyleEditIndex(index);
-    setShowLineStyleModal(true);
-  }
-
-  function closeLineStyleEditor() {
-    setShowLineStyleModal(false);
-  }
+  // Line style editor functions removed - now handled in IndicatorConfigScreen
 
   function openIndicatorConfig(name: string) {
     const ind = indicators.find((i) => i.name === name) || null;
-    setIndicatorToEdit(ind);
+    if (!ind) return;
+
     try {
       const count = Array.isArray(ind?.calcParams)
         ? (ind!.calcParams as any[]).length
         : 1;
-      setConfigSelectedIndex(count > 0 ? 0 : 0);
-      setNewParamValue(count > 0 ? Number(ind?.calcParams?.[0] ?? 9) : 9);
-    } catch {}
-    setShowIndicatorConfigModal(true);
+      const paramValue = count > 0 ? Number(ind?.calcParams?.[0] ?? 9) : 9;
+
+      navigation.navigate("IndicatorConfigScreen" as any, {
+        indicatorName: name,
+        getCurrentIndicator: () =>
+          indicators.find((i) => i.name === name) || null,
+        newParamValue: paramValue,
+        onAddParam: addIndicatorParam,
+        onRemoveParam: removeIndicatorParam,
+        onUpdateIndicatorLine: updateIndicatorLine,
+      });
+    } catch (e) {
+      console.warn("Failed to open indicator config:", e);
+    }
   }
 
-  function closeIndicatorConfig() {
-    setShowIndicatorConfigModal(false);
-    setIndicatorToEdit(null);
-  }
+  // Removed closeIndicatorConfig - no longer needed with screen navigation
 
   function addIndicatorParam(name: string, value: number) {
     if (!Number.isFinite(value) || value <= 0) return;
@@ -737,15 +731,24 @@ export default function ChartFullScreen() {
         name,
         Math.floor(value)
       );
-      setConfigSelectedIndex(newIndex);
-      return list as any;
+      // Note: configSelectedIndex no longer needed with screen navigation
+      // Note: No need to update indicatorToEdit since we're using screen navigation
+      // Force shallow copy to change array reference for WebView key
+      return list.slice() as any;
     });
   }
 
   function removeIndicatorParam(name: string, value: number) {
-    setIndicators(
-      (prev) => removeIndicatorParamInList(prev as any, name, value) as any
-    );
+    setIndicators((prev) => {
+      const updated = removeIndicatorParamInList(
+        prev as any,
+        name,
+        value
+      ) as any;
+      // Note: No need to update indicatorToEdit since we're using screen navigation
+      // Force shallow copy to change array reference for WebView key
+      return updated.slice();
+    });
   }
 
   const openIndicatorsSheet = () => {
@@ -836,41 +839,7 @@ export default function ChartFullScreen() {
         />
       )}
 
-      {/* Indicator Config Modal */}
-      <IndicatorConfigModal
-        visible={showIndicatorConfigModal && !!indicatorToEdit}
-        onClose={closeIndicatorConfig}
-        indicator={indicatorToEdit}
-        newParamValue={newParamValue}
-        setNewParamValue={setNewParamValue}
-        onAddParam={addIndicatorParam}
-        onOpenLineStyleEditor={openLineStyleEditor}
-      />
-      {/* Line Style Sub-Modal */}
-      <LineStyleModal
-        visible={showLineStyleModal && !!indicatorToEdit}
-        onClose={closeLineStyleEditor}
-        title={`${indicatorToEdit?.name || ""}${
-          Array.isArray(indicatorToEdit?.calcParams)
-            ? String(indicatorToEdit?.calcParams?.[lineStyleEditIndex] ?? "")
-            : ""
-        }`}
-        onUpdateColor={(hex) =>
-          updateIndicatorLine(indicatorToEdit!.name, lineStyleEditIndex, {
-            color: hex,
-          })
-        }
-        onUpdateThickness={(n) =>
-          updateIndicatorLine(indicatorToEdit!.name, lineStyleEditIndex, {
-            size: n,
-          })
-        }
-        onUpdateStyle={(s) =>
-          updateIndicatorLine(indicatorToEdit!.name, lineStyleEditIndex, {
-            style: s,
-          })
-        }
-      />
+      {/* Indicator Config now handled by IndicatorConfigScreen navigation */}
       {/* OHLCV Row */}
       <OHLCRow lastCandle={lastCandle} />
 
