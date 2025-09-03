@@ -261,7 +261,7 @@ export default function ChartFullScreen() {
     useState<boolean>(false);
   const [reasoningBottomSheetAnim] = useState(new Animated.Value(0));
 
-  const headerHeight = 60;
+  const headerHeight = 52;
   const ohlcRowHeight = 24;
   const indicatorBarHeight = indicatorsExpanded ? 88 : 28;
   const timeframeRowHeight = 48;
@@ -782,7 +782,7 @@ export default function ChartFullScreen() {
             currentStockName={stockName || "Loading..."}
           />
         </View>
-        <View style={{ width: 40 }} />
+        <View style={{ width: 36 }} />
       </View>
 
       {/* OHLCV Row */}
@@ -1825,13 +1825,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 8,
     backgroundColor: "#0a0a0a",
     borderBottomWidth: 1,
     borderBottomColor: "#2a2a2a",
   },
   backButton: {
-    padding: 8,
+    padding: 6,
   },
   headerCenter: {
     flex: 1,

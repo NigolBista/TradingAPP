@@ -31,6 +31,18 @@ interface Props {
     stop?: number;
     targets?: number[];
   };
+  // Optional: provide custom bars to render instead of fetching
+  customBars?: Array<{
+    timestamp: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume?: number;
+    turnover?: number;
+  }>;
+  // Optional: simpler custom series (will be converted to OHLC with equal values)
+  customData?: Array<{ time: number; value: number }>;
 }
 
 export default function SimpleKLineChart({
@@ -49,10 +61,33 @@ export default function SimpleKLineChart({
   showTimeAxisText,
   showLastPriceLabel = true,
   levels,
+  customBars,
+  customData,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
+
+  // Ensure WebView remounts when custom data changes to force a fresh load
+  const dataKey = useMemo(() => {
+    try {
+      const bars =
+        customBars && customBars.length > 0
+          ? customBars
+          : customData && customData.length > 0
+          ? customData
+          : [];
+      if (!Array.isArray(bars) || bars.length === 0) return "0";
+      const first = (bars[0] as any).timestamp ?? (bars[0] as any).time ?? 0;
+      const last =
+        (bars[bars.length - 1] as any).timestamp ??
+        (bars[bars.length - 1] as any).time ??
+        0;
+      return `${bars.length}-${first}-${last}`;
+    } catch (_) {
+      return "0";
+    }
+  }, [customBars, customData]);
 
   const html = useMemo(() => {
     const safeSymbol = (symbol || "AAPL").toUpperCase();
@@ -98,6 +133,20 @@ export default function SimpleKLineChart({
         var SHOW_LAST_PRICE_LABEL = ${JSON.stringify(showLastPriceLabel)};
         var LEVELS = ${JSON.stringify(levels || {})};
         var POLY_API_KEY = ${JSON.stringify(polygonApiKey || "")};
+        var CUSTOM_BARS = ${JSON.stringify(customBars || [])};
+        var CUSTOM_DATA = ${JSON.stringify(
+          (customData || []).map(function (p) {
+            return {
+              timestamp: Number(p.time) || 0,
+              open: Number(p.value) || 0,
+              high: Number(p.value) || 0,
+              low: Number(p.value) || 0,
+              close: Number(p.value) || 0,
+              volume: 0,
+              turnover: 0,
+            };
+          })
+        )};
 
         function mapPeriod(tf){
           try {
@@ -264,6 +313,9 @@ export default function SimpleKLineChart({
             }
             
             var chart = window.klinecharts.init('k-line-chart');
+            try {
+              post({ debug: 'Chart init', symbol: SYMBOL, timeframe: TF, hasCustomBars: (CUSTOM_BARS||[]).length, hasCustomData: (CUSTOM_DATA||[]).length });
+            } catch(_){ }
             if (SHOW_MA) { try { chart.createIndicator && chart.createIndicator('MA', false, { id: 'candle_pane' }); } catch(_){} }
             if (SHOW_VOL) { try { chart.createIndicator && chart.createIndicator('VOL'); } catch(_){} }
             applyChartType(chart, CHART_TYPE);
@@ -276,51 +328,107 @@ export default function SimpleKLineChart({
               try { chart.setPeriod(mapPeriod(TF)); } catch(_){}
             }
 
-            // v10: Use data loader backed by Polygon.io
-            if (typeof chart.setDataLoader === 'function') {
-              chart.setDataLoader({
-                getBars: function(ctx){
+            // Prefer custom bars when provided; otherwise attach Polygon loader
+            var hasCustom = (Array.isArray(CUSTOM_BARS) && CUSTOM_BARS.length > 0) || (Array.isArray(CUSTOM_DATA) && CUSTOM_DATA.length > 0);
+            if (hasCustom) {
+              try {
+                var bars = (Array.isArray(CUSTOM_BARS) && CUSTOM_BARS.length > 0) ? CUSTOM_BARS : CUSTOM_DATA;
+                try { bars = bars.slice().sort(function(a,b){ return (a.timestamp||0) - (b.timestamp||0); }); } catch(_){ }
+                post({ debug: 'Applying custom bars', count: (bars||[]).length, first: bars && bars[0], last: bars && bars[bars.length-1] });
+                var applied = false;
+                try {
+                  if (chart && typeof chart.setData === 'function') {
+                    chart.setData(bars);
+                    applied = true;
+                    post({ debug: 'setData used' });
+                  }
+                } catch (e1) { post({ warn: 'setData failed', message: String(e1 && e1.message || e1) }); }
+                if (!applied) {
                   try {
-                    var callback = ctx && ctx.callback ? ctx.callback : function(){};
-                    var p = mapPeriod(TF);
-                    var to = Date.now();
-                    var from = to - 500 * periodToMs(p);
-                    if (!POLY_API_KEY) { post({ warn: 'Missing Polygon API key' }); callback([]); return; }
-                    var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) +
-                              '/range/' + p.span + '/' + p.type + '/' + from + '/' + to +
-                              '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
-                    fetch(url)
-                      .then(function(res){ return res.json(); })
-                      .then(function(result){
-                        var list = (result && result.results) || [];
-                        var out = list.map(function(d){
-                          return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw };
-                        });
-                        callback(out);
-                      })
-                      .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); callback([]); });
-                  } catch (e) { post({ error: 'getBars_failed', message: String(e && e.message || e) }); }
+                    if (chart && typeof chart.applyNewData === 'function') {
+                      chart.applyNewData(bars);
+                      applied = true;
+                      post({ debug: 'applyNewData used' });
+                    }
+                  } catch (e2) { post({ warn: 'applyNewData failed', message: String(e2 && e2.message || e2) }); }
                 }
-              });
+                if (!applied) {
+                  try {
+                    if (chart && typeof chart.applyData === 'function') {
+                      chart.applyData(bars);
+                      applied = true;
+                      post({ debug: 'applyData used' });
+                    }
+                  } catch (e3) { post({ warn: 'applyData failed', message: String(e3 && e3.message || e3) }); }
+                }
+                if (!applied) {
+                  // Last resort: install a data loader that immediately returns our bars
+                  try {
+                    if (typeof chart.setDataLoader === 'function') {
+                      chart.setDataLoader({
+                        getBars: function(ctx){
+                          try {
+                            var cb = (ctx && ctx.callback) ? ctx.callback : function(){};
+                            cb(bars);
+                          } catch (e4) { post({ error: 'custom_loader_callback_failed', message: String(e4 && e4.message || e4) }); }
+                        }
+                      });
+                      post({ debug: 'setDataLoader(custom) used' });
+                      applied = true;
+                    }
+                  } catch (e5) { post({ error: 'setDataLoader_custom_failed', message: String(e5 && e5.message || e5) }); }
+                }
+                if (!applied) { post({ error: 'apply_custom_failed', message: 'No supported API to set data' }); }
+              } catch(e) {
+                post({ error: 'apply_custom_failed', message: String(e && e.message || e) });
+              }
             } else {
-              // Fallback: try Polygon once
-              (function(){
-                var p = mapPeriod(TF);
-                var to = Date.now();
-                var from = to - 500 * periodToMs(p);
-                if (!POLY_API_KEY) return;
-                var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) +
-                          '/range/' + p.span + '/' + p.type + '/' + from + '/' + to +
-                          '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
-                fetch(url)
-                  .then(function(res){ return res.json(); })
-                  .then(function(result){
-                    var list = (result && result.results) || [];
-                    var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
-                    try { chart.applyNewData(out || []); } catch(e) { post({ error: 'applyNewData failed', message: String(e && e.message || e) }); }
-                  })
-                  .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); });
-              })();
+              // v10: Use data loader backed by Polygon.io
+              if (typeof chart.setDataLoader === 'function') {
+                chart.setDataLoader({
+                  getBars: function(ctx){
+                    try {
+                      var callback = ctx && ctx.callback ? ctx.callback : function(){};
+                      var p = mapPeriod(TF);
+                      var to = Date.now();
+                      var from = to - 500 * periodToMs(p);
+                      if (!POLY_API_KEY) { post({ warn: 'Missing Polygon API key' }); callback([]); return; }
+                      var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) +
+                                '/range/' + p.span + '/' + p.type + '/' + from + '/' + to +
+                                '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
+                      fetch(url)
+                        .then(function(res){ return res.json(); })
+                        .then(function(result){
+                          var list = (result && result.results) || [];
+                          var out = list.map(function(d){
+                            return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw };
+                          });
+                          callback(out);
+                        })
+                        .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); callback([]); });
+                    } catch (e) { post({ error: 'getBars_failed', message: String(e && e.message || e) }); }
+                  }
+                });
+              } else {
+                // Fallback: try Polygon once
+                (function(){
+                  var p = mapPeriod(TF);
+                  var to = Date.now();
+                  var from = to - 500 * periodToMs(p);
+                  if (!POLY_API_KEY) return;
+                  var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) +
+                            '/range/' + p.span + '/' + p.type + '/' + from + '/' + to +
+                            '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
+                  fetch(url)
+                    .then(function(res){ return res.json(); })
+                    .then(function(result){
+                      var list = (result && result.results) || [];
+                      var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
+                      try { chart.applyNewData(out || []); } catch(e) { post({ error: 'applyNewData failed', message: String(e && e.message || e) }); }
+                    })
+                    .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); });
+                })();
+              }
             }
 
             // Levels overlay helpers
@@ -537,13 +645,15 @@ export default function SimpleKLineChart({
     showPriceAxisText,
     showTimeAxisText,
     levels,
+    customBars,
+    customData,
   ]);
 
   return (
     <View style={[styles.container, { height }]}>
       <WebView
         ref={webRef}
-        key={`${symbol}-${timeframe}-${chartType}`}
+        key={`${symbol}-${timeframe}-${chartType}-${dataKey}`}
         originWhitelist={["*"]}
         source={{ html }}
         style={{ height, width: "100%" }}
@@ -552,7 +662,22 @@ export default function SimpleKLineChart({
         startInLoadingState={false}
         scalesPageToFit={false}
         scrollEnabled
-        onMessage={() => {}}
+        onMessage={(event) => {
+          try {
+            const data = JSON.parse(event.nativeEvent.data || "{}");
+            if (data.error) {
+              console.warn("[SimpleKLineChart:error]", data);
+            } else if (data.warn) {
+              console.warn("[SimpleKLineChart:warn]", data);
+            } else if (data.debug) {
+              console.log("[SimpleKLineChart:debug]", data);
+            } else {
+              console.log("[SimpleKLineChart:msg]", data);
+            }
+          } catch (e) {
+            console.log("[SimpleKLineChart:raw]", event.nativeEvent.data);
+          }
+        }}
       />
     </View>
   );
