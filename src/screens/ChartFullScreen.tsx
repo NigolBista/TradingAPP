@@ -1275,9 +1275,18 @@ export default function ChartFullScreen() {
             justifyContent: "space-between",
           }}
         >
-          {/* Strategy Complexity */}
+          {/* Reasoning */}
           <Pressable
-            onPress={showComplexityBottomSheetWithTab}
+            onPress={() => {
+              if (!aiMeta && !isStreaming && !streamingText) return;
+              setShowReasoningBottomSheet(true);
+              Animated.timing(reasoningBottomSheetAnim, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: false,
+              }).start();
+            }}
+            disabled={!aiMeta && !isStreaming && !streamingText}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -1287,22 +1296,19 @@ export default function ChartFullScreen() {
               backgroundColor: "transparent",
               borderWidth: 1,
               borderColor: "rgba(255,255,255,0.08)",
+              opacity: !aiMeta && !isStreaming && !streamingText ? 0.6 : 1,
               minWidth: 110,
             }}
             hitSlop={8}
           >
-            <Ionicons name="settings-outline" size={16} color="#fff" />
-            <Text
-              style={{
-                color: "#fff",
-                fontWeight: "600",
-                fontSize: 12,
-                marginLeft: 6,
-              }}
-              numberOfLines={1}
-            >
-              {selectedComplexity.charAt(0).toUpperCase() +
-                selectedComplexity.slice(1)}
+            <Ionicons
+              name="bulb"
+              size={16}
+              color="rgba(255,255,255,0.9)"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>
+              Reasoning
             </Text>
           </Pressable>
 
@@ -1346,19 +1352,9 @@ export default function ChartFullScreen() {
               </>
             )}
           </Pressable>
-
-          {/* Reasoning */}
+          {/* Strategy Complexity */}
           <Pressable
-            onPress={() => {
-              if (!aiMeta && !isStreaming && !streamingText) return;
-              setShowReasoningBottomSheet(true);
-              Animated.timing(reasoningBottomSheetAnim, {
-                toValue: 1,
-                duration: 300,
-                useNativeDriver: false,
-              }).start();
-            }}
-            disabled={!aiMeta && !isStreaming && !streamingText}
+            onPress={showComplexityBottomSheetWithTab}
             style={{
               flexDirection: "row",
               alignItems: "center",
@@ -1368,19 +1364,22 @@ export default function ChartFullScreen() {
               backgroundColor: "transparent",
               borderWidth: 1,
               borderColor: "rgba(255,255,255,0.08)",
-              opacity: !aiMeta && !isStreaming && !streamingText ? 0.6 : 1,
               minWidth: 110,
             }}
             hitSlop={8}
           >
-            <Ionicons
-              name="bulb"
-              size={16}
-              color="rgba(255,255,255,0.9)"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>
-              Reasoning
+            <Ionicons name="settings-outline" size={16} color="#fff" />
+            <Text
+              style={{
+                color: "#fff",
+                fontWeight: "600",
+                fontSize: 12,
+                marginLeft: 6,
+              }}
+              numberOfLines={1}
+            >
+              {selectedComplexity.charAt(0).toUpperCase() +
+                selectedComplexity.slice(1)}
             </Text>
           </Pressable>
         </View>
