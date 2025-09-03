@@ -1,4 +1,5 @@
-import { fetchBulkQuotes, fetchSingleQuote, type SimpleQuote } from "./quotes";
+import { type SimpleQuote } from "./quotes";
+import { safeFetchBulkQuotes, safeFetchSingleQuote } from "./quoteFetcher";
 import Constants from "expo-constants";
 
 type RefreshCallback = () => void;
@@ -60,18 +61,18 @@ class RealtimeDataManager {
             }/${Math.ceil(symbols.length / chunkSize)}:`,
             chunk
           );
-          await fetchBulkQuotes(chunk);
+          await safeFetchBulkQuotes(chunk);
 
           // Rate limiting: wait between chunks to avoid overwhelming API
           if (i + chunkSize < symbols.length) {
             await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms delay
           }
         } catch (error) {
-          console.error(
-            "❌ Watchlist quotes fetch failed for chunk:",
-            chunk,
-            error
-          );
+          // console.error(
+          //   "❌ Watchlist quotes fetch failed for chunk:",
+          //   chunk,
+          //   error
+          // );
           // Continue with other chunks even if one fails
         }
       }
@@ -164,7 +165,7 @@ class RealtimeDataManager {
     this.stockDetailInterval = setInterval(async () => {
       try {
         if (!this.currentStock) return;
-        await fetchSingleQuote(this.currentStock);
+        await safeFetchSingleQuote(this.currentStock);
         this.refreshCallbacks.forEach((cb) => {
           try {
             cb();

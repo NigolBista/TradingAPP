@@ -35,7 +35,8 @@ import StockAutocomplete from "../components/common/StockAutocomplete";
 import AddToWatchlistModal from "../components/common/AddToWatchlistModal";
 import SwipeableStockItem from "../components/common/SwipeableStockItem";
 import { useTheme } from "../providers/ThemeProvider";
-import { fetchBulkQuotes, type SimpleQuote } from "../services/quotes";
+import { type SimpleQuote } from "../services/quotes";
+import { safeFetchBulkQuotes } from "../services/quoteFetcher";
 import { realtimeDataManager } from "../services/realtimeDataManager";
 import { useFocusEffect } from "@react-navigation/native";
 
@@ -349,7 +350,7 @@ export default function WatchlistScreen() {
       if (!symbols || symbols.length === 0) return;
 
       try {
-        const cached = await fetchBulkQuotes(symbols);
+        const cached = await safeFetchBulkQuotes(symbols);
         if (!isMounted) return;
 
         const signature = symbols
@@ -504,7 +505,7 @@ export default function WatchlistScreen() {
       Object.assign(companyNamesRef.current, nameMap);
 
       // Fetch fresh quotes from Polygon
-      const cached = await fetchBulkQuotes(symbols);
+      const cached = await safeFetchBulkQuotes(symbols);
       const hasAnyCached = Object.keys(cached).length > 0;
       if (hasAnyCached) {
         const immediate: StockData[] = symbols.map((symbol) => {
@@ -530,7 +531,7 @@ export default function WatchlistScreen() {
       }
 
       // Background fetch fresh quotes (bulk)
-      const fresh = await fetchBulkQuotes(symbols);
+      const fresh = await safeFetchBulkQuotes(symbols);
       const updated: StockData[] = symbols.map((symbol) => {
         const q = fresh[symbol] as SimpleQuote | undefined;
         const price = q?.last ?? 0;

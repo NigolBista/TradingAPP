@@ -36,6 +36,11 @@ export interface UserProfile {
   riskPerTradePct?: number; // % of account per trade
   signalConfidenceThreshold?: number; // 0-100
   notificationsEnabled?: boolean;
+
+  // Strategy complexity preferences
+  strategyComplexity?: "simple" | "partial" | "advanced";
+  preferredRiskReward?: number;
+  autoApplyComplexity?: boolean; // Auto-apply complexity to all analyses
 }
 
 interface UserState {

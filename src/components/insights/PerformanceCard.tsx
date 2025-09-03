@@ -9,6 +9,7 @@ import {
 import type { PortfolioHistory } from "../../services/portfolioAggregationService";
 import { COLORS } from "../../constants/colors";
 import { useTheme } from "../../providers/ThemeProvider";
+import SimpleKLineChart from "../charts/SimpleKLineChart";
 
 type Period = "1D" | "1W" | "1M" | "3M" | "YTD" | "1Y" | "ALL";
 
@@ -65,6 +66,28 @@ export default function PerformanceCard({
       );
   }, [history]);
 
+  // Ensure ascending order by time
+  const sortedSeries = useMemo(() => {
+    const s = [...chartSeries].sort((a, b) => a.time - b.time);
+    return s;
+  }, [chartSeries]);
+
+  useEffect(() => {
+    if (!history) {
+      console.log("[PerformanceCard] No history available");
+      return;
+    }
+    const count = sortedSeries.length;
+    const first = count > 0 ? sortedSeries[0] : null;
+    const last = count > 0 ? sortedSeries[count - 1] : null;
+    console.log("[PerformanceCard] Net worth series", {
+      count,
+      first,
+      last,
+      period: selected,
+    });
+  }, [sortedSeries, selected, history]);
+
   const periods: Period[] = ["1D", "1W", "1M", "3M", "YTD", "1Y", "ALL"];
   const styles = createStyles(theme);
 
@@ -89,15 +112,31 @@ export default function PerformanceCard({
       </View>
 
       <View style={styles.chartContainer}>
-        {/* <AmChartsLine
-          data={chartSeries}
+        <SimpleKLineChart
+          symbol={"NETWORTH"}
+          timeframe={selected}
           height={120}
-          color={
-            safeNetWorthChangePercent >= 0 ? COLORS.POSITIVE : COLORS.NEGATIVE
-          }
-          strokeWidth={2}
-          showFill={false}
-        /> */}
+          theme={theme.mode === "dark" ? "dark" : "light"}
+          chartType={"area"}
+          showVolume={false}
+          showMA={false}
+          showTopInfo={false}
+          showGrid={false}
+          showPriceAxisLine={false}
+          showTimeAxisLine={false}
+          showPriceAxisText={false}
+          showTimeAxisText={false}
+          showLastPriceLabel={false}
+          customBars={sortedSeries.map((d) => ({
+            timestamp: d.time,
+            open: d.close,
+            high: d.close,
+            low: d.close,
+            close: d.close,
+            volume: 0,
+            turnover: 0,
+          }))}
+        />
       </View>
 
       <View style={styles.tabs}>

@@ -275,9 +275,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#2a2a2a",
     borderRadius: 20,
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 4,
     flex: 1,
-    marginRight: 12,
+    // marginRight: 12,
   },
   stockInfo: {
     flex: 1,
