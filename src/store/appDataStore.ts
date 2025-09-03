@@ -247,7 +247,7 @@ const prefetchWatchlistQuotes = async (symbols: string[]): Promise<void> => {
     try {
       await fetchAndCacheBulkQuotes(chunk);
     } catch (e) {
-      console.error("❌ Watchlist quotes fetch failed for chunk:", e);
+      // console.error("❌ Watchlist quotes fetch failed for chunk:", e);
     }
   }
 };
