@@ -233,7 +233,7 @@ export default function SimpleKLineChart({
                     theme === "dark" ? "rgba(255,255,255,0.06)" : "#EDEDED"
                   )},
                   style: 'dashed',
-                  dashedValue: [2, 2]
+                  dashValue: [2, 2]
                 },
                 vertical: {
                   show: SHOW_GRID,
@@ -243,7 +243,7 @@ export default function SimpleKLineChart({
                     theme === "dark" ? "rgba(255,255,255,0.06)" : "#EDEDED"
                   )},
                   style: 'dashed',
-                  dashedValue: [2, 2]
+                  dashValue: [2, 2]
                 }
               },
               // Hide/darken the pane separator line between main and volume panes
@@ -309,7 +309,7 @@ export default function SimpleKLineChart({
                         color: color,
                         size: 1,
                         style: 'dashed',
-                        dashedValue: [10, 6]
+                        dashValue: [10, 6]
                       }
                     },
                     {
@@ -492,7 +492,7 @@ export default function SimpleKLineChart({
                       color: color, 
                       size: 1, 
                       style: 'dashed', 
-                      dashedValue: [10, 6] 
+                      dashValue: [10, 6]
                     },
                     text: { 
                       show: true, 
@@ -718,10 +718,10 @@ export default function SimpleKLineChart({
                     // Convert style to chart library format
                     if (line.style === 'dashed') {
                       lineStyle.style = 'dashed';
-                      lineStyle.dashedValue = [5, 3]; // dash pattern
+                      lineStyle.dashValue = [5, 3]; // dash pattern
                     } else if (line.style === 'dotted') {
                       lineStyle.style = 'dashed';
-                      lineStyle.dashedValue = [1, 2]; // dot pattern
+                      lineStyle.dashValue = [1, 2]; // dot pattern
                     } else {
                       lineStyle.style = 'solid';
                     }
@@ -811,6 +811,19 @@ export default function SimpleKLineChart({
     customData,
     indicatorsKey,
   ]);
+
+  // Update indicators dynamically when configuration changes
+  useEffect(() => {
+    if (!isReadyRef.current || !webRef.current) return;
+    try {
+      const js = `try { window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.setIndicators(${JSON.stringify(
+        indicators || []
+      )}); } catch (e) {}`;
+      webRef.current.injectJavaScript(js);
+    } catch (e) {
+      console.warn("[SimpleKLineChart] indicator update failed", e);
+    }
+  }, [indicatorsKey]);
 
   return (
     <View style={[styles.container, { height }]}>
