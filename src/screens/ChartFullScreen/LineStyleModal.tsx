@@ -9,36 +9,108 @@ type Props = {
   onUpdateColor: (hex: string) => void;
   onUpdateThickness: (n: number) => void;
   onUpdateStyle: (s: string) => void;
+  currentColor?: string;
+  currentThickness?: number;
+  currentStyle?: string;
 };
 
-export default function LineStyleModal({ visible, onClose, title, onUpdateColor, onUpdateThickness, onUpdateStyle }: Props) {
+export default function LineStyleModal({
+  visible,
+  onClose,
+  title,
+  onUpdateColor,
+  onUpdateThickness,
+  onUpdateStyle,
+  currentColor = "#00D4AA",
+  currentThickness = 1,
+  currentStyle = "solid",
+}: Props) {
   const colors = [
-    "#111827",
-    "#1F2937",
-    "#374151",
-    "#4B5563",
-    "#60A5FA",
-    "#A78BFA",
-    "#F472B6",
-    "#F87171",
-    "#F59E0B",
-    "#FBBF24",
-    "#34D399",
-    "#22D3EE",
-    "#10B981",
-    "#3B82F6",
-    "#EF4444",
-    "#FDE047",
+    // Row 1: Dark to medium grays and blues
+    "#111827", // Dark gray
+    "#1F2937", // Darker gray
+    "#374151", // Medium dark gray
+    "#4B5563", // Medium gray
+    "#1E3A8A", // Dark blue
+    "#3B82F6", // Blue
+    "#2563EB", // Medium blue
+    "#1D4ED8", // Darker blue
+
+    // Row 2: Light blues and purples
+    "#60A5FA", // Light blue
+    "#93C5FD", // Lighter blue
+    "#A78BFA", // Purple
+    "#8B5CF6", // Medium purple
+    "#7C3AED", // Darker purple
+    "#6D28D9", // Dark purple
+    "#5B21B6", // Very dark purple
+    "#4C1D95", // Darkest purple
+
+    // Row 3: Pinks, reds, and oranges
+    "#F472B6", // Pink
+    "#EC4899", // Medium pink
+    "#F87171", // Light red
+    "#EF4444", // Red
+    "#DC2626", // Dark red
+    "#F59E0B", // Orange
+    "#D97706", // Dark orange
+    "#B45309", // Darker orange
+
+    // Row 4: Yellows and greens
+    "#FBBF24", // Light orange/yellow
+    "#FDE047", // Yellow
+    "#FACC15", // Bright yellow
+    "#EAB308", // Medium yellow
+    "#34D399", // Light green
+    "#22D3EE", // Cyan
+    "#10B981", // Green
+    "#059669", // Dark green
   ];
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" }} onPress={onClose}>
-        <View style={{ backgroundColor: "#1a1a1a", borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingTop: 20, paddingBottom: 24, maxHeight: 600 }}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          justifyContent: "flex-end",
+        }}
+        onPress={onClose}
+      >
+        <View
+          style={{
+            backgroundColor: "#1a1a1a",
+            borderTopLeftRadius: 20,
+            borderTopRightRadius: 20,
+            paddingTop: 20,
+            paddingBottom: 24,
+            maxHeight: 600,
+          }}
+        >
           <Pressable>
             <View style={{ alignItems: "center", paddingBottom: 10 }}>
-              <View style={{ width: 40, height: 4, backgroundColor: "#666", borderRadius: 2 }} />
+              <View
+                style={{
+                  width: 40,
+                  height: 4,
+                  backgroundColor: "#666",
+                  borderRadius: 2,
+                }}
+              />
             </View>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, marginBottom: 8 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingHorizontal: 20,
+                marginBottom: 8,
+              }}
+            >
               <Text style={{ color: "#fff", fontWeight: "700" }}>{title}</Text>
               <Pressable onPress={onClose} style={{ padding: 4 }}>
                 <Ionicons name="close" size={20} color="#fff" />
@@ -46,28 +118,162 @@ export default function LineStyleModal({ visible, onClose, title, onUpdateColor,
             </View>
             <ScrollView style={{ paddingHorizontal: 20 }}>
               <Text style={{ color: "#9CA3AF", marginBottom: 8 }}>Color</Text>
-              <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
-                {colors.map((sw) => (
-                  <Pressable key={`style-color-${sw}`} onPress={() => onUpdateColor(sw)} style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: sw, marginRight: 10, marginBottom: 10, borderWidth: 1, borderColor: "#111" }} />
+              <View style={{ flexDirection: "column" }}>
+                {Array.from({ length: 4 }, (_, rowIndex) => (
+                  <View
+                    key={rowIndex}
+                    style={{
+                      flexDirection: "row",
+                      marginBottom: 10,
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    {colors
+                      .slice(rowIndex * 8, (rowIndex + 1) * 8)
+                      .map((sw) => {
+                        const normalizedCurrentColor = (
+                          currentColor || "#00D4AA"
+                        )
+                          .toLowerCase()
+                          .trim();
+                        const normalizedSw = sw.toLowerCase().trim();
+                        const isSelected =
+                          normalizedSw === normalizedCurrentColor;
+                        return (
+                          <Pressable
+                            key={`style-color-${sw}`}
+                            onPress={() => onUpdateColor(sw)}
+                            style={{
+                              flex: 1,
+                              height: 28,
+                              borderRadius: 14,
+                              marginRight: 8,
+                              borderWidth: isSelected ? 3 : 1,
+                              borderColor: isSelected ? "#00D4AA" : "#111",
+                              padding: isSelected ? 1 : 0,
+                              backgroundColor: "#1a1a1a", // Background for the padding area
+                            }}
+                          >
+                            <View
+                              style={{
+                                flex: 1,
+                                borderRadius: 13,
+                                backgroundColor: sw,
+                              }}
+                            />
+                          </Pressable>
+                        );
+                      })}
+                  </View>
                 ))}
               </View>
-              <Text style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}>Thickness</Text>
+              <Text style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}>
+                Thickness
+              </Text>
               <View style={{ flexDirection: "row", marginBottom: 8 }}>
                 {[1, 2, 3, 4].map((th) => (
-                  <Pressable key={`style-th-${th}`} onPress={() => onUpdateThickness(th)} style={{ paddingHorizontal: 10, paddingVertical: 8, borderRadius: 10, marginRight: 8, backgroundColor: "#111827", borderWidth: 1, borderColor: "#333" }}>
-                    <Text style={{ color: "#fff", fontWeight: "700" }}>{th}</Text>
+                  <Pressable
+                    key={`style-th-${th}`}
+                    onPress={() => onUpdateThickness(th)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 12,
+                      paddingHorizontal: 8,
+                      borderRadius: 10,
+                      marginRight: 8,
+                      backgroundColor: "#111827",
+                      borderWidth: th === currentThickness ? 2 : 1,
+                      borderColor: th === currentThickness ? "#00D4AA" : "#333",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: "80%",
+                        height: th,
+                        backgroundColor: "#00D4AA",
+                        borderRadius: th / 2,
+                      }}
+                    />
                   </Pressable>
                 ))}
               </View>
-              <Text style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}>Style</Text>
+              <Text style={{ color: "#9CA3AF", marginTop: 6, marginBottom: 8 }}>
+                Style
+              </Text>
               <View style={{ flexDirection: "row" }}>
                 {[
                   { k: "solid", label: "Solid" },
                   { k: "dashed", label: "Dashed" },
                   { k: "dotted", label: "Dotted" },
                 ].map((opt) => (
-                  <Pressable key={`style-st-${opt.k}`} onPress={() => onUpdateStyle(opt.k)} style={{ paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, marginRight: 8, backgroundColor: "#111827", borderWidth: 1, borderColor: "#333" }}>
-                    <Text style={{ color: "#fff", fontWeight: "700" }}>{opt.label}</Text>
+                  <Pressable
+                    key={`style-st-${opt.k}`}
+                    onPress={() => onUpdateStyle(opt.k)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 12,
+                      paddingHorizontal: 8,
+                      borderRadius: 10,
+                      marginRight: 8,
+                      backgroundColor: "#111827",
+                      borderWidth: opt.k === currentStyle ? 2 : 1,
+                      borderColor: opt.k === currentStyle ? "#00D4AA" : "#333",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {opt.k === "solid" ? (
+                      <View
+                        style={{
+                          width: "80%",
+                          height: 2,
+                          backgroundColor: "#00D4AA",
+                          borderRadius: 1,
+                        }}
+                      />
+                    ) : opt.k === "dashed" ? (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          width: "80%",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        {Array.from({ length: 6 }, (_, i) => (
+                          <View
+                            key={i}
+                            style={{
+                              width: "12%",
+                              height: 2,
+                              backgroundColor: "#00D4AA",
+                              borderRadius: 1,
+                            }}
+                          />
+                        ))}
+                      </View>
+                    ) : (
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          width: "80%",
+                          justifyContent: "space-around",
+                        }}
+                      >
+                        {Array.from({ length: 8 }, (_, i) => (
+                          <View
+                            key={i}
+                            style={{
+                              width: 2,
+                              height: 2,
+                              backgroundColor: "#00D4AA",
+                              borderRadius: 1,
+                            }}
+                          />
+                        ))}
+                      </View>
+                    )}
                   </Pressable>
                 ))}
               </View>
@@ -78,5 +284,3 @@ export default function LineStyleModal({ visible, onClose, title, onUpdateColor,
     </Modal>
   );
 }
-
-

@@ -481,6 +481,24 @@ export default function IndicatorConfigScreen() {
           onUpdateColor={handleUpdateColor}
           onUpdateThickness={handleUpdateThickness}
           onUpdateStyle={handleUpdateStyle}
+          currentColor={
+            Array.isArray((indicator?.styles as any)?.lines)
+              ? ((indicator?.styles as any).lines as any[])[lineStyleEditIndex]
+                  ?.color || "#00D4AA"
+              : (indicator?.styles as any)?.lines?.[0]?.color || "#00D4AA"
+          }
+          currentThickness={
+            Array.isArray((indicator?.styles as any)?.lines)
+              ? ((indicator?.styles as any).lines as any[])[lineStyleEditIndex]
+                  ?.size || 1
+              : (indicator?.styles as any)?.lines?.[0]?.size || 1
+          }
+          currentStyle={
+            Array.isArray((indicator?.styles as any)?.lines)
+              ? ((indicator?.styles as any).lines as any[])[lineStyleEditIndex]
+                  ?.style || "solid"
+              : (indicator?.styles as any)?.lines?.[0]?.style || "solid"
+          }
         />
       </SafeAreaView>
     </GestureHandlerRootView>
