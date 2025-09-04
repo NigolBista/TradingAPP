@@ -73,7 +73,7 @@ export default function ChartFullScreen() {
   const { cacheSignal, getCachedSignal } = useSignalCacheStore();
   const { profile, setProfile } = useUserStore();
   const [chartType, setChartType] = useState<ChartType>(
-    (route.params?.chartType as ChartType) || "candlestick",
+    (route.params?.chartType as ChartType) || "candlestick"
   );
 
   const initialTimeframe: string | undefined = route.params?.initialTimeframe;
@@ -110,7 +110,7 @@ export default function ChartFullScreen() {
   // State variables
   const [data, setData] = useState<any[]>(initialDataParam || []);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D",
+    (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
   );
   const [stockName, setStockName] = useState<string>("");
   React.useEffect(() => {
@@ -144,7 +144,7 @@ export default function ChartFullScreen() {
   // migrated animations handled in extracted components
   const [analyzing, setAnalyzing] = useState<boolean>(false);
   const [currentTradePlan, setCurrentTradePlan] = useState<any | undefined>(
-    initialTradePlan,
+    initialTradePlan
   );
   const [showMA, setShowMA] = useState<boolean>(false);
   const [showVolume, setShowVolume] = useState<boolean>(false);
@@ -185,8 +185,8 @@ export default function ChartFullScreen() {
     initialAnalysisContext?.mode === "day_trade"
       ? "day_trade"
       : initialAnalysisContext?.mode === "swing_trade"
-        ? "swing_trade"
-        : "auto",
+      ? "swing_trade"
+      : "auto"
   );
 
   const showUnifiedBottomSheetWithTab = () => {
@@ -209,7 +209,7 @@ export default function ChartFullScreen() {
     "auto" | "day" | "scalp" | "swing"
   >((initialAnalysisContext?.tradePace as any) || "auto");
   const [desiredRR, setDesiredRR] = useState<number>(
-    initialAnalysisContext?.desiredRR || 1.5,
+    initialAnalysisContext?.desiredRR || 1.5
   );
   const [contextMode, setContextMode] = useState<
     "price_action" | "news_sentiment"
@@ -220,15 +220,16 @@ export default function ChartFullScreen() {
 
   // Auto-analysis and streaming output
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState<boolean>(
-    !!initialAnalysisContext || !!initialAiMeta, // Skip auto-analysis if we have existing analysis data
+    !!initialAnalysisContext || !!initialAiMeta // Skip auto-analysis if we have existing analysis data
   );
   const [streamingText, setStreamingText] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
 
   // Reasoning box visibility control
   const [showReasoning, setShowReasoning] = useState<boolean>(false);
-  const [hasExistingReasoning, setHasExistingReasoning] =
-    useState<boolean>(!!initialAiMeta);
+  const [hasExistingReasoning, setHasExistingReasoning] = useState<boolean>(
+    !!initialAiMeta
+  );
 
   // Strategy complexity state
   const [showComplexityBottomSheet, setShowComplexityBottomSheet] =
@@ -256,7 +257,7 @@ export default function ChartFullScreen() {
       indicatorBarHeight -
       timeframeRowHeight -
       bottomNavHeight -
-      8,
+      8
   );
 
   useEffect(() => {
@@ -576,8 +577,8 @@ export default function ChartFullScreen() {
             profile.riskPerTradePct && profile.riskPerTradePct <= 1
               ? "conservative"
               : profile.riskPerTradePct && profile.riskPerTradePct <= 2
-                ? "moderate"
-                : "aggressive",
+              ? "moderate"
+              : "aggressive",
           preferredRiskReward: profile.preferredRiskReward || desiredRR,
           userPreferences: {
             pace: isAutoAnalysis ? "auto" : tradePace,
@@ -736,7 +737,7 @@ export default function ChartFullScreen() {
         if (newIndicator && overrideIndicatorRef.current) {
           console.log(
             `🎨 Applying default colors for ${name}:`,
-            newIndicator.styles?.lines,
+            newIndicator.styles?.lines
           );
           overrideIndicatorRef.current(name, {
             lines: newIndicator.styles?.lines || [],
@@ -753,14 +754,14 @@ export default function ChartFullScreen() {
   function updateIndicatorLine(
     name: string,
     lineIndex: number,
-    updates: Partial<{ color: string; size: number; style: string }>,
+    updates: Partial<{ color: string; size: number; style: string }>
   ) {
     setIndicators((prev) => {
       const updated = updateIndicatorLineInList(
         prev as any,
         name,
         lineIndex,
-        updates as any,
+        updates as any
       ) as any;
 
       // Apply the style override to the chart immediately with the updated state
@@ -783,7 +784,7 @@ export default function ChartFullScreen() {
             } else {
               // Keep existing line style
               updatedLines.push(
-                lines[i] || { color: "#3B82F6", size: 1, style: "solid" },
+                lines[i] || { color: "#3B82F6", size: 1, style: "solid" }
               );
             }
           }
@@ -836,7 +837,7 @@ export default function ChartFullScreen() {
       const { list, newIndex } = addIndicatorParamInList(
         prev as any,
         name,
-        Math.floor(value),
+        Math.floor(value)
       );
       // Note: configSelectedIndex no longer needed with screen navigation
       // Note: No need to update indicatorToEdit since we're using screen navigation
@@ -850,7 +851,7 @@ export default function ChartFullScreen() {
       const updated = removeIndicatorParamInList(
         prev as any,
         name,
-        value,
+        value
       ) as any;
       // Note: No need to update indicatorToEdit since we're using screen navigation
       // Force shallow copy to change array reference for WebView key
@@ -910,8 +911,7 @@ export default function ChartFullScreen() {
     const interval = setInterval(() => {
       if (currentIndex < words.length) {
         setStreamingText(
-          (prev) =>
-            prev + (currentIndex === 0 ? "" : " ") + words[currentIndex],
+          (prev) => prev + (currentIndex === 0 ? "" : " ") + words[currentIndex]
         );
         currentIndex++;
       } else {
@@ -924,132 +924,6 @@ export default function ChartFullScreen() {
   // Manual analysis (called by user button press)
   async function handleAnalyzePress() {
     return performAnalysis(false);
-  }
-
-  // Test function to demonstrate indicator style overrides
-  function testIndicatorOverrides() {
-    if (!overrideIndicatorRef.current) {
-      console.log("❌ overrideIndicatorRef.current is null");
-      return;
-    }
-
-    console.log(
-      "🔍 Current indicators:",
-      indicators.map((i) => i.name),
-    );
-
-    // First, let's add an EMA indicator if it doesn't exist
-    if (!indicators.find((i) => i.name === "EMA")) {
-      console.log("➕ Adding EMA indicator for testing");
-      toggleIndicator("EMA");
-
-      // Wait a bit for the indicator to be added, then apply override
-      setTimeout(() => {
-        applyTestOverride();
-      }, 1000);
-    } else {
-      applyTestOverride();
-    }
-  }
-
-  function applyTestOverride() {
-    if (!overrideIndicatorRef.current) return;
-
-    console.log("🎨 Applying test override...");
-
-    // Test different styles for EMA indicator - line-specific
-    const emaId = "EMA";
-
-    // Test 1: Change only the first line (EMA9) to orange with dashed line
-    overrideIndicatorRef.current(emaId, {
-      lines: [
-        {
-          color: "#ff9800",
-          size: 3,
-          style: "dashed",
-          dashedValue: [6, 3],
-        },
-        {
-          color: "#00D4AA", // Keep second line default
-          size: 1,
-          style: "solid",
-        },
-        {
-          color: "#00D4AA", // Keep third line default
-          size: 1,
-          style: "solid",
-        },
-      ],
-      lineIndex: 0, // Specify we're updating line 0 (EMA9)
-    });
-
-    // Test 2: Change only the second line (EMA12) to red
-    setTimeout(() => {
-      if (overrideIndicatorRef.current) {
-        console.log("🎨 Trying line-specific override for EMA12...");
-        overrideIndicatorRef.current(emaId, {
-          lines: [
-            {
-              color: "#ff9800", // Keep first line orange
-              size: 3,
-              style: "dashed",
-              dashedValue: [6, 3],
-            },
-            {
-              color: "#ff0000", // Change second line to red
-              size: 4,
-              style: "solid",
-            },
-            {
-              color: "#00D4AA", // Keep third line default
-              size: 1,
-              style: "solid",
-            },
-          ],
-          lineIndex: 1, // Specify we're updating line 1 (EMA12)
-        });
-      }
-    }, 2000);
-
-    console.log(
-      "✅ Applied test indicator override for EMA with line-specific styling",
-    );
-  }
-
-  // Test function to check chart capabilities
-  function testChartCapabilities() {
-    if (!overrideIndicatorRef.current) return;
-
-    console.log("🔍 Testing chart capabilities...");
-
-    // Try a direct injection test
-    const testCode = `
-      if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.testChartCapabilities) {
-        window.__SIMPLE_KLINE__.testChartCapabilities();
-      } else {
-        console.log('❌ testChartCapabilities function not available');
-      }
-    `;
-
-    // Send a test message that will trigger the test function
-    console.log("📤 Sending capability test message");
-
-    // We need to access the WebView to send the message
-    // For now, let's just trigger the test by calling the overrideIndicator with a special test case
-    if (overrideIndicatorRef.current) {
-      // Send a test message by calling overrideIndicator with test parameters
-      console.log("📤 Triggering test via overrideIndicator call");
-      overrideIndicatorRef.current("TEST_CAPABILITIES", { test: true });
-    }
-  }
-
-  // Function to get current indicator styles
-  function getCurrentIndicatorStyles(indicatorName: string) {
-    console.log("🔍 Getting current styles for:", indicatorName);
-
-    // We need to access the WebView to call the function
-    // For now, let's just log what we expect
-    console.log("📤 Would call getCurrentIndicatorStyles for:", indicatorName);
   }
 
   return (
@@ -1108,7 +982,7 @@ export default function ChartFullScreen() {
                   stop: currentTradePlan.stop,
                   targets: (currentTradePlan.targets || []).slice(
                     0,
-                    3,
+                    3
                   ) as number[],
                 }
               : undefined
@@ -1271,56 +1145,6 @@ export default function ChartFullScreen() {
             </Text>
           </Pressable>
         </View>
-
-        {/* Test Indicator Override Button - Remove this in production */}
-        <View
-          style={{
-            marginTop: 8,
-            alignItems: "center",
-            flexDirection: "row",
-            gap: 8,
-          }}
-        >
-          <Pressable
-            onPress={testIndicatorOverrides}
-            style={{
-              paddingVertical: 8,
-              paddingHorizontal: 16,
-              borderRadius: 8,
-              backgroundColor: "#ff9800",
-            }}
-          >
-            <Text style={{ color: "#000", fontWeight: "600", fontSize: 12 }}>
-              Test Override
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={testChartCapabilities}
-            style={{
-              paddingVertical: 8,
-              paddingHorizontal: 16,
-              borderRadius: 8,
-              backgroundColor: "#3B82F6",
-            }}
-          >
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>
-              Test Capabilities
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={() => getCurrentIndicatorStyles("EMA")}
-            style={{
-              paddingVertical: 8,
-              paddingHorizontal: 16,
-              borderRadius: 8,
-              backgroundColor: "#10B981",
-            }}
-          >
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>
-              Get EMA Styles
-            </Text>
-          </Pressable>
-        </View>
       </View>
 
       {/* Strategy Complexity Bottom Sheet */}
@@ -1331,7 +1155,7 @@ export default function ChartFullScreen() {
         onSelectComplexity={(c) => {
           setSelectedComplexity(c);
           setCurrentTradePlan((prev: any) =>
-            prev ? applyComplexityToPlan(prev, c) : prev,
+            prev ? applyComplexityToPlan(prev, c) : prev
           );
         }}
         profile={profile}
