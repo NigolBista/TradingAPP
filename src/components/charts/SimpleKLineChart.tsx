@@ -49,7 +49,8 @@ interface Props {
   onOverrideIndicator?: (
     overrideFn: (
       id: string | { name: string; paneId?: string },
-      styles: any
+      styles: any,
+      calcParams?: any
     ) => void
   ) => void;
 }
@@ -86,14 +87,19 @@ export default function SimpleKLineChart({
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
 
-  // Method to override indicator styles
+  // Method to override indicator styles and parameters
   const overrideIndicator = React.useCallback(
-    (id: string | { name: string; paneId?: string }, styles: any) => {
+    (
+      id: string | { name: string; paneId?: string },
+      styles: any,
+      calcParams?: any
+    ) => {
       if (isReadyRef.current && webRef.current) {
         const message = JSON.stringify({
           type: "overrideIndicator",
           id,
           styles,
+          calcParams,
         });
         // console.log("📤 Sending message to WebView:", message);
 
@@ -107,7 +113,8 @@ export default function SimpleKLineChart({
             console.log('Direct injection: calling overrideIndicator for ${indicatorName}');
             var overrideObj = {
               name: '${indicatorName}',
-              styles: ${JSON.stringify(styles)}
+              styles: ${JSON.stringify(styles)},
+              calcParams: ${JSON.stringify(calcParams || null)}
             };
             console.log('Direct injection: override object', overrideObj);
             window.__SIMPLE_KLINE__.overrideIndicator(overrideObj, 'candle_pane', function() {
@@ -213,10 +220,10 @@ export default function SimpleKLineChart({
             var data = JSON.parse(event.data || '{}');
             post({ debug: 'Parsed message data', data: data });
             if (data.type === 'overrideIndicator') {
-              post({ debug: 'Processing overrideIndicator message', id: data.id, styles: data.styles });
+              post({ debug: 'Processing overrideIndicator message', id: data.id, styles: data.styles, calcParams: data.calcParams });
               if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.overrideIndicator) {
-                // Pass the parameters correctly - id and styles separately
-                window.__SIMPLE_KLINE__.overrideIndicator(data.id, data.styles);
+                // Pass the parameters correctly - id, styles, and calcParams separately
+                window.__SIMPLE_KLINE__.overrideIndicator(data.id, data.styles, data.calcParams);
               } else {
                 post({ error: 'overrideIndicator function not available in __SIMPLE_KLINE__' });
               }
@@ -858,7 +865,7 @@ export default function SimpleKLineChart({
             } catch(_) {}
 
             // Indicator override function
-            function overrideIndicator(id, styles) {
+            function overrideIndicator(id, styles, calcParams) {
               try {
                 // Check if parameters are swapped (common issue)
                 if (typeof id === 'object' && id.styles && typeof styles === 'string') {
@@ -866,23 +873,22 @@ export default function SimpleKLineChart({
                   // Extract the actual indicator name and styles from the nested object
                   var actualId = id.name || styles; // Use the name from the object, or fallback to the string
                   var actualStyles = id.styles || id; // Use the styles from the object, or use the whole object
+                  var actualCalcParams = id.calcParams || calcParams; // Extract calcParams from object or use parameter
                   id = actualId;
                   styles = actualStyles;
-                  post({ debug: 'Corrected parameters', id: id, styles: styles });
+                  calcParams = actualCalcParams;
+                  post({ debug: 'Corrected parameters', id: id, styles: styles, calcParams: calcParams });
                 }
-                
                 
                 if (!chart) {
                   post({ error: 'Chart instance not available' });
                   return false;
                 }
                 
-                if (typeof chart.overrideIndicator !== 'function') {
-                  post({ error: 'overrideIndicator method not available on chart instance' });
-                  return false;
-                }
+                // Handle different ID formats and extract the indicator name
+                var indicatorName = typeof id === 'string' ? id : (id && id.name) || '';
                 
-                // Get all indicators for debugging
+                // Get all indicators to find the target
                 var allIndicators = [];
                 try {
                   if (typeof chart.getIndicators === 'function') {
@@ -892,14 +898,30 @@ export default function SimpleKLineChart({
                   post({ debug: 'Error getting indicators list', error: String(e) });
                 }
                 
-                // Handle different ID formats and extract the indicator name
-                var indicatorName = id;
+                var foundIndicator = allIndicators.find(function(ind) {
+                  return ind && ind.name === indicatorName;
+                });
+                
+                if (!foundIndicator) {
+                  post({ error: 'Indicator not found', name: indicatorName });
+                  return false;
+                }
+                
+                // Prepare the override object with both styles and calcParams
+                var overrideObject = {
+                  id: foundIndicator.id,
+                  styles: styles || {}
+                };
+                
+                // Add calcParams if provided
+                if (calcParams && Array.isArray(calcParams) && calcParams.length > 0) {
+                  overrideObject.calcParams = calcParams;
+                  post({ debug: 'Adding calcParams to override', calcParams: calcParams });
+                }
                 
                 // Process styles to handle line styles properly
-                var processedStyles = styles;
                 if (styles && styles.lines && Array.isArray(styles.lines)) {
-                  // Always use the complete lines array from ChartFullScreen
-                  processedStyles = { lines: [] };
+                  var processedStyles = { lines: [] };
                   styles.lines.forEach(function(line, index) {
                     var lineStyle = {
                       color: line.color || '#3B82F6',
@@ -921,24 +943,22 @@ export default function SimpleKLineChart({
                     
                     processedStyles.lines.push(lineStyle);
                   });
-                  post({ debug: 'Using complete lines array from ChartFullScreen', processedStyles: processedStyles });
+                  overrideObject.styles = processedStyles;
+                  post({ debug: 'Processed line styles', processedStyles: processedStyles });
                 }
                 
-                // Approach 3: Use actual indicator ID if available
-                var foundIndicator = allIndicators.find(function(ind) {
-                  return ind && ind.name === indicatorName;
-                });
-                
-                if (foundIndicator && foundIndicator.id) {
-                  var overrideObject3 = {
-                    id: foundIndicator.id,
-                    styles: processedStyles
-                  };
-                  post({ debug: 'Trying approach 3 - using indicator ID', overrideObject: overrideObject3 });
-                  chart.overrideIndicator(overrideObject3, 'candle_pane', function() {
-                    post({ debug: 'Approach 3 callback executed' });
+                // Call overrideIndicator with the complete object
+                if (typeof chart.overrideIndicator === 'function') {
+                  post({ debug: 'Calling overrideIndicator', overrideObject: overrideObject });
+                  chart.overrideIndicator(overrideObject, 'candle_pane', function() {
+                    post({ debug: 'Override callback executed successfully' });
                   });
+                } else {
+                  post({ error: 'overrideIndicator method not available on chart instance' });
+                  return false;
                 }
+                
+                return true;
               } catch(e) {
                 post({ error: 'overrideIndicator failed', message: String(e && e.message || e), stack: e.stack });
                 return false;

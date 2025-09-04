@@ -159,7 +159,11 @@ export default function ChartFullScreen() {
   const [pinError, setPinError] = useState<string | null>(null);
   const barSpacingRef = React.useRef<number>(60_000);
   const overrideIndicatorRef = React.useRef<
-    | ((id: string | { name: string; paneId?: string }, styles: any) => void)
+    | ((
+        id: string | { name: string; paneId?: string },
+        styles: any,
+        calcParams?: any
+      ) => void)
     | null
   >(null);
 
@@ -210,18 +214,21 @@ export default function ChartFullScreen() {
     hydrate();
   }, [symbol]);
 
-  // Apply indicator styles
+  // Apply indicator styles and parameters
   const applyIndicatorStyles = useCallback(() => {
     if (styleRetryRef.current) clearInterval(styleRetryRef.current);
 
     const attempt = () => {
       if (!overrideIndicatorRef.current) return;
       latestIndicatorsRef.current.forEach((indicator) => {
-        if (indicator.styles?.lines) {
-          overrideIndicatorRef.current!(indicator.name, {
-            lines: indicator.styles.lines,
-          });
-        }
+        const styles = indicator.styles?.lines
+          ? { lines: indicator.styles.lines }
+          : {};
+        const calcParams = indicator.calcParams;
+
+        // Always call overrideIndicator with both styles and calcParams
+        // The WebView will decide whether to recreate the indicator or just update styles
+        overrideIndicatorRef.current!(indicator.name, styles, calcParams);
       });
     };
 
@@ -677,9 +684,11 @@ export default function ChartFullScreen() {
               `🎨 Applying default colors for ${name}:`,
               newIndicator.styles?.lines
             );
-            overrideIndicatorRef.current(name, {
-              lines: newIndicator.styles?.lines || [],
-            });
+            const styles = newIndicator.styles?.lines
+              ? { lines: newIndicator.styles.lines }
+              : {};
+            const calcParams = newIndicator.calcParams;
+            overrideIndicatorRef.current(name, styles, calcParams);
           }
         }
 
@@ -726,10 +735,9 @@ export default function ChartFullScreen() {
               }
             }
 
-            overrideIndicatorRef.current(name, {
-              lines: updatedLines,
-              lineIndex: lineIndex,
-            });
+            const styles = { lines: updatedLines };
+            const calcParams = indicator.calcParams;
+            overrideIndicatorRef.current(name, styles, calcParams);
           }
         }
 
