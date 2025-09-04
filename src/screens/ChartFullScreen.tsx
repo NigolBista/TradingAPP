@@ -140,9 +140,6 @@ export default function ChartFullScreen() {
   const [showCustomRrModal, setShowCustomRrModal] = useState<boolean>(false);
 
   // Analysis and streaming state
-  const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState<boolean>(
-    !!initialAnalysisContext || !!initialAiMeta
-  );
   const [streamingText, setStreamingText] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [showReasoning, setShowReasoning] = useState<boolean>(false);
@@ -211,9 +208,6 @@ export default function ChartFullScreen() {
   useEffect(() => {
     loadStockName();
     hydrate();
-    if (!initialAnalysisContext && !initialAiMeta) {
-      setHasAutoAnalyzed(false);
-    }
   }, [symbol]);
 
   // Apply indicator styles
@@ -232,14 +226,10 @@ export default function ChartFullScreen() {
     };
 
     attempt();
-    let tries = 0;
-    styleRetryRef.current = setInterval(() => {
+    // Retry once after 200ms to ensure styles are applied
+    styleRetryRef.current = setTimeout(() => {
       attempt();
-      tries += 1;
-      if (tries > 20) {
-        if (styleRetryRef.current) clearInterval(styleRetryRef.current);
-        styleRetryRef.current = null;
-      }
+      styleRetryRef.current = null;
     }, 200);
   }, []);
 
@@ -298,349 +288,302 @@ export default function ChartFullScreen() {
   }, [initialAiMeta]);
 
   // Core analysis function
-  const performAnalysis = useCallback(
-    async (isAutoAnalysis: boolean = false) => {
+  const performAnalysis = useCallback(async () => {
+    try {
+      setAnalyzing(true);
+
+      // Fetch candle data based on trade pace
+      let d: any[] = [];
+      let h1: any[] = [];
+      let m15: any[] = [];
+      let m5: any[] = [];
+      let m1: any[] = [];
+
+      const pace = tradePace;
       try {
-        setAnalyzing(true);
-
-        // Fetch candle data based on trade pace
-        let d: any[] = [];
-        let h1: any[] = [];
-        let m15: any[] = [];
-        let m5: any[] = [];
-        let m1: any[] = [];
-
-        const pace = isAutoAnalysis ? tradePace : tradePace;
-        try {
-          if (pace === "scalp") {
-            const [c1, c5, c15, c60, cd] = await Promise.all([
-              fetchCandles(symbol, { resolution: "1", limit: 120 }),
-              fetchCandles(symbol, { resolution: "5", limit: 60 }),
-              fetchCandles(symbol, { resolution: "15", limit: 32 }),
-              fetchCandles(symbol, { resolution: "1H", limit: 24 }),
-              fetchCandles(symbol, { resolution: "D", limit: 20 }),
-            ]);
-            m1 = c1;
-            m5 = c5;
-            m15 = c15;
-            h1 = c60;
-            d = cd;
-          } else if (pace === "day") {
-            const [c5, c15, c60, cd] = await Promise.all([
-              fetchCandles(symbol, { resolution: "5", limit: 78 }),
-              fetchCandles(symbol, { resolution: "15", limit: 52 }),
-              fetchCandles(symbol, { resolution: "1H", limit: 48 }),
-              fetchCandles(symbol, { resolution: "D", limit: 45 }),
-            ]);
-            m5 = c5;
-            m15 = c15;
-            h1 = c60;
-            d = cd;
-          } else if (pace === "swing") {
-            const [c60, cd] = await Promise.all([
-              fetchCandles(symbol, { resolution: "1H", limit: 200 }),
-              fetchCandles(symbol, { resolution: "D", limit: 180 }),
-            ]);
-            h1 = c60;
-            d = cd;
-            const [c15, c5] = await Promise.all([
-              fetchCandles(symbol, { resolution: "15", limit: 32 }),
-              fetchCandles(symbol, { resolution: "5", limit: 60 }),
-            ]);
-            m15 = c15;
-            m5 = c5;
-          } else {
-            const [c5, c15, c60, cd] = await Promise.all([
-              fetchCandles(symbol, { resolution: "5", limit: 78 }),
-              fetchCandles(symbol, { resolution: "15", limit: 40 }),
-              fetchCandles(symbol, { resolution: "1H", limit: 72 }),
-              fetchCandles(symbol, { resolution: "D", limit: 120 }),
-            ]);
-            m5 = c5;
-            m15 = c15;
-            h1 = c60;
-            d = cd;
-          }
-        } catch (err) {
-          console.warn("Candle fetch failed for AI analysis:", err);
+        if (pace === "scalp") {
+          const [c1, c5, c15, c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "1", limit: 120 }),
+            fetchCandles(symbol, { resolution: "5", limit: 60 }),
+            fetchCandles(symbol, { resolution: "15", limit: 32 }),
+            fetchCandles(symbol, { resolution: "1H", limit: 24 }),
+            fetchCandles(symbol, { resolution: "D", limit: 20 }),
+          ]);
+          m1 = c1;
+          m5 = c5;
+          m15 = c15;
+          h1 = c60;
+          d = cd;
+        } else if (pace === "day") {
+          const [c5, c15, c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "5", limit: 78 }),
+            fetchCandles(symbol, { resolution: "15", limit: 52 }),
+            fetchCandles(symbol, { resolution: "1H", limit: 48 }),
+            fetchCandles(symbol, { resolution: "D", limit: 45 }),
+          ]);
+          m5 = c5;
+          m15 = c15;
+          h1 = c60;
+          d = cd;
+        } else if (pace === "swing") {
+          const [c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "1H", limit: 200 }),
+            fetchCandles(symbol, { resolution: "D", limit: 180 }),
+          ]);
+          h1 = c60;
+          d = cd;
+          const [c15, c5] = await Promise.all([
+            fetchCandles(symbol, { resolution: "15", limit: 32 }),
+            fetchCandles(symbol, { resolution: "5", limit: 60 }),
+          ]);
+          m15 = c15;
+          m5 = c5;
+        } else {
+          const [c5, c15, c60, cd] = await Promise.all([
+            fetchCandles(symbol, { resolution: "5", limit: 78 }),
+            fetchCandles(symbol, { resolution: "15", limit: 40 }),
+            fetchCandles(symbol, { resolution: "1H", limit: 72 }),
+            fetchCandles(symbol, { resolution: "D", limit: 120 }),
+          ]);
+          m5 = c5;
+          m15 = c15;
+          h1 = c60;
+          d = cd;
         }
-
-        // Context fetches
-        const shouldFetchContext =
-          isAutoAnalysis || contextMode === "news_sentiment";
-        let newsBrief: any[] | undefined = undefined;
-        let marketNewsBrief: any[] | undefined = undefined;
-        let fedBrief: any[] | undefined = undefined;
-        let vixSnapshot:
-          | { value: number; bucket: "low" | "moderate" | "high" }
-          | undefined = undefined;
-
-        if (shouldFetchContext) {
-          try {
-            const news = await fetchSymbolNews(symbol);
-            newsBrief = (news || []).slice(0, 5).map((n: any) => ({
-              title: n.title,
-              summary: (n.summary || "").slice(0, 180),
-              source: n.source,
-              publishedAt: n.publishedAt,
-            }));
-          } catch {}
-
-          if (isAutoAnalysis) {
-            try {
-              const marketNews = await fetchSymbolNews("SPY");
-              marketNewsBrief = (marketNews || [])
-                .slice(0, 3)
-                .map((n: any) => ({
-                  title: n.title,
-                  summary: (n.summary || "").slice(0, 120),
-                  source: n.source,
-                }));
-            } catch {}
-
-            try {
-              const events = await getUpcomingFedEvents();
-              fedBrief = (events || []).slice(0, 3).map((e: any) => ({
-                title: e.title,
-                date: e.date,
-                impact: e.impact,
-                type: e.type,
-              }));
-            } catch {}
-
-            try {
-              const val = 0;
-              const bucket = val < 15 ? "low" : val <= 25 ? "moderate" : "high";
-              vixSnapshot = { value: val, bucket };
-            } catch {}
-          }
-        }
-
-        // Derive sentiment from news
-        let sentimentSummary:
-          | { label: "bullish" | "bearish" | "neutral"; score: number }
-          | undefined = undefined;
-        if (shouldFetchContext && newsBrief && newsBrief.length > 0) {
-          const positives = [
-            "beat",
-            "surge",
-            "optimistic",
-            "strong",
-            "growth",
-            "record",
-            "win",
-            "rally",
-          ];
-          const negatives = [
-            "miss",
-            "drop",
-            "cut",
-            "weak",
-            "fell",
-            "loss",
-            "selloff",
-            "concern",
-          ];
-          let score = 0;
-          for (const n of newsBrief) {
-            const text = `${n.title} ${n.summary}`.toLowerCase();
-            positives.forEach((w) => {
-              if (text.includes(w)) score += 1;
-            });
-            negatives.forEach((w) => {
-              if (text.includes(w)) score -= 1;
-            });
-          }
-          const label =
-            score > 1 ? "bullish" : score < -1 ? "bearish" : "neutral";
-          sentimentSummary = { label, score };
-        }
-
-        const analysisMode = isAutoAnalysis ? "auto" : mode;
-        const candleData: Record<string, any[]> = {};
-
-        if (d && d.length)
-          candleData["1d"] = d.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          }));
-        if (h1 && h1.length)
-          candleData["1h"] = h1.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          }));
-        if (m15 && m15.length)
-          candleData["15m"] = m15.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          }));
-        if (m5 && m5.length)
-          candleData["5m"] = m5.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          }));
-        if (m1 && m1.length)
-          candleData["1m"] = m1.map((c) => ({
-            time: c.time,
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-            volume: c.volume,
-          }));
-
-        const output = await runAIStrategy({
-          symbol,
-          mode: analysisMode,
-          candleData,
-          indicators: {},
-          context: {
-            userBias: "neutral",
-            strategyPreference: analysisMode,
-            complexity: selectedComplexity,
-            riskTolerance:
-              profile.riskPerTradePct && profile.riskPerTradePct <= 1
-                ? "conservative"
-                : profile.riskPerTradePct && profile.riskPerTradePct <= 2
-                ? "moderate"
-                : "aggressive",
-            preferredRiskReward: profile.preferredRiskReward || desiredRR,
-            userPreferences: {
-              pace: isAutoAnalysis ? "auto" : tradePace,
-              desiredRR: isAutoAnalysis ? 2.0 : desiredRR,
-            },
-            includeFlags: {
-              macro: isAutoAnalysis,
-              sentiment: shouldFetchContext,
-              vix: isAutoAnalysis,
-              fomc: isAutoAnalysis,
-              market: isAutoAnalysis,
-              fundamentals: true,
-            },
-            news: newsBrief,
-            marketNews: marketNewsBrief,
-            fedEvents: fedBrief,
-            sentimentSummary,
-            vix: vixSnapshot,
-            fundamentals: {
-              level: isAutoAnalysis ? "comprehensive" : "neutral",
-            },
-            analysisType: isAutoAnalysis
-              ? "comprehensive_auto"
-              : "user_directed",
-          },
-        });
-
-        if (output) {
-          const tp = aiOutputToTradePlan(output, selectedComplexity);
-          setCurrentTradePlan(tp);
-          const newAiMeta = {
-            strategyChosen: String(output.strategyChosen),
-            side: output.side,
-            confidence: output.confidence,
-            why: output.why || [],
-            notes: output.tradePlanNotes || [],
-            targets: output.targets || [],
-            riskReward: output.riskReward,
-          };
-          setAiMeta(newAiMeta);
-
-          const reasoningText =
-            (output.why || []).join(". ") +
-            (output.tradePlanNotes
-              ? ". " + output.tradePlanNotes.join(". ")
-              : "");
-          if (reasoningText) {
-            simulateStreamingText(reasoningText);
-          }
-
-          setShowReasoning(true);
-          setHasExistingReasoning(true);
-
-          if (!isAutoAnalysis) {
-            const currentCached = getCachedSignal(symbol);
-            if (currentCached) {
-              addAnalysisMessage({
-                symbol: currentCached.symbol,
-                strategy: currentCached.aiMeta?.strategyChosen,
-                side: currentCached.aiMeta?.side,
-                entry: currentCached.tradePlan?.entry,
-                lateEntry: currentCached.tradePlan?.lateEntry,
-                exit: currentCached.tradePlan?.exit,
-                lateExit: currentCached.tradePlan?.lateExit,
-                stop: currentCached.tradePlan?.stop,
-                targets: currentCached.aiMeta?.targets,
-                riskReward: currentCached.aiMeta?.riskReward,
-                confidence: currentCached.aiMeta?.confidence,
-                why: currentCached.aiMeta?.why,
-                tradePlan: currentCached.tradePlan,
-                aiMeta: currentCached.aiMeta,
-                analysisContext: currentCached.analysisContext,
-              });
-            }
-          }
-
-          const cachedSignalData = {
-            symbol,
-            timestamp: Date.now(),
-            tradePlan: tp,
-            aiMeta: newAiMeta,
-            analysisContext: {
-              mode: analysisMode,
-              tradePace: isAutoAnalysis ? "auto" : tradePace,
-              desiredRR: isAutoAnalysis ? 2.0 : desiredRR,
-              contextMode,
-              isAutoAnalysis,
-            },
-            rawAnalysisOutput: output,
-          };
-          cacheSignal(cachedSignalData);
-        }
-      } catch (error) {
-        console.warn("AI analysis failed:", error);
-      } finally {
-        setAnalyzing(false);
+      } catch (err) {
+        console.warn("Candle fetch failed for AI analysis:", err);
       }
-    },
-    [
-      symbol,
-      tradePace,
-      contextMode,
-      selectedComplexity,
-      profile,
-      desiredRR,
-      mode,
-      getCachedSignal,
-      addAnalysisMessage,
-      cacheSignal,
-    ]
-  );
 
-  // Auto-analysis on data load
-  useEffect(() => {
-    if (!hasAutoAnalyzed && !analyzing) {
-      setHasAutoAnalyzed(true);
-      setTimeout(() => {
-        performAnalysis(true);
-      }, 500);
+      // Context fetches
+      const shouldFetchContext = contextMode === "news_sentiment";
+      let newsBrief: any[] | undefined = undefined;
+      let marketNewsBrief: any[] | undefined = undefined;
+      let fedBrief: any[] | undefined = undefined;
+      let vixSnapshot:
+        | { value: number; bucket: "low" | "moderate" | "high" }
+        | undefined = undefined;
+
+      if (shouldFetchContext) {
+        try {
+          const news = await fetchSymbolNews(symbol);
+          newsBrief = (news || []).slice(0, 5).map((n: any) => ({
+            title: n.title,
+            summary: (n.summary || "").slice(0, 180),
+            source: n.source,
+            publishedAt: n.publishedAt,
+          }));
+        } catch {}
+      }
+
+      // Derive sentiment from news
+      let sentimentSummary:
+        | { label: "bullish" | "bearish" | "neutral"; score: number }
+        | undefined = undefined;
+      if (shouldFetchContext && newsBrief && newsBrief.length > 0) {
+        const positives = [
+          "beat",
+          "surge",
+          "optimistic",
+          "strong",
+          "growth",
+          "record",
+          "win",
+          "rally",
+        ];
+        const negatives = [
+          "miss",
+          "drop",
+          "cut",
+          "weak",
+          "fell",
+          "loss",
+          "selloff",
+          "concern",
+        ];
+        let score = 0;
+        for (const n of newsBrief) {
+          const text = `${n.title} ${n.summary}`.toLowerCase();
+          positives.forEach((w) => {
+            if (text.includes(w)) score += 1;
+          });
+          negatives.forEach((w) => {
+            if (text.includes(w)) score -= 1;
+          });
+        }
+        const label =
+          score > 1 ? "bullish" : score < -1 ? "bearish" : "neutral";
+        sentimentSummary = { label, score };
+      }
+
+      const analysisMode = mode;
+      const candleData: Record<string, any[]> = {};
+
+      if (d && d.length)
+        candleData["1d"] = d.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (h1 && h1.length)
+        candleData["1h"] = h1.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (m15 && m15.length)
+        candleData["15m"] = m15.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (m5 && m5.length)
+        candleData["5m"] = m5.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+      if (m1 && m1.length)
+        candleData["1m"] = m1.map((c) => ({
+          time: c.time,
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+          volume: c.volume,
+        }));
+
+      const output = await runAIStrategy({
+        symbol,
+        mode: analysisMode,
+        candleData,
+        indicators: {},
+        context: {
+          userBias: "neutral",
+          strategyPreference: analysisMode,
+          complexity: selectedComplexity,
+          riskTolerance:
+            profile.riskPerTradePct && profile.riskPerTradePct <= 1
+              ? "conservative"
+              : profile.riskPerTradePct && profile.riskPerTradePct <= 2
+              ? "moderate"
+              : "aggressive",
+          preferredRiskReward: profile.preferredRiskReward || desiredRR,
+          userPreferences: {
+            pace: tradePace,
+            desiredRR: desiredRR,
+          },
+          includeFlags: {
+            macro: false,
+            sentiment: shouldFetchContext,
+            vix: false,
+            fomc: false,
+            market: false,
+            fundamentals: true,
+          },
+          news: newsBrief,
+          marketNews: marketNewsBrief,
+          fedEvents: fedBrief,
+          sentimentSummary,
+          vix: vixSnapshot,
+          fundamentals: {
+            level: "neutral",
+          },
+          analysisType: "user_directed",
+        },
+      });
+
+      if (output) {
+        const tp = aiOutputToTradePlan(output, selectedComplexity);
+        setCurrentTradePlan(tp);
+        const newAiMeta = {
+          strategyChosen: String(output.strategyChosen),
+          side: output.side,
+          confidence: output.confidence,
+          why: output.why || [],
+          notes: output.tradePlanNotes || [],
+          targets: output.targets || [],
+          riskReward: output.riskReward,
+        };
+        setAiMeta(newAiMeta);
+
+        const reasoningText =
+          (output.why || []).join(". ") +
+          (output.tradePlanNotes
+            ? ". " + output.tradePlanNotes.join(". ")
+            : "");
+        if (reasoningText) {
+          simulateStreamingText(reasoningText);
+        }
+
+        setShowReasoning(true);
+        setHasExistingReasoning(true);
+
+        const currentCached = getCachedSignal(symbol);
+        if (currentCached) {
+          addAnalysisMessage({
+            symbol: currentCached.symbol,
+            strategy: currentCached.aiMeta?.strategyChosen,
+            side: currentCached.aiMeta?.side,
+            entry: currentCached.tradePlan?.entry,
+            lateEntry: currentCached.tradePlan?.lateEntry,
+            exit: currentCached.tradePlan?.exit,
+            lateExit: currentCached.tradePlan?.lateExit,
+            stop: currentCached.tradePlan?.stop,
+            targets: currentCached.aiMeta?.targets,
+            riskReward: currentCached.aiMeta?.riskReward,
+            confidence: currentCached.aiMeta?.confidence,
+            why: currentCached.aiMeta?.why,
+            tradePlan: currentCached.tradePlan,
+            aiMeta: currentCached.aiMeta,
+            analysisContext: currentCached.analysisContext,
+          });
+        }
+
+        const cachedSignalData = {
+          symbol,
+          timestamp: Date.now(),
+          tradePlan: tp,
+          aiMeta: newAiMeta,
+          analysisContext: {
+            mode: analysisMode,
+            tradePace: tradePace,
+            desiredRR: desiredRR,
+            contextMode,
+            isAutoAnalysis: false,
+          },
+          rawAnalysisOutput: output,
+        };
+        cacheSignal(cachedSignalData);
+      }
+    } catch (error) {
+      console.warn("AI analysis failed:", error);
+    } finally {
+      setAnalyzing(false);
     }
-  }, [hasAutoAnalyzed, analyzing, performAnalysis]);
+  }, [
+    symbol,
+    tradePace,
+    contextMode,
+    selectedComplexity,
+    profile,
+    desiredRR,
+    mode,
+    getCachedSignal,
+    addAnalysisMessage,
+    cacheSignal,
+  ]);
 
   // Fetch last candle for OHLCV row when symbol or timeframe changes
   useEffect(() => {
@@ -858,7 +801,7 @@ export default function ChartFullScreen() {
 
   // Manual analysis handler
   const handleAnalyzePress = useCallback(() => {
-    return performAnalysis(false);
+    return performAnalysis();
   }, [performAnalysis]);
 
   return (
