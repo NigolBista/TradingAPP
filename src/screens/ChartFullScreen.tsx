@@ -262,8 +262,9 @@ export default function ChartFullScreen() {
     }
   }, [symbol]);
 
-  const applyIndicatorStyles = React.useCallback((retry = 0) => {
-    if (overrideIndicatorRef.current) {
+  const applyIndicatorStyles = React.useCallback(() => {
+    const attempt = () => {
+      if (!overrideIndicatorRef.current) return;
       latestIndicatorsRef.current.forEach((indicator) => {
         if (indicator.styles?.lines) {
           overrideIndicatorRef.current!(indicator.name, {
@@ -271,9 +272,12 @@ export default function ChartFullScreen() {
           });
         }
       });
-    } else if (retry < 5) {
-      setTimeout(() => applyIndicatorStyles(retry + 1), 100 * (retry + 1));
-    }
+    };
+
+    // apply immediately and then a few more times to handle chart resets
+    [0, 100, 250, 500, 1000].forEach((delay) => {
+      setTimeout(attempt, delay);
+    });
   }, []);
 
   useEffect(() => {
