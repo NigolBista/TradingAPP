@@ -259,6 +259,40 @@ export default function ChartFullScreen() {
     }
   }, [symbol]);
 
+  // Update chart when returning from IndicatorConfigScreen
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      // Force chart refresh when returning from indicator config
+      if (overrideIndicatorRef.current && indicators.length > 0) {
+        indicators.forEach((indicator) => {
+          if (indicator.styles?.lines) {
+            overrideIndicatorRef.current!(indicator.name, {
+              lines: indicator.styles.lines,
+            });
+          }
+        });
+      }
+    });
+    return unsubscribe;
+  }, [navigation, indicators]);
+
+  // Apply default styles to chart when indicators are first loaded
+  useEffect(() => {
+    if (overrideIndicatorRef.current && indicators.length > 0) {
+      indicators.forEach((indicator) => {
+        if (indicator.styles?.lines) {
+          console.log(
+            `🎨 Applying initial styles for ${indicator.name}:`,
+            indicator.styles.lines
+          );
+          overrideIndicatorRef.current!(indicator.name, {
+            lines: indicator.styles.lines,
+          });
+        }
+      });
+    }
+  }, [indicators]);
+
   // Fallback: if no isDayUp provided, hydrate from cached quotes
   useEffect(() => {
     let mounted = true;
@@ -680,7 +714,25 @@ export default function ChartFullScreen() {
   }
 
   function toggleIndicator(name: string) {
-    setIndicators((prev) => toggleIndicatorInList(prev as any, name) as any);
+    setIndicators((prev) => {
+      const updated = toggleIndicatorInList(prev as any, name) as any;
+
+      // If we added a new indicator, apply its default styles to the chart
+      if (updated.length > prev.length) {
+        const newIndicator = updated.find((ind: any) => ind.name === name);
+        if (newIndicator && overrideIndicatorRef.current) {
+          console.log(
+            `🎨 Applying default colors for ${name}:`,
+            newIndicator.styles?.lines
+          );
+          overrideIndicatorRef.current(name, {
+            lines: newIndicator.styles?.lines || [],
+          });
+        }
+      }
+
+      return updated;
+    });
   }
 
   function updateIndicatorLine(
@@ -688,48 +740,49 @@ export default function ChartFullScreen() {
     lineIndex: number,
     updates: Partial<{ color: string; size: number; style: string }>
   ) {
-    setIndicators(
-      (prev) =>
-        updateIndicatorLineInList(
-          prev as any,
-          name,
-          lineIndex,
-          updates as any
-        ) as any
-    );
+    setIndicators((prev) => {
+      const updated = updateIndicatorLineInList(
+        prev as any,
+        name,
+        lineIndex,
+        updates as any
+      ) as any;
 
-    // Apply the style override to the chart immediately
-    if (overrideIndicatorRef.current) {
-      const indicator = indicators.find((i) => i.name === name);
-      if (indicator) {
-        const count = Array.isArray(indicator.calcParams)
-          ? indicator.calcParams.length
-          : 1;
-        const lines = Array.isArray((indicator.styles as any)?.lines)
-          ? ((indicator.styles as any).lines as any[]).slice()
-          : [];
+      // Apply the style override to the chart immediately with the updated state
+      if (overrideIndicatorRef.current) {
+        const indicator = updated.find((i: any) => i.name === name);
+        if (indicator) {
+          const count = Array.isArray(indicator.calcParams)
+            ? indicator.calcParams.length
+            : 1;
+          const lines = Array.isArray((indicator.styles as any)?.lines)
+            ? ((indicator.styles as any).lines as any[]).slice()
+            : [];
 
-        // Create a new lines array with only the specific line updated
-        const updatedLines = [];
-        for (let i = 0; i < count; i++) {
-          if (i === lineIndex) {
-            // Apply updates to the specific line
-            updatedLines.push({ ...lines[i], ...updates });
-          } else {
-            // Keep existing line style
-            updatedLines.push(
-              lines[i] || { color: "#00D4AA", size: 1, style: "solid" }
-            );
+          // Create a new lines array with only the specific line updated
+          const updatedLines = [];
+          for (let i = 0; i < count; i++) {
+            if (i === lineIndex) {
+              // Apply updates to the specific line
+              updatedLines.push({ ...lines[i], ...updates });
+            } else {
+              // Keep existing line style
+              updatedLines.push(
+                lines[i] || { color: "#3B82F6", size: 1, style: "solid" }
+              );
+            }
           }
-        }
 
-        // Apply override to chart with line index information
-        overrideIndicatorRef.current(name, {
-          lines: updatedLines,
-          lineIndex: lineIndex, // Pass the line index for precise targeting
-        });
+          // Apply override to chart with line index information
+          overrideIndicatorRef.current(name, {
+            lines: updatedLines,
+            lineIndex: lineIndex, // Pass the line index for precise targeting
+          });
+        }
       }
-    }
+
+      return updated;
+    });
   }
 
   // Line style editor functions removed - now handled in IndicatorConfigScreen

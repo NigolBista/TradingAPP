@@ -21,7 +21,7 @@ export default function LineStyleModal({
   onUpdateColor,
   onUpdateThickness,
   onUpdateStyle,
-  currentColor = "#00D4AA",
+  currentColor = "#3B82F6",
   currentThickness = 1,
   currentStyle = "solid",
 }: Props) {
@@ -132,7 +132,7 @@ export default function LineStyleModal({
                       .slice(rowIndex * 8, (rowIndex + 1) * 8)
                       .map((sw) => {
                         const normalizedCurrentColor = (
-                          currentColor || "#00D4AA"
+                          currentColor || "#3B82F6"
                         )
                           .toLowerCase()
                           .trim();
@@ -149,7 +149,7 @@ export default function LineStyleModal({
                               borderRadius: 14,
                               marginRight: 8,
                               borderWidth: isSelected ? 3 : 1,
-                              borderColor: isSelected ? "#00D4AA" : "#111",
+                              borderColor: isSelected ? "#3B82F6" : "#111",
                               padding: isSelected ? 1 : 0,
                               backgroundColor: "#1a1a1a", // Background for the padding area
                             }}
@@ -183,7 +183,7 @@ export default function LineStyleModal({
                       marginRight: 8,
                       backgroundColor: "#111827",
                       borderWidth: th === currentThickness ? 2 : 1,
-                      borderColor: th === currentThickness ? "#00D4AA" : "#333",
+                      borderColor: th === currentThickness ? "#3B82F6" : "#333",
                       alignItems: "center",
                       justifyContent: "center",
                     }}
@@ -192,7 +192,7 @@ export default function LineStyleModal({
                       style={{
                         width: "80%",
                         height: th,
-                        backgroundColor: "#00D4AA",
+                        backgroundColor: "#3B82F6",
                         borderRadius: th / 2,
                       }}
                     />
@@ -219,7 +219,7 @@ export default function LineStyleModal({
                       marginRight: 8,
                       backgroundColor: "#111827",
                       borderWidth: opt.k === currentStyle ? 2 : 1,
-                      borderColor: opt.k === currentStyle ? "#00D4AA" : "#333",
+                      borderColor: opt.k === currentStyle ? "#3B82F6" : "#333",
                       alignItems: "center",
                       justifyContent: "center",
                     }}
@@ -229,7 +229,7 @@ export default function LineStyleModal({
                         style={{
                           width: "80%",
                           height: 2,
-                          backgroundColor: "#00D4AA",
+                          backgroundColor: "#3B82F6",
                           borderRadius: 1,
                         }}
                       />
@@ -247,7 +247,7 @@ export default function LineStyleModal({
                             style={{
                               width: "12%",
                               height: 2,
-                              backgroundColor: "#00D4AA",
+                              backgroundColor: "#3B82F6",
                               borderRadius: 1,
                             }}
                           />
@@ -267,7 +267,7 @@ export default function LineStyleModal({
                             style={{
                               width: 2,
                               height: 2,
-                              backgroundColor: "#00D4AA",
+                              backgroundColor: "#3B82F6",
                               borderRadius: 1,
                             }}
                           />

@@ -799,7 +799,7 @@ export default function SimpleKLineChart({
                   var processedStyles = { lines: [] };
                   cfg.styles.lines.forEach(function(line, index) {
                     var lineStyle = {
-                      color: line.color || '#00D4AA',
+                      color: line.color || '#3B82F6',
                       size: line.size || 1,
                       style: line.style || 'solid'
                     };
@@ -944,7 +944,7 @@ export default function SimpleKLineChart({
                   processedStyles = { lines: [] };
                   styles.lines.forEach(function(line, index) {
                     var lineStyle = {
-                      color: line.color || '#00D4AA',
+                      color: line.color || '#3B82F6',
                       size: line.size || 1,
                       style: line.style || 'solid'
                     };
