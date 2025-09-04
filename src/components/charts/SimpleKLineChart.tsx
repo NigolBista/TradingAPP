@@ -976,36 +976,6 @@ export default function SimpleKLineChart({
                 // Try multiple approaches
                 var result = false;
                 
-                // Approach 1: Try with name and candle_pane
-                var overrideObject1 = {
-                  name: indicatorName,
-                  styles: processedStyles
-                };
-                post({ debug: 'Trying approach 1 - using name with candle_pane', overrideObject: overrideObject1 });
-                result = chart.overrideIndicator(overrideObject1, 'candle_pane', function() {
-                  post({ debug: 'Approach 1 callback executed' });
-                });
-                
-                if (result) {
-                  post({ debug: 'Approach 1 succeeded', result: result });
-                  return result;
-                }
-                
-                // Approach 2: Try with name without paneId
-                var overrideObject2 = {
-                  name: indicatorName,
-                  styles: processedStyles
-                };
-                post({ debug: 'Trying approach 2 - using name without paneId', overrideObject: overrideObject2 });
-                result = chart.overrideIndicator(overrideObject2, null, function() {
-                  post({ debug: 'Approach 2 callback executed' });
-                });
-                
-                if (result) {
-                  post({ debug: 'Approach 2 succeeded', result: result });
-                  return result;
-                }
-                
                 // Approach 3: Use actual indicator ID if available
                 var foundIndicator = allIndicators.find(function(ind) {
                   return ind && ind.name === indicatorName;
@@ -1017,29 +987,10 @@ export default function SimpleKLineChart({
                     styles: processedStyles
                   };
                   post({ debug: 'Trying approach 3 - using indicator ID', overrideObject: overrideObject3 });
-                  result = chart.overrideIndicator(overrideObject3, 'candle_pane', function() {
+                  chart.overrideIndicator(overrideObject3, 'candle_pane', function() {
                     post({ debug: 'Approach 3 callback executed' });
                   });
-                  
-                  if (result) {
-                    post({ debug: 'Approach 3 succeeded', result: result });
-                    return result;
-                  }
                 }
-                
-                // Approach 4: Try with just the name as string
-                post({ debug: 'Trying approach 4 - using name as string', indicatorName: indicatorName });
-                result = chart.overrideIndicator(indicatorName, processedStyles, function() {
-                  post({ debug: 'Approach 4 callback executed' });
-                });
-                
-                if (result) {
-                  post({ debug: 'Approach 4 succeeded', result: result });
-                  return result;
-                }
-                
-                post({ debug: 'All approaches failed', result: result });
-                return result;
               } catch(e) {
                 post({ error: 'overrideIndicator failed', message: String(e && e.message || e), stack: e.stack });
                 return false;
