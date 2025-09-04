@@ -152,12 +152,18 @@ export default function ChartFullScreen() {
   // Indicators state
   const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
   const latestIndicatorsRef = useRef<IndicatorConfig[]>([]);
+  const styleRetryRef = useRef<NodeJS.Timeout | null>(null);
   const [showIndicatorsSheet, setShowIndicatorsSheet] = useState(false);
   // migrated animations handled in extracted components
   const [showIndicatorsAccordion, setShowIndicatorsAccordion] = useState(false);
   useEffect(() => {
     latestIndicatorsRef.current = indicators;
   }, [indicators]);
+  useEffect(() => {
+    return () => {
+      if (styleRetryRef.current) clearInterval(styleRetryRef.current);
+    };
+  }, []);
   // Removed indicator config modal state - now using screen navigation
   // Line style editing now handled in IndicatorConfigScreen
   const [lastCandle, setLastCandle] = useState<Candle | null>(null);
@@ -263,6 +269,8 @@ export default function ChartFullScreen() {
   }, [symbol]);
 
   const applyIndicatorStyles = React.useCallback(() => {
+    if (styleRetryRef.current) clearInterval(styleRetryRef.current);
+
     const attempt = () => {
       if (!overrideIndicatorRef.current) return;
       latestIndicatorsRef.current.forEach((indicator) => {
@@ -274,10 +282,17 @@ export default function ChartFullScreen() {
       });
     };
 
-    // apply immediately and then a few more times to handle chart resets
-    [0, 100, 250, 500, 1000].forEach((delay) => {
-      setTimeout(attempt, delay);
-    });
+    // Run once immediately and then retry for a short period to handle chart resets
+    attempt();
+    let tries = 0;
+    styleRetryRef.current = setInterval(() => {
+      attempt();
+      tries += 1;
+      if (tries > 20) {
+        if (styleRetryRef.current) clearInterval(styleRetryRef.current);
+        styleRetryRef.current = null;
+      }
+    }, 200);
   }, []);
 
   useEffect(() => {
@@ -729,8 +744,10 @@ export default function ChartFullScreen() {
         }
       }
 
+      latestIndicatorsRef.current = updated;
       return updated;
     });
+    applyIndicatorStyles();
   }
 
   function updateIndicatorLine(
@@ -779,8 +796,10 @@ export default function ChartFullScreen() {
         }
       }
 
+      latestIndicatorsRef.current = updated;
       return updated;
     });
+    applyIndicatorStyles();
   }
 
   // Line style editor functions removed - now handled in IndicatorConfigScreen
