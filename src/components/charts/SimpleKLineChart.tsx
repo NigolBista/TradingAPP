@@ -220,16 +220,9 @@ export default function SimpleKLineChart({
               } else {
                 post({ error: 'overrideIndicator function not available in __SIMPLE_KLINE__' });
               }
-            } else if (data.type === 'testCapabilities') {
-              post({ debug: 'Processing testCapabilities message' });
-              if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.testChartCapabilities) {
-                window.__SIMPLE_KLINE__.testChartCapabilities();
               } else {
-                post({ error: 'testChartCapabilities function not available in __SIMPLE_KLINE__' });
+                post({ debug: 'Unknown message type', type: data.type });
               }
-            } else {
-              post({ debug: 'Unknown message type', type: data.type });
-            }
           } catch(e) {
             post({ error: 'message_handler_failed', message: String(e && e.message || e), rawData: event.data });
           }
@@ -864,21 +857,12 @@ export default function SimpleKLineChart({
               }
             } catch(_) {}
 
-            // Indicator override function
-            function overrideIndicator(id, styles) {
-              try {
-                post({ debug: 'overrideIndicator called', id: id, styles: styles, idType: typeof id, stylesType: typeof styles });
-                
-                // Special case for testing capabilities
-                if (id === 'TEST_CAPABILITIES' && styles && styles.test) {
-                  post({ debug: 'Test capabilities requested, running test...' });
-                  if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.testChartCapabilities) {
-                    window.__SIMPLE_KLINE__.testChartCapabilities();
-                  }
-                  return true;
-                }
-                
-                // Check if parameters are swapped (common issue)
+              // Indicator override function
+              function overrideIndicator(id, styles) {
+                try {
+                  post({ debug: 'overrideIndicator called', id: id, styles: styles, idType: typeof id, stylesType: typeof styles });
+
+                  // Check if parameters are swapped (common issue)
                 if (typeof id === 'object' && id.styles && typeof styles === 'string') {
                   post({ debug: 'Parameters appear to be swapped, correcting...' });
                   // Extract the actual indicator name and styles from the nested object
@@ -966,12 +950,8 @@ export default function SimpleKLineChart({
                   post({ debug: 'Using complete lines array from ChartFullScreen', processedStyles: processedStyles });
                 }
                 
-                // Get current styles before applying override
-                var currentStyles = getCurrentIndicatorStyles(indicatorName);
-                post({ debug: 'Current styles before override', currentStyles: currentStyles });
-                
-                // Call the chart's overrideIndicator method with correct API signature
-                post({ debug: 'Calling chart.overrideIndicator', indicatorName: indicatorName, processedStyles: processedStyles });
+                  // Call the chart's overrideIndicator method with correct API signature
+                  post({ debug: 'Calling chart.overrideIndicator', indicatorName: indicatorName, processedStyles: processedStyles });
                 
                 // Try multiple approaches
                 var result = false;
@@ -1046,91 +1026,20 @@ export default function SimpleKLineChart({
               }
             }
 
-            // Test function to verify chart capabilities
-            function testChartCapabilities() {
-              try {
-                post({ debug: 'Testing chart capabilities...' });
-                post({ debug: 'Chart object exists', hasChart: !!chart });
-                post({ debug: 'Chart overrideIndicator method', hasMethod: typeof chart.overrideIndicator === 'function' });
-                
-                if (typeof chart.getIndicators === 'function') {
-                  var indicators = chart.getIndicators() || [];
-                  post({ debug: 'Available indicators for testing', indicators: indicators });
-                  
-                  // Get detailed info about each indicator
-                  indicators.forEach(function(ind, index) {
-                    post({ 
-                      debug: 'Indicator ' + index, 
-                      name: ind.name, 
-                      id: ind.id, 
-                      calcParams: ind.calcParams,
-                      styles: ind.styles,
-                      type: typeof ind
-                    });
-                  });
-                }
-                
-                // Try a simple test
-                if (typeof chart.overrideIndicator === 'function') {
-                  post({ debug: 'Attempting simple test override...' });
-                  var testResult = chart.overrideIndicator({
-                    name: 'EMA',
-                    styles: { lines: [{ color: '#ff0000', size: 2, style: 'solid' }] }
-                  }, 'candle_pane', function() {
-                    post({ debug: 'Test override callback executed!' });
-                  });
-                  post({ debug: 'Test override result', result: testResult });
-                }
-              } catch(e) {
-                post({ error: 'Test failed', message: String(e && e.message || e) });
-              }
-            }
-            
-            // Function to get current indicator styles
-            function getCurrentIndicatorStyles(indicatorName) {
-              try {
-                if (typeof chart.getIndicators === 'function') {
-                  var indicators = chart.getIndicators() || [];
-                  var foundIndicator = indicators.find(function(ind) {
-                    return ind && ind.name === indicatorName;
-                  });
-                  
-                  if (foundIndicator) {
-                    post({ 
-                      debug: 'Current styles for ' + indicatorName, 
-                      styles: foundIndicator.styles,
-                      calcParams: foundIndicator.calcParams,
-                      id: foundIndicator.id
-                    });
-                    return foundIndicator.styles;
-                  } else {
-                    post({ debug: 'Indicator not found: ' + indicatorName });
-                    return null;
-                  }
-                }
-                return null;
-              } catch(e) {
-                post({ error: 'getCurrentIndicatorStyles failed', message: String(e && e.message || e) });
-                return null;
-              }
-            }
-
-            window.__SIMPLE_KLINE__ = {
-              setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} },
-              setLevels: function(lvls){ try { applyLevels(lvls); } catch(_){} },
-              setIndicators: function(list){
+              window.__SIMPLE_KLINE__ = {
+                setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} },
+                setLevels: function(lvls){ try { applyLevels(lvls); } catch(_){} },
+                setIndicators: function(list){
                 try {
                   clearAllIndicators();
                   if (Array.isArray(list)) {
                     list.forEach(function(ic){ createIndicatorSafe(ic); });
                   }
                 } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); }
-              },
-              overrideIndicator: overrideIndicator,
-              testChartCapabilities: testChartCapabilities,
-              getCurrentIndicatorStyles: getCurrentIndicatorStyles,
-              levelOverlayIds: []
-            };
+                },
+                overrideIndicator: overrideIndicator,
+                levelOverlayIds: []
+              };
 
             post({ ready: true, symbol: SYMBOL });
 
