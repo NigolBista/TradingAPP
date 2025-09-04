@@ -73,7 +73,7 @@ export default function ChartFullScreen() {
   const { cacheSignal, getCachedSignal } = useSignalCacheStore();
   const { profile, setProfile } = useUserStore();
   const [chartType, setChartType] = useState<ChartType>(
-    (route.params?.chartType as ChartType) || "candlestick"
+    (route.params?.chartType as ChartType) || "candlestick",
   );
 
   const initialTimeframe: string | undefined = route.params?.initialTimeframe;
@@ -110,7 +110,7 @@ export default function ChartFullScreen() {
   // State variables
   const [data, setData] = useState<any[]>(initialDataParam || []);
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
-    (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
+    (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D",
   );
   const [stockName, setStockName] = useState<string>("");
   React.useEffect(() => {
@@ -144,16 +144,20 @@ export default function ChartFullScreen() {
   // migrated animations handled in extracted components
   const [analyzing, setAnalyzing] = useState<boolean>(false);
   const [currentTradePlan, setCurrentTradePlan] = useState<any | undefined>(
-    initialTradePlan
+    initialTradePlan,
   );
   const [showMA, setShowMA] = useState<boolean>(false);
   const [showVolume, setShowVolume] = useState<boolean>(false);
   const [indicatorsExpanded, setIndicatorsExpanded] = useState<boolean>(false);
   // Indicators state
   const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
+  const latestIndicatorsRef = useRef<IndicatorConfig[]>([]);
   const [showIndicatorsSheet, setShowIndicatorsSheet] = useState(false);
   // migrated animations handled in extracted components
   const [showIndicatorsAccordion, setShowIndicatorsAccordion] = useState(false);
+  useEffect(() => {
+    latestIndicatorsRef.current = indicators;
+  }, [indicators]);
   // Removed indicator config modal state - now using screen navigation
   // Line style editing now handled in IndicatorConfigScreen
   const [lastCandle, setLastCandle] = useState<Candle | null>(null);
@@ -175,8 +179,8 @@ export default function ChartFullScreen() {
     initialAnalysisContext?.mode === "day_trade"
       ? "day_trade"
       : initialAnalysisContext?.mode === "swing_trade"
-      ? "swing_trade"
-      : "auto"
+        ? "swing_trade"
+        : "auto",
   );
 
   const showUnifiedBottomSheetWithTab = () => {
@@ -199,7 +203,7 @@ export default function ChartFullScreen() {
     "auto" | "day" | "scalp" | "swing"
   >((initialAnalysisContext?.tradePace as any) || "auto");
   const [desiredRR, setDesiredRR] = useState<number>(
-    initialAnalysisContext?.desiredRR || 1.5
+    initialAnalysisContext?.desiredRR || 1.5,
   );
   const [contextMode, setContextMode] = useState<
     "price_action" | "news_sentiment"
@@ -210,16 +214,15 @@ export default function ChartFullScreen() {
 
   // Auto-analysis and streaming output
   const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState<boolean>(
-    !!initialAnalysisContext || !!initialAiMeta // Skip auto-analysis if we have existing analysis data
+    !!initialAnalysisContext || !!initialAiMeta, // Skip auto-analysis if we have existing analysis data
   );
   const [streamingText, setStreamingText] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
 
   // Reasoning box visibility control
   const [showReasoning, setShowReasoning] = useState<boolean>(false);
-  const [hasExistingReasoning, setHasExistingReasoning] = useState<boolean>(
-    !!initialAiMeta
-  );
+  const [hasExistingReasoning, setHasExistingReasoning] =
+    useState<boolean>(!!initialAiMeta);
 
   // Strategy complexity state
   const [showComplexityBottomSheet, setShowComplexityBottomSheet] =
@@ -247,7 +250,7 @@ export default function ChartFullScreen() {
       indicatorBarHeight -
       timeframeRowHeight -
       bottomNavHeight -
-      8
+      8,
   );
 
   useEffect(() => {
@@ -259,39 +262,30 @@ export default function ChartFullScreen() {
     }
   }, [symbol]);
 
-  // Update chart when returning from IndicatorConfigScreen
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      // Force chart refresh when returning from indicator config
-      if (overrideIndicatorRef.current && indicators.length > 0) {
-        indicators.forEach((indicator) => {
-          if (indicator.styles?.lines) {
-            overrideIndicatorRef.current!(indicator.name, {
-              lines: indicator.styles.lines,
-            });
-          }
-        });
-      }
-    });
-    return unsubscribe;
-  }, [navigation, indicators]);
-
-  // Apply default styles to chart when indicators are first loaded
-  useEffect(() => {
-    if (overrideIndicatorRef.current && indicators.length > 0) {
-      indicators.forEach((indicator) => {
+  const applyIndicatorStyles = React.useCallback((retry = 0) => {
+    if (overrideIndicatorRef.current) {
+      latestIndicatorsRef.current.forEach((indicator) => {
         if (indicator.styles?.lines) {
-          console.log(
-            `🎨 Applying initial styles for ${indicator.name}:`,
-            indicator.styles.lines
-          );
           overrideIndicatorRef.current!(indicator.name, {
             lines: indicator.styles.lines,
           });
         }
       });
+    } else if (retry < 5) {
+      setTimeout(() => applyIndicatorStyles(retry + 1), 100 * (retry + 1));
     }
-  }, [indicators]);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      applyIndicatorStyles();
+    });
+    return unsubscribe;
+  }, [navigation, applyIndicatorStyles]);
+
+  useEffect(() => {
+    applyIndicatorStyles();
+  }, [indicators, applyIndicatorStyles]);
 
   // Fallback: if no isDayUp provided, hydrate from cached quotes
   useEffect(() => {
@@ -563,8 +557,8 @@ export default function ChartFullScreen() {
             profile.riskPerTradePct && profile.riskPerTradePct <= 1
               ? "conservative"
               : profile.riskPerTradePct && profile.riskPerTradePct <= 2
-              ? "moderate"
-              : "aggressive",
+                ? "moderate"
+                : "aggressive",
           preferredRiskReward: profile.preferredRiskReward || desiredRR,
           userPreferences: {
             pace: isAutoAnalysis ? "auto" : tradePace,
@@ -723,7 +717,7 @@ export default function ChartFullScreen() {
         if (newIndicator && overrideIndicatorRef.current) {
           console.log(
             `🎨 Applying default colors for ${name}:`,
-            newIndicator.styles?.lines
+            newIndicator.styles?.lines,
           );
           overrideIndicatorRef.current(name, {
             lines: newIndicator.styles?.lines || [],
@@ -738,14 +732,14 @@ export default function ChartFullScreen() {
   function updateIndicatorLine(
     name: string,
     lineIndex: number,
-    updates: Partial<{ color: string; size: number; style: string }>
+    updates: Partial<{ color: string; size: number; style: string }>,
   ) {
     setIndicators((prev) => {
       const updated = updateIndicatorLineInList(
         prev as any,
         name,
         lineIndex,
-        updates as any
+        updates as any,
       ) as any;
 
       // Apply the style override to the chart immediately with the updated state
@@ -768,7 +762,7 @@ export default function ChartFullScreen() {
             } else {
               // Keep existing line style
               updatedLines.push(
-                lines[i] || { color: "#3B82F6", size: 1, style: "solid" }
+                lines[i] || { color: "#3B82F6", size: 1, style: "solid" },
               );
             }
           }
@@ -819,7 +813,7 @@ export default function ChartFullScreen() {
       const { list, newIndex } = addIndicatorParamInList(
         prev as any,
         name,
-        Math.floor(value)
+        Math.floor(value),
       );
       // Note: configSelectedIndex no longer needed with screen navigation
       // Note: No need to update indicatorToEdit since we're using screen navigation
@@ -833,7 +827,7 @@ export default function ChartFullScreen() {
       const updated = removeIndicatorParamInList(
         prev as any,
         name,
-        value
+        value,
       ) as any;
       // Note: No need to update indicatorToEdit since we're using screen navigation
       // Force shallow copy to change array reference for WebView key
@@ -893,7 +887,8 @@ export default function ChartFullScreen() {
     const interval = setInterval(() => {
       if (currentIndex < words.length) {
         setStreamingText(
-          (prev) => prev + (currentIndex === 0 ? "" : " ") + words[currentIndex]
+          (prev) =>
+            prev + (currentIndex === 0 ? "" : " ") + words[currentIndex],
         );
         currentIndex++;
       } else {
@@ -917,7 +912,7 @@ export default function ChartFullScreen() {
 
     console.log(
       "🔍 Current indicators:",
-      indicators.map((i) => i.name)
+      indicators.map((i) => i.name),
     );
 
     // First, let's add an EMA indicator if it doesn't exist
@@ -994,7 +989,7 @@ export default function ChartFullScreen() {
     }, 2000);
 
     console.log(
-      "✅ Applied test indicator override for EMA with line-specific styling"
+      "✅ Applied test indicator override for EMA with line-specific styling",
     );
   }
 
@@ -1078,6 +1073,7 @@ export default function ChartFullScreen() {
           indicators={indicators}
           onOverrideIndicator={(overrideFn) => {
             overrideIndicatorRef.current = overrideFn;
+            applyIndicatorStyles();
           }}
           levels={
             currentTradePlan
@@ -1089,7 +1085,7 @@ export default function ChartFullScreen() {
                   stop: currentTradePlan.stop,
                   targets: (currentTradePlan.targets || []).slice(
                     0,
-                    3
+                    3,
                   ) as number[],
                 }
               : undefined
@@ -1312,7 +1308,7 @@ export default function ChartFullScreen() {
         onSelectComplexity={(c) => {
           setSelectedComplexity(c);
           setCurrentTradePlan((prev: any) =>
-            prev ? applyComplexityToPlan(prev, c) : prev
+            prev ? applyComplexityToPlan(prev, c) : prev,
           );
         }}
         profile={profile}
