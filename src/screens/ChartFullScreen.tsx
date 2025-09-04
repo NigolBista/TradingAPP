@@ -98,6 +98,10 @@ export default function ChartFullScreen() {
   const [pinError, setPinError] = useState<string | null>(null);
   const chartRef = React.useRef<any>(null);
   const barSpacingRef = React.useRef<number>(60_000);
+  const overrideIndicatorRef = React.useRef<
+    | ((id: string | { name: string; paneId?: string }, styles: any) => void)
+    | null
+  >(null);
 
   // Rate limiting state for historical data requests
   const lastHistoricalRequestRef = useRef<number>(0);
@@ -693,6 +697,39 @@ export default function ChartFullScreen() {
           updates as any
         ) as any
     );
+
+    // Apply the style override to the chart immediately
+    if (overrideIndicatorRef.current) {
+      const indicator = indicators.find((i) => i.name === name);
+      if (indicator) {
+        const count = Array.isArray(indicator.calcParams)
+          ? indicator.calcParams.length
+          : 1;
+        const lines = Array.isArray((indicator.styles as any)?.lines)
+          ? ((indicator.styles as any).lines as any[]).slice()
+          : [];
+
+        // Create a new lines array with only the specific line updated
+        const updatedLines = [];
+        for (let i = 0; i < count; i++) {
+          if (i === lineIndex) {
+            // Apply updates to the specific line
+            updatedLines.push({ ...lines[i], ...updates });
+          } else {
+            // Keep existing line style
+            updatedLines.push(
+              lines[i] || { color: "#00D4AA", size: 1, style: "solid" }
+            );
+          }
+        }
+
+        // Apply override to chart with line index information
+        overrideIndicatorRef.current(name, {
+          lines: updatedLines,
+          lineIndex: lineIndex, // Pass the line index for precise targeting
+        });
+      }
+    }
   }
 
   // Line style editor functions removed - now handled in IndicatorConfigScreen
@@ -818,6 +855,132 @@ export default function ChartFullScreen() {
     return performAnalysis(false);
   }
 
+  // Test function to demonstrate indicator style overrides
+  function testIndicatorOverrides() {
+    if (!overrideIndicatorRef.current) {
+      console.log("❌ overrideIndicatorRef.current is null");
+      return;
+    }
+
+    console.log(
+      "🔍 Current indicators:",
+      indicators.map((i) => i.name)
+    );
+
+    // First, let's add an EMA indicator if it doesn't exist
+    if (!indicators.find((i) => i.name === "EMA")) {
+      console.log("➕ Adding EMA indicator for testing");
+      toggleIndicator("EMA");
+
+      // Wait a bit for the indicator to be added, then apply override
+      setTimeout(() => {
+        applyTestOverride();
+      }, 1000);
+    } else {
+      applyTestOverride();
+    }
+  }
+
+  function applyTestOverride() {
+    if (!overrideIndicatorRef.current) return;
+
+    console.log("🎨 Applying test override...");
+
+    // Test different styles for EMA indicator - line-specific
+    const emaId = "EMA";
+
+    // Test 1: Change only the first line (EMA9) to orange with dashed line
+    overrideIndicatorRef.current(emaId, {
+      lines: [
+        {
+          color: "#ff9800",
+          size: 3,
+          style: "dashed",
+          dashedValue: [6, 3],
+        },
+        {
+          color: "#00D4AA", // Keep second line default
+          size: 1,
+          style: "solid",
+        },
+        {
+          color: "#00D4AA", // Keep third line default
+          size: 1,
+          style: "solid",
+        },
+      ],
+      lineIndex: 0, // Specify we're updating line 0 (EMA9)
+    });
+
+    // Test 2: Change only the second line (EMA12) to red
+    setTimeout(() => {
+      if (overrideIndicatorRef.current) {
+        console.log("🎨 Trying line-specific override for EMA12...");
+        overrideIndicatorRef.current(emaId, {
+          lines: [
+            {
+              color: "#ff9800", // Keep first line orange
+              size: 3,
+              style: "dashed",
+              dashedValue: [6, 3],
+            },
+            {
+              color: "#ff0000", // Change second line to red
+              size: 4,
+              style: "solid",
+            },
+            {
+              color: "#00D4AA", // Keep third line default
+              size: 1,
+              style: "solid",
+            },
+          ],
+          lineIndex: 1, // Specify we're updating line 1 (EMA12)
+        });
+      }
+    }, 2000);
+
+    console.log(
+      "✅ Applied test indicator override for EMA with line-specific styling"
+    );
+  }
+
+  // Test function to check chart capabilities
+  function testChartCapabilities() {
+    if (!overrideIndicatorRef.current) return;
+
+    console.log("🔍 Testing chart capabilities...");
+
+    // Try a direct injection test
+    const testCode = `
+      if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.testChartCapabilities) {
+        window.__SIMPLE_KLINE__.testChartCapabilities();
+      } else {
+        console.log('❌ testChartCapabilities function not available');
+      }
+    `;
+
+    // Send a test message that will trigger the test function
+    console.log("📤 Sending capability test message");
+
+    // We need to access the WebView to send the message
+    // For now, let's just trigger the test by calling the overrideIndicator with a special test case
+    if (overrideIndicatorRef.current) {
+      // Send a test message by calling overrideIndicator with test parameters
+      console.log("📤 Triggering test via overrideIndicator call");
+      overrideIndicatorRef.current("TEST_CAPABILITIES", { test: true });
+    }
+  }
+
+  // Function to get current indicator styles
+  function getCurrentIndicatorStyles(indicatorName: string) {
+    console.log("🔍 Getting current styles for:", indicatorName);
+
+    // We need to access the WebView to call the function
+    // For now, let's just log what we expect
+    console.log("📤 Would call getCurrentIndicatorStyles for:", indicatorName);
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -860,6 +1023,9 @@ export default function ChartFullScreen() {
           showPriceAxisText={true}
           showTimeAxisText={true}
           indicators={indicators}
+          onOverrideIndicator={(overrideFn) => {
+            overrideIndicatorRef.current = overrideFn;
+          }}
           levels={
             currentTradePlan
               ? {
@@ -1030,6 +1196,56 @@ export default function ChartFullScreen() {
             >
               {selectedComplexity.charAt(0).toUpperCase() +
                 selectedComplexity.slice(1)}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* Test Indicator Override Button - Remove this in production */}
+        <View
+          style={{
+            marginTop: 8,
+            alignItems: "center",
+            flexDirection: "row",
+            gap: 8,
+          }}
+        >
+          <Pressable
+            onPress={testIndicatorOverrides}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              backgroundColor: "#ff9800",
+            }}
+          >
+            <Text style={{ color: "#000", fontWeight: "600", fontSize: 12 }}>
+              Test Override
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={testChartCapabilities}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              backgroundColor: "#3B82F6",
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>
+              Test Capabilities
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => getCurrentIndicatorStyles("EMA")}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: 16,
+              borderRadius: 8,
+              backgroundColor: "#10B981",
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>
+              Get EMA Styles
             </Text>
           </Pressable>
         </View>
