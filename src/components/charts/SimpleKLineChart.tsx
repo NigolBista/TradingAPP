@@ -45,6 +45,13 @@ interface Props {
   customData?: Array<{ time: number; value: number }>;
   // New: dynamic indicators configuration
   indicators?: IndicatorConfig[];
+  // New: indicator override callback setter
+  onOverrideIndicator?: (
+    overrideFn: (
+      id: string | { name: string; paneId?: string },
+      styles: any
+    ) => void
+  ) => void;
 }
 
 export interface IndicatorConfig {
@@ -74,9 +81,61 @@ export default function SimpleKLineChart({
   customBars,
   customData,
   indicators = [],
+  onOverrideIndicator,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
+
+  // Method to override indicator styles
+  const overrideIndicator = React.useCallback(
+    (id: string | { name: string; paneId?: string }, styles: any) => {
+      if (isReadyRef.current && webRef.current) {
+        const message = JSON.stringify({
+          type: "overrideIndicator",
+          id,
+          styles,
+        });
+        // console.log("📤 Sending message to WebView:", message);
+
+        // Try both methods
+        webRef.current.postMessage(message);
+
+        // Also try injecting JavaScript directly with correct API signature
+        const indicatorName = typeof id === "string" ? id : id.name;
+        const jsCode = `
+          if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.overrideIndicator) {
+            console.log('Direct injection: calling overrideIndicator for ${indicatorName}');
+            var overrideObj = {
+              name: '${indicatorName}',
+              styles: ${JSON.stringify(styles)}
+            };
+            console.log('Direct injection: override object', overrideObj);
+            window.__SIMPLE_KLINE__.overrideIndicator(overrideObj, 'candle_pane', function() {
+              console.log('Direct injection: override callback executed');
+            });
+          } else {
+            console.log('Direct injection: overrideIndicator not available');
+          }
+        `;
+        webRef.current.injectJavaScript(jsCode);
+      } else {
+        console.log(
+          "❌ Cannot send message - isReady:",
+          isReadyRef.current,
+          "webRef:",
+          !!webRef.current
+        );
+      }
+    },
+    []
+  );
+
+  // Expose overrideIndicator method to parent component
+  React.useEffect(() => {
+    if (onOverrideIndicator) {
+      onOverrideIndicator(overrideIndicator);
+    }
+  }, [onOverrideIndicator, overrideIndicator]);
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
 
@@ -146,6 +205,28 @@ export default function SimpleKLineChart({
       (function(){
         function post(msg){ try { window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch(e) {} }
         window.onerror = function(m, s, l, c, e){ post({ error: m || (e && e.message) || 'unknown' }); };
+
+        // Handle messages from React Native
+        document.addEventListener('message', function(event) {
+          try {
+            post({ debug: 'Received message from React Native', rawData: event.data });
+            var data = JSON.parse(event.data || '{}');
+            post({ debug: 'Parsed message data', data: data });
+            if (data.type === 'overrideIndicator') {
+              post({ debug: 'Processing overrideIndicator message', id: data.id, styles: data.styles });
+              if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.overrideIndicator) {
+                // Pass the parameters correctly - id and styles separately
+                window.__SIMPLE_KLINE__.overrideIndicator(data.id, data.styles);
+              } else {
+                post({ error: 'overrideIndicator function not available in __SIMPLE_KLINE__' });
+              }
+            } else {
+              post({ debug: 'Unknown message type', type: data.type });
+            }
+          } catch(e) {
+            post({ error: 'message_handler_failed', message: String(e && e.message || e), rawData: event.data });
+          }
+        });
 
         var SYMBOL = ${JSON.stringify(safeSymbol)};
         var CHART_TYPE = ${JSON.stringify(ct)}; // 'candle' | 'line' | 'area'
@@ -711,7 +792,7 @@ export default function SimpleKLineChart({
                   var processedStyles = { lines: [] };
                   cfg.styles.lines.forEach(function(line, index) {
                     var lineStyle = {
-                      color: line.color || '#00D4AA',
+                      color: line.color || '#3B82F6',
                       size: line.size || 1,
                       style: line.style || 'solid'
                     };
@@ -776,6 +857,94 @@ export default function SimpleKLineChart({
               }
             } catch(_) {}
 
+            // Indicator override function
+            function overrideIndicator(id, styles) {
+              try {
+                // Check if parameters are swapped (common issue)
+                if (typeof id === 'object' && id.styles && typeof styles === 'string') {
+                  post({ debug: 'Parameters appear to be swapped, correcting...' });
+                  // Extract the actual indicator name and styles from the nested object
+                  var actualId = id.name || styles; // Use the name from the object, or fallback to the string
+                  var actualStyles = id.styles || id; // Use the styles from the object, or use the whole object
+                  id = actualId;
+                  styles = actualStyles;
+                  post({ debug: 'Corrected parameters', id: id, styles: styles });
+                }
+                
+                
+                if (!chart) {
+                  post({ error: 'Chart instance not available' });
+                  return false;
+                }
+                
+                if (typeof chart.overrideIndicator !== 'function') {
+                  post({ error: 'overrideIndicator method not available on chart instance' });
+                  return false;
+                }
+                
+                // Get all indicators for debugging
+                var allIndicators = [];
+                try {
+                  if (typeof chart.getIndicators === 'function') {
+                    allIndicators = chart.getIndicators() || [];
+                  }
+                } catch(e) {
+                  post({ debug: 'Error getting indicators list', error: String(e) });
+                }
+                
+                // Handle different ID formats and extract the indicator name
+                var indicatorName = id;
+                
+                // Process styles to handle line styles properly
+                var processedStyles = styles;
+                if (styles && styles.lines && Array.isArray(styles.lines)) {
+                  // Always use the complete lines array from ChartFullScreen
+                  processedStyles = { lines: [] };
+                  styles.lines.forEach(function(line, index) {
+                    var lineStyle = {
+                      color: line.color || '#3B82F6',
+                      size: line.size || 1,
+                      style: line.style || 'solid'
+                    };
+                    
+                    // Convert style to chart library format
+                    if (line.style === 'dashed') {
+                      lineStyle.style = 'dashed';
+                      lineStyle.dashedValue = line.dashedValue || [5, 3];
+                    } else if (line.style === 'dotted') {
+                      lineStyle.style = 'dashed';
+                      lineStyle.dashedValue = [1, 2];
+                    } else if (line.style === 'solid') {
+                      lineStyle.style = 'solid';
+                      delete lineStyle.dashedValue;
+                    }
+                    
+                    processedStyles.lines.push(lineStyle);
+                  });
+                  post({ debug: 'Using complete lines array from ChartFullScreen', processedStyles: processedStyles });
+                }
+                
+                // Approach 3: Use actual indicator ID if available
+                var foundIndicator = allIndicators.find(function(ind) {
+                  return ind && ind.name === indicatorName;
+                });
+                
+                if (foundIndicator && foundIndicator.id) {
+                  var overrideObject3 = {
+                    id: foundIndicator.id,
+                    styles: processedStyles
+                  };
+                  post({ debug: 'Trying approach 3 - using indicator ID', overrideObject: overrideObject3 });
+                  chart.overrideIndicator(overrideObject3, 'candle_pane', function() {
+                    post({ debug: 'Approach 3 callback executed' });
+                  });
+                }
+              } catch(e) {
+                post({ error: 'overrideIndicator failed', message: String(e && e.message || e), stack: e.stack });
+                return false;
+              }
+            }
+
             window.__SIMPLE_KLINE__ = {
               setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} },
               setLevels: function(lvls){ try { applyLevels(lvls); } catch(_){} },
@@ -787,6 +956,7 @@ export default function SimpleKLineChart({
                   }
                 } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); }
               },
+              overrideIndicator: overrideIndicator,
               levelOverlayIds: []
             };
 

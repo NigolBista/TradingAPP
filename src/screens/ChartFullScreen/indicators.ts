@@ -333,7 +333,7 @@ export function updateIndicatorLineInList(
       ? ((ind.styles as any).lines as IndicatorLineStyle[]).slice()
       : buildDefaultLines(count);
     const idx = Math.max(0, Math.min(lineIndex, count - 1));
-    const current = lines[idx] || { color: "#00D4AA", size: 1, style: "solid" };
+    const current = lines[idx] || buildDefaultLines(1)[0];
     lines[idx] = { ...current, ...updates } as IndicatorLineStyle;
     return {
       ...ind,
@@ -362,7 +362,7 @@ export function addIndicatorParamInList(
       ? ((ind.styles as any).lines as IndicatorLineStyle[]).slice()
       : buildDefaultLines(count);
     while (lines.length < count) {
-      lines.push({ color: "#00D4AA", size: 1, style: "solid" });
+      lines.push(buildDefaultLines(1)[0]);
     }
     return {
       ...ind,

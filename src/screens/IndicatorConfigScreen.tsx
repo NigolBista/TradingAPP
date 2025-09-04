@@ -15,6 +15,10 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { IndicatorConfig } from "../components/charts/SimpleKLineChart";
 import LineStyleModal from "./ChartFullScreen/LineStyleModal";
+import {
+  BUILTIN_INDICATORS,
+  buildDefaultLines,
+} from "./ChartFullScreen/indicators";
 
 type RouteParams = {
   indicatorName: string;
@@ -27,6 +31,12 @@ type RouteParams = {
     lineIndex: number,
     updates: Partial<{ color: string; size: number; style: string }>
   ) => void;
+};
+
+// Helper function to get proper default colors for an indicator
+const getDefaultIndicatorColors = (indicatorName: string, count: number) => {
+  const meta = BUILTIN_INDICATORS.find((i) => i.name === indicatorName);
+  return buildDefaultLines(count, meta?.defaultColor);
 };
 
 export default function IndicatorConfigScreen() {
@@ -85,11 +95,8 @@ export default function IndicatorConfigScreen() {
       const lines = Array.isArray((prev.styles as any)?.lines)
         ? ((prev.styles as any).lines as any[]).slice()
         : [];
-      const current = lines[lineStyleEditIndex] || {
-        color: "#00D4AA",
-        size: 1,
-        style: "solid",
-      };
+      const defaultColors = getDefaultIndicatorColors(indicatorName, 1);
+      const current = lines[lineStyleEditIndex] || defaultColors[0];
       lines[lineStyleEditIndex] = { ...current, color: hex };
       return { ...prev, styles: { ...(prev.styles as any), lines } } as any;
     });
@@ -105,34 +112,28 @@ export default function IndicatorConfigScreen() {
       const lines = Array.isArray((prev.styles as any)?.lines)
         ? ((prev.styles as any).lines as any[]).slice()
         : [];
-      const current = lines[lineStyleEditIndex] || {
-        color: "#00D4AA",
-        size: 1,
-        style: "solid",
-      };
+      const defaultColors = getDefaultIndicatorColors(indicatorName, 1);
+      const current = lines[lineStyleEditIndex] || defaultColors[0];
       lines[lineStyleEditIndex] = { ...current, size };
       return { ...prev, styles: { ...(prev.styles as any), lines } } as any;
     });
   };
 
   const handleUpdateStyle = (style: string) => {
-    // Update local state first for immediate UI feedback
+    // Update parent state first
+    onUpdateIndicatorLine(indicatorName, lineStyleEditIndex, { style });
+
+    // Update local state for immediate UI feedback
     setIndicator((prev) => {
       if (!prev) return prev;
       const lines = Array.isArray((prev.styles as any)?.lines)
         ? ((prev.styles as any).lines as any[]).slice()
         : [];
-      const current = lines[lineStyleEditIndex] || {
-        color: "#00D4AA",
-        size: 1,
-        style: "solid",
-      };
+      const defaultColors = getDefaultIndicatorColors(indicatorName, 1);
+      const current = lines[lineStyleEditIndex] || defaultColors[0];
       lines[lineStyleEditIndex] = { ...current, style };
       return { ...prev, styles: { ...(prev.styles as any), lines } } as any;
     });
-
-    // Update parent state after local state
-    onUpdateIndicatorLine(indicatorName, lineStyleEditIndex, { style });
   };
 
   // Local helpers for immediate add/remove UI updates
@@ -150,8 +151,10 @@ export default function IndicatorConfigScreen() {
       const lines = Array.isArray((prev.styles as any)?.lines)
         ? ((prev.styles as any).lines as any[]).slice()
         : [];
-      while (lines.length < count)
-        lines.push({ color: "#00D4AA", size: 1, style: "solid" });
+      while (lines.length < count) {
+        const defaultColors = getDefaultIndicatorColors(indicatorName, count);
+        lines.push(defaultColors[lines.length] || defaultColors[0]);
+      }
       return {
         ...prev,
         calcParams: params,
@@ -236,11 +239,11 @@ export default function IndicatorConfigScreen() {
             {Array.isArray(indicator.calcParams) ? (
               indicator.calcParams.map((period: any, idx: number) => {
                 const lines = (indicator.styles as any)?.lines || [];
-                const current = lines[idx] || {
-                  color: "#00D4AA",
-                  size: 1,
-                  style: "solid",
-                };
+                const defaultColors = getDefaultIndicatorColors(
+                  indicatorName,
+                  1
+                );
+                const current = lines[idx] || defaultColors[0];
 
                 const lineTitle = `${Number(period)}`;
                 const renderRightActions = () => (
@@ -424,7 +427,7 @@ export default function IndicatorConfigScreen() {
                       borderRadius: 20,
                       backgroundColor:
                         (indicator.styles as any)?.lines?.[0]?.color ||
-                        "#00D4AA",
+                        getDefaultIndicatorColors(indicatorName, 1)[0].color,
                       marginRight: 12,
                       borderWidth: 1,
                       borderColor: "#333",
@@ -439,7 +442,7 @@ export default function IndicatorConfigScreen() {
                           (indicator.styles as any)?.lines?.[0]?.size || 1,
                         backgroundColor:
                           (indicator.styles as any)?.lines?.[0]?.color ||
-                          "#00D4AA",
+                          getDefaultIndicatorColors(indicatorName, 1)[0].color,
                         borderRadius:
                           ((indicator.styles as any)?.lines?.[0]?.size || 1) /
                           2,
@@ -465,7 +468,8 @@ export default function IndicatorConfigScreen() {
                               (indicator.styles as any)?.lines?.[0]?.size || 1,
                             backgroundColor:
                               (indicator.styles as any)?.lines?.[0]?.color ||
-                              "#00D4AA",
+                              getDefaultIndicatorColors(indicatorName, 1)[0]
+                                .color,
                             borderRadius:
                               ((indicator.styles as any)?.lines?.[0]?.size ||
                                 1) / 2,
@@ -492,7 +496,8 @@ export default function IndicatorConfigScreen() {
                               (indicator.styles as any)?.lines?.[0]?.size || 1,
                             backgroundColor:
                               (indicator.styles as any)?.lines?.[0]?.color ||
-                              "#00D4AA",
+                              getDefaultIndicatorColors(indicatorName, 1)[0]
+                                .color,
                             borderRadius:
                               ((indicator.styles as any)?.lines?.[0]?.size ||
                                 1) / 2,
@@ -569,7 +574,7 @@ export default function IndicatorConfigScreen() {
                     style={{
                       paddingVertical: 10,
                       paddingHorizontal: 16,
-                      backgroundColor: "#00D4AA",
+                      backgroundColor: "#3B82F6",
                       borderRadius: 12,
                     }}
                   >
@@ -598,8 +603,10 @@ export default function IndicatorConfigScreen() {
           currentColor={
             Array.isArray((indicator?.styles as any)?.lines)
               ? ((indicator?.styles as any).lines as any[])[lineStyleEditIndex]
-                  ?.color || "#00D4AA"
-              : (indicator?.styles as any)?.lines?.[0]?.color || "#00D4AA"
+                  ?.color ||
+                getDefaultIndicatorColors(indicatorName, 1)[0].color
+              : (indicator?.styles as any)?.lines?.[0]?.color ||
+                getDefaultIndicatorColors(indicatorName, 1)[0].color
           }
           currentThickness={
             Array.isArray((indicator?.styles as any)?.lines)
