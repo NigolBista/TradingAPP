@@ -452,7 +452,10 @@ export default function SimpleKLineChart({
                     {
                       type: 'rect',
                       attrs: { x: start.x, y: 0, width: end.x - start.x, height: 9999 },
-                      styles: { color: color, style: 'fill' }
+                      styles: { color: color, style: 'fill' },
+                      // Explicitly ignore pointer events so the rectangle does not
+                      // intercept touch gestures and block chart panning
+                      ignoreEvent: true
                     }
                   ];
                 }
