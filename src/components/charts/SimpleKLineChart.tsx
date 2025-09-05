@@ -294,26 +294,26 @@ export default function SimpleKLineChart({
                 priceMark: {
                   last: {
                     show: SHOW_LAST_PRICE_LABEL,
-                    line: { show: SHOW_LAST_PRICE_LABEL },
+                    line: { show: SHOW_LAST_PRICE_LABEL, size: 1 },
                     text: { show: SHOW_LAST_PRICE_LABEL }
                   },
                   high: { show: false },
                   low: { show: false }
                 }
               },
-              xAxis: { 
+              xAxis: {
                 tickText: { show: SHOW_X_AXIS_TEXT },
                 axisLine: { show: SHOW_X_AXIS_LINE },
                 tickLine: { show: false }
               },
-              yAxis: { 
+              yAxis: {
                 tickText: { show: SHOW_Y_AXIS_TEXT },
                 axisLine: { show: SHOW_Y_AXIS_LINE },
                 tickLine: { show: false }
               },
               crosshair: {
-                horizontal: { text: { show: SHOW_TOP_INFO } },
-                vertical: { text: { show: SHOW_TOP_INFO } }
+                horizontal: { text: { show: true } },
+                vertical: { text: { show: true } }
               },
               grid: {
                 horizontal: {
