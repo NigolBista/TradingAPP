@@ -436,7 +436,13 @@ export default function SimpleKLineChart({
             if (window.klinecharts.registerOverlay && !window.__SESSION_BG_REGISTERED__) {
               window.klinecharts.registerOverlay({
                 name: 'sessionBg',
-                totalStep: 2,
+                // This overlay only draws preset rectangles and should never
+                // capture pointer events.  Define it as a pure decoration by
+                // disabling interaction steps and default mouse handling so it
+                // does not block chart panning.
+                totalStep: 0,
+                needDefaultMouseEvent: false,
+                needCrosshair: false,
                 createPointFigures: function({ coordinates, overlay }) {
                   var start = coordinates[0];
                   var end = coordinates[1];
