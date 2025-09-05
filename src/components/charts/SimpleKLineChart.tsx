@@ -820,7 +820,13 @@ export default function SimpleKLineChart({
                       var id = chart.createOverlay({
                         name: 'sessionBg',
                         lock: true,
-                        points: [ { timestamp: s.start, value: 0 }, { timestamp: s.end, value: 0 } ],
+                        // Mark as a non-interactive decoration so it does not
+                        // capture touch events and block chart panning
+                        mode: 'decoration',
+                        points: [
+                          { timestamp: s.start, value: 0 },
+                          { timestamp: s.end, value: 0 }
+                        ],
                         extendData: { color: s.color }
                       });
                       ids.push(id);
