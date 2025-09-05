@@ -526,6 +526,7 @@ export default function SimpleKLineChart({
               } catch(e) {
                 post({ error: 'apply_custom_failed', message: String(e && e.message || e) });
               }
+              setTimeout(applySessionBackgrounds, 0);
             } else {
               // v10: Use data loader backed by Polygon.io
               if (typeof chart.setDataLoader === 'function') {
@@ -536,7 +537,12 @@ export default function SimpleKLineChart({
                       var p = mapPeriod(TF);
                       var to = Date.now();
                       var from = to - 500 * periodToMs(p);
-                      if (!POLY_API_KEY) { post({ warn: 'Missing Polygon API key' }); callback([]); return; }
+                      if (!POLY_API_KEY) {
+                        post({ warn: 'Missing Polygon API key' });
+                        callback([]);
+                        setTimeout(applySessionBackgrounds, 0);
+                        return;
+                      }
                       var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) +
                                 '/range/' + p.span + '/' + p.type + '/' + from + '/' + to +
                                 '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
@@ -548,8 +554,13 @@ export default function SimpleKLineChart({
                             return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw };
                           });
                           callback(out);
+                          setTimeout(applySessionBackgrounds, 0);
                         })
-                        .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); callback([]); });
+                        .catch(function(err){
+                          post({ error: 'polygon_load_failed', message: String(err && err.message || err) });
+                          callback([]);
+                          setTimeout(applySessionBackgrounds, 0);
+                        });
                     } catch (e) { post({ error: 'getBars_failed', message: String(e && e.message || e) }); }
                   }
                 });
@@ -569,8 +580,12 @@ export default function SimpleKLineChart({
                       var list = (result && result.results) || [];
                       var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
                       try { chart.applyNewData(out || []); } catch(e) { post({ error: 'applyNewData failed', message: String(e && e.message || e) }); }
+                      setTimeout(applySessionBackgrounds, 0);
                     })
-                    .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); });
+                    .catch(function(err){
+                      post({ error: 'polygon_load_failed', message: String(err && err.message || err) });
+                      setTimeout(applySessionBackgrounds, 0);
+                    });
                 })();
               }
             }
