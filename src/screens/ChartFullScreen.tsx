@@ -104,6 +104,7 @@ export default function ChartFullScreen() {
   );
   const [showMA, setShowMA] = useState<boolean>(false);
   const [showVolume, setShowVolume] = useState<boolean>(false);
+  const [showSessions, setShowSessions] = useState<boolean>(true);
   const [indicatorsExpanded, setIndicatorsExpanded] = useState<boolean>(false);
 
   // Indicators state
@@ -822,6 +823,8 @@ export default function ChartFullScreen() {
         onToggleIndicatorsAccordion={() =>
           setShowIndicatorsAccordion((v) => !v)
         }
+        onToggleSessions={() => setShowSessions((s) => !s)}
+        showSessions={showSessions}
       />
 
       {showIndicatorsAccordion && (
@@ -848,6 +851,7 @@ export default function ChartFullScreen() {
           }
           showVolume={showVolume}
           showMA={showMA}
+          showSessions={showSessions}
           showTopInfo={false}
           showPriceAxisText={true}
           showTimeAxisText={true}

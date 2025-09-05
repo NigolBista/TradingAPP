@@ -19,6 +19,7 @@ interface Props {
   showTimeAxisText?: boolean;
   showLastPriceLabel?: boolean;
   flushRightEdge?: boolean;
+  showSessions?: boolean;
   levels?: {
     entries?: number[];
     exits?: number[];
@@ -78,6 +79,7 @@ export default function SimpleKLineChart({
   showPriceAxisText,
   showTimeAxisText,
   showLastPriceLabel = true,
+  showSessions = false,
   levels,
   customBars,
   customData,
@@ -247,6 +249,7 @@ export default function SimpleKLineChart({
         var SHOW_Y_AXIS_TEXT = ${JSON.stringify(showYAxisText)};
         var SHOW_X_AXIS_TEXT = ${JSON.stringify(showXAxisText)};
         var SHOW_LAST_PRICE_LABEL = ${JSON.stringify(showLastPriceLabel)};
+        var SHOW_SESSIONS = ${JSON.stringify(showSessions)};
         var LEVELS = ${JSON.stringify(levels || {})};
         var POLY_API_KEY = ${JSON.stringify(polygonApiKey || "")};
         var CUSTOM_BARS = ${JSON.stringify(customBars || [])};
@@ -427,6 +430,29 @@ export default function SimpleKLineChart({
               });
               window.__LABELED_LINE_REGISTERED__ = true;
               post({ debug: 'Custom labeled line overlay registered' });
+            }
+
+            // Register session background overlay
+            if (window.klinecharts.registerOverlay && !window.__SESSION_BG_REGISTERED__) {
+              window.klinecharts.registerOverlay({
+                name: 'sessionBg',
+                totalStep: 2,
+                createPointFigures: function({ coordinates, overlay }) {
+                  var start = coordinates[0];
+                  var end = coordinates[1];
+                  if (!start || !end) return [];
+                  var color = (overlay.extendData && overlay.extendData.color) || 'rgba(0,0,0,0.1)';
+                  return [
+                    {
+                      type: 'rect',
+                      attrs: { x: start.x, y: 0, width: end.x - start.x, height: 9999 },
+                      styles: { color: color, style: 'fill' }
+                    }
+                  ];
+                }
+              });
+              window.__SESSION_BG_REGISTERED__ = true;
+              post({ debug: 'Session background overlay registered' });
             }
             
             var chart = window.klinecharts.init('k-line-chart');
@@ -734,6 +760,63 @@ export default function SimpleKLineChart({
               } catch(e){ post({ warn: 'applyLevels failed', message: String(e && e.message || e) }); }
             }
 
+            // Session background helpers
+            function clearSessionBackgrounds(){
+              try {
+                var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.sessionOverlayIds) || [];
+                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') {
+                  ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} });
+                }
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.sessionOverlayIds = [];
+              } catch(_){}
+            }
+            function applySessionBackgrounds(){
+              try {
+                clearSessionBackgrounds();
+                if (!SHOW_SESSIONS) return;
+                var data = chart && typeof chart.getDataList === 'function' ? chart.getDataList() : [];
+                if (!data || !data.length) return;
+                var first = data[0];
+                var last = data[data.length-1];
+                var startTs = Number(first.timestamp || first.time || 0);
+                var endTs = Number(last.timestamp || last.time || 0);
+                if (!startTs || !endTs) return;
+                var dayMs = 24*60*60*1000;
+                var baseDate = new Date(startTs);
+                baseDate.setHours(0,0,0,0);
+                var ids = [];
+                for (var day = baseDate.getTime(); day <= endTs; day += dayMs) {
+                  var preStart = day + 4*60*60*1000;
+                  var regStart = day + 9*60*60*1000 + 30*60*1000;
+                  var regEnd = day + 16*60*60*1000;
+                  var afterEnd = day + 20*60*60*1000;
+                  var nextDay = day + dayMs;
+                  var sessions = [
+                    { start: day, end: preStart, color: 'rgba(100,100,100,0.1)' },
+                    { start: preStart, end: regStart, color: 'rgba(30,144,255,0.1)' },
+                    { start: regStart, end: regEnd, color: 'rgba(34,197,94,0.1)' },
+                    { start: regEnd, end: afterEnd, color: 'rgba(168,85,247,0.1)' },
+                    { start: afterEnd, end: nextDay, color: 'rgba(100,100,100,0.1)' }
+                  ];
+                  sessions.forEach(function(s){
+                    if (s.end <= startTs || s.start >= endTs) return;
+                    try {
+                      var id = chart.createOverlay({
+                        name: 'sessionBg',
+                        lock: true,
+                        points: [ { timestamp: s.start, value: 0 }, { timestamp: s.end, value: 0 } ],
+                        extendData: { color: s.color }
+                      });
+                      ids.push(id);
+                    } catch(_){}
+                  });
+                }
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.sessionOverlayIds = ids;
+              } catch(e){ post({ warn: 'applySessionBackgrounds failed', message: String(e && e.message || e) }); }
+            }
+
             // Indicator creation helpers
             function clearAllIndicators(){
               try {
@@ -977,13 +1060,15 @@ export default function SimpleKLineChart({
                 } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); }
               },
               overrideIndicator: overrideIndicator,
-              levelOverlayIds: []
+              levelOverlayIds: [],
+              sessionOverlayIds: []
             };
 
             post({ ready: true, symbol: SYMBOL });
 
             // Apply initial levels if provided
             try { applyLevels(LEVELS); } catch(_){}
+            try { applySessionBackgrounds(); } catch(_){}
             return true;
           } catch (err) { post({ error: String(err && err.message || err) }); return false; }
         }
@@ -1006,13 +1091,14 @@ export default function SimpleKLineChart({
     customBars,
     customData,
     indicatorsKey,
+    showSessions,
   ]);
 
   return (
     <View style={[styles.container, { height }]}>
       <WebView
         ref={webRef}
-        key={`${symbol}-${timeframe}-${chartType}-${dataKey}-${indicatorsKey}`}
+        key={`${symbol}-${timeframe}-${chartType}-${dataKey}-${indicatorsKey}-${showSessions}`}
         originWhitelist={["*"]}
         source={{ html }}
         style={{ height, width: "100%" }}
