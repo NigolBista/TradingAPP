@@ -70,3 +70,28 @@ assistant. The chat button on the full-screen chart launches a dialog where the
 LLM can issue tool calls to change timeframes, add indicators, capture
 screenshots, and run iterative analysis. All messages, screenshots, and
 strategy outputs are stored in persistent history for review.
+
+### Agentic Trading System
+
+For a more robust, human-in-the-loop workflow, use the `runAgenticTrading`
+helper. This wraps the LLM chart engine in a small agent architecture that
+critiques each strategy, requests optional user feedback, and iterates for
+deeper analysis:
+
+```ts
+import { runAgenticTrading } from "./src/logic";
+
+await runAgenticTrading({
+  symbol: "AAPL",
+  iterations: 2, // number of critique/feedback loops
+  onUserFeedback: async (critique) => {
+    console.log("Critique:", critique);
+    return "Looks good"; // return user notes that influence the next run
+  },
+});
+```
+
+Each iteration runs chart actions, generates a strategy, critiques the result,
+and gives a human reviewer a chance to weigh in before continuing. This agentic
+approach keeps strategy planning, analysis, critique, and feedback modular and
+extensible for future agents.
