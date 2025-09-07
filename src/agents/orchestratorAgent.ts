@@ -76,6 +76,14 @@ export class OrchestratorAgent implements Agent {
       },
     },
     {
+      name: 'process-chart-command',
+      description:
+        'Interpret natural language chart commands and execute the appropriate actions',
+      parameters: {
+        command: { type: 'string' },
+      },
+    },
+    {
       name: 'get-agent-status',
       description: 'Get status and capabilities of all registered agents',
       parameters: {},
@@ -99,6 +107,9 @@ export class OrchestratorAgent implements Agent {
 
         case 'determine-entry-exit':
           return this.determineEntryExit(context, params?.symbol, params?.timeframe, params?.indicators);
+
+        case 'process-chart-command':
+          return this.processChartCommand(context, params?.command);
 
         case 'get-agent-status':
           return this.getAgentStatus();
@@ -378,6 +389,127 @@ export class OrchestratorAgent implements Agent {
     ];
 
     return this.executeWorkflow(context, workflow, false);
+  }
+
+  private async processChartCommand(
+    context: AgentContext,
+    command: string
+  ): Promise<AgentResponse> {
+    const lower = command.toLowerCase();
+
+    // Detect timeframe like 5m, 1h, 1d etc
+    const timeframeMatch = lower.match(/(\d+)\s*(m|h|d|w)/);
+    const timeframe = timeframeMatch
+      ? `${timeframeMatch[1]}${timeframeMatch[2]}`
+      : undefined;
+
+    // Detect indicators from common list
+    const knownIndicators = [
+      'ema',
+      'sma',
+      'wma',
+      'vwap',
+      'rsi',
+      'macd',
+      'bollinger',
+      'bb',
+      'stochastic',
+    ];
+    const indicators = knownIndicators
+      .filter((ind) => lower.includes(ind))
+      .map((ind) => ({ indicator: ind.toUpperCase() }));
+
+    const runAnalysis = /analysis|analyze/.test(lower);
+    const runEntryExit = /entry|exit/.test(lower);
+
+    const workflow: WorkflowStep[] = [
+      { agent: 'chart-context', action: 'get-chart-context', params: {} },
+    ];
+
+    if (timeframe) {
+      workflow.push({
+        agent: 'chart-control',
+        action: 'change-timeframe',
+        params: { timeframe },
+      });
+    }
+
+    indicators.forEach((def) =>
+      workflow.push({
+        agent: 'chart-control',
+        action: 'add-indicator',
+        params: { indicator: def.indicator },
+      })
+    );
+
+    if (runAnalysis) {
+      workflow.push({
+        agent: 'analysis',
+        action: 'analyze-chart',
+        params: {
+          symbol: context.symbol,
+          indicators: indicators.map((i) => i.indicator),
+        },
+      });
+    }
+
+    if (runEntryExit) {
+      workflow.push({
+        agent: 'analysis',
+        action: 'entry-exit-analysis',
+        params: {
+          symbol: context.symbol,
+          indicators: indicators.map((i) => i.indicator),
+        },
+      });
+    }
+
+    const result = await this.executeWorkflow(context, workflow, false);
+
+    // If entry/exit requested, attempt to show markers on chart
+    if (runEntryExit && result.success) {
+      const analysisResult = (result.data?.results || []).find(
+        (r: any) => r.analysis && r.analysis.entry !== undefined
+      );
+      const entry = analysisResult?.analysis?.entry;
+      const exit = analysisResult?.analysis?.exit;
+      if (entry !== undefined && exit !== undefined) {
+        const chartAgent = agentRegistry.getAgent('chart-control');
+        await chartAgent?.execute(context, 'add-indicator', {
+          indicator: 'entry',
+          options: { price: entry },
+        });
+        await chartAgent?.execute(context, 'add-indicator', {
+          indicator: 'exit',
+          options: { price: exit },
+        });
+      }
+    }
+
+    const messages: string[] = [];
+    if (timeframe) messages.push(`Timeframe set to ${timeframe}`);
+    if (indicators.length)
+      messages.push(
+        `Added indicators: ${indicators
+          .map((i) => i.indicator)
+          .join(', ')}`
+      );
+    if (runEntryExit) {
+      const analysisResult = (result.data?.results || []).find(
+        (r: any) => r.analysis && r.analysis.entry !== undefined
+      );
+      if (analysisResult?.analysis) {
+        messages.push(
+          `Entry at ${analysisResult.analysis.entry.toFixed(2)}, exit at ${analysisResult.analysis.exit.toFixed(2)}`
+        );
+      } else {
+        messages.push('Entry/exit analysis completed');
+      }
+    } else if (runAnalysis) {
+      messages.push('Analysis completed');
+    }
+
+    return { ...result, message: messages.join('. ') || result.message };
   }
 
   private async getAgentStatus(): Promise<AgentResponse> {
