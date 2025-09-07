@@ -1,5 +1,12 @@
-import { Agent, AgentContext, AgentResponse, AgentAction } from './types';
+import { Agent, AgentContext, AgentResponse, AgentAction, WorkflowStep } from './types';
 import { agentRegistry } from './registry';
+import { z } from 'zod';
+
+const workflowStepSchema = z.object({
+  agent: z.string(),
+  action: z.string(),
+  params: z.record(z.any()).optional(),
+});
 
 export class OrchestratorAgent implements Agent {
   name = 'orchestrator';
@@ -119,51 +126,70 @@ export class OrchestratorAgent implements Agent {
   }
 
   private async executeWorkflow(
-    context: AgentContext, 
-    workflow: any[], 
+    context: AgentContext,
+    workflow: WorkflowStep[],
     parallel: boolean = false
   ): Promise<AgentResponse> {
+    const validation = z.array(workflowStepSchema).safeParse(workflow);
+    if (!validation.success) {
+      return {
+        success: false,
+        error: `Invalid workflow: ${validation.error.message}`,
+      };
+    }
+
+    const steps = validation.data;
     const results: any[] = [];
     const errors: string[] = [];
 
     if (parallel) {
-      // Execute all steps in parallel
-      const promises = workflow.map(async (step) => {
+      const promises = steps.map(async (step, index) => {
         const agent = agentRegistry.getAgent(step.agent);
         if (!agent) {
-          return { error: `Agent ${step.agent} not found` };
+          return { error: `Step ${index + 1}: Agent ${step.agent} not found` };
         }
-        return await agent.execute(context, step.action, step.params);
+        if (!agent.canHandle(step.action)) {
+          return { error: `Step ${index + 1}: Agent ${step.agent} cannot handle ${step.action}` };
+        }
+        try {
+          return await agent.execute(context, step.action, step.params);
+        } catch (err: any) {
+          return { error: err.message };
+        }
       });
 
       const responses = await Promise.all(promises);
-      responses.forEach((response, index) => {
+      responses.forEach((response) => {
         if (response.success) {
           results.push(response);
-        } else {
-          errors.push(`Step ${index + 1}: ${response.error}`);
+        } else if (response.error) {
+          errors.push(response.error);
         }
       });
     } else {
-      // Execute steps sequentially
-      for (let i = 0; i < workflow.length; i++) {
-        const step = workflow[i];
+      for (let i = 0; i < steps.length; i++) {
+        const step = steps[i];
         const agent = agentRegistry.getAgent(step.agent);
-        
         if (!agent) {
           errors.push(`Step ${i + 1}: Agent ${step.agent} not found`);
           continue;
         }
-
-        const response = await agent.execute(context, step.action, step.params);
-        if (response.success) {
-          results.push(response);
-          // Update context with results for next steps
-          if (response.data) {
-            context = { ...context, ...response.data };
+        if (!agent.canHandle(step.action)) {
+          errors.push(`Step ${i + 1}: Agent ${step.agent} cannot handle ${step.action}`);
+          continue;
+        }
+        try {
+          const response = await agent.execute(context, step.action, step.params);
+          if (response.success) {
+            results.push(response);
+            if (response.data) {
+              context = { ...context, ...response.data };
+            }
+          } else {
+            errors.push(`Step ${i + 1}: ${response.error}`);
           }
-        } else {
-          errors.push(`Step ${i + 1}: ${response.error}`);
+        } catch (err: any) {
+          errors.push(`Step ${i + 1}: ${err.message}`);
         }
       }
     }
@@ -238,6 +264,11 @@ export class OrchestratorAgent implements Agent {
           }
         );
         break;
+      default:
+        return {
+          success: false,
+          error: `Unknown analysis type: ${analysisType}`,
+        };
     }
 
     return this.executeWorkflow(context, workflow, analysisType === 'comprehensive');

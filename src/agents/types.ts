@@ -48,6 +48,12 @@ export interface AgentRegistry {
   getAllAgents(): Agent[];
 }
 
+export interface WorkflowStep {
+  agent: string;
+  action: string;
+  params?: Record<string, any>;
+}
+
 // Specific agent response types
 export interface ChartControlResponse extends AgentResponse {
   chartActions?: ChartAction[];
