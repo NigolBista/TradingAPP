@@ -40,6 +40,11 @@ import {
   aiOutputToTradePlan,
   applyComplexityToPlan,
 } from "../logic/aiStrategyEngine";
+import {
+  registerChartBridge,
+  unregisterChartBridge,
+  type ChartAction,
+} from "../logic/chartBridge";
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { useUserStore } from "../store/userStore";
@@ -224,6 +229,53 @@ export default function ChartFullScreen() {
     loadStockName();
     hydrate();
   }, [symbol]);
+
+  // Register a chart bridge so external agents can manipulate the chart state
+  useEffect(() => {
+    const bridge = {
+      async perform(action: ChartAction) {
+        switch (action.type) {
+          case "addIndicator":
+            setIndicators((prev) => {
+              const exists = prev.some(
+                (i) => i.name.toLowerCase() === action.indicator.toLowerCase()
+              );
+              if (exists) return prev;
+              const cfg: IndicatorConfig = {
+                name: action.indicator,
+                ...(action.options || {}),
+              };
+              return [...prev, cfg];
+            });
+            break;
+          case "setTimeframe":
+            setExtendedTf(action.timeframe as ExtendedTimeframe);
+            break;
+          case "setChartType":
+            setChartType(action.chartType as ChartType);
+            break;
+          case "toggleDisplayOption":
+            if (action.option === "ma") setShowMA(action.enabled);
+            if (action.option === "volume") setShowVolume(action.enabled);
+            if (action.option === "sessions") setShowSessions(action.enabled);
+            break;
+          default:
+            console.warn("Unhandled chart action", action);
+        }
+      },
+    };
+
+    registerChartBridge(bridge);
+    return () => unregisterChartBridge();
+  }, [
+    setIndicators,
+    setExtendedTf,
+    setChartType,
+    setShowMA,
+    setShowVolume,
+    setShowSessions,
+    symbol,
+  ]);
 
   // Apply indicator styles and parameters
   const applyIndicatorStyles = useCallback(() => {

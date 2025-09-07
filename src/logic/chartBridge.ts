@@ -28,6 +28,14 @@ export function registerChartBridge(bridge: ChartBridge) {
 }
 
 /**
+ * Unregister the currently active bridge. Typically used when the chart
+ * component unmounts so that stale references are not retained.
+ */
+export function unregisterChartBridge() {
+  activeBridge = null;
+}
+
+/**
  * Retrieve the currently registered bridge. Useful for advanced custom flows.
  */
 export function getChartBridge(): ChartBridge | null {
