@@ -37,3 +37,28 @@ Notes:
 - News uses public Yahoo RSS suitable for testing without a key.
 - For realtime and server features, add Supabase Edge Functions for caching and Stripe webhooks.
 - Not financial advice.
+
+### LLM Chart Engine (Experimental)
+
+The `runLLMChartEngine` helper allows an LLM to iteratively control the chart using
+OpenAI tool calls. Both user-driven actions and LLM-generated actions funnel
+through the same `ChartBridge` so every capability exposed to a user is also
+available to the model. Register a bridge that knows how to perform chart
+actions and capture screenshots, then invoke the engine:
+
+```ts
+import { runLLMChartEngine } from "./src/logic";
+
+await runLLMChartEngine({
+  symbol: "AAPL",
+  strategy: "day_trade",
+  runs: 1,
+  sendData: "screenshot",
+});
+```
+
+The engine will request chart actions from the LLM, execute them via the
+bridge, optionally send a screenshot back for analysis, and produce a strategy
+plan using the existing AI strategy pipeline. Increase the `runs` option for
+deep multi-step analysis. A custom `strategyRunner` can be supplied for a
+different analysis engine, keeping the module extensible.
