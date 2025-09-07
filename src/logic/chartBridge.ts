@@ -47,9 +47,13 @@ export async function executeChartAction(action: ChartAction): Promise<void> {
  * Execute a sequence of chart actions.
  */
 export async function executeChartActions(actions: ChartAction[]): Promise<void> {
-  for (const action of actions) {
-    await executeChartAction(action);
-  }
+  await Promise.all(
+    actions.map((action) =>
+      executeChartAction(action).catch((e) =>
+        console.warn("Chart action failed", e)
+      )
+    )
+  );
 }
 
 /**

@@ -12,6 +12,22 @@ import {
 } from "./aiStrategyEngine";
 import { StrategyKey } from "./strategies";
 
+const COLOR_MAP: Record<string, string> = {
+  purple: "#800080",
+  blue: "#0000FF",
+  yellow: "#FFFF00",
+  green: "#008000",
+  red: "#FF0000",
+  orange: "#FFA500",
+  pink: "#FFC0CB",
+};
+
+function normalizeColor(color: string): string {
+  if (!color) return color;
+  const lower = color.toLowerCase();
+  return COLOR_MAP[lower] || color;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -128,6 +144,12 @@ export async function sendChartChatMessage(
       case "set_timeframe":
         return { type: "setTimeframe", timeframe: args.timeframe };
       case "add_indicator":
+        if (args.options?.styles?.lines) {
+          args.options.styles.lines = args.options.styles.lines.map((l: any) => ({
+            ...l,
+            color: normalizeColor(l.color),
+          }));
+        }
         return {
           type: "addIndicator",
           indicator: args.indicator,
@@ -186,13 +208,11 @@ export async function sendChartChatMessage(
       } as any);
     });
 
-    // Add one final tool message with analysis and screenshot data
+    // Provide analysis and screenshot context to the model
     followMessages.push({
-      role: "tool" as const,
-      tool_call_id: "chart_analysis",
-      name: "chart_analysis",
+      role: "user" as const,
       content: JSON.stringify({ analysis, screenshot: !!screenshot }),
-    } as any);
+    });
   }
 
   const final = await client.chat.completions.create({
