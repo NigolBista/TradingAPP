@@ -74,6 +74,18 @@ export class AnalysisAgent implements Agent {
         timeframe: { type: "string", optional: true },
       },
     },
+    {
+      name: "entry-exit-analysis",
+      description: "Generate entry and exit signals based on indicators",
+      parameters: {
+        symbol: { type: "string" },
+        indicators: {
+          type: "array",
+          items: { type: "string" },
+          optional: true,
+        },
+      },
+    },
   ];
 
   async execute(
@@ -120,6 +132,13 @@ export class AnalysisAgent implements Agent {
 
         case "assess-risk":
           return this.assessRisk(context, params?.symbol, params?.timeframe);
+
+        case "entry-exit-analysis":
+          return this.analyzeEntryExit(
+            context,
+            params?.symbol,
+            params?.indicators
+          );
 
         default:
           return {
@@ -340,6 +359,35 @@ export class AnalysisAgent implements Agent {
       success: true,
       data: { analysis },
       message: `Risk assessment completed for ${symbol}`,
+      analysis,
+    };
+  }
+
+  private async analyzeEntryExit(
+    context: AgentContext,
+    symbol: string,
+    indicators?: string[]
+  ): Promise<AnalysisResponse> {
+    const price = context.currentPrice || Math.random() * 100;
+    const entry = price * (1 - Math.random() * 0.02);
+    const exit = price * (1 + Math.random() * 0.02);
+    const analysis = {
+      trend: this.determineTrend(),
+      strength: Math.random() * 100,
+      confidence: Math.random() * 100,
+      signals: this.generateSignals(indicators || []),
+      recommendations: this.generateRecommendations(),
+      indicators: indicators || [],
+      entry,
+      exit,
+      stopLoss: entry * (1 - 0.02),
+      takeProfit: exit * (1 + 0.02),
+    };
+
+    return {
+      success: true,
+      data: { analysis },
+      message: `Entry/exit analysis completed for ${symbol}`,
       analysis,
     };
   }

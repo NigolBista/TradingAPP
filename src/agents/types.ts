@@ -61,6 +61,10 @@ export interface AnalysisResponse extends AgentResponse {
     confidence?: number;
     signals?: any[];
     recommendations?: string[];
+    entry?: number;
+    exit?: number;
+    stopLoss?: number;
+    takeProfit?: number;
   };
 }
 
