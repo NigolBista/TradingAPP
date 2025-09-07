@@ -11,6 +11,10 @@ class AgentRegistryImpl implements AgentRegistry {
   private agents: Map<string, Agent> = new Map();
 
   register(agent: Agent): void {
+    if (this.agents.has(agent.name)) {
+      console.warn(`Agent ${agent.name} already registered, skipping.`);
+      return;
+    }
     this.agents.set(agent.name, agent);
     console.log(`Registered agent: ${agent.name}`);
   }
