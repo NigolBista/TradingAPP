@@ -7,6 +7,8 @@ import {
   Pressable,
   SafeAreaView,
   Image,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -31,7 +33,10 @@ export default function ChartChatScreen() {
     setInput("");
     setSending(true);
     try {
-      const history = messages.map((m) => ({ role: m.role, content: m.content }));
+      const history = messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
       const res = await sendChartChatMessage({
         symbol,
         message: content,
@@ -52,107 +57,123 @@ export default function ChartChatScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingHorizontal: 16,
-          paddingVertical: 12,
-          borderBottomWidth: 1,
-          borderBottomColor: theme.colors.border,
-        }}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 20}
       >
-        <Pressable onPress={() => navigation.goBack()} style={{ padding: 8 }}>
-          <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
-        </Pressable>
-        <Text
+        <View
           style={{
-            color: theme.colors.text,
-            fontWeight: "700",
-            fontSize: 16,
-            marginLeft: 8,
+            flexDirection: "row",
+            alignItems: "center",
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: theme.colors.border,
           }}
         >
-          Chat · {symbol}
-        </Text>
-        <Pressable
-          onPress={() => newChat(symbol)}
-          style={{ marginLeft: "auto", padding: 8 }}
-        >
-          <Ionicons name="refresh" size={20} color={theme.colors.text} />
-        </Pressable>
-      </View>
-
-      <FlatList
-        data={messages}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 16 }}
-        renderItem={({ item }) => (
-          <View
+          <Pressable onPress={() => navigation.goBack()} style={{ padding: 8 }}>
+            <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+          </Pressable>
+          <Text
             style={{
-              marginBottom: 12,
-              alignSelf: item.role === "user" ? "flex-end" : "flex-start",
-              backgroundColor:
-                item.role === "user" ? theme.colors.primary : theme.colors.card,
-              borderRadius: 8,
-              padding: 10,
-              maxWidth: "80%",
+              color: theme.colors.text,
+              fontWeight: "700",
+              fontSize: 16,
+              marginLeft: 8,
             }}
           >
-            <Text
+            Chat · {symbol}
+          </Text>
+          <Pressable
+            onPress={() => newChat(symbol)}
+            style={{ marginLeft: "auto", padding: 8 }}
+          >
+            <Ionicons name="refresh" size={20} color={theme.colors.text} />
+          </Pressable>
+        </View>
+
+        <FlatList
+          data={messages}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 16, flexGrow: 1 }}
+          renderItem={({ item }) => (
+            <View
               style={{
-                color: item.role === "user" ? "#fff" : theme.colors.text,
+                marginBottom: 12,
+                alignSelf: item.role === "user" ? "flex-end" : "flex-start",
+                backgroundColor:
+                  item.role === "user"
+                    ? theme.colors.primary
+                    : theme.colors.card,
+                borderRadius: 8,
+                padding: 10,
+                maxWidth: "80%",
               }}
             >
-              {item.content}
-            </Text>
-            {item.screenshot ? (
-              <Image
-                source={{ uri: item.screenshot }}
-                style={{ width: 200, height: 120, marginTop: 6, borderRadius: 6 }}
-              />
-            ) : null}
-          </View>
-        )}
-      />
-
-      <View
-        style={{
-          flexDirection: "row",
-          padding: 16,
-          borderTopWidth: 1,
-          borderTopColor: theme.colors.border,
-        }}
-      >
-        <TextInput
-          style={{
-            flex: 1,
-            color: theme.colors.text,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            borderRadius: 8,
-            paddingHorizontal: 12,
-            paddingVertical: 8,
-            marginRight: 8,
-          }}
-          placeholder="Ask the AI..."
-          placeholderTextColor={theme.colors.textSecondary}
-          value={input}
-          onChangeText={setInput}
+              <Text
+                style={{
+                  color: item.role === "user" ? "#fff" : theme.colors.text,
+                }}
+              >
+                {item.content}
+              </Text>
+              {item.screenshot ? (
+                <Image
+                  source={{ uri: item.screenshot }}
+                  style={{
+                    width: 200,
+                    height: 120,
+                    marginTop: 6,
+                    borderRadius: 6,
+                  }}
+                />
+              ) : null}
+            </View>
+          )}
         />
-        <Pressable
-          onPress={handleSend}
-          disabled={sending}
+
+        <View
           style={{
-            backgroundColor: theme.colors.primary,
-            paddingHorizontal: 16,
-            justifyContent: "center",
-            borderRadius: 8,
+            flexDirection: "row",
+            padding: 16,
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.border,
+            backgroundColor: theme.colors.background,
           }}
         >
-          <Ionicons name="send" size={16} color="#fff" />
-        </Pressable>
-      </View>
+          <TextInput
+            style={{
+              flex: 1,
+              color: theme.colors.text,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              borderRadius: 8,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              marginRight: 8,
+            }}
+            placeholder="Ask the AI..."
+            placeholderTextColor={theme.colors.textSecondary}
+            value={input}
+            onChangeText={setInput}
+            multiline
+            maxLength={500}
+          />
+          <Pressable
+            onPress={handleSend}
+            disabled={sending}
+            style={{
+              backgroundColor: theme.colors.primary,
+              paddingHorizontal: 16,
+              justifyContent: "center",
+              borderRadius: 8,
+            }}
+          >
+            <Ionicons name="send" size={16} color="#fff" />
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

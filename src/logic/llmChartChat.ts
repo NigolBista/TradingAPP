@@ -121,7 +121,9 @@ export async function sendChartChatMessage(
 
   const toolCalls = (res.choices?.[0]?.message as any)?.tool_calls || [];
   const actions: ChartAction[] = toolCalls.map((tc: any) => {
-    const args = tc.function?.arguments ? JSON.parse(tc.function.arguments) : {};
+    const args = tc.function?.arguments
+      ? JSON.parse(tc.function.arguments)
+      : {};
     switch (tc.function?.name) {
       case "set_timeframe":
         return { type: "setTimeframe", timeframe: args.timeframe };
@@ -145,7 +147,11 @@ export async function sendChartChatMessage(
   }
 
   let screenshot: string | undefined;
-  if (opts.sendData === "screenshot" || opts.sendData === "both" || !opts.sendData) {
+  if (
+    opts.sendData === "screenshot" ||
+    opts.sendData === "both" ||
+    !opts.sendData
+  ) {
     screenshot = await screenshotChart();
   }
 
@@ -156,13 +162,38 @@ export async function sendChartChatMessage(
     mode: opts.strategy || "auto",
   });
 
-  const followMessages = baseMessages.concat([
-    {
-      role: "tool",
-      name: "chart_update",
+  // Add assistant message with tool calls if there were any actions
+  const assistantMessage = {
+    role: "assistant" as const,
+    content: res.choices?.[0]?.message?.content || "",
+    tool_calls: toolCalls,
+  };
+
+  const followMessages = baseMessages.concat([assistantMessage]);
+
+  // Add tool response messages for each tool call
+  if (toolCalls.length > 0) {
+    // Add responses for chart control tool calls
+    toolCalls.forEach((toolCall: any) => {
+      followMessages.push({
+        role: "tool" as const,
+        tool_call_id: toolCall.id,
+        name: toolCall.function?.name || "chart_action",
+        content: JSON.stringify({
+          success: true,
+          action: toolCall.function?.name,
+        }),
+      } as any);
+    });
+
+    // Add one final tool message with analysis and screenshot data
+    followMessages.push({
+      role: "tool" as const,
+      tool_call_id: "chart_analysis",
+      name: "chart_analysis",
       content: JSON.stringify({ analysis, screenshot: !!screenshot }),
-    } as any,
-  ]);
+    } as any);
+  }
 
   const final = await client.chat.completions.create({
     model: "gpt-4o-mini",

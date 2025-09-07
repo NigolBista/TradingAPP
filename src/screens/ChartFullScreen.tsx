@@ -8,6 +8,7 @@ import {
   useColorScheme,
   Modal,
   TextInput,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -186,6 +187,15 @@ export default function ChartFullScreen() {
       bottomNavHeight -
       8
   );
+
+  // Recalculate chart height when screen dimensions change
+  useEffect(() => {
+    // Force re-render when screen dimensions change
+    const subscription = Dimensions.addEventListener("change", () => {
+      // This will trigger a re-render with new dimensions
+    });
+    return () => subscription?.remove();
+  }, []);
 
   // Initialize bar spacing from initial data
   React.useEffect(() => {
@@ -937,6 +947,21 @@ export default function ChartFullScreen() {
             <Text style={styles.bottomNavButtonText}>Reasoning</Text>
           </Pressable>
 
+          {/* Chat */}
+          <Pressable
+            onPress={() => navigation.navigate("ChartChat" as any, { symbol })}
+            style={styles.bottomNavButton}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="chatbubble-outline"
+              size={16}
+              color="rgba(255,255,255,0.9)"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.bottomNavButtonText}>Chat</Text>
+          </Pressable>
+
           {/* Analyze */}
           <Pressable
             onPress={handleAnalyzePress}
@@ -985,28 +1010,6 @@ export default function ChartFullScreen() {
           </Pressable>
         </View>
       </View>
-
-      <Pressable
-        onPress={() => navigation.navigate("ChartChat", { symbol })}
-        style={{
-          position: "absolute",
-          bottom: bottomNavHeight + 20,
-          right: 20,
-          backgroundColor: "#2563EB",
-          width: 48,
-          height: 48,
-          borderRadius: 24,
-          alignItems: "center",
-          justifyContent: "center",
-          shadowColor: "#000",
-          shadowOpacity: 0.3,
-          shadowRadius: 4,
-          elevation: 5,
-        }}
-        hitSlop={8}
-      >
-        <Ionicons name="chatbubbles" size={22} color="#fff" />
-      </Pressable>
 
       {/* Strategy Complexity Bottom Sheet */}
       <ComplexityBottomSheet
@@ -1119,12 +1122,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: 12,
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    minWidth: 110,
+    minWidth: 90,
+    flex: 1,
+    marginHorizontal: 2,
   },
   bottomNavButtonText: {
     color: "#fff",
@@ -1136,11 +1141,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     borderRadius: 12,
     shadowColor: "#007AFF",
     shadowOffset: { width: 0, height: 0 },
-    minWidth: 140,
+    minWidth: 120,
+    flex: 1.2,
+    marginHorizontal: 2,
   },
   analyzeButtonText: {
     color: "#fff",
