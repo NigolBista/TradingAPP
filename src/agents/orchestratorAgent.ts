@@ -37,7 +37,35 @@ export class OrchestratorAgent implements Agent {
       parameters: {
         symbol: { type: 'string' },
         timeframe: { type: 'string' },
-        indicators: { type: 'array', items: { type: 'string' } }
+        indicators: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              indicator: { type: 'string' },
+              options: { type: 'object', optional: true }
+            }
+          }
+        }
+      },
+    },
+    {
+      name: 'determine-entry-exit',
+      description: 'Setup chart and determine entry/exit points',
+      parameters: {
+        symbol: { type: 'string' },
+        timeframe: { type: 'string', optional: true },
+        indicators: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              indicator: { type: 'string' },
+              options: { type: 'object', optional: true }
+            }
+          },
+          optional: true,
+        },
       },
     },
     {
@@ -61,7 +89,10 @@ export class OrchestratorAgent implements Agent {
         
         case 'setup-chart-analysis':
           return this.setupChartAnalysis(context, params?.symbol, params?.timeframe, params?.indicators);
-        
+
+        case 'determine-entry-exit':
+          return this.determineEntryExit(context, params?.symbol, params?.timeframe, params?.indicators);
+
         case 'get-agent-status':
           return this.getAgentStatus();
         
@@ -255,10 +286,10 @@ export class OrchestratorAgent implements Agent {
   }
 
   private async setupChartAnalysis(
-    context: AgentContext, 
-    symbol: string, 
-    timeframe: string, 
-    indicators: string[]
+    context: AgentContext,
+    symbol: string,
+    timeframe: string,
+    indicators: { indicator: string; options?: any }[] = []
   ): Promise<AgentResponse> {
     const workflow = [
       // Get chart context
@@ -274,16 +305,44 @@ export class OrchestratorAgent implements Agent {
         params: { symbol, timeframe }
       },
       // Add indicators
-      ...indicators.map(indicator => ({
+      ...indicators.map(def => ({
         agent: 'chart-control',
         action: 'add-indicator',
-        params: { indicator }
+        params: { indicator: def.indicator, options: def.options }
       })),
       // Perform analysis
       {
         agent: 'analysis',
         action: 'analyze-chart',
-        params: { symbol, indicators }
+        params: { symbol, indicators: indicators.map(i => i.indicator) }
+      }
+    ];
+
+    return this.executeWorkflow(context, workflow, false);
+  }
+
+  private async determineEntryExit(
+    context: AgentContext,
+    symbol: string,
+    timeframe?: string,
+    indicators: { indicator: string; options?: any }[] = []
+  ): Promise<AgentResponse> {
+    const workflow = [
+      { agent: 'chart-context', action: 'get-chart-context', params: {} },
+      {
+        agent: 'chart-control',
+        action: 'setup-chart',
+        params: { symbol, timeframe: timeframe || '1D' }
+      },
+      ...indicators.map(def => ({
+        agent: 'chart-control',
+        action: 'add-indicator',
+        params: { indicator: def.indicator, options: def.options }
+      })),
+      {
+        agent: 'analysis',
+        action: 'entry-exit-analysis',
+        params: { symbol, indicators: indicators.map(i => i.indicator) }
       }
     ];
 

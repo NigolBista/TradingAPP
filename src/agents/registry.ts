@@ -1,4 +1,11 @@
-import { Agent, AgentRegistry, AgentCapability } from './types';
+import { Agent, AgentRegistry, AgentCapability } from "./types";
+import { ChartContextAgent } from "./chartContextAgent";
+import { ChartControlAgent } from "./chartControlAgent";
+import { AnalysisAgent } from "./analysisAgent";
+import { TradingAgent } from "./tradingAgent";
+import { AlertAgent } from "./alertAgent";
+import { CritiqueAgent } from "./critiqueAgent";
+import { OrchestratorAgent } from "./orchestratorAgent";
 
 class AgentRegistryImpl implements AgentRegistry {
   private agents: Map<string, Agent> = new Map();
@@ -41,3 +48,14 @@ class AgentRegistryImpl implements AgentRegistry {
 
 // Singleton instance
 export const agentRegistry = new AgentRegistryImpl();
+
+// Register default agents
+[
+  new ChartContextAgent(),
+  new ChartControlAgent(),
+  new AnalysisAgent(),
+  new TradingAgent(),
+  new AlertAgent(),
+  new CritiqueAgent(),
+  new OrchestratorAgent(),
+].forEach((agent) => agentRegistry.register(agent));
