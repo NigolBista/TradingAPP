@@ -7,7 +7,9 @@ export type ChartAction =
   | { type: "setLineColor"; color: string }
   | { type: "navigate"; direction: "left" | "right" }
   | { type: "checkNews" }
-  | { type: "runAnalysis"; strategy?: string };
+  | { type: "runAnalysis"; strategy?: string }
+  | { type: "setChartType"; chartType: string }
+  | { type: "toggleDisplayOption"; option: string; enabled: boolean };
 
 // Bridge interface allowing actions to be executed on the actual charting UI
 export interface ChartBridge {
@@ -46,7 +48,9 @@ export async function executeChartAction(action: ChartAction): Promise<void> {
 /**
  * Execute a sequence of chart actions.
  */
-export async function executeChartActions(actions: ChartAction[]): Promise<void> {
+export async function executeChartActions(
+  actions: ChartAction[]
+): Promise<void> {
   await Promise.all(
     actions.map((action) =>
       executeChartAction(action).catch((e) =>

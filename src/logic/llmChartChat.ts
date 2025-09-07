@@ -11,21 +11,28 @@ import {
   AIStrategyInput,
 } from "./aiStrategyEngine";
 import { StrategyKey } from "./strategies";
-
-const COLOR_MAP: Record<string, string> = {
-  purple: "#800080",
-  blue: "#0000FF",
-  yellow: "#FFFF00",
-  green: "#008000",
-  red: "#FF0000",
-  orange: "#FFA500",
-  pink: "#FFC0CB",
-};
+import {
+  generateChartContextConfig,
+  getColorByName,
+  isValidColor,
+} from "./chartContextConfig";
 
 function normalizeColor(color: string): string {
   if (!color) return color;
-  const lower = color.toLowerCase();
-  return COLOR_MAP[lower] || color;
+
+  // First check if it's already a valid hex color
+  if (isValidColor(color)) {
+    return color;
+  }
+
+  // Try to find by name or category
+  const foundColor = getColorByName(color);
+  if (foundColor) {
+    return foundColor;
+  }
+
+  // Return original if no match found
+  return color;
 }
 
 export interface ChatMessage {
@@ -66,67 +73,55 @@ export async function sendChartChatMessage(
   const client = new OpenAI({ apiKey: openaiApiKey });
   const strategyRunner = opts.strategyRunner ?? runAIStrategy;
 
+  // Get comprehensive context configuration
+  const contextConfig = generateChartContextConfig();
+
   const baseMessages = [
     {
       role: "system",
-      content:
-        "You are a trading assistant that controls a charting interface using tool calls.",
+      content: `You are a trading assistant that controls a charting interface using tool calls.
+
+Available Configuration:
+- Chart Types: ${contextConfig.chartTypes
+        .map((ct) => `${ct.value} (${ct.label})`)
+        .join(", ")}
+- Timeframes: ${contextConfig.timeframes
+        .map((tf) => `${tf.value} (${tf.label})`)
+        .join(", ")}
+- Line Styles: ${contextConfig.lineStyles
+        .map((ls) => `${ls.value} (${ls.label})`)
+        .join(", ")}
+- Line Thickness: ${contextConfig.lineThicknessOptions
+        .map((lt) => `${lt.value}px (${lt.label})`)
+        .join(", ")}
+- Available Colors: ${contextConfig.colorPalette
+        .map((c) => `${c.value} (${c.name})`)
+        .join(", ")}
+- Available Indicators: ${contextConfig.availableIndicators
+        .map((ind) => `${ind.name} (${ind.title})`)
+        .join(", ")}
+- Trading Strategies: ${contextConfig.tradingStrategies
+        .map((ts) => `${ts.value} (${ts.label})`)
+        .join(", ")}
+- Strategy Complexity: ${contextConfig.strategyComplexityLevels
+        .map((sc) => `${sc.value} (${sc.label})`)
+        .join(", ")}
+
+Use the available options when making tool calls. Always use valid values from the configuration above.`,
     },
     ...opts.history,
-    { role: "user", content: opts.message },
+    {
+      role: "user",
+      content: `${opts.message}
+
+Available Configuration: ${JSON.stringify(contextConfig, null, 2)}`,
+    },
   ];
 
-  const tools = [
-    {
-      type: "function",
-      function: {
-        name: "set_timeframe",
-        description: "change chart timeframe",
-        parameters: {
-          type: "object",
-          properties: { timeframe: { type: "string" } },
-          required: ["timeframe"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "add_indicator",
-        description: "add technical indicator",
-        parameters: {
-          type: "object",
-          properties: {
-            indicator: { type: "string" },
-            options: { type: "object" },
-          },
-          required: ["indicator"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "navigate",
-        description: "pan chart",
-        parameters: {
-          type: "object",
-          properties: {
-            direction: { type: "string", enum: ["left", "right"] },
-          },
-          required: ["direction"],
-        },
-      },
-    },
-    {
-      type: "function",
-      function: {
-        name: "check_news",
-        description: "check latest news",
-        parameters: { type: "object", properties: {}, required: [] },
-      },
-    },
-  ];
+  const tools = contextConfig.availableTools.map((tool) => ({
+    type: "function",
+    function: tool,
+  }));
 
   const res = await client.chat.completions.create({
     model: "gpt-4o-mini",
@@ -145,10 +140,12 @@ export async function sendChartChatMessage(
         return { type: "setTimeframe", timeframe: args.timeframe };
       case "add_indicator":
         if (args.options?.styles?.lines) {
-          args.options.styles.lines = args.options.styles.lines.map((l: any) => ({
-            ...l,
-            color: normalizeColor(l.color),
-          }));
+          args.options.styles.lines = args.options.styles.lines.map(
+            (l: any) => ({
+              ...l,
+              color: normalizeColor(l.color),
+            })
+          );
         }
         return {
           type: "addIndicator",
@@ -159,6 +156,14 @@ export async function sendChartChatMessage(
         return { type: "navigate", direction: args.direction };
       case "check_news":
         return { type: "checkNews" } as any;
+      case "set_chart_type":
+        return { type: "setChartType", chartType: args.chartType } as any;
+      case "toggle_display_option":
+        return {
+          type: "toggleDisplayOption",
+          option: args.option,
+          enabled: args.enabled,
+        } as any;
       default:
         return { type: "noop" } as any;
     }
