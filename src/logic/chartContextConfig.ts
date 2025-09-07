@@ -275,72 +275,84 @@ export function generateChartContextConfig() {
         name: "set_timeframe",
         description: "Change chart timeframe",
         parameters: {
-          timeframe: {
-            type: "string",
-            enum: TIMEFRAMES.map((tf) => tf.value),
-            description: "The timeframe to set for the chart",
+          type: "object",
+          properties: {
+            timeframe: {
+              type: "string",
+              enum: TIMEFRAMES.map((tf) => tf.value),
+              description: "The timeframe to set for the chart",
+            },
           },
+          required: ["timeframe"],
         },
       },
       {
         name: "add_indicator",
         description: "Add technical indicator to chart",
         parameters: {
-          indicator: {
-            type: "string",
-            enum: BUILTIN_INDICATORS.map((ind) => ind.name),
-            description: "The indicator to add",
-          },
-          options: {
-            type: "object",
-            description: "Indicator configuration options",
-            properties: {
-              styles: {
-                type: "object",
-                properties: {
-                  lines: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        color: {
-                          type: "string",
-                          enum: COLOR_PALETTE.map((c) => c.value),
-                          description: "Line color from available palette",
-                        },
-                        size: {
-                          type: "number",
-                          enum: LINE_THICKNESS_OPTIONS.map((t) => t.value),
-                          description: "Line thickness",
-                        },
-                        style: {
-                          type: "string",
-                          enum: LINE_STYLES.map((s) => s.value),
-                          description: "Line style",
+          type: "object",
+          properties: {
+            indicator: {
+              type: "string",
+              enum: BUILTIN_INDICATORS.map((ind) => ind.name),
+              description: "The indicator to add",
+            },
+            options: {
+              type: "object",
+              description: "Indicator configuration options",
+              properties: {
+                styles: {
+                  type: "object",
+                  properties: {
+                    lines: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          color: {
+                            type: "string",
+                            enum: COLOR_PALETTE.map((c) => c.value),
+                            description: "Line color from available palette",
+                          },
+                          size: {
+                            type: "number",
+                            enum: LINE_THICKNESS_OPTIONS.map((t) => t.value),
+                            description: "Line thickness",
+                          },
+                          style: {
+                            type: "string",
+                            enum: LINE_STYLES.map((s) => s.value),
+                            description: "Line style",
+                          },
                         },
                       },
                     },
                   },
                 },
-              },
-              calcParams: {
-                type: "array",
-                items: { type: "number" },
-                description: "Indicator calculation parameters",
+                calcParams: {
+                  type: "array",
+                  items: { type: "number" },
+                  description: "Indicator calculation parameters",
+                },
               },
             },
           },
+          required: ["indicator"],
         },
       },
       {
         name: "navigate",
         description: "Pan chart view",
         parameters: {
-          direction: {
-            type: "string",
-            enum: NAVIGATION_OPTIONS.map((n) => n.value),
-            description: "Direction to pan the chart",
+          type: "object",
+          properties: {
+            direction: {
+              type: "string",
+              enum: NAVIGATION_OPTIONS.map((n) => n.value),
+              description: "Direction to pan the chart",
+            },
           },
+          required: ["direction"],
         },
       },
       {
@@ -356,26 +368,49 @@ export function generateChartContextConfig() {
         name: "set_chart_type",
         description: "Change chart display type",
         parameters: {
-          chartType: {
-            type: "string",
-            enum: CHART_TYPES.map((ct) => ct.value),
-            description: "The chart type to display",
+          type: "object",
+          properties: {
+            chartType: {
+              type: "string",
+              enum: CHART_TYPES.map((ct) => ct.value),
+              description: "The chart type to display",
+            },
           },
+          required: ["chartType"],
         },
       },
       {
         name: "toggle_display_option",
         description: "Toggle chart display options",
         parameters: {
-          option: {
-            type: "string",
-            enum: CHART_DISPLAY_OPTIONS.map((opt) => opt.value),
-            description: "The display option to toggle",
+          type: "object",
+          properties: {
+            option: {
+              type: "string",
+              enum: CHART_DISPLAY_OPTIONS.map((opt) => opt.value),
+              description: "The display option to toggle",
+            },
+            enabled: {
+              type: "boolean",
+              description: "Whether to enable or disable the option",
+            },
           },
-          enabled: {
-            type: "boolean",
-            description: "Whether to enable or disable the option",
+          required: ["option", "enabled"],
+        },
+      },
+      {
+        name: "run_analysis",
+        description: "Run AI analysis on the current chart state",
+        parameters: {
+          type: "object",
+          properties: {
+            strategy: {
+              type: "string",
+              enum: TRADING_STRATEGIES.map((ts) => ts.value),
+              description: "The trading strategy to use for analysis",
+            },
           },
+          required: [],
         },
       },
     ],

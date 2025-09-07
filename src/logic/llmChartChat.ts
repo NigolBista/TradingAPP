@@ -81,6 +81,18 @@ export async function sendChartChatMessage(
       role: "system",
       content: `You are a trading assistant that controls a charting interface using tool calls.
 
+IMPORTANT BEHAVIOR:
+- When users ask to add indicators, change timeframes, modify chart settings, or make any chart modifications, you MUST use the appropriate tool calls to perform these actions.
+- Only use the run_analysis tool when the user explicitly asks for analysis, insights, or trading recommendations.
+- For chart modifications, use tools like add_indicator, set_timeframe, set_chart_type, etc.
+- Always respond with tool calls when users request chart changes - don't just explain what you would do.
+
+EXAMPLES:
+- User: "Add EMA indicator" → Call add_indicator tool with indicator: "EMA"
+- User: "Change to 1D timeframe" → Call set_timeframe tool with timeframe: "1D"
+- User: "Analyze this chart" → Call run_analysis tool
+- User: "What do you think about this stock?" → Call run_analysis tool
+
 Available Configuration:
 - Chart Types: ${contextConfig.chartTypes
         .map((ct) => `${ct.value} (${ct.label})`)
@@ -114,7 +126,7 @@ Use the available options when making tool calls. Always use valid values from t
       role: "user",
       content: `${opts.message}
 
-Available Configuration: ${JSON.stringify(contextConfig, null, 2)}`,
+Please use the appropriate tool calls to perform any requested chart modifications.`,
     },
   ];
 
@@ -128,9 +140,13 @@ Available Configuration: ${JSON.stringify(contextConfig, null, 2)}`,
     messages: baseMessages as any,
     tools,
     tool_choice: "auto",
+    temperature: 0.1, // Lower temperature for more consistent tool usage
   } as any);
 
   const toolCalls = (res.choices?.[0]?.message as any)?.tool_calls || [];
+  console.log("LLM Response tool calls:", toolCalls);
+  console.log("LLM Response content:", res.choices?.[0]?.message?.content);
+
   const actions: ChartAction[] = toolCalls.map((tc: any) => {
     const args = tc.function?.arguments
       ? JSON.parse(tc.function.arguments)
@@ -164,13 +180,20 @@ Available Configuration: ${JSON.stringify(contextConfig, null, 2)}`,
           option: args.option,
           enabled: args.enabled,
         } as any;
+      case "run_analysis":
+        return { type: "runAnalysis", strategy: args.strategy } as any;
       default:
         return { type: "noop" } as any;
     }
   });
 
+  console.log("Generated actions:", actions);
+
   if (actions.length) {
+    console.log("Executing chart actions:", actions);
     await executeChartActions(actions);
+  } else {
+    console.log("No actions to execute");
   }
 
   let screenshot: string | undefined;
@@ -182,12 +205,20 @@ Available Configuration: ${JSON.stringify(contextConfig, null, 2)}`,
     screenshot = await screenshotChart();
   }
 
-  const analysis = await strategyRunner({
-    symbol: opts.symbol,
-    candleData: {} as any,
-    context: { screenshot },
-    mode: opts.strategy || "auto",
-  });
+  // Only run analysis if run_analysis tool was called
+  const hasAnalysisRequest = toolCalls.some(
+    (tc: any) => tc.function?.name === "run_analysis"
+  );
+  let analysis: AIStrategyOutput | null = null;
+
+  if (hasAnalysisRequest) {
+    analysis = await strategyRunner({
+      symbol: opts.symbol,
+      candleData: {} as any,
+      context: { screenshot },
+      mode: opts.strategy || "auto",
+    });
+  }
 
   // Add assistant message with tool calls if there were any actions
   const assistantMessage = {
