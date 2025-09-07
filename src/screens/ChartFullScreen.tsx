@@ -986,6 +986,28 @@ export default function ChartFullScreen() {
         </View>
       </View>
 
+      <Pressable
+        onPress={() => navigation.navigate("ChartChat", { symbol })}
+        style={{
+          position: "absolute",
+          bottom: bottomNavHeight + 20,
+          right: 20,
+          backgroundColor: "#2563EB",
+          width: 48,
+          height: 48,
+          borderRadius: 24,
+          alignItems: "center",
+          justifyContent: "center",
+          shadowColor: "#000",
+          shadowOpacity: 0.3,
+          shadowRadius: 4,
+          elevation: 5,
+        }}
+        hitSlop={8}
+      >
+        <Ionicons name="chatbubbles" size={22} color="#fff" />
+      </Pressable>
+
       {/* Strategy Complexity Bottom Sheet */}
       <ComplexityBottomSheet
         visible={showComplexityBottomSheet}

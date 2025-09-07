@@ -62,3 +62,11 @@ bridge, optionally send a screenshot back for analysis, and produce a strategy
 plan using the existing AI strategy pipeline. Increase the `runs` option for
 deep multi-step analysis. A custom `strategyRunner` can be supplied for a
 different analysis engine, keeping the module extensible.
+
+### Interactive Chart Chat
+
+A dedicated `ChartChat` screen lets users hold a conversation with the trading
+assistant. The chat button on the full-screen chart launches a dialog where the
+LLM can issue tool calls to change timeframes, add indicators, capture
+screenshots, and run iterative analysis. All messages, screenshots, and
+strategy outputs are stored in persistent history for review.
