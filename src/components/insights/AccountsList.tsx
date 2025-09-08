@@ -11,7 +11,7 @@ interface Account {
   balance: number;
   dayChange: number;
   dayChangePercent: number;
-  lastSync?: Date;
+  lastSync?: string;
   isConnected: boolean;
 }
 
@@ -36,10 +36,16 @@ export default function AccountsList({
     return `$${value.toFixed(2)}`;
   };
 
-  const formatLastSync = (date?: Date) => {
+  const formatLastSync = (date?: string) => {
     if (!date) return "Never synced";
+
+    const dateObj = new Date(date);
+
+    // Check if the date is valid
+    if (isNaN(dateObj.getTime())) return "Never synced";
+
     const now = new Date();
-    const diff = now.getTime() - date.getTime();
+    const diff = now.getTime() - dateObj.getTime();
     const minutes = Math.floor(diff / (1000 * 60));
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));

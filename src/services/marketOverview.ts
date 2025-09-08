@@ -269,10 +269,10 @@ async function generateAIMarketSummary(
         );
 
   try {
-    console.log("🤖 Calling OpenAI API with model: gpt-4o-mini");
+    console.log("🤖 Calling OpenAI API with model: gpt-5-mini");
 
     const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-5-mini",
       messages: [
         {
           role: "system",
@@ -281,8 +281,7 @@ async function generateAIMarketSummary(
         },
         { role: "user", content: prompt },
       ],
-      temperature: 0.3,
-      max_tokens: depth === "brief" ? 800 : 1200,
+      max_completion_tokens: depth === "brief" ? 800 : 1200,
     });
 
     const aiResponse = response.choices[0]?.message?.content?.trim();

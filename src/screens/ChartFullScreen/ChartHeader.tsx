@@ -8,27 +8,26 @@ type Props = {
   symbol: string;
   stockName: string;
   onToggleIndicatorsAccordion: () => void;
-  onToggleSessions: () => void;
-  showSessions: boolean;
 };
 
-export default function ChartHeader({ onBack, symbol, stockName, onToggleIndicatorsAccordion, onToggleSessions, showSessions }: Props) {
+export default function ChartHeader({
+  onBack,
+  symbol,
+  stockName,
+  onToggleIndicatorsAccordion,
+}: Props) {
   return (
     <View style={styles.header}>
       <Pressable style={styles.backButton} onPress={onBack}>
         <Ionicons name="arrow-back" size={24} color="#fff" />
       </Pressable>
       <View style={styles.headerCenter}>
-        <StockSearchBar currentSymbol={symbol} currentStockName={stockName || "Loading..."} />
+        <StockSearchBar
+          currentSymbol={symbol}
+          currentStockName={stockName || "Loading..."}
+        />
       </View>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <Pressable
-          onPress={onToggleSessions}
-          style={{ paddingHorizontal: 8, paddingVertical: 6, marginRight: 4 }}
-          hitSlop={8}
-        >
-          <Ionicons name="time" size={20} color={showSessions ? "#fff" : "#555"} />
-        </Pressable>
         <Pressable
           onPress={onToggleIndicatorsAccordion}
           style={{ paddingHorizontal: 8, paddingVertical: 6, marginRight: 4 }}
@@ -62,5 +61,3 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 });
-
-

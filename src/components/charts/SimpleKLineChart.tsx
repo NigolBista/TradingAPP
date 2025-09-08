@@ -902,7 +902,7 @@ export default function SimpleKLineChart({
                 if (!cfg || !cfg.name) return;
                 var nm = String(cfg.name).toUpperCase();
                 post({ debug: 'Attempting to create indicator', name: nm, config: cfg });
-                var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA','BIAS'];
+                var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA'];
                 var wantsOverlay = !!cfg.overlay || overlayCompat.indexOf(nm) >= 0;
                 var options = {};
                 if (wantsOverlay) { options.id = 'candle_pane'; }

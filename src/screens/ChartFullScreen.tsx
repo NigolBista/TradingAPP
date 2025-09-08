@@ -8,6 +8,7 @@ import {
   useColorScheme,
   Modal,
   TextInput,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -30,6 +31,8 @@ import {
   updateIndicatorLineInList,
   addIndicatorParamInList,
   removeIndicatorParamInList,
+  getDefaultIndicator,
+  buildDefaultLines,
 } from "./ChartFullScreen/indicators";
 import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
@@ -39,6 +42,12 @@ import {
   aiOutputToTradePlan,
   applyComplexityToPlan,
 } from "../logic/aiStrategyEngine";
+import {
+  registerChartBridge,
+  unregisterChartBridge,
+  type ChartAction,
+  updateChartState,
+} from "../logic/chartBridge";
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { useUserStore } from "../store/userStore";
@@ -51,6 +60,8 @@ import {
   type Candle,
 } from "../services/marketProviders";
 import { timeframeSpacingMs } from "./ChartFullScreen/utils";
+import { buildDayTradePlan } from "../logic/dayTrade";
+import { buildSwingTradePlan } from "../logic/swingTrade";
 
 // Types
 type AIMeta = {
@@ -155,6 +166,7 @@ export default function ChartFullScreen() {
     useState<StrategyComplexity>(profile.strategyComplexity || "advanced");
   const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
     useState<boolean>(false);
+  const [showReasonIcon, setShowReasonIcon] = useState<boolean>(true);
 
   // Refs
   const [pinError, setPinError] = useState<string | null>(null);
@@ -187,6 +199,15 @@ export default function ChartFullScreen() {
       8
   );
 
+  // Recalculate chart height when screen dimensions change
+  useEffect(() => {
+    // Force re-render when screen dimensions change
+    const subscription = Dimensions.addEventListener("change", () => {
+      // This will trigger a re-render with new dimensions
+    });
+    return () => subscription?.remove();
+  }, []);
+
   // Initialize bar spacing from initial data
   React.useEffect(() => {
     if (initialDataParam && initialDataParam.length >= 2) {
@@ -214,6 +235,100 @@ export default function ChartFullScreen() {
     loadStockName();
     hydrate();
   }, [symbol]);
+
+  // Register a chart bridge so external agents can manipulate the chart state
+  useEffect(() => {
+    const bridge = {
+      async perform(action: ChartAction) {
+        switch (action.type) {
+          case "addIndicator":
+            setIndicators((prev) => {
+              const base = getDefaultIndicator(action.indicator);
+              const options: any = action.options || {};
+
+              const calcParams = Array.isArray(options.calcParams)
+                ? options.calcParams.map((v: number) => Math.floor(v))
+                : base.calcParams;
+
+              const lineCount = Array.isArray(calcParams)
+                ? calcParams.length
+                : 1;
+
+              let lines = buildDefaultLines(
+                lineCount,
+                (base.styles as any)?.lines?.[0]?.color
+              );
+
+              if (options.styles?.lines) {
+                lines = lines.map((line, idx) => ({
+                  ...line,
+                  ...(options.styles.lines[idx] || {}),
+                }));
+              }
+
+              const cfg: IndicatorConfig = {
+                ...base,
+                ...options,
+                calcParams,
+                styles: { ...(base.styles as any), lines },
+              } as IndicatorConfig;
+
+              const existingIndex = prev.findIndex(
+                (i) => i.name.toLowerCase() === action.indicator.toLowerCase()
+              );
+
+              if (existingIndex >= 0) {
+                const copy = prev.slice();
+                copy[existingIndex] = cfg;
+                updateChartState({
+                  indicators: copy.map((i) => ({
+                    indicator: i.name,
+                    options: { calcParams: i.calcParams, styles: i.styles },
+                  })),
+                });
+                return copy;
+              }
+
+              const next = [...prev, cfg];
+              updateChartState({
+                indicators: next.map((i) => ({
+                  indicator: i.name,
+                  options: { calcParams: i.calcParams, styles: i.styles },
+                })),
+              });
+              return next;
+            });
+            break;
+          case "setTimeframe":
+            setExtendedTf(action.timeframe as ExtendedTimeframe);
+            updateChartState({ timeframe: action.timeframe });
+            break;
+          case "setChartType":
+            setChartType(action.chartType as ChartType);
+            updateChartState({ chartType: action.chartType });
+            break;
+          case "toggleDisplayOption":
+            if (action.option === "ma") setShowMA(action.enabled);
+            if (action.option === "volume") setShowVolume(action.enabled);
+            if (action.option === "sessions") setShowSessions(action.enabled);
+            break;
+          default:
+            console.warn("Unhandled chart action", action);
+        }
+      },
+    };
+
+    registerChartBridge(bridge);
+    return () => unregisterChartBridge();
+  }, [
+    setIndicators,
+    setExtendedTf,
+    setChartType,
+    setShowMA,
+    setShowVolume,
+    setShowSessions,
+    symbol,
+  ]);
 
   // Apply indicator styles and parameters
   const applyIndicatorStyles = useCallback(() => {
@@ -574,6 +689,101 @@ export default function ChartFullScreen() {
           rawAnalysisOutput: output,
         };
         cacheSignal(cachedSignalData);
+      } else {
+        // Fallback: build a local strategy so Analyze always yields a plan
+        const pickSeries = () =>
+          (m5 && m5.length ? m5 : null) ||
+          (m15 && m15.length ? m15 : null) ||
+          (h1 && h1.length ? h1 : null) ||
+          (d && d.length ? d : null) ||
+          (m1 && m1.length ? m1 : []);
+
+        const series = pickSeries() as any[];
+        const closes = (series || [])
+          .map((c) => c.close)
+          .filter((n) => Number.isFinite(n));
+        let currentPrice = Number.isFinite(closes[closes.length - 1])
+          ? closes[closes.length - 1]
+          : Number.isFinite(lastCandle?.close || NaN)
+          ? (lastCandle as any).close
+          : NaN;
+
+        // If still missing, synthesize a small series around a nominal value
+        let recentCloses = closes.slice(-60);
+        if (!Number.isFinite(currentPrice)) {
+          currentPrice = 100; // nominal
+        }
+        if (recentCloses.length < 10) {
+          const base = Number.isFinite(currentPrice) ? currentPrice : 100;
+          recentCloses = Array.from(
+            { length: 30 },
+            (_, i) => base * (1 + Math.sin(i / 5) * 0.003)
+          );
+        }
+
+        const prev = recentCloses[recentCloses.length - 10] ?? recentCloses[0];
+        const momentumPct =
+          Number.isFinite(prev) && prev > 0
+            ? ((currentPrice - prev) / prev) * 100
+            : 0;
+
+        const riskTolerance =
+          profile.riskPerTradePct && profile.riskPerTradePct <= 1
+            ? "conservative"
+            : profile.riskPerTradePct && profile.riskPerTradePct <= 2
+            ? "moderate"
+            : "aggressive";
+
+        const ctx = {
+          currentPrice,
+          recentCloses,
+          momentumPct,
+          preferredRiskReward: profile.preferredRiskReward || desiredRR,
+          riskTolerance,
+        } as any;
+
+        const plan = (
+          tradeMode === "day" ? buildDayTradePlan : buildSwingTradePlan
+        )(ctx);
+
+        setCurrentTradePlan(plan);
+        const newAiMeta = {
+          strategyChosen:
+            tradeMode === "day" ? "day_trade_fallback" : "swing_trade_fallback",
+          side: plan.side,
+          confidence: 0.4,
+          why: [
+            "AI analysis unavailable. Generated local strategy using recent price action.",
+          ],
+          notes: [
+            "Adjust risk-reward in settings for different target distances.",
+          ],
+          targets: plan.targets || [],
+          riskReward: plan.riskReward,
+        } as any;
+        setAiMeta(newAiMeta);
+
+        const reasoningText = `${newAiMeta.why?.join(". ") || ""}`;
+        if (reasoningText) {
+          simulateStreamingText(reasoningText);
+        }
+
+        setHasExistingReasoning(true);
+
+        cacheSignal({
+          symbol,
+          timestamp: Date.now(),
+          tradePlan: plan,
+          aiMeta: newAiMeta,
+          analysisContext: {
+            mode: analysisMode,
+            tradePace: tradePace,
+            desiredRR: desiredRR,
+            contextMode,
+            isAutoAnalysis: false,
+          },
+          rawAnalysisOutput: null as any,
+        });
       }
     } catch (error) {
       console.warn("AI analysis failed:", error);
@@ -823,8 +1033,6 @@ export default function ChartFullScreen() {
         onToggleIndicatorsAccordion={() =>
           setShowIndicatorsAccordion((v) => !v)
         }
-        onToggleSessions={() => setShowSessions((s) => !s)}
-        showSessions={showSessions}
       />
 
       {showIndicatorsAccordion && (
@@ -840,7 +1048,7 @@ export default function ChartFullScreen() {
       <OHLCRow lastCandle={lastCandle} />
 
       {/* Chart */}
-      <View style={{ marginBottom: 8 }}>
+      <View style={{ marginBottom: 8, position: "relative" }}>
         <SimpleKLineChart
           symbol={symbol}
           timeframe={extendedTf as any}
@@ -876,6 +1084,15 @@ export default function ChartFullScreen() {
               : undefined
           }
         />
+        {showReasonIcon ? (
+          <Pressable
+            onPress={() => setShowReasoningBottomSheet(true)}
+            style={styles.reasoningFloatInChart}
+            hitSlop={8}
+          >
+            <Ionicons name="bulb" size={20} color="#fff" />
+          </Pressable>
+        ) : null}
       </View>
 
       {/* Timeframe Chips */}
@@ -902,6 +1119,10 @@ export default function ChartFullScreen() {
           }
           return success;
         }}
+        showSessions={showSessions}
+        onSetShowSessions={(enabled) => setShowSessions(enabled)}
+        showReasonIcon={showReasonIcon}
+        onSetShowReasonIcon={(enabled) => setShowReasonIcon(enabled)}
       />
 
       {/* Reasoning Bottom Sheet */}
@@ -912,29 +1133,24 @@ export default function ChartFullScreen() {
         streamingText={streamingText}
       />
 
-      {/* Bottom Navigation */}
+      {/* Floating Reasoning Bulb moved inside chart */}
+
+      {/* Bottom Navigation: Chat, Analyze, Strategy */}
       <View style={styles.bottomNav}>
         <View style={styles.bottomNavContent}>
-          {/* Reasoning */}
+          {/* Chat */}
           <Pressable
-            onPress={() => {
-              if (!aiMeta && !isStreaming && !streamingText) return;
-              setShowReasoningBottomSheet(true);
-            }}
-            disabled={!aiMeta && !isStreaming && !streamingText}
-            style={[
-              styles.bottomNavButton,
-              { opacity: !aiMeta && !isStreaming && !streamingText ? 0.6 : 1 },
-            ]}
+            onPress={() => navigation.navigate("ChartChat" as any, { symbol })}
+            style={styles.bottomNavButton}
             hitSlop={8}
           >
             <Ionicons
-              name="bulb"
+              name="chatbubble-outline"
               size={16}
               color="rgba(255,255,255,0.9)"
               style={{ marginRight: 6 }}
             />
-            <Text style={styles.bottomNavButtonText}>Reasoning</Text>
+            <Text style={styles.bottomNavButtonText}>Chat</Text>
           </Pressable>
 
           {/* Analyze */}
@@ -968,7 +1184,7 @@ export default function ChartFullScreen() {
             )}
           </Pressable>
 
-          {/* Strategy Complexity */}
+          {/* Strategy */}
           <Pressable
             onPress={showComplexityBottomSheetWithTab}
             style={styles.bottomNavButton}
@@ -979,8 +1195,7 @@ export default function ChartFullScreen() {
               style={[styles.bottomNavButtonText, { marginLeft: 6 }]}
               numberOfLines={1}
             >
-              {selectedComplexity.charAt(0).toUpperCase() +
-                selectedComplexity.slice(1)}
+              Strategy
             </Text>
           </Pressable>
         </View>
@@ -1080,6 +1295,34 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0a0a0a",
   },
+  reasoningFloat: {
+    position: "absolute",
+    left: 16,
+    bottom: 80,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reasoningFloatInChart: {
+    position: "absolute",
+    left: 8,
+    bottom: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+    elevation: 2,
+  },
   bottomNav: {
     borderTopWidth: 1,
     borderTopColor: "#2a2a2a",
@@ -1097,12 +1340,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderRadius: 12,
     backgroundColor: "transparent",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
-    minWidth: 110,
+    minWidth: 90,
+    flex: 1,
+    marginHorizontal: 2,
   },
   bottomNavButtonText: {
     color: "#fff",
@@ -1114,11 +1359,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 12,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     borderRadius: 12,
     shadowColor: "#007AFF",
     shadowOffset: { width: 0, height: 0 },
-    minWidth: 140,
+    minWidth: 120,
+    flex: 1.2,
+    marginHorizontal: 2,
   },
   analyzeButtonText: {
     color: "#fff",
