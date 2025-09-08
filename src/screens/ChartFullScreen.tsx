@@ -31,6 +31,8 @@ import {
   updateIndicatorLineInList,
   addIndicatorParamInList,
   removeIndicatorParamInList,
+  getDefaultIndicator,
+  buildDefaultLines,
 } from "./ChartFullScreen/indicators";
 import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
@@ -237,14 +239,46 @@ export default function ChartFullScreen() {
         switch (action.type) {
           case "addIndicator":
             setIndicators((prev) => {
-              const exists = prev.some(
+              const base = getDefaultIndicator(action.indicator);
+              const options: any = action.options || {};
+
+              const calcParams = Array.isArray(options.calcParams)
+                ? options.calcParams.map((v: number) => Math.floor(v))
+                : base.calcParams;
+
+              const lineCount = Array.isArray(calcParams)
+                ? calcParams.length
+                : 1;
+
+              let lines = buildDefaultLines(
+                lineCount,
+                (base.styles as any)?.lines?.[0]?.color
+              );
+
+              if (options.styles?.lines) {
+                lines = lines.map((line, idx) => ({
+                  ...line,
+                  ...(options.styles.lines[idx] || {}),
+                }));
+              }
+
+              const cfg: IndicatorConfig = {
+                ...base,
+                ...options,
+                calcParams,
+                styles: { ...(base.styles as any), lines },
+              } as IndicatorConfig;
+
+              const existingIndex = prev.findIndex(
                 (i) => i.name.toLowerCase() === action.indicator.toLowerCase()
               );
-              if (exists) return prev;
-              const cfg: IndicatorConfig = {
-                name: action.indicator,
-                ...(action.options || {}),
-              };
+
+              if (existingIndex >= 0) {
+                const copy = prev.slice();
+                copy[existingIndex] = cfg;
+                return copy;
+              }
+
               return [...prev, cfg];
             });
             break;
