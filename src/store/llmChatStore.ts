@@ -19,6 +19,12 @@ interface LLMChatState {
     symbol: string,
     msg: Omit<LLMChatMessage, "id" | "timestamp">
   ) => void;
+  updateMessage: (
+    symbol: string,
+    id: string,
+    update: Partial<Pick<LLMChatMessage, "content">>
+  ) => void;
+  deleteMessage: (symbol: string, id: string) => void;
 }
 
 export const useLLMChatStore = create<LLMChatState>()(
@@ -35,6 +41,22 @@ export const useLLMChatStore = create<LLMChatState>()(
               ...(s.sessions[symbol] || []),
               { ...msg, id: `${Date.now()}`, timestamp: Date.now() },
             ],
+          },
+        })),
+      updateMessage: (symbol, id, update) =>
+        set((s) => ({
+          sessions: {
+            ...s.sessions,
+            [symbol]: (s.sessions[symbol] || []).map((m) =>
+              m.id === id ? { ...m, ...update } : m
+            ),
+          },
+        })),
+      deleteMessage: (symbol, id) =>
+        set((s) => ({
+          sessions: {
+            ...s.sessions,
+            [symbol]: (s.sessions[symbol] || []).filter((m) => m.id !== id),
           },
         })),
     }),
