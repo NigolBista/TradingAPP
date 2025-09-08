@@ -260,6 +260,7 @@ export function generateChartContextConfig() {
       description: indicator.description,
       defaultParams: indicator.defaultParams,
       compatOverlay: indicator.compatOverlay,
+      overlay: indicator.compatOverlay,
       defaultColor: indicator.defaultColor,
     })),
 
