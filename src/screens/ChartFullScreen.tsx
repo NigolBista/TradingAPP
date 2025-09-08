@@ -60,6 +60,8 @@ import {
   type Candle,
 } from "../services/marketProviders";
 import { timeframeSpacingMs } from "./ChartFullScreen/utils";
+import { buildDayTradePlan } from "../logic/dayTrade";
+import { buildSwingTradePlan } from "../logic/swingTrade";
 
 // Types
 type AIMeta = {
@@ -164,6 +166,7 @@ export default function ChartFullScreen() {
     useState<StrategyComplexity>(profile.strategyComplexity || "advanced");
   const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
     useState<boolean>(false);
+  const [showReasonIcon, setShowReasonIcon] = useState<boolean>(true);
 
   // Refs
   const [pinError, setPinError] = useState<string | null>(null);
@@ -686,6 +689,101 @@ export default function ChartFullScreen() {
           rawAnalysisOutput: output,
         };
         cacheSignal(cachedSignalData);
+      } else {
+        // Fallback: build a local strategy so Analyze always yields a plan
+        const pickSeries = () =>
+          (m5 && m5.length ? m5 : null) ||
+          (m15 && m15.length ? m15 : null) ||
+          (h1 && h1.length ? h1 : null) ||
+          (d && d.length ? d : null) ||
+          (m1 && m1.length ? m1 : []);
+
+        const series = pickSeries() as any[];
+        const closes = (series || [])
+          .map((c) => c.close)
+          .filter((n) => Number.isFinite(n));
+        let currentPrice = Number.isFinite(closes[closes.length - 1])
+          ? closes[closes.length - 1]
+          : Number.isFinite(lastCandle?.close || NaN)
+          ? (lastCandle as any).close
+          : NaN;
+
+        // If still missing, synthesize a small series around a nominal value
+        let recentCloses = closes.slice(-60);
+        if (!Number.isFinite(currentPrice)) {
+          currentPrice = 100; // nominal
+        }
+        if (recentCloses.length < 10) {
+          const base = Number.isFinite(currentPrice) ? currentPrice : 100;
+          recentCloses = Array.from(
+            { length: 30 },
+            (_, i) => base * (1 + Math.sin(i / 5) * 0.003)
+          );
+        }
+
+        const prev = recentCloses[recentCloses.length - 10] ?? recentCloses[0];
+        const momentumPct =
+          Number.isFinite(prev) && prev > 0
+            ? ((currentPrice - prev) / prev) * 100
+            : 0;
+
+        const riskTolerance =
+          profile.riskPerTradePct && profile.riskPerTradePct <= 1
+            ? "conservative"
+            : profile.riskPerTradePct && profile.riskPerTradePct <= 2
+            ? "moderate"
+            : "aggressive";
+
+        const ctx = {
+          currentPrice,
+          recentCloses,
+          momentumPct,
+          preferredRiskReward: profile.preferredRiskReward || desiredRR,
+          riskTolerance,
+        } as any;
+
+        const plan = (
+          tradeMode === "day" ? buildDayTradePlan : buildSwingTradePlan
+        )(ctx);
+
+        setCurrentTradePlan(plan);
+        const newAiMeta = {
+          strategyChosen:
+            tradeMode === "day" ? "day_trade_fallback" : "swing_trade_fallback",
+          side: plan.side,
+          confidence: 0.4,
+          why: [
+            "AI analysis unavailable. Generated local strategy using recent price action.",
+          ],
+          notes: [
+            "Adjust risk-reward in settings for different target distances.",
+          ],
+          targets: plan.targets || [],
+          riskReward: plan.riskReward,
+        } as any;
+        setAiMeta(newAiMeta);
+
+        const reasoningText = `${newAiMeta.why?.join(". ") || ""}`;
+        if (reasoningText) {
+          simulateStreamingText(reasoningText);
+        }
+
+        setHasExistingReasoning(true);
+
+        cacheSignal({
+          symbol,
+          timestamp: Date.now(),
+          tradePlan: plan,
+          aiMeta: newAiMeta,
+          analysisContext: {
+            mode: analysisMode,
+            tradePace: tradePace,
+            desiredRR: desiredRR,
+            contextMode,
+            isAutoAnalysis: false,
+          },
+          rawAnalysisOutput: null as any,
+        });
       }
     } catch (error) {
       console.warn("AI analysis failed:", error);
@@ -935,8 +1033,6 @@ export default function ChartFullScreen() {
         onToggleIndicatorsAccordion={() =>
           setShowIndicatorsAccordion((v) => !v)
         }
-        onToggleSessions={() => setShowSessions((s) => !s)}
-        showSessions={showSessions}
       />
 
       {showIndicatorsAccordion && (
@@ -952,7 +1048,7 @@ export default function ChartFullScreen() {
       <OHLCRow lastCandle={lastCandle} />
 
       {/* Chart */}
-      <View style={{ marginBottom: 8 }}>
+      <View style={{ marginBottom: 8, position: "relative" }}>
         <SimpleKLineChart
           symbol={symbol}
           timeframe={extendedTf as any}
@@ -988,6 +1084,15 @@ export default function ChartFullScreen() {
               : undefined
           }
         />
+        {showReasonIcon ? (
+          <Pressable
+            onPress={() => setShowReasoningBottomSheet(true)}
+            style={styles.reasoningFloatInChart}
+            hitSlop={8}
+          >
+            <Ionicons name="bulb" size={20} color="#fff" />
+          </Pressable>
+        ) : null}
       </View>
 
       {/* Timeframe Chips */}
@@ -1014,6 +1119,10 @@ export default function ChartFullScreen() {
           }
           return success;
         }}
+        showSessions={showSessions}
+        onSetShowSessions={(enabled) => setShowSessions(enabled)}
+        showReasonIcon={showReasonIcon}
+        onSetShowReasonIcon={(enabled) => setShowReasonIcon(enabled)}
       />
 
       {/* Reasoning Bottom Sheet */}
@@ -1024,31 +1133,11 @@ export default function ChartFullScreen() {
         streamingText={streamingText}
       />
 
-      {/* Bottom Navigation */}
+      {/* Floating Reasoning Bulb moved inside chart */}
+
+      {/* Bottom Navigation: Chat, Analyze, Strategy */}
       <View style={styles.bottomNav}>
         <View style={styles.bottomNavContent}>
-          {/* Reasoning */}
-          <Pressable
-            onPress={() => {
-              if (!aiMeta && !isStreaming && !streamingText) return;
-              setShowReasoningBottomSheet(true);
-            }}
-            disabled={!aiMeta && !isStreaming && !streamingText}
-            style={[
-              styles.bottomNavButton,
-              { opacity: !aiMeta && !isStreaming && !streamingText ? 0.6 : 1 },
-            ]}
-            hitSlop={8}
-          >
-            <Ionicons
-              name="bulb"
-              size={16}
-              color="rgba(255,255,255,0.9)"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.bottomNavButtonText}>Reasoning</Text>
-          </Pressable>
-
           {/* Chat */}
           <Pressable
             onPress={() => navigation.navigate("ChartChat" as any, { symbol })}
@@ -1095,7 +1184,7 @@ export default function ChartFullScreen() {
             )}
           </Pressable>
 
-          {/* Strategy Complexity */}
+          {/* Strategy */}
           <Pressable
             onPress={showComplexityBottomSheetWithTab}
             style={styles.bottomNavButton}
@@ -1106,8 +1195,7 @@ export default function ChartFullScreen() {
               style={[styles.bottomNavButtonText, { marginLeft: 6 }]}
               numberOfLines={1}
             >
-              {selectedComplexity.charAt(0).toUpperCase() +
-                selectedComplexity.slice(1)}
+              Strategy
             </Text>
           </Pressable>
         </View>
@@ -1206,6 +1294,34 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0a0a0a",
+  },
+  reasoningFloat: {
+    position: "absolute",
+    left: 16,
+    bottom: 80,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reasoningFloatInChart: {
+    position: "absolute",
+    left: 8,
+    bottom: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+    elevation: 2,
   },
   bottomNav: {
     borderTopWidth: 1,
