@@ -142,6 +142,13 @@ export default function ChartFullScreen() {
   const [tradePace, setTradePace] = useState<
     "auto" | "day" | "scalp" | "swing"
   >((initialAnalysisContext?.tradePace as any) || "auto");
+  const [contextLookback, setContextLookback] = useState<{
+    mode: "auto" | "fixed";
+    ms?: number;
+  }>({
+    mode: (initialAnalysisContext?.contextLookback?.mode as any) || "auto",
+    ms: initialAnalysisContext?.contextLookback?.ms,
+  });
   const [desiredRR, setDesiredRR] = useState<number>(
     initialAnalysisContext?.desiredRR || 1.5
   );
@@ -587,10 +594,29 @@ export default function ChartFullScreen() {
           volume: c.volume,
         }));
 
+      // Optionally trim candle context based on lookback (AI context only)
+      function trimByLookback<T extends { time: number }>(arr: T[]): T[] {
+        if (!arr || !arr.length) return arr;
+        if (contextLookback?.mode !== "fixed" || !contextLookback.ms)
+          return arr;
+        const cutoff = Date.now() - contextLookback.ms;
+        // Keep only data newer than cutoff
+        const idx = arr.findIndex((c) => c.time >= cutoff);
+        return idx <= 0 ? arr : arr.slice(idx);
+      }
+
+      const trimmedCandleData = {
+        "1d": trimByLookback(d),
+        "1h": trimByLookback(h1),
+        "15m": trimByLookback(m15),
+        "5m": trimByLookback(m5),
+        "1m": trimByLookback(m1),
+      } as Record<string, any[]>;
+
       const output = await runAIStrategy({
         symbol,
         mode: analysisMode,
-        candleData,
+        candleData: trimmedCandleData,
         indicators: {},
         context: {
           userBias: "neutral",
@@ -624,6 +650,7 @@ export default function ChartFullScreen() {
             level: "neutral",
           },
           analysisType: "user_directed",
+          contextLookback,
         },
       });
 
@@ -685,6 +712,7 @@ export default function ChartFullScreen() {
             desiredRR: desiredRR,
             contextMode,
             isAutoAnalysis: false,
+            contextLookback,
           },
           rawAnalysisOutput: output,
         };
@@ -781,7 +809,8 @@ export default function ChartFullScreen() {
             desiredRR: desiredRR,
             contextMode,
             isAutoAnalysis: false,
-          },
+            contextLookback,
+          } as any,
           rawAnalysisOutput: null as any,
         });
       }
@@ -1023,6 +1052,21 @@ export default function ChartFullScreen() {
     return performAnalysis();
   }, [performAnalysis]);
 
+  // Decide icon for reasoning float based on AI call side
+  const decisionSide = (aiMeta?.side as any) || (currentTradePlan?.side as any);
+  const reasoningIconName =
+    decisionSide === "long"
+      ? "arrow-up"
+      : decisionSide === "short"
+      ? "arrow-down"
+      : "bulb";
+  const reasoningIconColor =
+    decisionSide === "long"
+      ? "#16A34A"
+      : decisionSide === "short"
+      ? "#EF4444"
+      : "#fff";
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -1090,7 +1134,11 @@ export default function ChartFullScreen() {
             style={styles.reasoningFloatInChart}
             hitSlop={8}
           >
-            <Ionicons name="bulb" size={20} color="#fff" />
+            <Ionicons
+              name={reasoningIconName as any}
+              size={20}
+              color={reasoningIconColor}
+            />
           </Pressable>
         ) : null}
       </View>
@@ -1221,6 +1269,9 @@ export default function ChartFullScreen() {
         setTradePace={setTradePace}
         contextMode={contextMode}
         setContextMode={setContextMode}
+        extendedTf={extendedTf as any}
+        contextLookback={contextLookback}
+        setContextLookback={setContextLookback}
       />
 
       {/* Indicators Bottom Sheet */}

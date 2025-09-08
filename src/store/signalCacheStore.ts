@@ -22,6 +22,7 @@ export interface CachedSignal {
     desiredRR: number;
     contextMode: string;
     isAutoAnalysis: boolean;
+    contextLookback?: { mode: "auto" | "fixed"; ms?: number };
   };
   // Raw analysis data for reuse
   rawAnalysisOutput?: any;
