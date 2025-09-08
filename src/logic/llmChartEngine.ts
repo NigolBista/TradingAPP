@@ -120,7 +120,7 @@ Available Configuration: ${JSON.stringify(contextConfig, null, 2)}`,
   }));
 
   const res = await client.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-5-mini",
     messages,
     tools,
     tool_choice: "auto",

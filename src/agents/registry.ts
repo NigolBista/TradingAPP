@@ -6,6 +6,7 @@ import { TradingAgent } from "./tradingAgent";
 import { AlertAgent } from "./alertAgent";
 import { CritiqueAgent } from "./critiqueAgent";
 import { OrchestratorAgent } from "./orchestratorAgent";
+import { RouterAgent } from "./routerAgent";
 
 class AgentRegistryImpl implements AgentRegistry {
   private agents: Map<string, Agent> = new Map();
@@ -24,8 +25,8 @@ class AgentRegistryImpl implements AgentRegistry {
   }
 
   getAgentsByCapability(capability: string): Agent[] {
-    return Array.from(this.agents.values()).filter(agent =>
-      agent.capabilities.some(cap => cap.name === capability)
+    return Array.from(this.agents.values()).filter((agent) =>
+      agent.capabilities.some((cap) => cap.name === capability)
     );
   }
 
@@ -35,7 +36,7 @@ class AgentRegistryImpl implements AgentRegistry {
 
   // Helper method to find agents that can handle a specific action
   getAgentsForAction(action: string): Agent[] {
-    return Array.from(this.agents.values()).filter(agent =>
+    return Array.from(this.agents.values()).filter((agent) =>
       agent.canHandle(action)
     );
   }
@@ -44,7 +45,7 @@ class AgentRegistryImpl implements AgentRegistry {
   getCapabilitiesSummary(): Record<string, string[]> {
     const summary: Record<string, string[]> = {};
     this.agents.forEach((agent, name) => {
-      summary[name] = agent.capabilities.map(cap => cap.name);
+      summary[name] = agent.capabilities.map((cap) => cap.name);
     });
     return summary;
   }
@@ -62,4 +63,5 @@ export const agentRegistry = new AgentRegistryImpl();
   new AlertAgent(),
   new CritiqueAgent(),
   new OrchestratorAgent(),
+  new RouterAgent(),
 ].forEach((agent) => agentRegistry.register(agent));

@@ -12,7 +12,10 @@ export interface AgenticRunOptions extends LLMChartRunOptions {
    */
   iterations?: number;
   /** Callback fired with the critique so a human can provide feedback. */
-  onUserFeedback?: (critique: string, iteration: number) => Promise<string | void>;
+  onUserFeedback?: (
+    critique: string,
+    iteration: number
+  ) => Promise<string | void>;
 }
 
 /**
@@ -64,12 +67,14 @@ async function critiqueAnalysis(
     },
     {
       role: "user",
-      content: `Analysis: ${JSON.stringify(analysis)}. UserFeedback: ${userFeedback || "none"}`,
+      content: `Analysis: ${JSON.stringify(analysis)}. UserFeedback: ${
+        userFeedback || "none"
+      }`,
     },
   ];
 
   const res = await client.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-5-mini",
     messages,
   } as any);
 

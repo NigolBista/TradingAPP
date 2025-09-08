@@ -26,7 +26,7 @@ export interface Account {
   balance: number;
   dayChange: number;
   dayChangePercent: number;
-  lastSync: Date;
+  lastSync: string;
   isConnected: boolean;
 }
 
@@ -385,7 +385,7 @@ const createInitialMockData = () => {
       balance: account.balances.current || 0,
       dayChange: mockDayChange,
       dayChangePercent: mockDayChangePercent,
-      lastSync: new Date(),
+      lastSync: new Date().toISOString(),
       isConnected: true,
     };
   });

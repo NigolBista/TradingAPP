@@ -136,11 +136,10 @@ Please use the appropriate tool calls to perform any requested chart modificatio
   }));
 
   const res = await client.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-5-mini",
     messages: baseMessages as any,
     tools,
     tool_choice: "auto",
-    temperature: 0.1, // Lower temperature for more consistent tool usage
   } as any);
 
   const toolCalls = (res.choices?.[0]?.message as any)?.tool_calls || [];
@@ -252,7 +251,7 @@ Please use the appropriate tool calls to perform any requested chart modificatio
   }
 
   const final = await client.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-5-mini",
     messages: followMessages as any,
   } as any);
 

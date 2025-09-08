@@ -9,7 +9,11 @@ export type ChartAction =
   | { type: "checkNews" }
   | { type: "runAnalysis"; strategy?: string }
   | { type: "setChartType"; chartType: string }
-  | { type: "toggleDisplayOption"; option: string; enabled: boolean };
+  | { type: "toggleDisplayOption"; option: string; enabled: boolean }
+  | {
+      type: "setIndicatorStack";
+      stack: Array<{ indicator: string; options?: Record<string, any> }>;
+    };
 
 // Bridge interface allowing actions to be executed on the actual charting UI
 export interface ChartBridge {
@@ -17,6 +21,12 @@ export interface ChartBridge {
 }
 
 let activeBridge: ChartBridge | null = null;
+type ChartStateSnapshot = {
+  timeframe?: string;
+  chartType?: string;
+  indicators: Array<{ indicator: string; options?: Record<string, any> }>;
+};
+let latestState: ChartStateSnapshot = { indicators: [] };
 
 /**
  * Register a bridge that knows how to communicate with the chart. This bridge
@@ -40,6 +50,20 @@ export function unregisterChartBridge() {
  */
 export function getChartBridge(): ChartBridge | null {
   return activeBridge;
+}
+
+export function updateChartState(partial: Partial<ChartStateSnapshot>) {
+  latestState = {
+    ...latestState,
+    ...partial,
+    indicators: Array.isArray(partial.indicators)
+      ? partial.indicators
+      : latestState.indicators,
+  };
+}
+
+export function getChartStateSnapshot(): ChartStateSnapshot {
+  return JSON.parse(JSON.stringify(latestState));
 }
 
 /**

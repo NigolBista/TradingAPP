@@ -95,7 +95,7 @@ export async function runAIStrategy(
     return null;
   }
 
-  const model = "gpt-4o-mini";
+  const model = "gpt-5-mini";
   const client = new OpenAI({ apiKey: openaiApiKey });
 
   let chosenKey: StrategyKey = "day_trade";
@@ -131,7 +131,6 @@ export async function runAIStrategy(
       console.log("=====================================");
       console.log("⚙️  MODEL CONFIG:");
       console.log("Model:", model);
-      console.log("Temperature:", 0.2);
       console.log("Max Tokens:", 750);
       console.log("Response Format: JSON");
       console.log("=====================================");
@@ -142,8 +141,7 @@ export async function runAIStrategy(
           { role: "system", content: systemContent },
           { role: "user", content: userContent },
         ],
-        temperature: 0.2,
-        max_tokens: 750,
+        max_completion_tokens: 750,
         response_format: { type: "json_object" } as any,
       });
       const text = response.choices?.[0]?.message?.content?.trim();

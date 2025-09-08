@@ -46,6 +46,7 @@ import {
   registerChartBridge,
   unregisterChartBridge,
   type ChartAction,
+  updateChartState,
 } from "../logic/chartBridge";
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
@@ -276,17 +277,32 @@ export default function ChartFullScreen() {
               if (existingIndex >= 0) {
                 const copy = prev.slice();
                 copy[existingIndex] = cfg;
+                updateChartState({
+                  indicators: copy.map((i) => ({
+                    indicator: i.name,
+                    options: { calcParams: i.calcParams, styles: i.styles },
+                  })),
+                });
                 return copy;
               }
 
-              return [...prev, cfg];
+              const next = [...prev, cfg];
+              updateChartState({
+                indicators: next.map((i) => ({
+                  indicator: i.name,
+                  options: { calcParams: i.calcParams, styles: i.styles },
+                })),
+              });
+              return next;
             });
             break;
           case "setTimeframe":
             setExtendedTf(action.timeframe as ExtendedTimeframe);
+            updateChartState({ timeframe: action.timeframe });
             break;
           case "setChartType":
             setChartType(action.chartType as ChartType);
+            updateChartState({ chartType: action.chartType });
             break;
           case "toggleDisplayOption":
             if (action.option === "ma") setShowMA(action.enabled);
