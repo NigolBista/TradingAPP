@@ -1,4 +1,5 @@
 import { initializeAppDataStore } from "../store/appDataStore";
+import { initializeAlertEngine } from "./alertEngine";
 
 /**
  * App Initializer
@@ -22,6 +23,9 @@ export class AppInitializer {
     try {
       // Initialize the centralized data store
       await initializeAppDataStore();
+
+      // Start alert engine listeners
+      initializeAlertEngine();
 
       this.initialized = true;
       console.log("✅ App initialization complete");

@@ -1,4 +1,5 @@
 import { captureChartScreenshot } from "../services/chartScreenshot";
+import type { AlertCondition } from "../store/alertStore";
 
 // Unified chart actions that both user and LLM engines can dispatch
 export type ChartAction =
@@ -13,6 +14,19 @@ export type ChartAction =
   | {
       type: "setIndicatorStack";
       stack: Array<{ indicator: string; options?: Record<string, any> }>;
+    }
+  | {
+      type: "createPriceAlert";
+      payload: {
+        symbol?: string;
+        condition: AlertCondition;
+        price: number;
+        note?: string;
+      };
+    }
+  | {
+      type: "clearPriceAlerts";
+      payload: { symbol?: string };
     };
 
 // Bridge interface allowing actions to be executed on the actual charting UI

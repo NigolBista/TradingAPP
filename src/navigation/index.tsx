@@ -36,6 +36,7 @@ import EarningsCalendarScreen from "../screens/EarningsCalendarScreen";
 import ChatScreen from "../screens/ChatScreen";
 import ChartChatScreen from "../screens/ChartChatScreen";
 import IndicatorConfigScreen from "../screens/IndicatorConfigScreen";
+import AlertsScreen from "../screens/AlertsScreen";
 import { useAuth } from "../providers/AuthProvider";
 import { useTheme } from "../providers/ThemeProvider";
 
@@ -185,21 +186,26 @@ export default function RootNavigation() {
             component={EarningsCalendarScreen}
             options={{ headerShown: false }}
           />
-        <RootStack.Screen
-          name="Chat"
-          component={ChatScreen}
-          options={{ headerShown: false }}
-        />
-        <RootStack.Screen
-          name="ChartChat"
-          component={ChartChatScreen}
-          options={{ headerShown: false }}
-        />
-        <RootStack.Screen
-          name="IndicatorConfigScreen"
-          component={IndicatorConfigScreen}
-          options={{ headerShown: false }}
-        />
+          <RootStack.Screen
+            name="Chat"
+            component={ChatScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="ChartChat"
+            component={ChartChatScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="IndicatorConfigScreen"
+            component={IndicatorConfigScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="Alerts"
+            component={AlertsScreen}
+            options={{ headerShown: false }}
+          />
         </RootStack.Navigator>
       ) : (
         <AuthRoutes />

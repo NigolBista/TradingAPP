@@ -62,6 +62,7 @@ import {
 import { timeframeSpacingMs } from "./ChartFullScreen/utils";
 import { buildDayTradePlan } from "../logic/dayTrade";
 import { buildSwingTradePlan } from "../logic/swingTrade";
+import { useAlertStore } from "../store/alertStore";
 
 // Types
 type AIMeta = {
@@ -117,6 +118,8 @@ export default function ChartFullScreen() {
   const [showVolume, setShowVolume] = useState<boolean>(false);
   const [showSessions, setShowSessions] = useState<boolean>(true);
   const [indicatorsExpanded, setIndicatorsExpanded] = useState<boolean>(false);
+  const { getActiveAlertsForSymbol, updateAlert } = useAlertStore();
+  const alertsForSymbol = getActiveAlertsForSymbol(symbol);
 
   // Indicators state
   const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
@@ -174,6 +177,7 @@ export default function ChartFullScreen() {
   const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
     useState<boolean>(false);
   const [showReasonIcon, setShowReasonIcon] = useState<boolean>(true);
+  const [pendingTapPrice, setPendingTapPrice] = useState<number | null>(null);
 
   // Refs
   const [pinError, setPinError] = useState<string | null>(null);
@@ -319,6 +323,62 @@ export default function ChartFullScreen() {
             if (action.option === "volume") setShowVolume(action.enabled);
             if (action.option === "sessions") setShowSessions(action.enabled);
             break;
+          case "createPriceAlert": {
+            const { createAlert, getActiveAlertsForSymbol, deleteAlert } =
+              useAlertStore.getState();
+            const targetSymbol = (action.payload.symbol || symbol) as string;
+            const priceNum = Number(action.payload.price);
+            if (!Number.isFinite(priceNum)) break;
+
+            // Fetch current price to decide direction smartly
+            let lastPrice: number | null = null;
+            try {
+              const q: SimpleQuote = await fetchSingleQuote(targetSymbol);
+              lastPrice = Number(q?.last ?? NaN);
+              if (!Number.isFinite(lastPrice)) lastPrice = null;
+            } catch {}
+
+            // Decide final condition: if target > current → above, else below
+            let finalCondition = action.payload.condition as any;
+            if (
+              Number.isFinite(priceNum) &&
+              Number.isFinite(lastPrice as any)
+            ) {
+              finalCondition =
+                priceNum > (lastPrice as number) ? "above" : "below";
+            }
+
+            // Remove any existing alerts at this exact price for this symbol
+            const existing = getActiveAlertsForSymbol(targetSymbol) || [];
+            existing
+              .filter((a) => Number(a.price) === priceNum)
+              .forEach((a) => deleteAlert(a.id));
+
+            // Create a single smart alert
+            createAlert({
+              symbol: targetSymbol,
+              condition: finalCondition,
+              price: priceNum,
+              source: "agent",
+              note: action.payload.note,
+            } as any);
+            break;
+          }
+          case "clearPriceAlerts": {
+            const { alerts, deleteAlert } = useAlertStore.getState();
+            const target = action.payload?.symbol
+              ? String(action.payload.symbol).toUpperCase()
+              : null;
+            const all = Object.values(alerts || {});
+            for (const a of all) {
+              if (!target || a.symbol === target) {
+                try {
+                  deleteAlert(a.id);
+                } catch {}
+              }
+            }
+            break;
+          }
           default:
             console.warn("Unhandled chart action", action);
         }
@@ -1112,6 +1172,25 @@ export default function ChartFullScreen() {
             overrideIndicatorRef.current = overrideFn;
             applyIndicatorStyles();
           }}
+          onChartTap={(y, price) => {
+            if (Number.isFinite(price as any))
+              setPendingTapPrice(price as number);
+          }}
+          alerts={alertsForSymbol.map((a) => ({
+            id: a.id,
+            price: a.price,
+            label:
+              (a.source === "agent" ? "Agent " : "") + (a.condition || "alert"),
+            color:
+              a.source === "agent"
+                ? "#8B5CF6"
+                : (a.condition || "").includes("above")
+                ? "#10B981"
+                : "#EF4444",
+          }))}
+          onAlertMoved={(id, newPrice) => {
+            updateAlert(id, { price: newPrice });
+          }}
           levels={
             currentTradePlan
               ? {
@@ -1140,6 +1219,34 @@ export default function ChartFullScreen() {
               color={reasoningIconColor}
             />
           </Pressable>
+        ) : null}
+        {Number.isFinite(pendingTapPrice as any) ? (
+          <View style={{ position: "absolute", right: 12, top: 12 }}>
+            <Pressable
+              onPress={() => {
+                const p = pendingTapPrice as number;
+                setPendingTapPrice(null);
+                const { createAlert } = useAlertStore.getState();
+                createAlert({
+                  symbol,
+                  condition: "above" as any,
+                  price: p,
+                  source: "user",
+                });
+              }}
+              style={{
+                backgroundColor: "#2563EB",
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                borderRadius: 16,
+                flexDirection: "row",
+                alignItems: "center",
+              }}
+              hitSlop={8}
+            >
+              <Ionicons name="notifications-outline" size={16} color="#fff" />
+            </Pressable>
+          </View>
         ) : null}
       </View>
 

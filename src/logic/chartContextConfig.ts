@@ -414,6 +414,51 @@ export function generateChartContextConfig() {
           required: [],
         },
       },
+      {
+        name: "create_price_alert",
+        description: "Create a price alert for a symbol at a level",
+        parameters: {
+          type: "object",
+          properties: {
+            symbol: {
+              type: "string",
+              description:
+                "Stock ticker. Defaults to the currently selected symbol.",
+            },
+            condition: {
+              type: "string",
+              enum: ["above", "below", "crosses_above", "crosses_below"],
+              description:
+                "Alert fires when price meets this condition relative to level",
+            },
+            price: {
+              type: "number",
+              description: "Price level to monitor",
+            },
+            note: {
+              type: "string",
+              description: "Optional note to include with the alert",
+            },
+          },
+          required: ["condition", "price"],
+        },
+      },
+      {
+        name: "clear_price_alerts",
+        description:
+          "Clear price alerts. If symbol provided, clears for symbol; otherwise clears all.",
+        parameters: {
+          type: "object",
+          properties: {
+            symbol: {
+              type: "string",
+              description:
+                "Optional stock ticker. If omitted, all alerts will be cleared.",
+            },
+          },
+          required: [],
+        },
+      },
     ],
   };
 }

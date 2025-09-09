@@ -1,4 +1,5 @@
 import { Agent, AgentContext, AgentResponse, AlertResponse } from "./types";
+import { useAlertStore } from "../store/alertStore";
 
 export class AlertAgent implements Agent {
   name = "alert";
@@ -165,19 +166,28 @@ export class AlertAgent implements Agent {
     const { symbol, condition, price, message } = params;
     const alertId = `price_${++this.alertCounter}`;
 
-    const alert = {
+    const alert: any = {
       id: alertId,
-      type: "price",
+      type: "price" as const,
       symbol,
       condition,
       price,
       message: message || `${symbol} price ${condition} ${price}`,
-      priority: "medium",
+      priority: "medium" as const,
       created: Date.now(),
       active: true,
     };
 
     this.alerts.set(alertId, alert);
+    try {
+      useAlertStore.getState().createAlert({
+        symbol,
+        condition,
+        price,
+        source: "agent",
+        note: message,
+      } as any);
+    } catch {}
 
     return {
       success: true,
@@ -194,9 +204,9 @@ export class AlertAgent implements Agent {
     const { symbol, indicator, condition, value, message } = params;
     const alertId = `indicator_${++this.alertCounter}`;
 
-    const alert = {
+    const alert: any = {
       id: alertId,
-      type: "indicator",
+      type: "indicator" as const,
       symbol,
       indicator,
       condition,
@@ -204,7 +214,7 @@ export class AlertAgent implements Agent {
       message:
         message ||
         `${symbol} ${indicator} ${condition} ${value || "threshold"}`,
-      priority: "medium",
+      priority: "medium" as const,
       created: Date.now(),
       active: true,
     };
@@ -226,16 +236,15 @@ export class AlertAgent implements Agent {
     const { symbol, pattern, timeframe, message } = params;
     const alertId = `pattern_${++this.alertCounter}`;
 
-    const alert = {
+    const alert: any = {
       id: alertId,
-      type: "pattern",
+      type: "custom" as const,
       symbol,
-      pattern,
-      timeframe: timeframe || "1D",
+      condition: `${pattern} on ${timeframe || "1D"}`,
       message:
         message ||
         `${symbol} ${pattern} pattern detected on ${timeframe || "1D"}`,
-      priority: "high",
+      priority: "high" as const,
       created: Date.now(),
       active: true,
     };
@@ -257,16 +266,17 @@ export class AlertAgent implements Agent {
     const { symbol, keywords, sentiment, message } = params;
     const alertId = `news_${++this.alertCounter}`;
 
-    const alert = {
+    const alert: any = {
       id: alertId,
-      type: "news",
+      type: "news" as const,
       symbol,
       keywords: keywords || [],
       sentiment: sentiment || "neutral",
+      condition: sentiment || "neutral",
       message:
         message ||
         `News alert for ${symbol} with ${sentiment || "neutral"} sentiment`,
-      priority: "medium",
+      priority: "medium" as const,
       created: Date.now(),
       active: true,
     };
@@ -288,13 +298,13 @@ export class AlertAgent implements Agent {
     const { symbol, condition, message, priority = "medium" } = params;
     const alertId = `custom_${++this.alertCounter}`;
 
-    const alert = {
+    const alert: any = {
       id: alertId,
-      type: "custom",
+      type: "custom" as const,
       symbol,
       condition,
       message: message || `Custom alert for ${symbol}: ${condition}`,
-      priority,
+      priority: priority as any,
       created: Date.now(),
       active: true,
     };
@@ -351,6 +361,13 @@ export class AlertAgent implements Agent {
 
     const updatedAlert = { ...alert, ...updates, updated: Date.now() };
     this.alerts.set(alertId, updatedAlert);
+    try {
+      const { updateAlert } = useAlertStore.getState();
+      updateAlert(alertId, {
+        price: updates?.price,
+        note: updates?.message,
+      } as any);
+    } catch {}
 
     return {
       success: true,
@@ -373,6 +390,10 @@ export class AlertAgent implements Agent {
     }
 
     this.alerts.delete(alertId);
+    try {
+      const { deleteAlert } = useAlertStore.getState() as any;
+      deleteAlert(alertId);
+    } catch {}
 
     return {
       success: true,

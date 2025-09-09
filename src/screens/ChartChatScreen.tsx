@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   Modal,
+  Animated,
+  Easing,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
@@ -23,11 +25,68 @@ export default function ChartChatScreen() {
   const route = useRoute<any>();
   const { theme } = useTheme();
   const symbol: string = route.params?.symbol;
-  const { sessions, addMessage, newChat, updateMessage, deleteMessage } =
-    useLLMChatStore();
+  const {
+    sessions,
+    addMessage,
+    newChat,
+    updateMessage,
+    deleteMessage,
+    truncateAfter,
+  } = useLLMChatStore();
   const messages = sessions[symbol] || [];
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [typing, setTyping] = useState(false);
+  const [streamBuffer, setStreamBuffer] = useState<string>("");
+
+  // Animated typing dots (bounce)
+  const dot1Y = useRef(new Animated.Value(0)).current;
+  const dot2Y = useRef(new Animated.Value(0)).current;
+  const dot3Y = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    let timers: Array<ReturnType<typeof setTimeout>> = [];
+    const loops: Animated.CompositeAnimation[] = [];
+
+    const startLoop = (val: Animated.Value, delay: number) => {
+      const up = Animated.timing(val, {
+        toValue: -4,
+        duration: 250,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      });
+      const down = Animated.timing(val, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.inOut(Easing.quad),
+        useNativeDriver: true,
+      });
+      const seq = Animated.sequence([up, down]);
+      const loop = Animated.loop(seq);
+      const t = setTimeout(() => loop.start(), delay);
+      timers.push(t);
+      loops.push(loop);
+    };
+
+    if (typing && !streamBuffer) {
+      startLoop(dot1Y, 0);
+      startLoop(dot2Y, 120);
+      startLoop(dot3Y, 240);
+    }
+
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+      try {
+        // Animated.loop does not expose stop on returned value; resetting values
+        dot1Y.stopAnimation();
+        dot2Y.stopAnimation();
+        dot3Y.stopAnimation();
+      } catch {}
+      dot1Y.setValue(0);
+      dot2Y.setValue(0);
+      dot3Y.setValue(0);
+    };
+  }, [typing, streamBuffer, dot1Y, dot2Y, dot3Y]);
   const [historyVisible, setHistoryVisible] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
@@ -53,18 +112,22 @@ export default function ChartChatScreen() {
     setInput("");
     setSending(true);
     try {
+      setTyping(true);
       const history = messages.map((m) => ({
         role: m.role,
         content: m.content,
       }));
+      setStreamBuffer("");
       const res = await sendChartChatMessage({
         symbol,
         message: content,
         history,
+        stream: true,
+        onDelta: (t) => setStreamBuffer((prev) => prev + t),
       });
       addMessage(symbol, {
         role: "assistant",
-        content: res.reply,
+        content: res.reply || streamBuffer,
         screenshot: res.screenshot,
         analysis: res.analysis,
       });
@@ -72,6 +135,8 @@ export default function ChartChatScreen() {
       console.error(err);
     } finally {
       setSending(false);
+      setTyping(false);
+      setStreamBuffer("");
     }
   };
 
@@ -92,14 +157,55 @@ export default function ChartChatScreen() {
     setEditText(content);
   };
 
-  const handleSaveEdit = () => {
-    if (!editingMessageId) return;
+  const handleSaveEdit = async () => {
+    if (!editingMessageId || sending) return;
     const text = editText.trim();
     if (!text) return;
+    const idx = messages.findIndex((m) => m.id === editingMessageId);
+    if (idx === -1) return;
+    const target = messages[idx];
+    if (target.role !== "user") return;
+
+    // Build history up to the edited message (excluding it)
+    const priorHistory = messages.slice(0, idx).map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: m.content,
+    }));
+
+    // Update the edited message content and remove all messages after it
     updateMessage(symbol, editingMessageId, { content: text });
+    truncateAfter(symbol, editingMessageId);
+
+    // Reset UI edit state
     setEditingMessageId(null);
     setEditText("");
     setActiveMessageId(null);
+
+    // Resubmit the edited query
+    setSending(true);
+    setTyping(true);
+    try {
+      setStreamBuffer("");
+      const res = await sendChartChatMessage({
+        symbol,
+        message: text,
+        history: priorHistory,
+        stream: false,
+        onDelta: (t) => setStreamBuffer((prev) => prev + t),
+      });
+      addMessage(symbol, {
+        role: "assistant",
+        content: res.reply || streamBuffer,
+        screenshot: res.screenshot,
+        analysis: res.analysis,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSending(false);
+      setTyping(false);
+      setStreamBuffer("");
+    }
   };
 
   const handleCancelEdit = () => {
@@ -208,6 +314,7 @@ export default function ChartChatScreen() {
                     <View style={{ flexDirection: "row", marginTop: 8 }}>
                       <Pressable
                         onPress={handleSaveEdit}
+                        disabled={sending}
                         style={{
                           paddingHorizontal: 10,
                           paddingVertical: 6,
@@ -222,7 +329,7 @@ export default function ChartChatScreen() {
                             fontWeight: "600",
                           }}
                         >
-                          Save
+                          Send
                         </Text>
                       </Pressable>
                       <Pressable
@@ -315,6 +422,80 @@ export default function ChartChatScreen() {
                 )}
               </Pressable>
             );
+          }}
+          ListFooterComponent={() => {
+            if (streamBuffer) {
+              return (
+                <View style={{ paddingVertical: 6 }}>
+                  <View
+                    style={{
+                      alignSelf: "flex-start",
+                      backgroundColor: theme.colors.card,
+                      borderRadius: 8,
+                      padding: 10,
+                      borderWidth: 1,
+                      borderColor: theme.colors.border,
+                      maxWidth: "80%",
+                    }}
+                  >
+                    <Text style={{ color: theme.colors.text }}>
+                      {streamBuffer}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
+
+            if (typing) {
+              return (
+                <View style={{ paddingVertical: 6 }}>
+                  <View
+                    style={{
+                      alignSelf: "flex-start",
+                      backgroundColor: theme.colors.card,
+                      borderRadius: 16,
+                      paddingVertical: 8,
+                      paddingHorizontal: 12,
+                      borderWidth: 1,
+                      borderColor: theme.colors.border,
+                      flexDirection: "row",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Animated.View
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: theme.colors.textSecondary,
+                        marginRight: 4,
+                        transform: [{ translateY: dot1Y }],
+                      }}
+                    />
+                    <Animated.View
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: theme.colors.textSecondary,
+                        marginRight: 4,
+                        transform: [{ translateY: dot2Y }],
+                      }}
+                    />
+                    <Animated.View
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 3,
+                        backgroundColor: theme.colors.textSecondary,
+                        transform: [{ translateY: dot3Y }],
+                      }}
+                    />
+                  </View>
+                </View>
+              );
+            }
+            return null;
           }}
         />
 

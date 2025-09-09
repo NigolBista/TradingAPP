@@ -49,6 +49,10 @@ export interface ChatRunOptions {
   sendData?: "screenshot" | "chart" | "both";
   /** Optional custom strategy engine */
   strategyRunner?: (input: AIStrategyInput) => Promise<AIStrategyOutput | null>;
+  /** Enable streaming for final response */
+  stream?: boolean;
+  /** Receive streamed text chunks when stream is enabled */
+  onDelta?: (text: string) => void;
 }
 
 export interface ChatRunResult {
@@ -71,6 +75,7 @@ export async function sendChartChatMessage(
   }
 
   const client = new OpenAI({ apiKey: openaiApiKey });
+  const { openaiEnableStreaming } = (Constants.expoConfig?.extra || {}) as any;
   const strategyRunner = opts.strategyRunner ?? runAIStrategy;
 
   // Get comprehensive context configuration
@@ -181,6 +186,23 @@ Please use the appropriate tool calls to perform any requested chart modificatio
         } as any;
       case "run_analysis":
         return { type: "runAnalysis", strategy: args.strategy } as any;
+      case "create_price_alert":
+        return {
+          type: "createPriceAlert",
+          payload: {
+            symbol: args.symbol,
+            condition: args.condition,
+            price: args.price,
+            note: args.note,
+          },
+        } as any;
+      case "clear_price_alerts":
+        return {
+          type: "clearPriceAlerts",
+          payload: {
+            symbol: args.symbol,
+          },
+        } as any;
       default:
         return { type: "noop" } as any;
     }
@@ -250,11 +272,33 @@ Please use the appropriate tool calls to perform any requested chart modificatio
     });
   }
 
-  const final = await client.chat.completions.create({
-    model: "gpt-5-mini",
-    messages: followMessages as any,
-  } as any);
-
-  const reply = final.choices?.[0]?.message?.content || "";
-  return { reply, analysis, screenshot };
+  const enableStreaming =
+    Boolean(openaiEnableStreaming) && Boolean(opts.stream);
+  if (enableStreaming) {
+    let full = "";
+    const stream = await client.chat.completions.create({
+      model: "gpt-5-mini",
+      messages: followMessages as any,
+      stream: true,
+    } as any);
+    for await (const part of stream as any) {
+      const token = part?.choices?.[0]?.delta?.content || "";
+      if (token) {
+        full += token;
+        if (typeof opts.onDelta === "function") {
+          try {
+            opts.onDelta(token);
+          } catch {}
+        }
+      }
+    }
+    return { reply: full, analysis, screenshot };
+  } else {
+    const final = await client.chat.completions.create({
+      model: "gpt-5-mini",
+      messages: followMessages as any,
+    } as any);
+    const reply = final.choices?.[0]?.message?.content || "";
+    return { reply, analysis, screenshot };
+  }
 }

@@ -12,7 +12,12 @@ import {
   Animated,
   Dimensions,
 } from "react-native";
-import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
+import {
+  RouteProp,
+  useRoute,
+  useNavigation,
+  NavigationProp,
+} from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 
 import SimpleKLineChart from "../components/charts/SimpleKLineChart";
@@ -51,6 +56,7 @@ import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
 
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
+  Alerts: { symbol: string };
 };
 
 // Simplified header timeframes for this screen only
@@ -348,7 +354,7 @@ const styles = StyleSheet.create({
 
 export default function StockDetailScreen() {
   const route = useRoute<RouteProp<RootStackParamList, "StockDetail">>();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const symbol = route.params?.symbol || "AAPL";
   const initialQuoteParam = route.params?.initialQuote as
     | SimpleQuote
@@ -1138,7 +1144,10 @@ export default function StockDetailScreen() {
 
           {/* Action Buttons */}
           <View style={styles.headerActions}>
-            <Pressable onPress={onSetAlert} style={styles.headerIconButton}>
+            <Pressable
+              onPress={() => navigation.navigate("Alerts", { symbol })}
+              style={styles.headerIconButton}
+            >
               <Ionicons name="notifications-outline" size={20} color="#fff" />
             </Pressable>
             <Pressable style={styles.headerIconButton}>

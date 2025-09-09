@@ -22,9 +22,11 @@ interface LLMChatState {
   updateMessage: (
     symbol: string,
     id: string,
-    update: Partial<Pick<LLMChatMessage, "content">>
+    update: Partial<Pick<LLMChatMessage, "content" | "screenshot" | "analysis">>
   ) => void;
   deleteMessage: (symbol: string, id: string) => void;
+  /** Remove all messages that appear after the given id (inclusive=false). */
+  truncateAfter: (symbol: string, id: string) => void;
 }
 
 export const useLLMChatStore = create<LLMChatState>()(
@@ -57,6 +59,19 @@ export const useLLMChatStore = create<LLMChatState>()(
           sessions: {
             ...s.sessions,
             [symbol]: (s.sessions[symbol] || []).filter((m) => m.id !== id),
+          },
+        })),
+      truncateAfter: (symbol, id) =>
+        set((s) => ({
+          sessions: {
+            ...s.sessions,
+            [symbol]: (() => {
+              const list = s.sessions[symbol] || [];
+              const idx = list.findIndex((m) => m.id === id);
+              if (idx === -1) return list;
+              // Keep up to idx (i.e., remove messages with index > idx)
+              return list.slice(0, idx + 1);
+            })(),
           },
         })),
     }),
