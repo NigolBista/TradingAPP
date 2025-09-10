@@ -382,11 +382,11 @@ export default function SimpleKLineChart({
                    backgroundColor: 'rgba(33, 150, 243, 0.2)',
                    activeBackgroundColor: 'rgba(33, 150, 243, 0.4)',
                    type: 'path', // 'path', 'icon_font'
-                   content: {
-                     style: 'stroke', // 'stroke', 'fill'
-                     path: 'M16,4L24,8L24,20L8,20L8,8L16,4zM16,24L16,28M12,24L20,24',
-                     lineWidth: 3,
-                   }
+                     content: {
+                       style: 'stroke', // 'stroke', 'fill'
+                       path: 'M16,6C12,6 8,8 8,12L8,18C8,20 10,22 12,22L20,22C22,22 24,20 24,18L24,12C24,8 20,6 16,6M16,6L16,4M12,24L14,24M18,24L20,24',
+                       lineWidth: 2,
+                     }
                  },
                  {
                    id: 'measure_tool',
@@ -1199,6 +1199,102 @@ export default function SimpleKLineChart({
               levelOverlayIds: [],
               sessionOverlayIds: []
             };
+
+            // Crosshair events: capture price on move and handle feature clicks (alert button)
+            (function(){
+              try {
+                var ActionType = (window.klinecharts && (window.klinecharts.ActionType || window.klinecharts.ProActionType)) || {};
+
+                function getPriceFromEvent(ev){
+                  try {
+                    if (!ev) return (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice) || null;
+                    if (typeof ev.price === 'number') return ev.price;
+                    if (ev.yAxis && typeof ev.yAxis.value === 'number') return ev.yAxis.value;
+                    if (typeof ev.value === 'number') return ev.value;
+                    if (ev.data) {
+                      if (typeof ev.data.value === 'number') return ev.data.value;
+                      if (typeof ev.data.close === 'number') return ev.data.close;
+                    }
+                    if ((ev.coordinate && typeof ev.coordinate.y === 'number') && chart && typeof chart.convertFromPixel === 'function') {
+                      var res = chart.convertFromPixel({ x: (ev.coordinate.x || 0), y: ev.coordinate.y });
+                      if (res && typeof res.value === 'number') return res.value;
+                      if (res && typeof res.price === 'number') return res.price;
+                    }
+                    // Additional possible fields to try
+                    if (typeof ev.y === 'number' && chart && typeof chart.convertFromPixel === 'function') {
+                      var fromY = chart.convertFromPixel({ x: 0, y: ev.y });
+                      if (fromY && typeof fromY.value === 'number') return fromY.value;
+                    }
+                  } catch(_) {}
+                  // Fallback to last recorded pointer-derived price
+                  try { return (window.__SIMPLE_KLINE__ && (window.__SIMPLE_KLINE__.lastPointerPrice || window.__SIMPLE_KLINE__.lastCrosshairPrice)) || null; } catch(_) { return null; }
+                }
+
+                function subscribeActionSafe(name, cb){
+                  try {
+                    if (typeof chart.subscribeAction === 'function') {
+                      chart.subscribeAction(name, cb);
+                      post({ debug: 'Subscribed action', name: name });
+                      return true;
+                    }
+                  } catch(e) { post({ warn: 'subscribeAction failed', name: name, message: String(e && e.message || e) }); }
+                  return false;
+                }
+
+                var CHANGE_EVT = ActionType.OnCrosshairChange || 'onCrosshairChange';
+                subscribeActionSafe(CHANGE_EVT, function(param){
+                  try {
+                    var price = getPriceFromEvent(param);
+                    if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                    window.__SIMPLE_KLINE__.lastCrosshair = param;
+                    window.__SIMPLE_KLINE__.lastCrosshairPrice = price;
+                  } catch(_) {}
+                });
+
+                var CLICK_EVT = ActionType.OnCrosshairFeatureClick || 'onCrosshairFeatureClick';
+                subscribeActionSafe(CLICK_EVT, function(param){
+                  try {
+                    var fid = (param && (param.featureId || (param.feature && param.feature.id) || param.id)) || '';
+                    var price = getPriceFromEvent(param);
+                    if ((price === null || price === undefined) && window.__SIMPLE_KLINE__) {
+                      price = window.__SIMPLE_KLINE__.lastPointerPrice || window.__SIMPLE_KLINE__.lastCrosshairPrice || null;
+                    }
+                    post({ debug: 'onCrosshairFeatureClick', featureId: fid, price: price });
+                    if (fid === 'alert_tool' && typeof price === 'number') {
+                      addPriceLine(price, '#F59E0B', 'Alert');
+                    }
+                  } catch(e) { post({ warn: 'onCrosshairFeatureClick handler failed', message: String(e && e.message || e) }); }
+                });
+
+                // Track last pointer position over the chart and derive price via convertFromPixel
+                try {
+                  var container = document.getElementById('k-line-chart');
+                  if (container) {
+                    var updatePointer = function(e){
+                      try {
+                        if (!container) return;
+                        var rect = container.getBoundingClientRect();
+                        var x = (e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] && e.touches[0].clientX)) - rect.left;
+                        var y = (e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] && e.touches[0].clientY)) - rect.top;
+                        if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                        window.__SIMPLE_KLINE__.lastPointer = { x: x, y: y };
+                        if (chart && typeof chart.convertFromPixel === 'function') {
+                          var converted = chart.convertFromPixel({ x: x, y: y });
+                          var val = (converted && (typeof converted.value === 'number' ? converted.value : converted.price));
+                          if (typeof val === 'number') {
+                            window.__SIMPLE_KLINE__.lastPointerPrice = val;
+                          }
+                        }
+                      } catch(_) { }
+                    };
+                    container.addEventListener('pointermove', updatePointer, { passive: true });
+                    container.addEventListener('pointerdown', updatePointer, { passive: true });
+                    container.addEventListener('touchstart', updatePointer, { passive: true });
+                    container.addEventListener('touchmove', updatePointer, { passive: true });
+                  }
+                } catch(_) {}
+              } catch(e) { post({ warn: 'crosshair_events_setup_failed', message: String(e && e.message || e) }); }
+            })();
 
             post({ ready: true, symbol: SYMBOL });
 
