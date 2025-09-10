@@ -342,8 +342,8 @@ export default function SimpleKLineChart({
                   paddingBottom: 4,
                   backgroundColor: '#686D76'
                 },
-                features: [{
-                   id: 'icon_id',
+                features: [                 {
+                   id: 'crosshair_tool',
                    position: 'left', // 'left' | 'middle' | 'right'
                    marginLeft: 8,
                    marginTop: 0,
@@ -353,7 +353,7 @@ export default function SimpleKLineChart({
                    paddingTop: 1,
                    paddingRight: 1,
                    paddingBottom: 1,
-                   size: 24,
+                   size: 32,
                    color: '#76808F',
                    activeColor: '#76808F',
                    backgroundColor: 'rgba(33, 150, 243, 0.2)',
@@ -361,12 +361,12 @@ export default function SimpleKLineChart({
                    type: 'path', // 'path', 'icon_font'
                    content: {
                      style: 'stroke', // 'stroke', 'fill'
-                     path: 'M13.6206,12.0582L23.5756,2.05492C24.0386,1.58966,24.0386,0.891762,23.5756,0.426494C23.1126,-0.038772,22.418,-0.038772,21.955,0.426494L12,10.4297L2.04502,0.34895C1.582,-0.116317,0.88746,-0.116317,0.424438,0.34895C-0.038585,0.814217,-0.038585,1.51212,0.424438,1.97738L10.3794,12.0582L0.347266,22.0614C-0.115756,22.5266,-0.115756,23.2246,0.347266,23.6898C0.578778,23.9224,0.88746,24,1.19614,24C1.50482,24,1.8135,23.9224,2.04502,23.6898L12,13.6866L21.955,23.6898C22.1864,23.9224,22.4952,24,22.8038,24C23.1126,24,23.4212,23.9224,23.6528,23.6898C24.1158,23.2246,24.1158,22.5266,23.6528,22.0614L13.6206,12.0582Z',
-                     lineWidth: 1,
+                     path: 'M16,4L16,12M16,20L16,28M4,16L12,16M20,16L28,16M16,16L16,16',
+                     lineWidth: 3,
                    }
                  },
                  {
-                   id: 'alert_id',
+                   id: 'alert_tool',
                    position: 'left', // 'left' | 'middle' | 'right'
                    marginLeft: 8,
                    marginTop: 0,
@@ -376,7 +376,7 @@ export default function SimpleKLineChart({
                    paddingTop: 1,
                    paddingRight: 1,
                    paddingBottom: 1,
-                   size: 24,
+                   size: 32,
                    color: '#76808F',
                    activeColor: '#76808F',
                    backgroundColor: 'rgba(33, 150, 243, 0.2)',
@@ -384,12 +384,12 @@ export default function SimpleKLineChart({
                    type: 'path', // 'path', 'icon_font'
                    content: {
                      style: 'stroke', // 'stroke', 'fill'
-                     path: 'M13.6206,12.0582L23.5756,2.05492C24.0386,1.58966,24.0386,0.891762,23.5756,0.426494C23.1126,-0.038772,22.418,-0.038772,21.955,0.426494L12,10.4297L2.04502,0.34895C1.582,-0.116317,0.88746,-0.116317,0.424438,0.34895C-0.038585,0.814217,-0.038585,1.51212,0.424438,1.97738L10.3794,12.0582L0.347266,22.0614C-0.115756,22.5266,-0.115756,23.2246,0.347266,23.6898C0.578778,23.9224,0.88746,24,1.19614,24C1.50482,24,1.8135,23.9224,2.04502,23.6898L12,13.6866L21.955,23.6898C22.1864,23.9224,22.4952,24,22.8038,24C23.1126,24,23.4212,23.9224,23.6528,23.6898C24.1158,23.2246,24.1158,22.5266,23.6528,22.0614L13.6206,12.0582Z',
-                   lineWidth: 1,
+                     path: 'M16,4L24,8L24,20L8,20L8,8L16,4zM16,24L16,28M12,24L20,24',
+                     lineWidth: 3,
                    }
                  },
                  {
-                   id: 'icon_id',
+                   id: 'measure_tool',
                    position: 'left', // 'left' | 'middle' | 'right'
                    marginLeft: 8,
                    marginTop: 0,
@@ -399,7 +399,7 @@ export default function SimpleKLineChart({
                    paddingTop: 1,
                    paddingRight: 1,
                    paddingBottom: 1,
-                   size: 24,
+                   size: 32,
                    color: '#76808F',
                    activeColor: '#76808F',
                    backgroundColor: 'rgba(33, 150, 243, 0.2)',
@@ -407,8 +407,8 @@ export default function SimpleKLineChart({
                    type: 'path', // 'path', 'icon_font'
                    content: {
                      style: 'stroke', // 'stroke', 'fill'
-                      path: 'M13.6206,12.0582L23.5756,2.05492C24.0386,1.58966,24.0386,0.891762,23.5756,0.426494C23.1126,-0.038772,22.418,-0.038772,21.955,0.426494L12,10.4297L2.04502,0.34895C1.582,-0.116317,0.88746,-0.116317,0.424438,0.34895C-0.038585,0.814217,-0.038585,1.51212,0.424438,1.97738L10.3794,12.0582L0.347266,22.0614C-0.115756,22.5266,-0.115756,23.2246,0.347266,23.6898C0.578778,23.9224,0.88746,24,1.19614,24C1.50482,24,1.8135,23.9224,2.04502,23.6898L12,13.6866L21.955,23.6898C22.1864,23.9224,22.4952,24,22.8038,24C23.1126,24,23.4212,23.9224,23.6528,23.6898C24.1158,23.2246,24.1158,22.5266,23.6528,22.0614L13.6206,12.0582Z',
-                      lineWidth: 1,
+                     path: 'M4,4L28,4M4,8L28,8M4,12L28,12M4,16L28,16M4,20L28,20M4,24L28,24M4,28L28,28M4,4L4,28M8,4L8,28M12,4L12,28M16,4L16,28M20,4L20,28M24,4L24,28M28,4L28,28',
+                     lineWidth: 2,
                    }
                  }]
               },
@@ -471,6 +471,13 @@ export default function SimpleKLineChart({
         function create(){
           try {
             if (!window.klinecharts || !window.klinecharts.init) { return false; }
+            
+            // Wait for Material Icons font to load
+            if (document.fonts && document.fonts.ready) {
+              document.fonts.ready.then(function() {
+                post({ debug: 'Material Icons font loaded' });
+              });
+            }
             
             // Register custom labeled line overlay
             if (window.klinecharts.registerOverlay && !window.__LABELED_LINE_REGISTERED__) {
