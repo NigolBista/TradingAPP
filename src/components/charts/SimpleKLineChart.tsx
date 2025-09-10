@@ -312,7 +312,106 @@ export default function SimpleKLineChart({
                 tickLine: { show: false }
               },
               crosshair: {
-                horizontal: { text: { show: true } },
+                horizontal: {
+                show: true,
+                line: {
+                  show: true,
+                  // 'solid' | 'dashed'
+                  style: 'dashed',
+                  dashedValue: [4, 2],
+                  size: 1,
+                  color: '#888888'
+                },
+                text: {
+                  show: true,
+                  // 'fill' | 'stroke' | 'stroke_fill'
+                  style: 'fill',
+                  color: '#FFFFFF',
+                  size: 12,
+                  family: 'Helvetica Neue',
+                  weight: 'normal',
+                  // 'solid' | 'dashed'
+                  borderStyle: 'solid',
+                  borderDashedValue: [2, 2],
+                  borderSize: 1,
+                  borderColor: '#686D76',
+                  borderRadius: 2,
+                  paddingLeft: 4,
+                  paddingRight: 4,
+                  paddingTop: 4,
+                  paddingBottom: 4,
+                  backgroundColor: '#686D76'
+                },
+                features: [{
+                   id: 'icon_id',
+                   position: 'left', // 'left' | 'middle' | 'right'
+                   marginLeft: 8,
+                   marginTop: 0,
+                   marginRight: 32,
+                   marginBottom: 0,
+                   paddingLeft: 1,
+                   paddingTop: 1,
+                   paddingRight: 1,
+                   paddingBottom: 1,
+                   size: 24,
+                   color: '#76808F',
+                   activeColor: '#76808F',
+                   backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                   activeBackgroundColor: 'rgba(33, 150, 243, 0.4)',
+                   type: 'path', // 'path', 'icon_font'
+                   content: {
+                     style: 'stroke', // 'stroke', 'fill'
+                     path: 'M13.6206,12.0582L23.5756,2.05492C24.0386,1.58966,24.0386,0.891762,23.5756,0.426494C23.1126,-0.038772,22.418,-0.038772,21.955,0.426494L12,10.4297L2.04502,0.34895C1.582,-0.116317,0.88746,-0.116317,0.424438,0.34895C-0.038585,0.814217,-0.038585,1.51212,0.424438,1.97738L10.3794,12.0582L0.347266,22.0614C-0.115756,22.5266,-0.115756,23.2246,0.347266,23.6898C0.578778,23.9224,0.88746,24,1.19614,24C1.50482,24,1.8135,23.9224,2.04502,23.6898L12,13.6866L21.955,23.6898C22.1864,23.9224,22.4952,24,22.8038,24C23.1126,24,23.4212,23.9224,23.6528,23.6898C24.1158,23.2246,24.1158,22.5266,23.6528,22.0614L13.6206,12.0582Z',
+                     lineWidth: 1,
+                   }
+                 },
+                 {
+                   id: 'alert_id',
+                   position: 'left', // 'left' | 'middle' | 'right'
+                   marginLeft: 8,
+                   marginTop: 0,
+                   marginRight: 8,
+                   marginBottom: 0,
+                   paddingLeft: 1,
+                   paddingTop: 1,
+                   paddingRight: 1,
+                   paddingBottom: 1,
+                   size: 24,
+                   color: '#76808F',
+                   activeColor: '#76808F',
+                   backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                   activeBackgroundColor: 'rgba(33, 150, 243, 0.4)',
+                   type: 'path', // 'path', 'icon_font'
+                   content: {
+                     style: 'stroke', // 'stroke', 'fill'
+                     path: 'M13.6206,12.0582L23.5756,2.05492C24.0386,1.58966,24.0386,0.891762,23.5756,0.426494C23.1126,-0.038772,22.418,-0.038772,21.955,0.426494L12,10.4297L2.04502,0.34895C1.582,-0.116317,0.88746,-0.116317,0.424438,0.34895C-0.038585,0.814217,-0.038585,1.51212,0.424438,1.97738L10.3794,12.0582L0.347266,22.0614C-0.115756,22.5266,-0.115756,23.2246,0.347266,23.6898C0.578778,23.9224,0.88746,24,1.19614,24C1.50482,24,1.8135,23.9224,2.04502,23.6898L12,13.6866L21.955,23.6898C22.1864,23.9224,22.4952,24,22.8038,24C23.1126,24,23.4212,23.9224,23.6528,23.6898C24.1158,23.2246,24.1158,22.5266,23.6528,22.0614L13.6206,12.0582Z',
+                   lineWidth: 1,
+                   }
+                 },
+                 {
+                   id: 'icon_id',
+                   position: 'left', // 'left' | 'middle' | 'right'
+                   marginLeft: 8,
+                   marginTop: 0,
+                   marginRight: 8,
+                   marginBottom: 0,
+                   paddingLeft: 1,
+                   paddingTop: 1,
+                   paddingRight: 1,
+                   paddingBottom: 1,
+                   size: 24,
+                   color: '#76808F',
+                   activeColor: '#76808F',
+                   backgroundColor: 'rgba(33, 150, 243, 0.2)',
+                   activeBackgroundColor: 'rgba(33, 150, 243, 0.4)',
+                   type: 'path', // 'path', 'icon_font'
+                   content: {
+                     style: 'stroke', // 'stroke', 'fill'
+                      path: 'M13.6206,12.0582L23.5756,2.05492C24.0386,1.58966,24.0386,0.891762,23.5756,0.426494C23.1126,-0.038772,22.418,-0.038772,21.955,0.426494L12,10.4297L2.04502,0.34895C1.582,-0.116317,0.88746,-0.116317,0.424438,0.34895C-0.038585,0.814217,-0.038585,1.51212,0.424438,1.97738L10.3794,12.0582L0.347266,22.0614C-0.115756,22.5266,-0.115756,23.2246,0.347266,23.6898C0.578778,23.9224,0.88746,24,1.19614,24C1.50482,24,1.8135,23.9224,2.04502,23.6898L12,13.6866L21.955,23.6898C22.1864,23.9224,22.4952,24,22.8038,24C23.1126,24,23.4212,23.9224,23.6528,23.6898C24.1158,23.2246,24.1158,22.5266,23.6528,22.0614L13.6206,12.0582Z',
+                      lineWidth: 1,
+                   }
+                 }]
+              },
                 vertical: { text: { show: true } }
               },
               grid: {
