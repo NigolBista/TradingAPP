@@ -51,6 +51,7 @@ import {
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { useUserStore } from "../store/userStore";
+import { useAlertStore } from "../store/alertStore";
 import { StrategyComplexity } from "../logic/types";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { getUpcomingFedEvents } from "../services/federalReserve";
@@ -94,6 +95,7 @@ export default function ChartFullScreen() {
   const { addAnalysisMessage } = useChatStore();
   const { cacheSignal, getCachedSignal } = useSignalCacheStore();
   const { profile, setProfile } = useUserStore();
+  const { addAlert, getAlertsForSymbol } = useAlertStore();
   const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
     useTimeframeStore();
 
@@ -1094,6 +1096,7 @@ export default function ChartFullScreen() {
       {/* Chart */}
       <View style={{ marginBottom: 8, position: "relative" }}>
         <SimpleKLineChart
+          key={`${symbol}-${extendedTf}-${chartType}`}
           symbol={symbol}
           timeframe={extendedTf as any}
           height={chartHeight}
@@ -1127,6 +1130,19 @@ export default function ChartFullScreen() {
                 }
               : undefined
           }
+          onAlertClick={(price) => {
+            addAlert({
+              symbol,
+              price,
+              condition: "above",
+              message: `Alert at $${price.toFixed(2)}`,
+            });
+          }}
+          alerts={getAlertsForSymbol(symbol).map((alert) => ({
+            price: alert.price,
+            condition: alert.condition,
+            isActive: alert.isActive,
+          }))}
         />
         {showReasonIcon ? (
           <Pressable

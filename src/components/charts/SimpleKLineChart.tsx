@@ -54,6 +54,10 @@ interface Props {
       calcParams?: any
     ) => void
   ) => void;
+  // Alert click callback
+  onAlertClick?: (price: number) => void;
+  // Alerts to display as price lines
+  alerts?: Array<{ price: number; condition: string; isActive: boolean }>;
 }
 
 export interface IndicatorConfig {
@@ -85,6 +89,8 @@ export default function SimpleKLineChart({
   customData,
   indicators = [],
   onOverrideIndicator,
+  onAlertClick,
+  alerts = [],
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
@@ -218,17 +224,22 @@ export default function SimpleKLineChart({
         // Handle messages from React Native
         document.addEventListener('message', function(event) {
           try {
-            post({ debug: 'Received message from React Native', rawData: event.data });
-            var data = JSON.parse(event.data || '{}');
-            post({ debug: 'Parsed message data', data: data });
+            var data = {};
+            try { data = JSON.parse(event.data || '{}'); } catch(_) { data = {}; }
             if (data.type === 'overrideIndicator') {
-              post({ debug: 'Processing overrideIndicator message', id: data.id, styles: data.styles, calcParams: data.calcParams });
               if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.overrideIndicator) {
                 // Pass the parameters correctly - id, styles, and calcParams separately
                 window.__SIMPLE_KLINE__.overrideIndicator(data.id, data.styles, data.calcParams);
               } else {
                 post({ error: 'overrideIndicator function not available in __SIMPLE_KLINE__' });
               }
+            } else if (data.type === 'setAlerts') {
+              try {
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                if (typeof window.__SIMPLE_KLINE__.applyAlerts === 'function') {
+                  window.__SIMPLE_KLINE__.applyAlerts(Array.isArray(data.alerts) ? data.alerts : []);
+                }
+              } catch(e) { post({ warn: 'setAlerts handler failed', message: String(e && e.message || e) }); }
             } else {
               post({ debug: 'Unknown message type', type: data.type });
             }
@@ -251,6 +262,7 @@ export default function SimpleKLineChart({
         var SHOW_LAST_PRICE_LABEL = ${JSON.stringify(showLastPriceLabel)};
         var SHOW_SESSIONS = ${JSON.stringify(showSessions)};
         var LEVELS = ${JSON.stringify(levels || {})};
+        var ALERTS = ${JSON.stringify(alerts || [])};
         var POLY_API_KEY = ${JSON.stringify(polygonApiKey || "")};
         var CUSTOM_BARS = ${JSON.stringify(customBars || [])};
         var CUSTOM_DATA = ${JSON.stringify(
@@ -798,6 +810,35 @@ export default function SimpleKLineChart({
                 post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); 
               }
             }
+            function addAlertLine(price, color, label){
+              try {
+                if (!price || isNaN(price)) return;
+                var idCounter = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.overlayIdCounter) || 1;
+                var customId = 'alert_line_' + (idCounter++);
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.overlayIdCounter = idCounter;
+                var lineId = undefined;
+                if (chart && typeof chart.createOverlay === 'function') {
+                  try {
+                    var overlayCfg = {
+                      name: 'priceLine',
+                      id: customId,
+                      lock: false,
+                      extendData: { price: price, label: label },
+                      styles: {
+                        line: { color: color || '#F59E0B', size: 1, style: 'dashed' },
+                        text: { color: color || '#F59E0B', size: 10, backgroundColor: 'rgba(0,0,0,0.4)' }
+                      }
+                    };
+                    lineId = chart.createOverlay(overlayCfg);
+                    post({ debug: 'Alert line created', id: lineId || customId, price: price, label: label });
+                  } catch(e) { post({ warn: 'createOverlay failed for alert', message: String(e && e.message || e) }); }
+                }
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                var ids = [lineId, customId].filter(function(id) { return id !== undefined; });
+                window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids);
+              } catch(e){ post({ error: 'addAlertLine failed', message: String(e && e.message || e) }); }
+            }
             function applyLevels(levels){
               try {
                 clearLevels();
@@ -863,6 +904,51 @@ export default function SimpleKLineChart({
                   tps.forEach(function(p, i){ addPriceLine(p, '#3B82F6', 'TP' + (i+1)); });
                 }
               } catch(e){ post({ warn: 'applyLevels failed', message: String(e && e.message || e) }); }
+            }
+
+            function clearAlerts(){
+              try {
+                var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.alertOverlayIds) || [];
+                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') {
+                  ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} });
+                }
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.alertOverlayIds = [];
+              } catch(_){}
+            }
+
+            function applyAlerts(alerts){
+              try {
+                clearAlerts();
+                if (!alerts || !Array.isArray(alerts) || !chart) return;
+                alerts.forEach(function(alert, i) {
+                  if (alert && typeof alert.price === 'number' && alert.isActive) {
+                    var color = '#F59E0B';
+                    var label = 'Alert ' + (i + 1);
+                    // All alerts use yellow color
+                    color = '#F59E0B';
+                    addAlertLine(alert.price, color, label);
+                  }
+                });
+              } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
+            }
+
+            function applyAlerts(alerts){
+              try {
+                if (!alerts || !Array.isArray(alerts) || !chart) return;
+                
+                alerts.forEach(function(alert, i) {
+                  if (alert && typeof alert.price === 'number' && alert.isActive) {
+                    var color = '#F59E0B'; // Default alert color
+                    var label = 'Alert ' + (i + 1);
+                    
+                    // All alerts use yellow color
+                    color = '#F59E0B';
+                    
+                    addPriceLine(alert.price, color, label);
+                  }
+                });
+              } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
             }
 
             // Session background helpers
@@ -1217,6 +1303,13 @@ export default function SimpleKLineChart({
                     post({ debug: 'onCrosshairFeatureClick', featureId: fid, price: price });
                     if (fid === 'alert_tool' && typeof price === 'number') {
                       addPriceLine(price, '#F59E0B', 'Alert');
+                      // Call the onAlertClick callback if provided
+                      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                          type: 'alertClick',
+                          price: price
+                        }));
+                      }
                     }
                   } catch(e) { post({ warn: 'onCrosshairFeatureClick handler failed', message: String(e && e.message || e) }); }
                 });
@@ -1255,6 +1348,7 @@ export default function SimpleKLineChart({
 
             // Apply initial levels if provided
             try { applyLevels(LEVELS); } catch(_){}
+            try { applyAlerts(ALERTS); } catch(_){}
             try { applySessionBackgrounds(); } catch(_){}
             return true;
           } catch (err) { post({ error: String(err && err.message || err) }); return false; }
@@ -1275,6 +1369,7 @@ export default function SimpleKLineChart({
     showPriceAxisText,
     showTimeAxisText,
     levels,
+    JSON.stringify(alerts), // Use JSON string to avoid object reference changes
     customBars,
     customData,
     indicatorsKey,
@@ -1300,7 +1395,9 @@ export default function SimpleKLineChart({
             if (data && data.ready) {
               isReadyRef.current = true;
             }
-            if (data.error) {
+            if (data.type === "alertClick" && data.price && onAlertClick) {
+              onAlertClick(data.price);
+            } else if (data.error) {
               console.warn("[SimpleKLineChart:error]", data);
             } else if (data.warn) {
               console.warn("[SimpleKLineChart:warn]", data);

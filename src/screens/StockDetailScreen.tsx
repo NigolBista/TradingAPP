@@ -46,8 +46,10 @@ import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
+import { useAlertStore, PriceAlert } from "../store/alertStore";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
+import AlertsList from "../components/common/AlertsList";
 
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
@@ -344,6 +346,36 @@ const styles = StyleSheet.create({
   chartTypeButtonTextActive: {
     color: "#000",
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+  },
+  alertsModalContainer: {
+    backgroundColor: "#0a0a0a",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: "90%",
+    flex: 1,
+  },
+  alertsModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  alertsModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#fff",
+  },
+  alertsModalCloseButton: {
+    padding: 4,
+  },
 });
 
 export default function StockDetailScreen() {
@@ -380,6 +412,7 @@ export default function StockDetailScreen() {
   const { messages, addAnalysisMessage, clearSymbolMessages } = useChatStore();
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
+  const { addAlert, checkAlerts, getAlertsForSymbol } = useAlertStore();
   const [activeTab, setActiveTab] = useState<"overview" | "signals" | "news">(
     "signals"
   );
@@ -394,20 +427,7 @@ export default function StockDetailScreen() {
     { time: number; value: number }[]
   >([]);
 
-  // Clear cache and reset chart when symbol changes
-  useEffect(() => {
-    console.log("🔄 Symbol changed to:", symbol, "- clearing viewport cache");
-
-    // Reset any local caches if needed (viewport cache removed)
-
-    // Clear other symbol-specific state
-    setAnalysis(null);
-    setNews([]);
-    setCachedSignal(null);
-
-    // Load new data
-    load();
-  }, [symbol]);
+  // (removed duplicate symbol effect)
 
   // Clear cache and reload chart when timeframe or extended hours setting changes
   useEffect(() => {
@@ -434,6 +454,7 @@ export default function StockDetailScreen() {
     null
   );
   const [sentimentLoading, setSentimentLoading] = useState(false);
+  const [showAlertsModal, setShowAlertsModal] = useState(false);
 
   // Batch edge requests from WebView to avoid excessive API calls while panning
   // Removed edge batching state; no longer needed with simple lazy loading
@@ -531,12 +552,19 @@ export default function StockDetailScreen() {
   };
 
   useEffect(() => {
+    // Initialize once on mount; symbol-specific resets handled by setters below
+    hydrate();
+  }, []);
+
+  useEffect(() => {
+    // Reset symbol-specific state when symbol changes
+    setAnalysis(null);
+    setNews([]);
+    setCachedSignal(null);
     load();
-    // Load stock name in background (non-blocking)
     loadStockName().catch((error) => {
       console.error("Stock name loading failed:", error);
     });
-    hydrate();
   }, [symbol]);
 
   // If no initialQuote provided, try hydrate from cached quotes quickly
@@ -589,6 +617,27 @@ export default function StockDetailScreen() {
       }
     }
   }, [activeTab, newsLoading, news.length, sentimentLoading, sentimentStats]);
+
+  // Check for triggered alerts when price changes
+  useEffect(() => {
+    const price = initialQuote?.last ?? analysis?.currentPrice ?? 0;
+    if (!(price > 0)) return;
+    // Batch alert checks; avoid calling during renders triggered by alert updates
+    const id = setTimeout(() => {
+      const triggeredAlerts = checkAlerts(symbol, price);
+      if (triggeredAlerts && triggeredAlerts.length) {
+        for (const alert of triggeredAlerts) {
+          sendLocalNotification(
+            `${symbol} Alert Triggered`,
+            `Price ${alert.condition} $${alert.price.toFixed(2)} - ${
+              alert.message || "Alert triggered"
+            }`
+          );
+        }
+      }
+    }, 0);
+    return () => clearTimeout(id);
+  }, [initialQuote?.last, analysis?.currentPrice, symbol]);
 
   // Separate function for loading market overview data
   async function loadMarketOverview() {
@@ -1074,11 +1123,7 @@ export default function StockDetailScreen() {
   const showPreMarket = currentSession === "pre-market";
 
   async function onSetAlert() {
-    await sendLocalNotification(
-      `Price alert set for ${symbol}`,
-      `We'll notify you on key moves and signals.`
-    );
-    Alert.alert("Alert Set", "You'll receive notifications for this symbol.");
+    setShowAlertsModal(true);
   }
 
   function onSaveNote() {
@@ -1212,6 +1257,22 @@ export default function StockDetailScreen() {
               showPriceAxisText={false}
               showTimeAxisText={true}
               showLastPriceLabel={false}
+              onAlertClick={(price) => {
+                // Create a new alert with the clicked price
+                addAlert({
+                  symbol,
+                  price,
+                  condition: "above",
+                  message: `Alert at $${price.toFixed(2)}`,
+                });
+                // Show the alerts modal to display the new alert
+                setShowAlertsModal(true);
+              }}
+              alerts={getAlertsForSymbol(symbol).map((alert) => ({
+                price: alert.price,
+                condition: alert.condition,
+                isActive: alert.isActive,
+              }))}
             />
           </View>
 
@@ -2496,6 +2557,29 @@ export default function StockDetailScreen() {
         showExtendedHours={showExtendedHours}
         onExtendedHoursChange={setShowExtendedHours}
       />
+
+      {/* Alerts Modal */}
+      <Modal
+        visible={showAlertsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowAlertsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertsModalContainer}>
+            <View style={styles.alertsModalHeader}>
+              <Text style={styles.alertsModalTitle}>Price Alerts</Text>
+              <Pressable
+                onPress={() => setShowAlertsModal(false)}
+                style={styles.alertsModalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#888" />
+              </Pressable>
+            </View>
+            <AlertsList symbol={symbol} currentPrice={currentPrice} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
