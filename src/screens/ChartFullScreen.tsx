@@ -95,7 +95,7 @@ export default function ChartFullScreen() {
   const { addAnalysisMessage } = useChatStore();
   const { cacheSignal, getCachedSignal } = useSignalCacheStore();
   const { profile, setProfile } = useUserStore();
-  const { addAlert, getAlertsForSymbol } = useAlertStore();
+  const { addAlert, getAlertsForSymbol, updateAlert } = useAlertStore();
   const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
     useTimeframeStore();
 
@@ -176,6 +176,10 @@ export default function ChartFullScreen() {
   const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
     useState<boolean>(false);
   const [showReasonIcon, setShowReasonIcon] = useState<boolean>(true);
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
+  const [proposedAlertPrice, setProposedAlertPrice] = useState<number | null>(
+    null
+  );
 
   // Refs
   const [pinError, setPinError] = useState<string | null>(null);
@@ -1139,11 +1143,23 @@ export default function ChartFullScreen() {
             });
           }}
           alerts={getAlertsForSymbol(symbol).map((alert) => ({
+            id: alert.id,
             price: alert.price,
             condition: alert.condition,
             isActive: alert.isActive,
           }))}
+          onAlertSelected={({ id, price }) => {
+            setSelectedAlertId(id);
+            setProposedAlertPrice(price);
+          }}
+          onAlertMoved={({ id, price }) => {
+            if (!id || !(price > 0)) return;
+            updateAlert(id, { price, isActive: true, triggeredAt: undefined });
+            setSelectedAlertId(null);
+            setProposedAlertPrice(null);
+          }}
         />
+        {/* Dragging is handled in-chart; removed separate overlay controls */}
         {showReasonIcon ? (
           <Pressable
             onPress={() => setShowReasoningBottomSheet(true)}

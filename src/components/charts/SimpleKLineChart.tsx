@@ -1,7 +1,8 @@
-import React, { useMemo, useRef, useEffect } from "react";
-import { View, StyleSheet } from "react-native";
+import React, { useMemo, useRef, useEffect, useState } from "react";
+import { View, StyleSheet, Pressable } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
+import { Ionicons } from "@expo/vector-icons";
 
 interface Props {
   symbol: string;
@@ -57,7 +58,16 @@ interface Props {
   // Alert click callback
   onAlertClick?: (price: number) => void;
   // Alerts to display as price lines
-  alerts?: Array<{ price: number; condition: string; isActive: boolean }>;
+  alerts?: Array<{
+    id?: string;
+    price: number;
+    condition: string;
+    isActive: boolean;
+  }>;
+  // Fired when user taps an existing alert line on the chart
+  onAlertSelected?: (payload: { id: string; price: number; y: number }) => void;
+  // Fired when user drags an alert line and releases with a new price
+  onAlertMoved?: (payload: { id: string; price: number }) => void;
 }
 
 export interface IndicatorConfig {
@@ -91,9 +101,13 @@ export default function SimpleKLineChart({
   onOverrideIndicator,
   onAlertClick,
   alerts = [],
+  onAlertSelected,
+  onAlertMoved,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
+  const [crosshairY, setCrosshairY] = useState<number | null>(null);
+  const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null);
 
   // Method to override indicator styles and parameters
   const overrideIndicator = React.useCallback(
@@ -151,6 +165,15 @@ export default function SimpleKLineChart({
       onOverrideIndicator(overrideIndicator);
     }
   }, [onOverrideIndicator, overrideIndicator]);
+
+  // Push alert changes to the WebView without full reload
+  useEffect(() => {
+    try {
+      if (!isReadyRef.current || !webRef.current) return;
+      const message = JSON.stringify({ type: "setAlerts", alerts });
+      webRef.current.postMessage(message);
+    } catch (_) {}
+  }, [alerts]);
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
 
@@ -204,6 +227,7 @@ export default function SimpleKLineChart({
 <html>
   <head>
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet" />
     <style>
       html, body { margin: 0; padding: 0; background: ${
         theme === "dark" ? "#0a0a0a" : "#ffffff"
@@ -238,8 +262,29 @@ export default function SimpleKLineChart({
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 if (typeof window.__SIMPLE_KLINE__.applyAlerts === 'function') {
                   window.__SIMPLE_KLINE__.applyAlerts(Array.isArray(data.alerts) ? data.alerts : []);
+                  // Re-apply after fonts are ready to ensure Material Icons render
+                  try {
+                    if (document.fonts && document.fonts.ready) {
+                      document.fonts.ready.then(function(){
+                        try { window.__SIMPLE_KLINE__.applyAlerts(Array.isArray(data.alerts) ? data.alerts : []); } catch(_){ }
+                      });
+                    } else {
+                      setTimeout(function(){
+                        try { window.__SIMPLE_KLINE__.applyAlerts(Array.isArray(data.alerts) ? data.alerts : []); } catch(_){ }
+                      }, 500);
+                    }
+                  } catch(_){ }
                 }
               } catch(e) { post({ warn: 'setAlerts handler failed', message: String(e && e.message || e) }); }
+            } else if (data.type === 'getYForPrice') {
+              try {
+                var price = Number(data.price);
+                var y = null;
+                if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.getYForPrice) {
+                  y = window.__SIMPLE_KLINE__.getYForPrice(price);
+                }
+                post({ type: 'pricePosition', price: price, y: y });
+              } catch(e) { post({ warn: 'getYForPrice failed', message: String(e && e.message || e) }); }
             } else {
               post({ debug: 'Unknown message type', type: data.type });
             }
@@ -262,7 +307,7 @@ export default function SimpleKLineChart({
         var SHOW_LAST_PRICE_LABEL = ${JSON.stringify(showLastPriceLabel)};
         var SHOW_SESSIONS = ${JSON.stringify(showSessions)};
         var LEVELS = ${JSON.stringify(levels || {})};
-        var ALERTS = ${JSON.stringify(alerts || [])};
+        var ALERTS = []; // Will be set via postMessage after ready
         var POLY_API_KEY = ${JSON.stringify(polygonApiKey || "")};
         var CUSTOM_BARS = ${JSON.stringify(customBars || [])};
         var CUSTOM_DATA = ${JSON.stringify(
@@ -354,90 +399,7 @@ export default function SimpleKLineChart({
                   paddingBottom: 4,
                   backgroundColor: '#686D76'
                 },
-                features: [                 {
-                   id: 'crosshair_tool',
-                   position: 'left', // 'left' | 'middle' | 'right'
-                   marginLeft: 8,
-                   marginTop: 0,
-                   marginRight: 32,
-                   marginBottom: 0,
-                   paddingLeft: 1,
-                   paddingTop: 1,
-                   paddingRight: 1,
-                   paddingBottom: 1,
-                   size: 32,
-                   color: '#76808F',
-                   activeColor: '#76808F',
-                   backgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#2B313B" : "#E6E9EE"
-                   )},
-                   activeBackgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#3A4451" : "#D8DEE6"
-                   )},
-                   borderRadius: 6,
-                   type: 'path', // 'path', 'icon_font'
-                   content: {
-                     style: 'stroke', // 'stroke', 'fill'
-                     path: 'M16,4L16,12M16,20L16,28M4,16L12,16M20,16L28,16M16,16L16,16',
-                     lineWidth: 3,
-                   }
-                 },
-                 {
-                   id: 'alert_tool',
-                   position: 'left', // 'left' | 'middle' | 'right'
-                   marginLeft: 8,
-                   marginTop: 0,
-                   marginRight: 8,
-                   marginBottom: 0,
-                   paddingLeft: 1,
-                   paddingTop: 1,
-                   paddingRight: 1,
-                   paddingBottom: 1,
-                   size: 32,
-                   color: '#76808F',
-                   activeColor: '#76808F',
-                   backgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#2B313B" : "#E6E9EE"
-                   )},
-                   activeBackgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#3A4451" : "#D8DEE6"
-                   )},
-                   borderRadius: 6,
-                   type: 'path', // 'path', 'icon_font'
-                     content: {
-                       style: 'stroke', // 'stroke', 'fill'
-                       path: 'M16,6C12,6 8,8 8,12L8,18C8,20 10,22 12,22L20,22C22,22 24,20 24,18L24,12C24,8 20,6 16,6M16,6L16,4M12,24L14,24M18,24L20,24',
-                       lineWidth: 2,
-                     }
-                 },
-                 {
-                   id: 'measure_tool',
-                   position: 'left', // 'left' | 'middle' | 'right'
-                   marginLeft: 8,
-                   marginTop: 0,
-                   marginRight: 8,
-                   marginBottom: 0,
-                   paddingLeft: 1,
-                   paddingTop: 1,
-                   paddingRight: 1,
-                   paddingBottom: 1,
-                   size: 32,
-                   color: '#76808F',
-                   activeColor: '#76808F',
-                   backgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#2B313B" : "#E6E9EE"
-                   )},
-                   activeBackgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#3A4451" : "#D8DEE6"
-                   )},
-                   borderRadius: 6,
-                   type: 'path', // 'path', 'icon_font'
-                   content: {
-                     style: 'stroke', // 'stroke', 'fill'
-                     path: 'M4,4L28,4M4,8L28,8M4,12L28,12M4,16L28,16M4,20L28,20M4,24L28,24M4,28L28,28M4,4L4,28M8,4L8,28M12,4L12,28M16,4L16,28M20,4L20,28M24,4L24,28M28,4L28,28',
-                     lineWidth: 2,
-                   }
-                 }]
+                features: []
               },
                 vertical: { text: { show: true } }
               },
@@ -512,8 +474,10 @@ export default function SimpleKLineChart({
                   var label = extendData.label || '';
                   var price = extendData.price || 0;
                   var color = extendData.color || '#10B981';
+                  // Treat dragHintArrows as a selection flag so we can reuse existing calls
+                  var isSelected = !!extendData.dragHintArrows;
                   
-                  return [
+                  var figs = [
                     {
                       type: 'line',
                       attrs: {
@@ -528,11 +492,15 @@ export default function SimpleKLineChart({
                         style: 'dashed',
                         dashedValue: [10, 6]
                       }
-                    },
-                    {
+                    }
+                  ];
+
+                  if (isSelected) {
+                    // Show full label when selected
+                    figs.push({
                       type: 'text',
                       attrs: {
-                        x: point.x + 10,
+                        x: 12,
                         y: point.y - 5,
                         text: label + ' $' + Number(price).toFixed(2),
                         baseline: 'bottom',
@@ -550,8 +518,61 @@ export default function SimpleKLineChart({
                         paddingTop: 2,
                         paddingBottom: 2
                       }
-                    }
-                  ];
+                    });
+                    // Tiny up/down arrows just above/below the line
+                    figs.push(
+                      {
+                        type: 'text',
+                        attrs: {
+                          x: 6,
+                          y: point.y - 8,
+                          text: '\u25B2', // ▲
+                          baseline: 'bottom',
+                          align: 'left'
+                        },
+                        styles: {
+                          color: '#C7CDD7',
+                          size: 8,
+                          backgroundColor: 'transparent'
+                        }
+                      },
+                      {
+                        type: 'text',
+                        attrs: {
+                          x: 6,
+                          y: point.y + 8,
+                          text: '\u25BC', // ▼
+                          baseline: 'top',
+                          align: 'left'
+                        },
+                        styles: {
+                          color: '#C7CDD7',
+                          size: 8,
+                          backgroundColor: 'transparent'
+                        }
+                      }
+                    );
+                  } else {
+                    // When not selected, show a small bell icon instead of the label
+                    figs.push({
+                      type: 'text',
+                      attrs: {
+                        x: 8,
+                        y: point.y - 6,
+                        text: '\uE7F4',
+                        baseline: 'bottom',
+                        align: 'left'
+                      },
+                      styles: {
+                        color: color,
+                        family: 'Material Icons',
+                        size: 16,
+                        backgroundColor: 'transparent'
+                      }
+                    });
+                  }
+
+                  return figs;
                 }
               });
               window.__LABELED_LINE_REGISTERED__ = true;
@@ -736,75 +757,79 @@ export default function SimpleKLineChart({
                 window.__SIMPLE_KLINE__.levelOverlayIds = [];
               } catch(_){}
             }
-            function addPriceLine(price, color, label){
+             function addPriceLine(price, color, label, dragHintArrows, isAlert){
               try {
                 if (!price || isNaN(price)) return;
                 
-                // Debug logging
-                post({ debug: 'Creating price line', price: price, label: label, color: color });
+                // Create appropriate overlay based on type
                 
-                // Try multiple approaches for text labels
+                var overlayId;
                 
-                // Approach 1: Try horizontalStraightLine with text (original approach)
-                var lineOpts = {
-                  name: 'horizontalStraightLine',
-                  lock: true,
-                  extend: 'none',
-                  points: [{ value: Number(price) }],
-                  styles: {
-                    line: { 
-                      color: color, 
-                      size: 1, 
-                      style: 'dashed', 
-                      dashedValue: [10, 6] 
-                    },
-                    text: { 
-                      show: true, 
-                      color: '#FFFFFF', 
-                      size: 12, 
-                      backgroundColor: color, 
-                      borderColor: color, 
-                      paddingLeft: 6, 
-                      paddingRight: 6, 
-                      paddingTop: 3, 
-                      paddingBottom: 3, 
-                      borderRadius: 4, 
-                      text: String(label) + ' $' + Number(price).toFixed(2)
+                if (isAlert) {
+                  // For alerts with drag hints, use custom overlay
+                  var customOpts = {
+                    name: 'labeledHorizontalLine',
+                    lock: false,
+                    points: [{ value: Number(price) }],
+                    extendData: {
+                      label: String(label),
+                      price: Number(price),
+                      color: color,
+                      dragHintArrows: !!dragHintArrows
                     }
+                  };
+                  
+                  try {
+                    if (chart && typeof chart.createOverlay === 'function') {
+                      overlayId = chart.createOverlay(customOpts);
+                      // Alert overlay created successfully
+                    }
+                  } catch(customError) {
+                    post({ debug: 'Custom overlay failed', error: String(customError) });
                   }
-                };
-                
-                var lineId;
-                if (chart && typeof chart.createOverlay === 'function') {
-                  lineId = chart.createOverlay(lineOpts);
-                  post({ debug: 'Line overlay created', id: lineId });
-                }
-                
-                // Approach 2: Try custom labeled line overlay
-                var customOpts = {
-                  name: 'labeledHorizontalLine',
-                  lock: true,
-                  points: [{ value: Number(price) }],
-                  extendData: {
-                    label: String(label),
-                    price: Number(price),
-                    color: color
-                  }
-                };
-                
-                var customId;
-                try {
+                } else {
+                  // For levels or non-draggable lines, use standard overlay
+                  var lineOpts = {
+                    name: 'horizontalStraightLine',
+                    lock: true,
+                    extend: 'none',
+                    points: [{ value: Number(price) }],
+                    styles: {
+                      line: { 
+                        color: color, 
+                        size: 1, 
+                        style: 'dashed', 
+                        dashedValue: [10, 6] 
+                      },
+                      text: { 
+                        show: true, 
+                        color: '#FFFFFF', 
+                        size: 12, 
+                        backgroundColor: color, 
+                        borderColor: color, 
+                        paddingLeft: 6, 
+                        paddingRight: 6, 
+                        paddingTop: 3, 
+                        paddingBottom: 3, 
+                        borderRadius: 4, 
+                        text: String(label) + ' $' + Number(price).toFixed(2)
+                      }
+                    }
+                  };
+                  
                   if (chart && typeof chart.createOverlay === 'function') {
-                    customId = chart.createOverlay(customOpts);
-                    post({ debug: 'Custom labeled overlay created', id: customId });
+                    overlayId = chart.createOverlay(lineOpts);
+                    // Standard line overlay created successfully
                   }
-                } catch(customError) {
-                  post({ debug: 'Custom overlay failed', error: String(customError) });
                 }
                 
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                var ids = [lineId, customId].filter(function(id) { return id !== undefined; });
-                window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids);
+                var ids = [overlayId].filter(function(id) { return id !== undefined; });
+                if (isAlert) {
+                  window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids);
+                } else {
+                  window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids);
+                }
                 
               } catch(e){ 
                 post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); 
@@ -836,8 +861,12 @@ export default function SimpleKLineChart({
                 }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 var ids = [lineId, customId].filter(function(id) { return id !== undefined; });
-                window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids);
-              } catch(e){ post({ error: 'addAlertLine failed', message: String(e && e.message || e) }); }
+                if (isAlert) {
+                  window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids);
+                } else {
+                  window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids);
+                }
+              } catch(e){ post({ error: 'addPriceLine failed', message: String(e && e.message || e) }); }
             }
             function applyLevels(levels){
               try {
@@ -858,24 +887,24 @@ export default function SimpleKLineChart({
                 if (hasDetailedLevels) {
                   // Use detailed level information with specific labels
                   if (levels.entry !== undefined && levels.entry !== null) {
-                    addPriceLine(levels.entry, '#10B981', 'Entry');
+                    addPriceLine(levels.entry, '#10B981', 'Entry', false, false);
                   }
                   if (levels.lateEntry !== undefined && levels.lateEntry !== null) {
-                    addPriceLine(levels.lateEntry, '#059669', 'Late Entry');
+                    addPriceLine(levels.lateEntry, '#059669', 'Late Entry', false, false);
                   }
                   if (levels.exit !== undefined && levels.exit !== null) {
-                    addPriceLine(levels.exit, '#EF4444', 'Exit');
+                    addPriceLine(levels.exit, '#EF4444', 'Exit', false, false);
                   }
                   if (levels.lateExit !== undefined && levels.lateExit !== null) {
-                    addPriceLine(levels.lateExit, '#DC2626', 'Extended Stop');
+                    addPriceLine(levels.lateExit, '#DC2626', 'Extended Stop', false, false);
                   }
                   if (levels.stop !== undefined && levels.stop !== null) {
-                    addPriceLine(levels.stop, '#EF4444', 'Stop');
+                    addPriceLine(levels.stop, '#EF4444', 'Stop', false, false);
                   }
                   if (levels.targets && Array.isArray(levels.targets)) {
                     levels.targets.forEach(function(target, i) {
                       if (target !== undefined && target !== null) {
-                        addPriceLine(target, '#3B82F6', 'Target ' + (i + 1));
+                        addPriceLine(target, '#3B82F6', 'Target ' + (i + 1), false, false);
                       }
                     });
                   }
@@ -895,13 +924,13 @@ export default function SimpleKLineChart({
                   
                   entries.forEach(function(p, i){ 
                     var label = entries.length === 1 ? 'Entry' : 'Entry ' + (i + 1);
-                    addPriceLine(p, '#10B981', label); 
+                    addPriceLine(p, '#10B981', label, false, false); 
                   });
                   exits.forEach(function(p, i){ 
                     var label = exits.length === 1 ? 'Exit' : 'Exit ' + (i + 1);
-                    addPriceLine(p, '#EF4444', label); 
+                    addPriceLine(p, '#EF4444', label, false, false); 
                   });
-                  tps.forEach(function(p, i){ addPriceLine(p, '#3B82F6', 'TP' + (i+1)); });
+                  tps.forEach(function(p, i){ addPriceLine(p, '#3B82F6', 'TP' + (i+1), false, false); });
                 }
               } catch(e){ post({ warn: 'applyLevels failed', message: String(e && e.message || e) }); }
             }
@@ -921,35 +950,32 @@ export default function SimpleKLineChart({
               try {
                 clearAlerts();
                 if (!alerts || !Array.isArray(alerts) || !chart) return;
+                // Keep last set of alerts so selection changes can re-render overlays
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.lastAlerts = alerts.slice();
+                // Build a registry so we can detect taps near alert lines later
+                var registry = [];
+                var selectedId = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.selectedAlertId) || null;
                 alerts.forEach(function(alert, i) {
                   if (alert && typeof alert.price === 'number' && alert.isActive) {
                     var color = '#F59E0B';
                     var label = 'Alert ' + (i + 1);
-                    // All alerts use yellow color
-                    color = '#F59E0B';
-                    addAlertLine(alert.price, color, label);
+                    var aid = String(alert.id || ('alert_' + (i + 1)));
+                    var isSel = selectedId != null && String(selectedId) === aid;
+                    addPriceLine(alert.price, color, label, !!isSel, true);
+                    registry.push({ id: String(alert.id || ('alert_' + (i + 1))), price: Number(alert.price) });
                   }
                 });
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.alertsRegistry = registry;
               } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
             }
 
-            function applyAlerts(alerts){
-              try {
-                if (!alerts || !Array.isArray(alerts) || !chart) return;
-                
-                alerts.forEach(function(alert, i) {
-                  if (alert && typeof alert.price === 'number' && alert.isActive) {
-                    var color = '#F59E0B'; // Default alert color
-                    var label = 'Alert ' + (i + 1);
-                    
-                    // All alerts use yellow color
-                    color = '#F59E0B';
-                    
-                    addPriceLine(alert.price, color, label);
-                  }
-                });
-              } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
-            }
+            // Expose applyAlerts so RN can push new alerts in without full reload
+            if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+            window.__SIMPLE_KLINE__.applyAlerts = applyAlerts;
+            // Preload Material Icons font so canvas text uses the correct glyphs
+            try { if (document.fonts && document.fonts.load) { document.fonts.load('16px \"Material Icons\"'); } } catch(_){ }
 
             // Session background helpers
             function clearSessionBackgrounds(){
@@ -1302,7 +1328,7 @@ export default function SimpleKLineChart({
                     }
                     post({ debug: 'onCrosshairFeatureClick', featureId: fid, price: price });
                     if (fid === 'alert_tool' && typeof price === 'number') {
-                      addPriceLine(price, '#F59E0B', 'Alert');
+                      addPriceLine(price, '#F59E0B', 'Alert', false, true);
                       // Call the onAlertClick callback if provided
                       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
                         window.ReactNativeWebView.postMessage(JSON.stringify({
@@ -1331,6 +1357,7 @@ export default function SimpleKLineChart({
                           var val = (converted && (typeof converted.value === 'number' ? converted.value : converted.price));
                           if (typeof val === 'number') {
                             window.__SIMPLE_KLINE__.lastPointerPrice = val;
+                            try { post({ type: 'crosshairMove', y: y, price: Number(val) }); } catch(_) {}
                           }
                         }
                       } catch(_) { }
@@ -1339,6 +1366,112 @@ export default function SimpleKLineChart({
                     container.addEventListener('pointerdown', updatePointer, { passive: true });
                     container.addEventListener('touchstart', updatePointer, { passive: true });
                     container.addEventListener('touchmove', updatePointer, { passive: true });
+
+                    var hideOverlay = function(){ try { post({ type: 'crosshairHide' }); } catch(_) {} };
+                    container.addEventListener('pointerleave', hideOverlay, { passive: true });
+                    container.addEventListener('pointercancel', hideOverlay, { passive: true });
+
+                    // Helper to get pixel Y for a price
+                    if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                    window.__SIMPLE_KLINE__.getYForPrice = function(price){
+                      try {
+                        if (chart && typeof chart.convertToPixel === 'function') {
+                          var px = chart.convertToPixel({ value: Number(price) });
+                          if (px && typeof px.y === 'number') return px.y;
+                        }
+                      } catch(_) {}
+                      return null;
+                    };
+
+                    // Drag state
+                    window.__SIMPLE_KLINE__.draggingAlert = null;
+                    window.__SIMPLE_KLINE__.dragPreviewId = null;
+
+                    // Start drag or select near alert line
+                    var handlePointerDown = function(e){
+                      try {
+                        var rect = container.getBoundingClientRect();
+                        var x = (e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] && e.touches[0].clientX)) - rect.left;
+                        var y = (e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] && e.touches[0].clientY)) - rect.top;
+                        var reg = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.alertsRegistry) || [];
+                        // Check for alert line hits
+                        if (!reg || !reg.length) return;
+                        var best = null;
+                        for (var i = 0; i < reg.length; i++) {
+                          var r = reg[i];
+                          var ay = window.__SIMPLE_KLINE__.getYForPrice ? window.__SIMPLE_KLINE__.getYForPrice(r.price) : null;
+                          if (ay == null) continue;
+                          var dy = Math.abs(y - ay);
+                          if (best == null || dy < best.dy) best = { id: r.id, price: r.price, y: ay, dy: dy };
+                        }
+                        if (best && best.dy <= 12) {
+                          // Mark selection
+                          if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                          window.__SIMPLE_KLINE__.selectedAlertId = best.id;
+                          try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){}
+                          post({ type: 'alertSelected', id: best.id, price: best.price, y: best.y });
+                          // Begin drag
+                          window.__SIMPLE_KLINE__.draggingAlert = { id: best.id, startY: y, price: best.price };
+                          window.__SIMPLE_KLINE__.draggingCurrentPrice = best.price;
+                        } else {
+                          // Tap outside: clear selection and hide label
+                          if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                          window.__SIMPLE_KLINE__.selectedAlertId = null;
+                          try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){}
+                        }
+                      } catch(_) {}
+                    };
+                    container.addEventListener('pointerdown', handlePointerDown, { passive: true });
+                    container.addEventListener('touchstart', handlePointerDown, { passive: true });
+
+                    // Move drag
+                    var handlePointerMove = function(e){
+                      try {
+                        var drag = window.__SIMPLE_KLINE__.draggingAlert;
+                        if (!drag) return;
+                        var rect = container.getBoundingClientRect();
+                        var y = (e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] && e.touches[0].clientY)) - rect.top;
+                        if (chart && typeof chart.convertFromPixel === 'function') {
+                          var converted = chart.convertFromPixel({ x: 0, y: y });
+                          var val = (converted && (typeof converted.value === 'number' ? converted.value : converted.price));
+                          if (typeof val === 'number' && isFinite(val)) {
+                            window.__SIMPLE_KLINE__.draggingCurrentPrice = val;
+                            // Update preview overlay
+                            var prevId = window.__SIMPLE_KLINE__.dragPreviewId;
+                            try { if (prevId && typeof chart.removeOverlay === 'function') chart.removeOverlay(prevId); } catch(_){ }
+                            try {
+                              var pid = chart.createOverlay({
+                                name: 'horizontalStraightLine',
+                                lock: true,
+                                points: [{ value: Number(val) }],
+                                styles: { line: { color: '#F59E0B', size: 1, style: 'dashed', dashedValue: [6, 4] } }
+                              });
+                              window.__SIMPLE_KLINE__.dragPreviewId = pid;
+                            } catch(_){ }
+                          }
+                        }
+                      } catch(_) {}
+                    };
+                    container.addEventListener('pointermove', handlePointerMove, { passive: true });
+                    container.addEventListener('touchmove', handlePointerMove, { passive: true });
+
+                    // End drag and emit
+                    var handlePointerUp = function(e){
+                      try {
+                        var drag = window.__SIMPLE_KLINE__.draggingAlert;
+                        if (!drag) return;
+                        // Clean preview
+                        try { if (window.__SIMPLE_KLINE__.dragPreviewId && typeof chart.removeOverlay === 'function') chart.removeOverlay(window.__SIMPLE_KLINE__.dragPreviewId); } catch(_){ }
+                        var finalPrice = window.__SIMPLE_KLINE__.draggingCurrentPrice;
+                        window.__SIMPLE_KLINE__.draggingAlert = null;
+                        window.__SIMPLE_KLINE__.dragPreviewId = null;
+                        if (typeof finalPrice === 'number') {
+                          post({ type: 'alertDragEnd', id: drag.id, price: Number(finalPrice) });
+                        }
+                      } catch(_) {}
+                    };
+                    container.addEventListener('pointerup', function(e){ try { handlePointerUp(e); } catch(_) {} try { hideOverlay(); } catch(_) {} }, { passive: true });
+                    container.addEventListener('touchend', function(e){ try { handlePointerUp(e); } catch(_) {} try { hideOverlay(); } catch(_) {} }, { passive: true });
                   }
                 } catch(_) {}
               } catch(e) { post({ warn: 'crosshair_events_setup_failed', message: String(e && e.message || e) }); }
@@ -1346,11 +1479,11 @@ export default function SimpleKLineChart({
 
             post({ ready: true, symbol: SYMBOL });
 
-            // Apply initial levels if provided
-            try { applyLevels(LEVELS); } catch(_){}
-            try { applyAlerts(ALERTS); } catch(_){}
-            try { applySessionBackgrounds(); } catch(_){}
-            return true;
+              // Apply initial levels if provided
+              try { applyLevels(LEVELS); } catch(_){}
+              // Initial alerts will be applied via postMessage after ready
+              try { applySessionBackgrounds(); } catch(_){}
+              return true;
           } catch (err) { post({ error: String(err && err.message || err) }); return false; }
         }
 
@@ -1369,7 +1502,7 @@ export default function SimpleKLineChart({
     showPriceAxisText,
     showTimeAxisText,
     levels,
-    JSON.stringify(alerts), // Use JSON string to avoid object reference changes
+    // alerts removed from deps to prevent WebView reload
     customBars,
     customData,
     indicatorsKey,
@@ -1394,9 +1527,44 @@ export default function SimpleKLineChart({
             const data = JSON.parse(event.nativeEvent.data || "{}");
             if (data && data.ready) {
               isReadyRef.current = true;
+              // Push initial alerts after ready
+              try {
+                if (webRef.current) {
+                  const msg = JSON.stringify({ type: "setAlerts", alerts });
+                  webRef.current.postMessage(msg);
+                }
+              } catch (_) {}
+            }
+            if (data.type === "crosshairMove") {
+              if (typeof data.y === "number") setCrosshairY(Number(data.y));
+              if (typeof data.price === "number")
+                setCrosshairPrice(Number(data.price));
+            } else if (data.type === "crosshairHide") {
+              setCrosshairY(null);
+              setCrosshairPrice(null);
             }
             if (data.type === "alertClick" && data.price && onAlertClick) {
               onAlertClick(data.price);
+            } else if (data.type === "alertSelected" && onAlertSelected) {
+              if (
+                data &&
+                typeof data.id === "string" &&
+                typeof data.price === "number"
+              ) {
+                onAlertSelected({
+                  id: data.id,
+                  price: data.price,
+                  y: Number(data.y || 0),
+                });
+              }
+            } else if (data.type === "alertDragEnd" && onAlertMoved) {
+              if (
+                data &&
+                typeof data.id === "string" &&
+                typeof data.price === "number"
+              ) {
+                onAlertMoved({ id: data.id, price: data.price });
+              }
             } else if (data.error) {
               console.warn("[SimpleKLineChart:error]", data);
             } else if (data.warn) {
@@ -1411,6 +1579,67 @@ export default function SimpleKLineChart({
           }
         }}
       />
+      {crosshairY != null && (
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          <View
+            style={{
+              position: "absolute",
+              top: Math.max(8, Math.min(height - 44, crosshairY - 16)),
+              right: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: "transparent",
+              gap: 6,
+            }}
+            pointerEvents="box-none"
+          >
+            <Pressable
+              style={{
+                padding: 6,
+                borderRadius: 16,
+                backgroundColor: theme === "dark" ? "#2B313B" : "#E6E9EE",
+                marginLeft: 4,
+              }}
+              onPress={() => {
+                // TODO: hook to your first action
+              }}
+            >
+              <Ionicons name="options-outline" size={16} color="#76808F" />
+            </Pressable>
+            <Pressable
+              style={{
+                padding: 6,
+                borderRadius: 16,
+                backgroundColor: theme === "dark" ? "#2B313B" : "#E6E9EE",
+                marginLeft: 4,
+              }}
+              onPress={() => {
+                if (crosshairPrice != null && onAlertClick)
+                  onAlertClick(crosshairPrice);
+              }}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={16}
+                color="#76808F"
+              />
+            </Pressable>
+            <Pressable
+              style={{
+                padding: 6,
+                borderRadius: 16,
+                backgroundColor: theme === "dark" ? "#2B313B" : "#E6E9EE",
+                marginLeft: 4,
+              }}
+              onPress={() => {
+                // TODO: hook to your third action
+              }}
+            >
+              <Ionicons name="stats-chart-outline" size={16} color="#76808F" />
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   );
 }

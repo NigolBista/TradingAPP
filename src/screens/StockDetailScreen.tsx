@@ -412,7 +412,8 @@ export default function StockDetailScreen() {
   const { messages, addAnalysisMessage, clearSymbolMessages } = useChatStore();
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
-  const { addAlert, checkAlerts, getAlertsForSymbol } = useAlertStore();
+  const { addAlert, checkAlerts, getAlertsForSymbol, updateAlert } =
+    useAlertStore();
   const [activeTab, setActiveTab] = useState<"overview" | "signals" | "news">(
     "signals"
   );
@@ -455,6 +456,10 @@ export default function StockDetailScreen() {
   );
   const [sentimentLoading, setSentimentLoading] = useState(false);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
+  const [proposedAlertPrice, setProposedAlertPrice] = useState<number | null>(
+    null
+  );
 
   // Batch edge requests from WebView to avoid excessive API calls while panning
   // Removed edge batching state; no longer needed with simple lazy loading
@@ -1269,11 +1274,30 @@ export default function StockDetailScreen() {
                 setShowAlertsModal(true);
               }}
               alerts={getAlertsForSymbol(symbol).map((alert) => ({
+                id: alert.id,
                 price: alert.price,
                 condition: alert.condition,
                 isActive: alert.isActive,
               }))}
+              onAlertSelected={({ id, price }) => {
+                setSelectedAlertId(id);
+                setProposedAlertPrice(price);
+              }}
+              onAlertMoved={({ id, price }) => {
+                if (!id || !(price > 0)) return;
+                try {
+                  updateAlert(id, {
+                    price,
+                    isActive: true,
+                    triggeredAt: undefined,
+                  });
+                } catch (_) {}
+                setSelectedAlertId(null);
+                setProposedAlertPrice(null);
+                setShowAlertsModal(true);
+              }}
             />
+            {/* In-chart drag handles replace the separate overlay controls */}
           </View>
 
           {/* Robinhood-style Timeframe Controls */}
