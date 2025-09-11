@@ -791,7 +791,7 @@ export default function SimpleKLineChart({
                 }
                 
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                var ids = [lineId, customId, textId].filter(function(id) { return id !== undefined; });
+                var ids = [lineId, customId].filter(function(id) { return id !== undefined; });
                 window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids);
                 
               } catch(e){ 
@@ -1179,31 +1179,7 @@ export default function SimpleKLineChart({
             (function(){
               try {
                 var ActionType = (window.klinecharts && (window.klinecharts.ActionType || window.klinecharts.ProActionType)) || {};
-
-                function getPriceFromEvent(ev){
-                  try {
-                    if (!ev) return (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice) || null;
-                    if (typeof ev.price === 'number') return ev.price;
-                    if (ev.yAxis && typeof ev.yAxis.value === 'number') return ev.yAxis.value;
-                    if (typeof ev.value === 'number') return ev.value;
-                    if (ev.data) {
-                      if (typeof ev.data.value === 'number') return ev.data.value;
-                      if (typeof ev.data.close === 'number') return ev.data.close;
-                    }
-                    if ((ev.coordinate && typeof ev.coordinate.y === 'number') && chart && typeof chart.convertFromPixel === 'function') {
-                      var res = chart.convertFromPixel({ x: (ev.coordinate.x || 0), y: ev.coordinate.y });
-                      if (res && typeof res.value === 'number') return res.value;
-                      if (res && typeof res.price === 'number') return res.price;
-                    }
-                    // Additional possible fields to try
-                    if (typeof ev.y === 'number' && chart && typeof chart.convertFromPixel === 'function') {
-                      var fromY = chart.convertFromPixel({ x: 0, y: ev.y });
-                      if (fromY && typeof fromY.value === 'number') return fromY.value;
-                    }
-                  } catch(_) {}
-                  // Fallback to last recorded pointer-derived price
-                  try { return (window.__SIMPLE_KLINE__ && (window.__SIMPLE_KLINE__.lastPointerPrice || window.__SIMPLE_KLINE__.lastCrosshairPrice)) || null; } catch(_) { return null; }
-                }
+                
 
                 function subscribeActionSafe(name, cb){
                   try {
@@ -1219,10 +1195,12 @@ export default function SimpleKLineChart({
                 var CHANGE_EVT = ActionType.OnCrosshairChange || 'onCrosshairChange';
                 subscribeActionSafe(CHANGE_EVT, function(param){
                   try {
-                    var price = getPriceFromEvent(param);
                     if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                     window.__SIMPLE_KLINE__.lastCrosshair = param;
-                    window.__SIMPLE_KLINE__.lastCrosshairPrice = price;
+                    var ptr = window.__SIMPLE_KLINE__.lastPointerPrice;
+                    if (typeof ptr === 'number') {
+                      window.__SIMPLE_KLINE__.lastCrosshairPrice = ptr;
+                    }
                   } catch(_) {}
                 });
 
@@ -1230,9 +1208,11 @@ export default function SimpleKLineChart({
                 subscribeActionSafe(CLICK_EVT, function(param){
                   try {
                     var fid = (param && (param.featureId || (param.feature && param.feature.id) || param.id)) || '';
-                    var price = getPriceFromEvent(param);
-                    if ((price === null || price === undefined) && window.__SIMPLE_KLINE__) {
-                      price = window.__SIMPLE_KLINE__.lastPointerPrice || window.__SIMPLE_KLINE__.lastCrosshairPrice || null;
+                    var price = null;
+                    if (window.__SIMPLE_KLINE__) {
+                      price = (window.__SIMPLE_KLINE__.lastPointerPrice != null)
+                        ? window.__SIMPLE_KLINE__.lastPointerPrice
+                        : window.__SIMPLE_KLINE__.lastCrosshairPrice || null;
                     }
                     post({ debug: 'onCrosshairFeatureClick', featureId: fid, price: price });
                     if (fid === 'alert_tool' && typeof price === 'number') {
