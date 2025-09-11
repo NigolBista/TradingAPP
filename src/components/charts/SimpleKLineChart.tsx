@@ -356,8 +356,13 @@ export default function SimpleKLineChart({
                    size: 32,
                    color: '#76808F',
                    activeColor: '#76808F',
-                   backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                   activeBackgroundColor: 'rgba(33, 150, 243, 0.4)',
+                   backgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#2B313B" : "#E6E9EE"
+                   )},
+                   activeBackgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#3A4451" : "#D8DEE6"
+                   )},
+                   borderRadius: 6,
                    type: 'path', // 'path', 'icon_font'
                    content: {
                      style: 'stroke', // 'stroke', 'fill'
@@ -379,8 +384,13 @@ export default function SimpleKLineChart({
                    size: 32,
                    color: '#76808F',
                    activeColor: '#76808F',
-                   backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                   activeBackgroundColor: 'rgba(33, 150, 243, 0.4)',
+                   backgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#2B313B" : "#E6E9EE"
+                   )},
+                   activeBackgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#3A4451" : "#D8DEE6"
+                   )},
+                   borderRadius: 6,
                    type: 'path', // 'path', 'icon_font'
                      content: {
                        style: 'stroke', // 'stroke', 'fill'
@@ -402,8 +412,13 @@ export default function SimpleKLineChart({
                    size: 32,
                    color: '#76808F',
                    activeColor: '#76808F',
-                   backgroundColor: 'rgba(33, 150, 243, 0.2)',
-                   activeBackgroundColor: 'rgba(33, 150, 243, 0.4)',
+                   backgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#2B313B" : "#E6E9EE"
+                   )},
+                   activeBackgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#3A4451" : "#D8DEE6"
+                   )},
+                   borderRadius: 6,
                    type: 'path', // 'path', 'icon_font'
                    content: {
                      style: 'stroke', // 'stroke', 'fill'
@@ -471,13 +486,6 @@ export default function SimpleKLineChart({
         function create(){
           try {
             if (!window.klinecharts || !window.klinecharts.init) { return false; }
-            
-            // Wait for Material Icons font to load
-            if (document.fonts && document.fonts.ready) {
-              document.fonts.ready.then(function() {
-                post({ debug: 'Material Icons font loaded' });
-              });
-            }
             
             // Register custom labeled line overlay
             if (window.klinecharts.registerOverlay && !window.__LABELED_LINE_REGISTERED__) {
@@ -780,39 +788,6 @@ export default function SimpleKLineChart({
                   }
                 } catch(customError) {
                   post({ debug: 'Custom overlay failed', error: String(customError) });
-                }
-                
-                // Approach 3: Create a separate text overlay if the line doesn't support text
-                var textOpts = {
-                  name: 'text',
-                  lock: true,
-                  points: [{ value: Number(price), timestamp: Date.now() }],
-                  styles: {
-                    text: {
-                      color: '#FFFFFF',
-                      size: 11,
-                      backgroundColor: color,
-                      borderColor: color,
-                      paddingLeft: 4,
-                      paddingRight: 4,
-                      paddingTop: 2,
-                      paddingBottom: 2,
-                      borderRadius: 3
-                    }
-                  },
-                  extendData: {
-                    text: String(label) + ' $' + Number(price).toFixed(2)
-                  }
-                };
-                
-                var textId;
-                try {
-                  if (chart && typeof chart.createOverlay === 'function') {
-                    textId = chart.createOverlay(textOpts);
-                    post({ debug: 'Text overlay created', id: textId });
-                  }
-                } catch(textError) {
-                  post({ debug: 'Text overlay failed', error: String(textError) });
                 }
                 
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
