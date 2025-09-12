@@ -863,7 +863,7 @@ export default function SimpleKLineChart({
                 var longPressStartPos = null;
                 var longPressFired = false;
                 var LONG_PRESS_MS = 700;
-                var LONG_PRESS_MOVE_TOLERANCE = 15;
+                var LONG_PRESS_MOVE_TOLERANCE = 2;
                 var movedBeyondTolerance = false;
 
                 function updateCursorVisibility() {
