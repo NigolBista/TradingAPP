@@ -1,8 +1,7 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
-import { View, StyleSheet, Pressable } from "react-native";
+import React, { useMemo, useRef, useEffect } from "react";
+import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
-import { Ionicons } from "@expo/vector-icons";
 
 interface Props {
   symbol: string;
@@ -106,8 +105,6 @@ export default function SimpleKLineChart({
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
-  const [crosshairY, setCrosshairY] = useState<number | null>(null);
-  const [crosshairPrice, setCrosshairPrice] = useState<number | null>(null);
 
   // Method to override indicator styles and parameters
   const overrideIndicator = React.useCallback(
@@ -399,7 +396,90 @@ export default function SimpleKLineChart({
                   paddingBottom: 4,
                   backgroundColor: '#686D76'
                 },
-                features: []
+                features: [                 {
+                   id: 'crosshair_tool',
+                   position: 'left', // 'left' | 'middle' | 'right'
+                   marginLeft: 8,
+                   marginTop: 0,
+                   marginRight: 32,
+                   marginBottom: 0,
+                   paddingLeft: 1,
+                   paddingTop: 1,
+                   paddingRight: 1,
+                   paddingBottom: 1,
+                   size: 32,
+                   color: '#76808F',
+                   activeColor: '#76808F',
+                   backgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#2B313B" : "#E6E9EE"
+                   )},
+                   activeBackgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#3A4451" : "#D8DEE6"
+                   )},
+                   borderRadius: 6,
+                   type: 'path', // 'path', 'icon_font'
+                   content: {
+                     style: 'stroke', // 'stroke', 'fill'
+                     path: 'M16,4L16,12M16,20L16,28M4,16L12,16M20,16L28,16M16,16L16,16',
+                     lineWidth: 3,
+                   }
+                 },
+                 {
+                   id: 'alert_tool',
+                   position: 'left', // 'left' | 'middle' | 'right'
+                   marginLeft: 8,
+                   marginTop: 0,
+                   marginRight: 8,
+                   marginBottom: 0,
+                   paddingLeft: 1,
+                   paddingTop: 1,
+                   paddingRight: 1,
+                   paddingBottom: 1,
+                   size: 32,
+                   color: '#76808F',
+                   activeColor: '#76808F',
+                   backgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#2B313B" : "#E6E9EE"
+                   )},
+                   activeBackgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#3A4451" : "#D8DEE6"
+                   )},
+                   borderRadius: 6,
+                   type: 'path', // 'path', 'icon_font'
+                     content: {
+                       style: 'stroke', // 'stroke', 'fill'
+                       path: 'M16,6C12,6 8,8 8,12L8,18C8,20 10,22 12,22L20,22C22,22 24,20 24,18L24,12C24,8 20,6 16,6M16,6L16,4M12,24L14,24M18,24L20,24',
+                       lineWidth: 2,
+                     }
+                 },
+                 {
+                   id: 'measure_tool',
+                   position: 'left', // 'left' | 'middle' | 'right'
+                   marginLeft: 8,
+                   marginTop: 0,
+                   marginRight: 8,
+                   marginBottom: 0,
+                   paddingLeft: 1,
+                   paddingTop: 1,
+                   paddingRight: 1,
+                   paddingBottom: 1,
+                   size: 32,
+                   color: '#76808F',
+                   activeColor: '#76808F',
+                   backgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#2B313B" : "#E6E9EE"
+                   )},
+                   activeBackgroundColor: ${JSON.stringify(
+                     theme === "dark" ? "#3A4451" : "#D8DEE6"
+                   )},
+                   borderRadius: 6,
+                   type: 'path', // 'path', 'icon_font'
+                   content: {
+                     style: 'stroke', // 'stroke', 'fill'
+                     path: 'M4,4L28,4M4,8L28,8M4,12L28,12M4,16L28,16M4,20L28,20M4,24L28,24M4,28L28,28M4,4L4,28M8,4L8,28M12,4L12,28M16,4L16,28M20,4L20,28M24,4L24,28M28,4L28,28',
+                     lineWidth: 2,
+                   }
+                 }]
               },
                 vertical: { text: { show: true } }
               },
@@ -1357,7 +1437,6 @@ export default function SimpleKLineChart({
                           var val = (converted && (typeof converted.value === 'number' ? converted.value : converted.price));
                           if (typeof val === 'number') {
                             window.__SIMPLE_KLINE__.lastPointerPrice = val;
-                            try { post({ type: 'crosshairMove', y: y, price: Number(val) }); } catch(_) {}
                           }
                         }
                       } catch(_) { }
@@ -1366,10 +1445,6 @@ export default function SimpleKLineChart({
                     container.addEventListener('pointerdown', updatePointer, { passive: true });
                     container.addEventListener('touchstart', updatePointer, { passive: true });
                     container.addEventListener('touchmove', updatePointer, { passive: true });
-
-                    var hideOverlay = function(){ try { post({ type: 'crosshairHide' }); } catch(_) {} };
-                    container.addEventListener('pointerleave', hideOverlay, { passive: true });
-                    container.addEventListener('pointercancel', hideOverlay, { passive: true });
 
                     // Helper to get pixel Y for a price
                     if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
@@ -1470,8 +1545,8 @@ export default function SimpleKLineChart({
                         }
                       } catch(_) {}
                     };
-                    container.addEventListener('pointerup', function(e){ try { handlePointerUp(e); } catch(_) {} try { hideOverlay(); } catch(_) {} }, { passive: true });
-                    container.addEventListener('touchend', function(e){ try { handlePointerUp(e); } catch(_) {} try { hideOverlay(); } catch(_) {} }, { passive: true });
+                    container.addEventListener('pointerup', handlePointerUp, { passive: true });
+                    container.addEventListener('touchend', handlePointerUp, { passive: true });
                   }
                 } catch(_) {}
               } catch(e) { post({ warn: 'crosshair_events_setup_failed', message: String(e && e.message || e) }); }
@@ -1535,14 +1610,6 @@ export default function SimpleKLineChart({
                 }
               } catch (_) {}
             }
-            if (data.type === "crosshairMove") {
-              if (typeof data.y === "number") setCrosshairY(Number(data.y));
-              if (typeof data.price === "number")
-                setCrosshairPrice(Number(data.price));
-            } else if (data.type === "crosshairHide") {
-              setCrosshairY(null);
-              setCrosshairPrice(null);
-            }
             if (data.type === "alertClick" && data.price && onAlertClick) {
               onAlertClick(data.price);
             } else if (data.type === "alertSelected" && onAlertSelected) {
@@ -1579,67 +1646,6 @@ export default function SimpleKLineChart({
           }
         }}
       />
-      {crosshairY != null && (
-        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-          <View
-            style={{
-              position: "absolute",
-              top: Math.max(8, Math.min(height - 44, crosshairY - 16)),
-              right: 8,
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: "transparent",
-              gap: 6,
-            }}
-            pointerEvents="box-none"
-          >
-            <Pressable
-              style={{
-                padding: 6,
-                borderRadius: 16,
-                backgroundColor: theme === "dark" ? "#2B313B" : "#E6E9EE",
-                marginLeft: 4,
-              }}
-              onPress={() => {
-                // TODO: hook to your first action
-              }}
-            >
-              <Ionicons name="options-outline" size={16} color="#76808F" />
-            </Pressable>
-            <Pressable
-              style={{
-                padding: 6,
-                borderRadius: 16,
-                backgroundColor: theme === "dark" ? "#2B313B" : "#E6E9EE",
-                marginLeft: 4,
-              }}
-              onPress={() => {
-                if (crosshairPrice != null && onAlertClick)
-                  onAlertClick(crosshairPrice);
-              }}
-            >
-              <Ionicons
-                name="notifications-outline"
-                size={16}
-                color="#76808F"
-              />
-            </Pressable>
-            <Pressable
-              style={{
-                padding: 6,
-                borderRadius: 16,
-                backgroundColor: theme === "dark" ? "#2B313B" : "#E6E9EE",
-                marginLeft: 4,
-              }}
-              onPress={() => {
-                // TODO: hook to your third action
-              }}
-            >
-              <Ionicons name="stats-chart-outline" size={16} color="#76808F" />
-            </Pressable>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
