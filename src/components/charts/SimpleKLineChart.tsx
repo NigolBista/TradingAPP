@@ -263,6 +263,12 @@ export default function SimpleKLineChart({
         background: ${JSON.stringify(theme === "dark" ? "#2B313B" : "#E6E9EE")};
         color: #76808F;
         box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
       }
       
       .custom-button:hover {
@@ -1403,6 +1409,58 @@ export default function SimpleKLineChart({
               try {
                 var ActionType = (window.klinecharts && (window.klinecharts.ActionType || window.klinecharts.ProActionType)) || {};
                 
+                // Button visibility state management
+                var buttonsVisible = false;
+                var hideButtonsTimeout = null;
+                
+                // Touch duration tracking
+                var touchStartTime = null;
+                var isLongPressActive = false;
+                var buttonsShownByLongPress = false; // Track if buttons were shown by long press
+                var lastLongPressTime = null; // Track when last long press occurred
+                
+                function showButtons(y, isFromLongPress) {
+                  try {
+                    var buttonsContainer = document.getElementById('crosshair-buttons');
+                    if (buttonsContainer && typeof y === 'number') {
+                      buttonsContainer.style.display = 'flex';
+                      buttonsContainer.style.top = (y - 18) + 'px';
+                      buttonsVisible = true;
+                      if (isFromLongPress) {
+                        buttonsShownByLongPress = true;
+                      }
+                      // Clear any pending hide timeout
+                      if (hideButtonsTimeout) {
+                        clearTimeout(hideButtonsTimeout);
+                        hideButtonsTimeout = null;
+                      }
+                      post({ debug: 'Buttons shown at Y', y: y, fromLongPress: !!isFromLongPress });
+                    }
+                  } catch(_) {}
+                }
+                
+                function hideButtons() {
+                  try {
+                    var buttonsContainer = document.getElementById('crosshair-buttons');
+                    if (buttonsContainer) {
+                      buttonsContainer.style.display = 'none';
+                      buttonsVisible = false;
+                      buttonsShownByLongPress = false; // Reset long press flag
+                      post({ debug: 'Buttons hidden' });
+                    }
+                  } catch(_) {}
+                }
+                
+                function hideButtonsDelayed(delay) {
+                  delay = delay || 150; // Default 150ms delay
+                  if (hideButtonsTimeout) {
+                    clearTimeout(hideButtonsTimeout);
+                  }
+                  hideButtonsTimeout = setTimeout(function() {
+                    hideButtons();
+                    hideButtonsTimeout = null;
+                  }, delay);
+                }
 
                 function subscribeActionSafe(name, cb){
                   try {
@@ -1429,38 +1487,34 @@ export default function SimpleKLineChart({
                     post({ debug: 'Crosshair change event', param: param });
                     
                     // Update custom button positions - only show when crosshair is actually visible
-                    var buttonsContainer = document.getElementById('crosshair-buttons');
-                    if (buttonsContainer) {
-                      // Check if crosshair is visible based on the parameter structure
-                      var isVisible = false;
-                      
-                      if (param) {
-                        // Different chart libraries may use different parameter structures
-                        if (typeof param.y === 'number') {
-                          // Basic check - if we have Y coordinate, crosshair might be visible
-                          isVisible = true;
-                        }
-                        
-                        // Check for explicit visibility flags
-                        if (param.visible === false || param.show === false || param.display === false) {
-                          isVisible = false;
-                        }
-                        
-                        // If param is null/undefined, crosshair is hidden
-                        if (!param) {
-                          isVisible = false;
-                        }
+                    var isVisible = false;
+                    
+                    if (param) {
+                      // Different chart libraries may use different parameter structures
+                      if (typeof param.y === 'number') {
+                        // Basic check - if we have Y coordinate, crosshair might be visible
+                        isVisible = true;
                       }
                       
-                      post({ debug: 'Button visibility decision', isVisible: isVisible, paramY: param ? param.y : 'no param' });
+                      // Check for explicit visibility flags
+                      if (param.visible === false || param.show === false || param.display === false) {
+                        isVisible = false;
+                      }
                       
-                      if (isVisible && typeof param.y === 'number') {
-                        // Show buttons and position them at crosshair Y position
-                        buttonsContainer.style.display = 'flex';
-                        buttonsContainer.style.top = (param.y - 18) + 'px';
-                      } else {
-                        // Hide buttons when crosshair is not visible
-                        buttonsContainer.style.display = 'none';
+                      // If param is null/undefined, crosshair is hidden
+                      if (!param) {
+                        isVisible = false;
+                      }
+                    }
+                    
+                    post({ debug: 'Button visibility decision', isVisible: isVisible, paramY: param ? param.y : 'no param' });
+                    
+                    if (isVisible && typeof param.y === 'number') {
+                      showButtons(param.y);
+                    } else {
+                      // Only hide buttons if they weren't shown by long press
+                      if (!buttonsShownByLongPress) {
+                        hideButtons();
                       }
                     }
                   } catch(_) {}
@@ -1490,9 +1544,115 @@ export default function SimpleKLineChart({
                       } catch(_) { }
                     };
                     container.addEventListener('pointermove', updatePointer, { passive: true });
-                    container.addEventListener('pointerdown', updatePointer, { passive: true });
-                    container.addEventListener('touchstart', updatePointer, { passive: true });
+                    
+                    // Track touch/pointer start for duration calculation
+                    var handlePointerStart = function(e) {
+                      try {
+                        touchStartTime = Date.now();
+                        isLongPressActive = false;
+                        post({ debug: 'Touch/pointer started', time: touchStartTime });
+                        updatePointer(e); // Also update pointer position
+                      } catch(_) {}
+                    };
+                    
+                    container.addEventListener('pointerdown', handlePointerStart, { passive: true });
+                    container.addEventListener('touchstart', handlePointerStart, { passive: true });
                     container.addEventListener('touchmove', updatePointer, { passive: true });
+                    
+                    // Additional event listeners to detect when crosshair should be hidden
+                    container.addEventListener('pointerleave', function() {
+                      post({ debug: 'Pointer left chart area' });
+                      // Only hide buttons if they weren't shown by long press
+                      if (!buttonsShownByLongPress) {
+                        hideButtonsDelayed(50);
+                      }
+                      // Reset tracking when leaving chart area
+                      touchStartTime = null;
+                      isLongPressActive = false;
+                    }, { passive: true });
+                    
+                    // Handle touch/pointer end with duration calculation
+                    var handlePointerEnd = function(e) {
+                      try {
+                        var touchEndTime = Date.now();
+                        var touchDuration = touchStartTime ? (touchEndTime - touchStartTime) : 0;
+                        
+                        post({ debug: 'Touch/pointer ended', duration: touchDuration, wasLongPress: touchDuration >= 2000, buttonsShownByLongPress: buttonsShownByLongPress });
+                        
+                        if (touchDuration >= 1000) {
+                          // Long press (1+ seconds) - show buttons at last known crosshair position
+                          lastLongPressTime = touchEndTime; // Record when long press occurred
+                          var lastCrosshair = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshair;
+                          if (lastCrosshair && typeof lastCrosshair.y === 'number') {
+                            showButtons(lastCrosshair.y, true); // Mark as from long press
+                            post({ debug: 'Showing buttons after long press', y: lastCrosshair.y });
+                          } else if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastPointer) {
+                            // Fallback to last pointer position if crosshair data not available
+                            var lastY = window.__SIMPLE_KLINE__.lastPointer.y;
+                            if (typeof lastY === 'number') {
+                              showButtons(lastY, true); // Mark as from long press
+                              post({ debug: 'Showing buttons after long press (fallback)', y: lastY });
+                            }
+                          }
+                          // Don't process as short press - this was a long press
+                        } else if (touchStartTime !== null) {
+                          // Check if this is too soon after a long press (cooldown period)
+                          var timeSinceLastLongPress = lastLongPressTime ? (touchEndTime - lastLongPressTime) : Infinity;
+                          var cooldownPeriod = 500; // 500ms cooldown after long press
+                          
+                          if (timeSinceLastLongPress < cooldownPeriod) {
+                            post({ debug: 'Short press ignored - too soon after long press', timeSince: timeSinceLastLongPress });
+                            // Ignore this short press as it's too soon after a long press
+                          } else {
+                            // Process as genuine short press
+                            if (buttonsShownByLongPress) {
+                              post({ debug: 'Short press detected - hiding buttons that were shown by long press' });
+                              hideButtons();
+                            } else {
+                              // If buttons weren't shown by long press, hide them with delay (normal crosshair behavior)
+                              hideButtonsDelayed(100);
+                            }
+                          }
+                        }
+                        
+                        // Reset tracking variables
+                        touchStartTime = null;
+                        isLongPressActive = false;
+                      } catch(_) {}
+                    };
+                    
+                    container.addEventListener('pointerup', handlePointerEnd, { passive: true });
+                    container.addEventListener('touchend', handlePointerEnd, { passive: true });
+                    
+                    container.addEventListener('touchcancel', function() {
+                      post({ debug: 'Touch cancelled on chart' });
+                      hideButtons();
+                      // Reset tracking variables on cancel
+                      touchStartTime = null;
+                      isLongPressActive = false;
+                    }, { passive: true });
+                    
+                    // Global pointer events to catch when user moves outside the entire chart area
+                    document.addEventListener('pointermove', function(e) {
+                      try {
+                        if (!buttonsVisible || !container) return;
+                        var rect = container.getBoundingClientRect();
+                        var x = e.clientX;
+                        var y = e.clientY;
+                        
+                        // Check if pointer is outside the chart bounds
+                        if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+                          post({ debug: 'Pointer moved outside chart bounds' });
+                          // Only hide buttons if they weren't shown by long press
+                          if (!buttonsShownByLongPress) {
+                            hideButtonsDelayed(50);
+                          }
+                          // Reset tracking when moving outside chart bounds
+                          touchStartTime = null;
+                          isLongPressActive = false;
+                        }
+                      } catch(_) {}
+                    }, { passive: true });
 
                     // Helper to get pixel Y for a price
                     if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
@@ -1597,6 +1757,7 @@ export default function SimpleKLineChart({
                     container.addEventListener('touchend', handlePointerUp, { passive: true });
                   }
                 } catch(_) {}
+                
               } catch(e) { post({ warn: 'crosshair_events_setup_failed', message: String(e && e.message || e) }); }
             })();
 
