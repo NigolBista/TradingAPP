@@ -23,7 +23,6 @@ interface Props {
     entries?: number[];
     exits?: number[];
     takeProfits?: number[];
-    // Enhanced level types for detailed labeling
     entry?: number;
     lateEntry?: number;
     exit?: number;
@@ -31,7 +30,6 @@ interface Props {
     stop?: number;
     targets?: number[];
   };
-  // Optional: provide custom bars to render instead of fetching
   customBars?: Array<{
     timestamp: number;
     open: number;
@@ -41,11 +39,8 @@ interface Props {
     volume?: number;
     turnover?: number;
   }>;
-  // Optional: simpler custom series (will be converted to OHLC with equal values)
   customData?: Array<{ time: number; value: number }>;
-  // New: dynamic indicators configuration
   indicators?: IndicatorConfig[];
-  // New: indicator override callback setter
   onOverrideIndicator?: (
     overrideFn: (
       id: string | { name: string; paneId?: string },
@@ -53,30 +48,25 @@ interface Props {
       calcParams?: any
     ) => void
   ) => void;
-  // Alert click callback
   onAlertClick?: (price: number) => void;
-  // Alerts to display as price lines
   alerts?: Array<{
     id?: string;
     price: number;
     condition: string;
     isActive: boolean;
   }>;
-  // Fired when user taps an existing alert line on the chart
   onAlertSelected?: (payload: { id: string; price: number; y: number }) => void;
-  // Fired when user drags an alert line and releases with a new price
   onAlertMoved?: (payload: { id: string; price: number }) => void;
-  // Custom button callbacks
   onMeasureClick?: (price: number) => void;
   onCrosshairClick?: (price: number) => void;
 }
 
 export interface IndicatorConfig {
   id?: string;
-  name: string; // e.g., 'MA', 'EMA', 'MACD', 'RSI'
-  overlay?: boolean; // true to draw on candle pane when compatible
-  calcParams?: any; // e.g., [5,10,30,60]
-  styles?: any; // pass-through style object to klinecharts
+  name: string;
+  overlay?: boolean;
+  calcParams?: any;
+  styles?: any;
 }
 
 export default function SimpleKLineChart({
@@ -110,7 +100,6 @@ export default function SimpleKLineChart({
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
 
-  // Method to override indicator styles and parameters
   const overrideIndicator = React.useCallback(
     (
       id: string | { name: string; paneId?: string },
@@ -137,14 +126,10 @@ export default function SimpleKLineChart({
     []
   );
 
-  // Expose overrideIndicator method to parent component
-  React.useEffect(() => {
-    if (onOverrideIndicator) {
-      onOverrideIndicator(overrideIndicator);
-    }
+  useEffect(() => {
+    if (onOverrideIndicator) onOverrideIndicator(overrideIndicator);
   }, [onOverrideIndicator, overrideIndicator]);
 
-  // Push alert changes to the WebView without full reload
   useEffect(() => {
     try {
       if (!isReadyRef.current || !webRef.current) return;
@@ -152,10 +137,10 @@ export default function SimpleKLineChart({
       webRef.current.postMessage(message);
     } catch (_) {}
   }, [alerts]);
+
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
 
-  // Ensure WebView remounts when custom data changes to force a fresh load
   const dataKey = useMemo(() => {
     try {
       const bars =
@@ -176,7 +161,6 @@ export default function SimpleKLineChart({
     }
   }, [customBars, customData]);
 
-  // Create a compact hash key for indicators so changes force a refresh
   const indicatorsKey = useMemo(() => {
     try {
       if (!indicators || indicators.length === 0) return "none";
@@ -195,7 +179,6 @@ export default function SimpleKLineChart({
   const html = useMemo(() => {
     const safeSymbol = (symbol || "AAPL").toUpperCase();
     const ct = chartType;
-    // Precompute axis text defaults (granular only)
     const showYAxisText =
       typeof showPriceAxisText === "boolean" ? showPriceAxisText : true;
     const showXAxisText =
@@ -213,7 +196,7 @@ export default function SimpleKLineChart({
       #k-line-wrap { width: 100%; height: ${height}px; position: relative; }
       #k-line-chart { width: 100%; height: 100%; }
       * { touch-action: none; }
-      
+
       .custom-crosshair-buttons {
         position: absolute;
         display: none;
@@ -223,7 +206,7 @@ export default function SimpleKLineChart({
         z-index: 1000;
         pointer-events: auto;
       }
-      
+
       .custom-button {
         width: 36px;
         height: 36px;
@@ -246,13 +229,13 @@ export default function SimpleKLineChart({
         -webkit-touch-callout: none;
         -webkit-tap-highlight-color: transparent;
       }
-      
+
       .custom-button:hover {
         background: ${JSON.stringify(theme === "dark" ? "#3A4451" : "#D8DEE6")};
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
       }
-      
+
       .custom-button:active {
         transform: translateY(0);
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -274,14 +257,13 @@ export default function SimpleKLineChart({
         function post(msg){ try { window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch(e) {} }
         window.onerror = function(m, s, l, c, e){ post({ error: m || (e && e.message) || 'unknown' }); };
 
-        // Handle messages from React Native
+        // Message bridge from React Native
         document.addEventListener('message', function(event) {
           try {
             var data = {};
             try { data = JSON.parse(event.data || '{}'); } catch(_) { data = {}; }
             if (data.type === 'overrideIndicator') {
               if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.overrideIndicator) {
-                // Pass the parameters correctly - id, styles, and calcParams separately
                 window.__SIMPLE_KLINE__.overrideIndicator(data.id, data.styles, data.calcParams);
               } else {
                 post({ error: 'overrideIndicator function not available in __SIMPLE_KLINE__' });
@@ -291,22 +273,17 @@ export default function SimpleKLineChart({
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 if (typeof window.__SIMPLE_KLINE__.applyAlerts === 'function') {
                   window.__SIMPLE_KLINE__.applyAlerts(Array.isArray(data.alerts) ? data.alerts : []);
-                  // Re-apply after fonts are ready to ensure Material Icons render
                   try {
                     if (document.fonts && document.fonts.ready) {
                       document.fonts.ready.then(function(){
                         try { window.__SIMPLE_KLINE__.applyAlerts(Array.isArray(data.alerts) ? data.alerts : []); } catch(_){ }
                       });
                     } else {
-                      setTimeout(function(){
-                        try { window.__SIMPLE_KLINE__.applyAlerts(Array.isArray(data.alerts) ? data.alerts : []); } catch(_){ }
-                      }, 500);
+                      setTimeout(function(){ try { window.__SIMPLE_KLINE__.applyAlerts(Array.isArray(data.alerts) ? data.alerts : []); } catch(_){ } }, 500);
                     }
                   } catch(_){ }
                 }
               } catch(e) { post({ warn: 'setAlerts handler failed', message: String(e && e.message || e) }); }
-            } else {
-              if (false) { post({ debug: 'Unknown message type', type: data.type }); }
             }
           } catch(e) {
             post({ error: 'message_handler_failed', message: String(e && e.message || e), rawData: event.data });
@@ -314,7 +291,7 @@ export default function SimpleKLineChart({
         });
 
         var SYMBOL = ${JSON.stringify(safeSymbol)};
-        var CHART_TYPE = ${JSON.stringify(ct)}; // 'candle' | 'line' | 'area'
+        var CHART_TYPE = ${JSON.stringify(ct)};
         var TF = ${JSON.stringify(timeframe)};
         var SHOW_VOL = ${JSON.stringify(showVolume)};
         var SHOW_MA = ${JSON.stringify(showMA)};
@@ -327,7 +304,6 @@ export default function SimpleKLineChart({
         var SHOW_LAST_PRICE_LABEL = ${JSON.stringify(showLastPriceLabel)};
         var SHOW_SESSIONS = ${JSON.stringify(showSessions)};
         var LEVELS = ${JSON.stringify(levels || {})};
-        var ALERTS = []; // Will be set via postMessage after ready
         var POLY_API_KEY = ${JSON.stringify(polygonApiKey || "")};
         var CUSTOM_BARS = ${JSON.stringify(customBars || [])};
         var CUSTOM_DATA = ${JSON.stringify(
@@ -365,8 +341,8 @@ export default function SimpleKLineChart({
         function applyChartType(chart, t){
           try {
             var type = (t === 'candle') ? 'candle_solid' : 'area';
-            var opts = { 
-              candle: { 
+            var opts = {
+              candle: {
                 type: type,
                 priceMark: {
                   last: {
@@ -389,44 +365,36 @@ export default function SimpleKLineChart({
                 tickLine: { show: false }
               },
               crosshair: {
+                show: false,
                 horizontal: {
-                show: true,
-                line: {
-                  show: true,
-                  // 'solid' | 'dashed'
-                  style: 'dashed',
-                  dashedValue: [4, 2],
-                  size: 1,
-                  color: '#888888'
+                  show: false,
+                  line: { style: 'dashed', dashedValue: [4, 2], size: 1, color: '#888888' },
+                  text: {
+                    show: true,
+                    style: 'fill',
+                    color: '#FFFFFF',
+                    size: 12,
+                    family: 'Helvetica Neue',
+                    weight: 'normal',
+                    borderStyle: 'solid',
+                    borderDashedValue: [2, 2],
+                    borderSize: 1,
+                    borderColor: '#686D76',
+                    borderRadius: 2,
+                    paddingLeft: 4,
+                    paddingRight: 4,
+                    paddingTop: 4,
+                    paddingBottom: 4,
+                    backgroundColor: '#686D76'
+                  },
+                  features: []
                 },
-                text: {
-                  show: true,
-                  // 'fill' | 'stroke' | 'stroke_fill'
-                  style: 'fill',
-                  color: '#FFFFFF',
-                  size: 12,
-                  family: 'Helvetica Neue',
-                  weight: 'normal',
-                  // 'solid' | 'dashed'
-                  borderStyle: 'solid',
-                  borderDashedValue: [2, 2],
-                  borderSize: 1,
-                  borderColor: '#686D76',
-                  borderRadius: 2,
-                  paddingLeft: 4,
-                  paddingRight: 4,
-                  paddingTop: 4,
-                  paddingBottom: 4,
-                  backgroundColor: '#686D76'
-                },
-                features: []
-              },
-                vertical: { text: { show: true } }
+                vertical: { show: false, text: { show: true } }
               },
               grid: {
                 horizontal: {
-                  show: SHOW_GRID,
-                  display: SHOW_GRID,
+                  show: ${JSON.stringify(showGrid)},
+                  display: ${JSON.stringify(showGrid)},
                   size: 1,
                   color: ${JSON.stringify(
                     theme === "dark" ? "rgba(255,255,255,0.06)" : "#EDEDED"
@@ -435,8 +403,8 @@ export default function SimpleKLineChart({
                   dashedValue: [2, 2]
                 },
                 vertical: {
-                  show: SHOW_GRID,
-                  display: SHOW_GRID,
+                  show: ${JSON.stringify(showGrid)},
+                  display: ${JSON.stringify(showGrid)},
                   size: 1,
                   color: ${JSON.stringify(
                     theme === "dark" ? "rgba(255,255,255,0.06)" : "#EDEDED"
@@ -445,19 +413,11 @@ export default function SimpleKLineChart({
                   dashedValue: [2, 2]
                 }
               },
-              // Hide/darken the pane separator line between main and volume panes
-              separator: {
-                size: 1,
-                color: ${JSON.stringify(
-                  theme === "dark" ? "#0a0a0a" : "#ffffff"
-                )}
-              }
+              separator: { size: 1, color: ${JSON.stringify(
+                theme === "dark" ? "#0a0a0a" : "#ffffff"
+              )} }
             };
-            if (!SHOW_TOP_INFO) {
-              // Hide only the candle (OHLC) header tooltip
-              // Keep indicator tooltips visible so MA/indicators still show values
-              opts.candle.tooltip = { showRule: 'none' };
-            }
+            if (!SHOW_TOP_INFO) { opts.candle.tooltip = { showRule: 'none' }; }
             if (typeof chart.setStyles === 'function') chart.setStyles(opts);
             else if (typeof chart.setStyleOptions === 'function') chart.setStyleOptions(opts);
           } catch (e) { post({ warn: 'applyChartType failed', message: String(e && e.message || e) }); }
@@ -480,133 +440,41 @@ export default function SimpleKLineChart({
         function create(){
           try {
             if (!window.klinecharts || !window.klinecharts.init) { return false; }
-            
-            // Register custom labeled line overlay
+
+            // Overlays
             if (window.klinecharts.registerOverlay && !window.__LABELED_LINE_REGISTERED__) {
               window.klinecharts.registerOverlay({
                 name: 'labeledHorizontalLine',
                 totalStep: 1,
-                createPointFigures: function({ coordinates, overlay, precision }) {
+                createPointFigures: function({ coordinates, overlay }) {
                   var point = coordinates[0];
                   if (!point) return [];
-                  
                   var extendData = overlay.extendData || {};
                   var label = extendData.label || '';
                   var price = extendData.price || 0;
                   var color = extendData.color || '#10B981';
-                  // Treat dragHintArrows as a selection flag so we can reuse existing calls
                   var isSelected = !!extendData.dragHintArrows;
-                  
                   var figs = [
-                    {
-                      type: 'line',
-                      attrs: {
-                        coordinates: [
-                          { x: 0, y: point.y },
-                          { x: 9999, y: point.y }
-                        ]
-                      },
-                      styles: {
-                        color: color,
-                        size: 1,
-                        style: 'dashed',
-                        dashedValue: [10, 6]
-                      }
-                    }
+                    { type: 'line', attrs: { coordinates: [ { x: 0, y: point.y }, { x: 9999, y: point.y } ] }, styles: { color: color, size: 1, style: 'dashed', dashedValue: [10, 6] } }
                   ];
-
                   if (isSelected) {
-                    // Show full label when selected
-                    figs.push({
-                      type: 'text',
-                      attrs: {
-                        x: 12,
-                        y: point.y - 5,
-                        text: label + ' $' + Number(price).toFixed(2),
-                        baseline: 'bottom',
-                        align: 'left'
-                      },
-                      styles: {
-                        color: '#FFFFFF',
-                        size: 11,
-                        backgroundColor: color,
-                        borderColor: color,
-                        borderSize: 1,
-                        borderRadius: 3,
-                        paddingLeft: 4,
-                        paddingRight: 4,
-                        paddingTop: 2,
-                        paddingBottom: 2
-                      }
-                    });
-                    // Tiny up/down arrows just above/below the line
+                    figs.push({ type: 'text', attrs: { x: 12, y: point.y - 5, text: label + ' $' + Number(price).toFixed(2), baseline: 'bottom', align: 'left' }, styles: { color: '#FFFFFF', size: 11, backgroundColor: color, borderColor: color, borderSize: 1, borderRadius: 3, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2 } });
                     figs.push(
-                      {
-                        type: 'text',
-                        attrs: {
-                          x: 6,
-                          y: point.y - 8,
-                          text: '\u25B2', // ▲
-                          baseline: 'bottom',
-                          align: 'left'
-                        },
-                        styles: {
-                          color: '#C7CDD7',
-                          size: 8,
-                          backgroundColor: 'transparent'
-                        }
-                      },
-                      {
-                        type: 'text',
-                        attrs: {
-                          x: 6,
-                          y: point.y + 8,
-                          text: '\u25BC', // ▼
-                          baseline: 'top',
-                          align: 'left'
-                        },
-                        styles: {
-                          color: '#C7CDD7',
-                          size: 8,
-                          backgroundColor: 'transparent'
-                        }
-                      }
+                      { type: 'text', attrs: { x: 6, y: point.y - 8, text: '\u25B2', baseline: 'bottom', align: 'left' }, styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' } },
+                      { type: 'text', attrs: { x: 6, y: point.y + 8, text: '\u25BC', baseline: 'top', align: 'left' }, styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' } }
                     );
                   } else {
-                    // When not selected, show a small bell icon instead of the label
-                    figs.push({
-                      type: 'text',
-                      attrs: {
-                        x: 8,
-                        y: point.y - 6,
-                        text: '\uE7F4',
-                        baseline: 'bottom',
-                        align: 'left'
-                      },
-                      styles: {
-                        color: color,
-                        family: 'Material Icons',
-                        size: 16,
-                        backgroundColor: 'transparent'
-                      }
-                    });
+                    figs.push({ type: 'text', attrs: { x: 8, y: point.y - 6, text: '\uE7F4', baseline: 'bottom', align: 'left' }, styles: { color: color, family: 'Material Icons', size: 16, backgroundColor: 'transparent' } });
                   }
-
                   return figs;
                 }
               });
               window.__LABELED_LINE_REGISTERED__ = true;
-              if (false) { post({ debug: 'Custom labeled line overlay registered' }); }
             }
 
-            // Register session background overlay
             if (window.klinecharts.registerOverlay && !window.__SESSION_BG_REGISTERED__) {
               window.klinecharts.registerOverlay({
                 name: 'sessionBg',
-                // This overlay only draws preset rectangles and should never
-                // capture pointer events.  Define it as a pure decoration by
-                // disabling interaction steps and default mouse handling so it
-                // does not block chart panning.
                 totalStep: 0,
                 needDefaultMouseEvent: false,
                 needCrosshair: false,
@@ -615,94 +483,40 @@ export default function SimpleKLineChart({
                   var end = coordinates[1];
                   if (!start || !end) return [];
                   var color = (overlay.extendData && overlay.extendData.color) || 'rgba(0,0,0,0.1)';
-                  return [
-                    {
-                      type: 'rect',
-                      attrs: { x: start.x, y: 0, width: end.x - start.x, height: 9999 },
-                      styles: { color: color, style: 'fill' },
-                      // Explicitly ignore pointer events so the rectangle does not
-                      // intercept touch gestures and block chart panning
-                      ignoreEvent: true
-                    }
-                  ];
+                  return [ { type: 'rect', attrs: { x: start.x, y: 0, width: end.x - start.x, height: 9999 }, styles: { color: color, style: 'fill' }, ignoreEvent: true } ];
                 }
               });
               window.__SESSION_BG_REGISTERED__ = true;
-              if (false) { post({ debug: 'Session background overlay registered' }); }
             }
-            
+
             var chart = window.klinecharts.init('k-line-chart');
-            try { if (false) { post({ debug: 'Chart init', symbol: SYMBOL, timeframe: TF, hasCustomBars: (CUSTOM_BARS||[]).length, hasCustomData: (CUSTOM_DATA||[]).length }); } } catch(_){ }
-            // Default toggles
             if (SHOW_MA) { try { chart.createIndicator && chart.createIndicator('MA', false, { id: 'candle_pane' }); } catch(_){} }
             if (SHOW_VOL) { try { chart.createIndicator && chart.createIndicator('VOL'); } catch(_){} }
             applyChartType(chart, CHART_TYPE);
 
-            // Set symbol and period
-            if (typeof chart.setSymbol === 'function') {
-              try { chart.setSymbol({ ticker: SYMBOL }); } catch(_){}
-            }
-            if (typeof chart.setPeriod === 'function') {
-              try { chart.setPeriod(mapPeriod(TF)); } catch(_){}
-            }
+            if (typeof chart.setSymbol === 'function') { try { chart.setSymbol({ ticker: SYMBOL }); } catch(_){} }
+            if (typeof chart.setPeriod === 'function') { try { chart.setPeriod(mapPeriod(TF)); } catch(_){} }
 
-            // Prefer custom bars when provided; otherwise attach Polygon loader
             var hasCustom = (Array.isArray(CUSTOM_BARS) && CUSTOM_BARS.length > 0) || (Array.isArray(CUSTOM_DATA) && CUSTOM_DATA.length > 0);
             if (hasCustom) {
               try {
                 var bars = (Array.isArray(CUSTOM_BARS) && CUSTOM_BARS.length > 0) ? CUSTOM_BARS : CUSTOM_DATA;
                 try { bars = bars.slice().sort(function(a,b){ return (a.timestamp||0) - (b.timestamp||0); }); } catch(_){ }
-                if (false) { post({ debug: 'Applying custom bars', count: (bars||[]).length, first: bars && bars[0], last: bars && bars[bars.length-1] }); }
                 var applied = false;
-                try {
-                  if (chart && typeof chart.setData === 'function') {
-                    chart.setData(bars);
-                    applied = true;
-                    if (false) { post({ debug: 'setData used' }); }
-                  }
-                } catch (e1) { post({ warn: 'setData failed', message: String(e1 && e1.message || e1) }); }
+                try { if (chart && typeof chart.setData === 'function') { chart.setData(bars); applied = true; } } catch(_){ }
+                if (!applied) { try { if (chart && typeof chart.applyNewData === 'function') { chart.applyNewData(bars); applied = true; } } catch(_){ } }
                 if (!applied) {
-                  try {
-                    if (chart && typeof chart.applyNewData === 'function') {
-                      chart.applyNewData(bars);
-                      applied = true;
-                      if (false) { post({ debug: 'applyNewData used' }); }
-                    }
-                  } catch (e2) { post({ warn: 'applyNewData failed', message: String(e2 && e2.message || e2) }); }
-                }
-                if (!applied) {
-                  try {
-                    if (chart && typeof chart.applyData === 'function') {
-                      chart.applyData(bars);
-                      applied = true;
-                      if (false) { post({ debug: 'applyData used' }); }
-                    }
-                  } catch (e3) { post({ warn: 'applyData failed', message: String(e3 && e3.message || e3) }); }
-                }
-                if (!applied) {
-                  // Last resort: install a data loader that immediately returns our bars
                   try {
                     if (typeof chart.setDataLoader === 'function') {
-                      chart.setDataLoader({
-                        getBars: function(ctx){
-                          try {
-                            var cb = (ctx && ctx.callback) ? ctx.callback : function(){};
-                            cb(bars);
-                          } catch (e4) { post({ error: 'custom_loader_callback_failed', message: String(e4 && e4.message || e4) }); }
-                        }
-                      });
-                      if (false) { post({ debug: 'setDataLoader(custom) used' }); }
+                      chart.setDataLoader({ getBars: function(ctx){ try { (ctx && ctx.callback ? ctx.callback : function(){}) (bars); } catch (e4) { post({ error: 'custom_loader_callback_failed', message: String(e4 && e4.message || e4) }); } } });
                       applied = true;
                     }
-                  } catch (e5) { post({ error: 'setDataLoader_custom_failed', message: String(e5 && e5.message || e5) }); }
+                  } catch(_){ }
                 }
                 if (!applied) { post({ error: 'apply_custom_failed', message: 'No supported API to set data' }); }
-              } catch(e) {
-                post({ error: 'apply_custom_failed', message: String(e && e.message || e) });
-              }
+              } catch(e) { post({ error: 'apply_custom_failed', message: String(e && e.message || e) }); }
               setTimeout(applySessionBackgrounds, 0);
             } else {
-              // v10: Use data loader backed by Polygon.io
               if (typeof chart.setDataLoader === 'function') {
                 chart.setDataLoader({
                   getBars: function(ctx){
@@ -711,43 +525,27 @@ export default function SimpleKLineChart({
                       var p = mapPeriod(TF);
                       var to = Date.now();
                       var from = to - 500 * periodToMs(p);
-                      if (!POLY_API_KEY) {
-                        post({ warn: 'Missing Polygon API key' });
-                        callback([]);
-                        setTimeout(applySessionBackgrounds, 0);
-                        return;
-                      }
-                      var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) +
-                                '/range/' + p.span + '/' + p.type + '/' + from + '/' + to +
-                                '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
+                      if (!POLY_API_KEY) { post({ warn: 'Missing Polygon API key' }); callback([]); setTimeout(applySessionBackgrounds, 0); return; }
+                      var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) + '/range/' + p.span + '/' + p.type + '/' + from + '/' + to + '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
                       fetch(url)
                         .then(function(res){ return res.json(); })
                         .then(function(result){
                           var list = (result && result.results) || [];
-                          var out = list.map(function(d){
-                            return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw };
-                          });
+                          var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
                           callback(out);
                           setTimeout(applySessionBackgrounds, 0);
                         })
-                        .catch(function(err){
-                          post({ error: 'polygon_load_failed', message: String(err && err.message || err) });
-                          callback([]);
-                          setTimeout(applySessionBackgrounds, 0);
-                        });
+                        .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); callback([]); setTimeout(applySessionBackgrounds, 0); });
                     } catch (e) { post({ error: 'getBars_failed', message: String(e && e.message || e) }); }
                   }
                 });
               } else {
-                // Fallback: try Polygon once
                 (function(){
                   var p = mapPeriod(TF);
                   var to = Date.now();
                   var from = to - 500 * periodToMs(p);
                   if (!POLY_API_KEY) return;
-                  var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) +
-                            '/range/' + p.span + '/' + p.type + '/' + from + '/' + to +
-                            '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
+                  var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) + '/range/' + p.span + '/' + p.type + '/' + from + '/' + to + '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
                   fetch(url)
                     .then(function(res){ return res.json(); })
                     .then(function(result){
@@ -756,165 +554,66 @@ export default function SimpleKLineChart({
                       try { chart.applyNewData(out || []); } catch(e) { post({ error: 'applyNewData failed', message: String(e && e.message || e) }); }
                       setTimeout(applySessionBackgrounds, 0);
                     })
-                    .catch(function(err){
-                      post({ error: 'polygon_load_failed', message: String(err && err.message || err) });
-                      setTimeout(applySessionBackgrounds, 0);
-                    });
+                    .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); setTimeout(applySessionBackgrounds, 0); });
                 })();
               }
             }
 
-            // Levels overlay helpers
+            // Levels
             function clearLevels(){
               try {
                 var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.levelOverlayIds) || [];
-                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') {
-                  ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} });
-                }
+                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') { ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} }); }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 window.__SIMPLE_KLINE__.levelOverlayIds = [];
-              } catch(_){}
+              } catch(_){ }
             }
-             function addPriceLine(price, color, label, dragHintArrows, isAlert){
+
+            function addPriceLine(price, color, label, dragHintArrows, isAlert){
               try {
-                if (!price || isNaN(price)) return;
-                
-                // Create appropriate overlay based on type
-                
+                if (price == null || isNaN(price)) return;
                 var overlayId;
-                
                 if (isAlert) {
-                  // For alerts with drag hints, use custom overlay
-                  var customOpts = {
-                    name: 'labeledHorizontalLine',
-                    lock: false,
-                    points: [{ value: Number(price) }],
-                    extendData: {
-                      label: String(label),
-                      price: Number(price),
-                      color: color,
-                      dragHintArrows: !!dragHintArrows
-                    }
-                  };
-                  
-                  try {
-                    if (chart && typeof chart.createOverlay === 'function') {
-                      overlayId = chart.createOverlay(customOpts);
-                      // Alert overlay created successfully
-                    }
-                  } catch(customError) {
-                    post({ warn: 'Custom overlay failed', error: String(customError) });
-                  }
+                  var customOpts = { name: 'labeledHorizontalLine', lock: false, points: [{ value: Number(price) }], extendData: { label: String(label), price: Number(price), color: color, dragHintArrows: !!dragHintArrows } };
+                  try { if (chart && typeof chart.createOverlay === 'function') { overlayId = chart.createOverlay(customOpts); } } catch(_) { }
                 } else {
-                  // For levels or non-draggable lines, use standard overlay
                   var lineOpts = {
-                    name: 'horizontalStraightLine',
-                    lock: true,
-                    extend: 'none',
-                    points: [{ value: Number(price) }],
-                    styles: {
-                      line: { 
-                        color: color, 
-                        size: 1, 
-                        style: 'dashed', 
-                        dashedValue: [10, 6] 
-                      },
-                      text: { 
-                        show: true, 
-                        color: '#FFFFFF', 
-                        size: 12, 
-                        backgroundColor: color, 
-                        borderColor: color, 
-                        paddingLeft: 6, 
-                        paddingRight: 6, 
-                        paddingTop: 3, 
-                        paddingBottom: 3, 
-                        borderRadius: 4, 
-                        text: String(label) + ' $' + Number(price).toFixed(2)
-                      }
-                    }
+                    name: 'horizontalStraightLine', lock: true, extend: 'none', points: [{ value: Number(price) }],
+                    styles: { line: { color: color, size: 1, style: 'dashed', dashedValue: [10, 6] }, text: { show: true, color: '#FFFFFF', size: 12, backgroundColor: color, borderColor: color, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, text: String(label) + ' $' + Number(price).toFixed(2) } }
                   };
-                  
-                  if (chart && typeof chart.createOverlay === 'function') {
-                    overlayId = chart.createOverlay(lineOpts);
-                    // Standard line overlay created successfully
-                  }
+                  if (chart && typeof chart.createOverlay === 'function') { overlayId = chart.createOverlay(lineOpts); }
                 }
-                
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 var ids = [overlayId].filter(function(id) { return id !== undefined; });
-                if (isAlert) {
-                  window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids);
-                } else {
-                  window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids);
-                }
-                
-              } catch(e){ 
-                post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); 
-              }
+                if (isAlert) { window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids); }
+                else { window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids); }
+              } catch(e){ post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); }
             }
+
             function applyLevels(levels){
               try {
                 clearLevels();
-                
-                // Minimal diagnostics only in dev
-                if (false) { post({ debug: 'applyLevels called', levels: JSON.stringify(levels) }); }
-                
-                // Enhanced level handling with specific labels
                 var hasDetailedLevels = levels && (
                   levels.entry !== undefined || levels.lateEntry !== undefined ||
                   levels.exit !== undefined || levels.lateExit !== undefined ||
                   levels.stop !== undefined || (levels.targets && levels.targets.length > 0)
                 );
-                
-                if (false) { post({ debug: 'hasDetailedLevels', value: hasDetailedLevels }); }
-                
+
                 if (hasDetailedLevels) {
-                  // Use detailed level information with specific labels
-                  if (levels.entry !== undefined && levels.entry !== null) {
-                    addPriceLine(levels.entry, '#10B981', 'Entry', false, false);
-                  }
-                  if (levels.lateEntry !== undefined && levels.lateEntry !== null) {
-                    addPriceLine(levels.lateEntry, '#059669', 'Late Entry', false, false);
-                  }
-                  if (levels.exit !== undefined && levels.exit !== null) {
-                    addPriceLine(levels.exit, '#EF4444', 'Exit', false, false);
-                  }
-                  if (levels.lateExit !== undefined && levels.lateExit !== null) {
-                    addPriceLine(levels.lateExit, '#DC2626', 'Extended Stop', false, false);
-                  }
-                  if (levels.stop !== undefined && levels.stop !== null) {
-                    addPriceLine(levels.stop, '#EF4444', 'Stop', false, false);
-                  }
+                  if (levels.entry != null) addPriceLine(levels.entry, '#10B981', 'Entry', false, false);
+                  if (levels.lateEntry != null) addPriceLine(levels.lateEntry, '#059669', 'Late Entry', false, false);
+                  if (levels.exit != null) addPriceLine(levels.exit, '#EF4444', 'Exit', false, false);
+                  if (levels.lateExit != null) addPriceLine(levels.lateExit, '#DC2626', 'Extended Stop', false, false);
+                  if (levels.stop != null) addPriceLine(levels.stop, '#EF4444', 'Stop', false, false);
                   if (levels.targets && Array.isArray(levels.targets)) {
-                    levels.targets.forEach(function(target, i) {
-                      if (target !== undefined && target !== null) {
-                        addPriceLine(target, '#3B82F6', 'Target ' + (i + 1), false, false);
-                      }
-                    });
+                    levels.targets.forEach(function(target, i) { if (target != null) addPriceLine(target, '#3B82F6', 'Target ' + (i + 1), false, false); });
                   }
                 } else {
-                  // Fallback to legacy array-based levels
                   var entries = Array.isArray(levels && levels.entries) ? levels.entries : [];
                   var exits = Array.isArray(levels && levels.exits) ? levels.exits : [];
                   var tps = Array.isArray(levels && levels.takeProfits) ? levels.takeProfits : [];
-                  
-                  // Fallback to dummy placeholder levels around mock data anchor when nothing provided
-                  if (!entries.length && !exits.length && !tps.length) {
-                    var anchor = 11349.50;
-                    entries = [anchor];
-                    exits = [anchor - 10];
-                    tps = [anchor + 10, anchor + 20];
-                  }
-                  
-                  entries.forEach(function(p, i){ 
-                    var label = entries.length === 1 ? 'Entry' : 'Entry ' + (i + 1);
-                    addPriceLine(p, '#10B981', label, false, false); 
-                  });
-                  exits.forEach(function(p, i){ 
-                    var label = exits.length === 1 ? 'Exit' : 'Exit ' + (i + 1);
-                    addPriceLine(p, '#EF4444', label, false, false); 
-                  });
+                  entries.forEach(function(p, i){ addPriceLine(p, '#10B981', entries.length === 1 ? 'Entry' : 'Entry ' + (i + 1), false, false); });
+                  exits.forEach(function(p, i){ addPriceLine(p, '#EF4444', exits.length === 1 ? 'Exit' : 'Exit ' + (i + 1), false, false); });
                   tps.forEach(function(p, i){ addPriceLine(p, '#3B82F6', 'TP' + (i+1), false, false); });
                 }
               } catch(e){ post({ warn: 'applyLevels failed', message: String(e && e.message || e) }); }
@@ -923,22 +622,18 @@ export default function SimpleKLineChart({
             function clearAlerts(){
               try {
                 var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.alertOverlayIds) || [];
-                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') {
-                  ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} });
-                }
+                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') { ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} }); }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 window.__SIMPLE_KLINE__.alertOverlayIds = [];
-              } catch(_){}
+              } catch(_){ }
             }
 
             function applyAlerts(alerts){
               try {
                 clearAlerts();
                 if (!alerts || !Array.isArray(alerts) || !chart) return;
-                // Keep last set of alerts so selection changes can re-render overlays
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 window.__SIMPLE_KLINE__.lastAlerts = alerts.slice();
-                // Build a registry so we can detect taps near alert lines later
                 var registry = [];
                 var selectedId = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.selectedAlertId) || null;
                 alerts.forEach(function(alert, i) {
@@ -948,30 +643,25 @@ export default function SimpleKLineChart({
                     var aid = String(alert.id || ('alert_' + (i + 1)));
                     var isSel = selectedId != null && String(selectedId) === aid;
                     addPriceLine(alert.price, color, label, !!isSel, true);
-                    registry.push({ id: String(alert.id || ('alert_' + (i + 1))), price: Number(alert.price) });
+                    registry.push({ id: aid, price: Number(alert.price) });
                   }
                 });
-                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 window.__SIMPLE_KLINE__.alertsRegistry = registry;
               } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
             }
 
-            // Expose applyAlerts so RN can push new alerts in without full reload
             if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
             window.__SIMPLE_KLINE__.applyAlerts = applyAlerts;
-            // Preload Material Icons font so canvas text uses the correct glyphs
-            try { if (document.fonts && document.fonts.load) { document.fonts.load('16px \"Material Icons\"'); } } catch(_){ }
+            try { if (document.fonts && document.fonts.load) { document.fonts.load('16px "Material Icons"'); } } catch(_){ }
 
-            // Session background helpers
+            // Sessions
             function clearSessionBackgrounds(){
               try {
                 var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.sessionOverlayIds) || [];
-                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') {
-                  ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} });
-                }
+                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') { ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} }); }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 window.__SIMPLE_KLINE__.sessionOverlayIds = [];
-              } catch(_){}
+              } catch(_){ }
             }
             function applySessionBackgrounds(){
               try {
@@ -1007,17 +697,12 @@ export default function SimpleKLineChart({
                       var id = chart.createOverlay({
                         name: 'sessionBg',
                         lock: true,
-                        // Mark as a non-interactive decoration so it does not
-                        // capture touch events and block chart panning
                         mode: 'decoration',
-                        points: [
-                          { timestamp: s.start, value: 0 },
-                          { timestamp: s.end, value: 0 }
-                        ],
+                        points: [ { timestamp: s.start, value: 0 }, { timestamp: s.end, value: 0 } ],
                         extendData: { color: s.color }
                       });
                       ids.push(id);
-                    } catch(_){}
+                    } catch(_){ }
                   });
                 }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
@@ -1025,310 +710,140 @@ export default function SimpleKLineChart({
               } catch(e){ post({ warn: 'applySessionBackgrounds failed', message: String(e && e.message || e) }); }
             }
 
-            // Indicator creation helpers
+            // Indicators
             function clearAllIndicators(){
               try {
-                if (false) { post({ debug: 'Clearing all indicators' }); }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 var ids = window.__SIMPLE_KLINE__.indicatorIds || [];
                 if (ids && ids.length && typeof chart.removeIndicator === 'function') {
-                  ids.forEach(function(id){
-                    try { 
-                      chart.removeIndicator(id); 
-                      if (false) { post({ debug: 'Removed indicator by ID', id: id }); }
-                    } catch(_) {}
-                  });
+                  ids.forEach(function(id){ try { chart.removeIndicator(id); } catch(_) {} });
                 }
                 window.__SIMPLE_KLINE__.indicatorIds = [];
-                
-                // More aggressive fallback: try multiple removal methods
-                var commonNames = ['MA', 'EMA', 'SMA', 'BOLL', 'BBI', 'SAR', 'VOL', 'MACD', 'KDJ', 'RSI', 'BIAS', 'BRAR', 'CCI', 'CR', 'DMA', 'DMI', 'KD', 'PSY', 'TRIX', 'VR', 'WR', 'MTM', 'EMV', 'TEMA', 'TRIPLE_EMA', 'VWAP', 'ROC', 'PVT', 'AO'];
-                commonNames.forEach(function(name) {
-                  try { 
-                    chart.removeIndicator(name); 
-                    if (false) { post({ debug: 'Removed indicator by name', name: name }); }
-                  } catch(_) {}
-                });
-                
-                // Try getIndicators and remove everything
                 try {
                   if (typeof chart.getIndicators === 'function') {
                     var remaining = chart.getIndicators() || [];
-                    if (false) { post({ debug: 'Found remaining indicators', count: remaining.length }); }
                     remaining.forEach(function(ind){
                       try {
-                        if (ind && ind.id) {
-                          chart.removeIndicator(ind.id);
-                          if (false) { post({ debug: 'Removed remaining indicator by ID', id: ind.id }); }
-                        } else if (ind && ind.name) {
-                          chart.removeIndicator(ind.name);
-                          if (false) { post({ debug: 'Removed remaining indicator by name', name: ind.name }); }
-                        }
+                        if (ind && ind.id) chart.removeIndicator(ind.id);
+                        else if (ind && ind.name) chart.removeIndicator(ind.name);
                       } catch(_) {}
                     });
                   }
                 } catch(_) {}
-                
-                if (false) { post({ debug: 'Indicator clearing completed' }); }
-              } catch(e) {
-                post({ warn: 'clearAllIndicators failed', message: String(e && e.message || e) });
-              }
+              } catch(e) { post({ warn: 'clearAllIndicators failed', message: String(e && e.message || e) }); }
             }
 
             function createIndicatorSafe(cfg){
               try {
                 if (!cfg || !cfg.name) return;
                 var nm = String(cfg.name).toUpperCase();
-                if (false) { post({ debug: 'Attempting to create indicator', name: nm, config: cfg }); }
                 var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA'];
                 var wantsOverlay = !!cfg.overlay || overlayCompat.indexOf(nm) >= 0;
                 var options = {};
                 if (wantsOverlay) { options.id = 'candle_pane'; }
-                
-                // Process styles to handle line styles properly
                 if (cfg.styles && cfg.styles.lines) {
                   var processedStyles = { lines: [] };
-                  cfg.styles.lines.forEach(function(line, index) {
-                    var lineStyle = {
-                      color: line.color || '#3B82F6',
-                      size: line.size || 1,
-                      style: line.style || 'solid'
-                    };
-                    
-                    // Convert style to chart library format
-                    if (line.style === 'dashed') {
-                      lineStyle.style = 'dashed';
-                      lineStyle.dashedValue = [5, 3]; // dash pattern
-                    } else if (line.style === 'dotted') {
-                      lineStyle.style = 'dashed';
-                      lineStyle.dashedValue = [1, 2]; // dot pattern
-                    } else {
-                      lineStyle.style = 'solid';
-                    }
-                    
+                  cfg.styles.lines.forEach(function(line){
+                    var lineStyle = { color: line.color || '#3B82F6', size: line.size || 1, style: line.style || 'solid' };
+                    if (line.style === 'dashed') { lineStyle.style = 'dashed'; lineStyle.dashedValue = [5, 3]; }
+                    else if (line.style === 'dotted') { lineStyle.style = 'dashed'; lineStyle.dashedValue = [1, 2]; }
+                    else { lineStyle.style = 'solid'; }
                     processedStyles.lines.push(lineStyle);
                   });
                   options.styles = processedStyles;
-                } else if (cfg.styles) {
-                  options.styles = cfg.styles;
-                }
-                
+                } else if (cfg.styles) { options.styles = cfg.styles; }
                 if (cfg.calcParams) { options.calcParams = cfg.calcParams; }
 
                 var created = null;
-                try {
-                  if (typeof chart.createIndicator === 'function') {
-                    // Try signature: (name, isStack, options)
-                    created = chart.createIndicator(nm, false, options);
-                  }
-                } catch(e1) {
-                  try {
-                    // Try alternate signature: ({ name, id, styles, calcParams })
-                    created = chart.createIndicator(Object.assign({ name: nm }, options));
-                  } catch(e2) {
-                    post({ warn: 'createIndicator failed', name: nm, message: String((e2 && e2.message) || e2) });
-                  }
-                }
-                try {
-                  if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                  window.__SIMPLE_KLINE__.indicatorIds = window.__SIMPLE_KLINE__.indicatorIds || [];
-                  if (created) { 
-                    window.__SIMPLE_KLINE__.indicatorIds.push(created);
-                    if (false) { post({ debug: 'Successfully created indicator', name: nm, id: created }); }
-                  } else {
-                    post({ warn: 'Failed to create indicator', name: nm });
-                  }
-                } catch(_) {}
+                try { if (typeof chart.createIndicator === 'function') { created = chart.createIndicator(nm, false, options); } }
+                catch(e1) { try { created = chart.createIndicator(Object.assign({ name: nm }, options)); } catch(_) { post({ warn: 'createIndicator failed', name: nm }); } }
+
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.indicatorIds = window.__SIMPLE_KLINE__.indicatorIds || [];
+                if (created) { window.__SIMPLE_KLINE__.indicatorIds.push(created); } else { post({ warn: 'Failed to create indicator', name: nm }); }
                 return created;
-              } catch(err) {
-                post({ warn: 'createIndicatorSafe exception', message: String(err && err.message || err) });
-              }
+              } catch(err) { post({ warn: 'createIndicatorSafe exception', message: String(err && err.message || err) }); }
             }
 
             try {
-              // Clear all existing indicators first
               clearAllIndicators();
-              
-              // Then create the new set of indicators
-              if (Array.isArray(INDICATORS)) {
-                INDICATORS.forEach(function(ic){ createIndicatorSafe(ic); });
-              }
+              if (Array.isArray(INDICATORS)) { INDICATORS.forEach(function(ic){ createIndicatorSafe(ic); }); }
             } catch(_) {}
 
-            // Indicator override function
             function overrideIndicator(id, styles, calcParams) {
               try {
-                // Check if parameters are swapped (common issue)
-                if (typeof id === 'object' && id.styles && typeof styles === 'string') {
-                  post({ debug: 'Parameters appear to be swapped, correcting...' });
-                  // Extract the actual indicator name and styles from the nested object
-                  var actualId = id.name || styles; // Use the name from the object, or fallback to the string
-                  var actualStyles = id.styles || id; // Use the styles from the object, or use the whole object
-                  var actualCalcParams = id.calcParams || calcParams; // Extract calcParams from object or use parameter
-                  id = actualId;
-                  styles = actualStyles;
-                  calcParams = actualCalcParams;
-                  if (false) { post({ debug: 'Corrected parameters', id: id, styles: styles, calcParams: calcParams }); }
-                }
-                
-                if (!chart) {
-                  post({ error: 'Chart instance not available' });
-                  return false;
-                }
-                
-                // Handle different ID formats and extract the indicator name
+                if (!chart) { post({ error: 'Chart instance not available' }); return false; }
                 var indicatorName = typeof id === 'string' ? id : (id && id.name) || '';
-                
-                // Get all indicators to find the target
                 var allIndicators = [];
-                try {
-                  if (typeof chart.getIndicators === 'function') {
-                    allIndicators = chart.getIndicators() || [];
-                  }
-                } catch(e) {
-                  if (false) { post({ debug: 'Error getting indicators list', error: String(e) }); }
-                }
-                
-                var foundIndicator = allIndicators.find(function(ind) {
-                  return ind && ind.name === indicatorName;
-                });
-                
-                if (!foundIndicator) {
-                  post({ error: 'Indicator not found', name: indicatorName });
-                  return false;
-                }
-                
-                // Prepare the override object with both styles and calcParams
-                var overrideObject = {
-                  id: foundIndicator.id,
-                  styles: styles || {}
-                };
-                
-                // Add calcParams if provided
-                if (calcParams && Array.isArray(calcParams) && calcParams.length > 0) {
-                  overrideObject.calcParams = calcParams;
-                  if (false) { post({ debug: 'Adding calcParams to override', calcParams: calcParams }); }
-                }
-                
-                // Process styles to handle line styles properly
+                try { if (typeof chart.getIndicators === 'function') { allIndicators = chart.getIndicators() || []; } } catch(_) {}
+                var foundIndicator = allIndicators.find(function(ind) { return ind && ind.name === indicatorName; });
+                if (!foundIndicator) { post({ error: 'Indicator not found', name: indicatorName }); return false; }
+
+                var overrideObject = { id: foundIndicator.id, styles: styles || {} };
+                if (calcParams && Array.isArray(calcParams) && calcParams.length > 0) { overrideObject.calcParams = calcParams; }
                 if (styles && styles.lines && Array.isArray(styles.lines)) {
                   var processedStyles = { lines: [] };
-                  styles.lines.forEach(function(line, index) {
-                    var lineStyle = {
-                      color: line.color || '#3B82F6',
-                      size: line.size || 1,
-                      style: line.style || 'solid'
-                    };
-                    
-                    // Convert style to chart library format
-                    if (line.style === 'dashed') {
-                      lineStyle.style = 'dashed';
-                      lineStyle.dashedValue = line.dashedValue || [5, 3];
-                    } else if (line.style === 'dotted') {
-                      lineStyle.style = 'dashed';
-                      lineStyle.dashedValue = [1, 2];
-                    } else if (line.style === 'solid') {
-                      lineStyle.style = 'solid';
-                      delete lineStyle.dashedValue;
-                    }
-                    
+                  styles.lines.forEach(function(line){
+                    var lineStyle = { color: line.color || '#3B82F6', size: line.size || 1, style: line.style || 'solid' };
+                    if (line.style === 'dashed') { lineStyle.style = 'dashed'; lineStyle.dashedValue = line.dashedValue || [5, 3]; }
+                    else if (line.style === 'dotted') { lineStyle.style = 'dashed'; lineStyle.dashedValue = [1, 2]; }
+                    else if (line.style === 'solid') { lineStyle.style = 'solid'; }
                     processedStyles.lines.push(lineStyle);
                   });
                   overrideObject.styles = processedStyles;
-                  if (false) { post({ debug: 'Processed line styles', processedStyles: processedStyles }); }
                 }
-                
-                // Call overrideIndicator with the complete object
-                if (typeof chart.overrideIndicator === 'function') {
-                  if (false) { post({ debug: 'Calling overrideIndicator', overrideObject: overrideObject }); }
-                  chart.overrideIndicator(overrideObject, 'candle_pane', function() {
-                    if (false) { post({ debug: 'Override callback executed successfully' }); }
-                  });
-                } else {
-                  post({ error: 'overrideIndicator method not available on chart instance' });
-                  return false;
-                }
-                
+
+                if (typeof chart.overrideIndicator === 'function') { chart.overrideIndicator(overrideObject, 'candle_pane', function(){}); }
+                else { post({ error: 'overrideIndicator method not available on chart instance' }); return false; }
                 return true;
-              } catch(e) {
-                post({ error: 'overrideIndicator failed', message: String(e && e.message || e), stack: e.stack });
-                return false;
-              }
+              } catch(e) { post({ error: 'overrideIndicator failed', message: String(e && e.message || e), stack: e.stack }); return false; }
             }
 
             window.__SIMPLE_KLINE__ = {
               setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} },
               setLevels: function(lvls){ try { applyLevels(lvls); } catch(_){} },
-              setIndicators: function(list){
-                try {
-                  clearAllIndicators();
-                  if (Array.isArray(list)) {
-                    list.forEach(function(ic){ createIndicatorSafe(ic); });
-                  }
-                } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); }
-              },
+              setIndicators: function(list){ try { clearAllIndicators(); if (Array.isArray(list)) { list.forEach(function(ic){ createIndicatorSafe(ic); }); } } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); } },
               overrideIndicator: overrideIndicator,
               levelOverlayIds: [],
               sessionOverlayIds: []
             };
 
-            // Setup custom button event handlers
+            // Custom buttons
             (function(){
               try {
-                // Add click handlers for custom buttons
                 var alertBtn = document.getElementById('btn-alert');
                 var measureBtn = document.getElementById('btn-measure');
                 var crosshairBtn = document.getElementById('btn-crosshair');
-                
                 if (alertBtn) {
                   alertBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
+                    e.preventDefault(); e.stopPropagation();
                     try {
                       var price = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice;
                       if (typeof price === 'number') {
                         addPriceLine(price, '#F59E0B', 'Alert', false, true);
-                        // Call the onAlertClick callback if provided
                         if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-                          window.ReactNativeWebView.postMessage(JSON.stringify({
-                            type: 'alertClick',
-                            price: price
-                          }));
+                          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'alertClick', price: price }));
                         }
                       }
                     } catch(err) { post({ error: 'Alert button click failed', message: String(err) }); }
                   });
                 }
-                
                 if (measureBtn) {
                   measureBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
+                    e.preventDefault(); e.stopPropagation();
                     try {
-                      // Implement measure tool functionality
-                      if (false) { post({ debug: 'Measure tool clicked' }); }
                       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                          type: 'measureClick',
-                          price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice
-                        }));
+                        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'measureClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice }));
                       }
                     } catch(err) { post({ error: 'Measure button click failed', message: String(err) }); }
                   });
                 }
-                
                 if (crosshairBtn) {
                   crosshairBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
+                    e.preventDefault(); e.stopPropagation();
                     try {
-                      // Implement crosshair tool functionality
-                      if (false) { post({ debug: 'Crosshair tool clicked' }); }
                       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                          type: 'crosshairClick',
-                          price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice
-                        }));
+                        window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'crosshairClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice }));
                       }
                     } catch(err) { post({ error: 'Crosshair button click failed', message: String(err) }); }
                   });
@@ -1336,21 +851,26 @@ export default function SimpleKLineChart({
               } catch(e) { post({ warn: 'Custom button setup failed', message: String(e && e.message || e) }); }
             })();
 
-            // Crosshair events: capture price on move and handle feature clicks (alert button)
+            // Crosshair + interactions
             (function(){
               try {
                 var ActionType = (window.klinecharts && (window.klinecharts.ActionType || window.klinecharts.ProActionType)) || {};
-                
-                // Button visibility state management
                 var buttonsVisible = false;
                 var hideButtonsTimeout = null;
-                
-                // Touch duration tracking
-                var touchStartTime = null;
-                var isLongPressActive = false;
-                var buttonsShownByLongPress = false; // Track if buttons were shown by long press
-                var lastLongPressTime = null; // Track when last long press occurred
-                
+                var buttonsShownByLongPress = false;
+                var lastLongPressTime = null;
+                var longPressTimer = null;
+                var longPressStartPos = null;
+                var longPressFired = false;
+                var LONG_PRESS_MS = 700;
+                var LONG_PRESS_MOVE_TOLERANCE = 15;
+                var movedBeyondTolerance = false;
+
+                function updateCursorVisibility() {
+                  if (chart && typeof chart.setStyles === 'function') {
+                    chart.setStyles({ crosshair: { show: buttonsVisible, horizontal: { show: buttonsVisible }, vertical: { show: buttonsVisible } } });
+                  }
+                }
                 function showButtons(y, isFromLongPress) {
                   try {
                     var buttonsContainer = document.getElementById('crosshair-buttons');
@@ -1358,50 +878,32 @@ export default function SimpleKLineChart({
                       buttonsContainer.style.display = 'flex';
                       buttonsContainer.style.top = (y - 18) + 'px';
                       buttonsVisible = true;
-                      if (isFromLongPress) {
-                        buttonsShownByLongPress = true;
-                      }
-                      // Clear any pending hide timeout
-                      if (hideButtonsTimeout) {
-                        clearTimeout(hideButtonsTimeout);
-                        hideButtonsTimeout = null;
-                      }
-                      if (false) { post({ debug: 'Buttons shown at Y', y: y, fromLongPress: !!isFromLongPress }); }
+                      if (isFromLongPress) buttonsShownByLongPress = true;
+                      updateCursorVisibility();
+                      if (hideButtonsTimeout) { clearTimeout(hideButtonsTimeout); hideButtonsTimeout = null; }
                     }
                   } catch(_) {}
                 }
-                
                 function hideButtons() {
                   try {
                     var buttonsContainer = document.getElementById('crosshair-buttons');
                     if (buttonsContainer) {
                       buttonsContainer.style.display = 'none';
                       buttonsVisible = false;
-                      buttonsShownByLongPress = false; // Reset long press flag
-                      if (false) { post({ debug: 'Buttons hidden' }); }
+                      buttonsShownByLongPress = false;
+                      updateCursorVisibility();
                     }
                   } catch(_) {}
                 }
-                
                 function hideButtonsDelayed(delay) {
-                  delay = delay || 150; // Default 150ms delay
-                  if (hideButtonsTimeout) {
-                    clearTimeout(hideButtonsTimeout);
-                  }
-                  hideButtonsTimeout = setTimeout(function() {
-                    hideButtons();
-                    hideButtonsTimeout = null;
-                  }, delay);
+                  delay = delay || 150;
+                  if (hideButtonsTimeout) { clearTimeout(hideButtonsTimeout); }
+                  hideButtonsTimeout = setTimeout(function() { hideButtons(); hideButtonsTimeout = null; }, delay);
                 }
 
                 function subscribeActionSafe(name, cb){
-                  try {
-                    if (typeof chart.subscribeAction === 'function') {
-                      chart.subscribeAction(name, cb);
-                      if (false) { post({ debug: 'Subscribed action', name: name }); }
-                      return true;
-                    }
-                  } catch(e) { post({ warn: 'subscribeAction failed', name: name, message: String(e && e.message || e) }); }
+                  try { if (typeof chart.subscribeAction === 'function') { chart.subscribeAction(name, cb); return true; } }
+                  catch(e) { post({ warn: 'subscribeAction failed', name: name, message: String(e && e.message || e) }); }
                   return false;
                 }
 
@@ -1411,50 +913,11 @@ export default function SimpleKLineChart({
                     if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                     window.__SIMPLE_KLINE__.lastCrosshair = param;
                     var ptr = window.__SIMPLE_KLINE__.lastPointerPrice;
-                    if (typeof ptr === 'number') {
-                      window.__SIMPLE_KLINE__.lastCrosshairPrice = ptr;
-                    }
-                    
-                    // Debug logging to understand crosshair parameter structure
-                    if (false) { post({ debug: 'Crosshair change event', param: param }); }
-                    
-                    // Update custom button positions - only show when crosshair is actually visible
-                    var isVisible = false;
-                    
-                    if (param) {
-                      // Different chart libraries may use different parameter structures
-                      if (typeof param.y === 'number') {
-                        // Basic check - if we have Y coordinate, crosshair might be visible
-                        isVisible = true;
-                      }
-                      
-                      // Check for explicit visibility flags
-                      if (param.visible === false || param.show === false || param.display === false) {
-                        isVisible = false;
-                      }
-                      
-                      // If param is null/undefined, crosshair is hidden
-                      if (!param) {
-                        isVisible = false;
-                      }
-                    }
-                    
-                    if (false) { post({ debug: 'Button visibility decision', isVisible: isVisible, paramY: param ? param.y : 'no param' }); }
-                    
-                    if (isVisible && typeof param.y === 'number') {
-                      showButtons(param.y);
-                    } else {
-                      // Only hide buttons if they weren't shown by long press
-                      if (!buttonsShownByLongPress) {
-                        hideButtons();
-                      }
-                    }
+                    if (typeof ptr === 'number') { window.__SIMPLE_KLINE__.lastCrosshairPrice = ptr; }
+                    if (buttonsShownByLongPress && param && typeof param.y === 'number') { showButtons(param.y, false); }
                   } catch(_) {}
                 });
 
-                // Feature click handler removed - using custom buttons instead
-
-                // Track last pointer position over the chart and derive price via convertFromPixel
                 try {
                   var container = document.getElementById('k-line-chart');
                   if (container) {
@@ -1469,177 +932,147 @@ export default function SimpleKLineChart({
                         if (chart && typeof chart.convertFromPixel === 'function') {
                           var converted = chart.convertFromPixel({ x: x, y: y });
                           var val = (converted && (typeof converted.value === 'number' ? converted.value : converted.price));
-                          if (typeof val === 'number') {
-                            window.__SIMPLE_KLINE__.lastPointerPrice = val;
+                          if (typeof val === 'number') { window.__SIMPLE_KLINE__.lastPointerPrice = val; }
+                        }
+                        if (longPressStartPos) {
+                          var dx = Math.abs(x - longPressStartPos.x);
+                          var dy = Math.abs(y - longPressStartPos.y);
+                          if (dx > LONG_PRESS_MOVE_TOLERANCE || dy > LONG_PRESS_MOVE_TOLERANCE) {
+                            try { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } } catch(_) {}
+                            movedBeyondTolerance = true;
                           }
                         }
+                        if (buttonsShownByLongPress && typeof y === 'number') { showButtons(y); }
                       } catch(_) { }
                     };
-                    container.addEventListener('pointermove', updatePointer, { passive: true });
-                    
-                    // Track touch/pointer start for duration calculation
+
+                    var touchStartTime = null;
                     var handlePointerStart = function(e) {
                       try {
                         touchStartTime = Date.now();
-                        isLongPressActive = false;
-                        if (false) { post({ debug: 'Touch/pointer started', time: touchStartTime }); }
-                        updatePointer(e); // Also update pointer position
+                        updatePointer(e);
+                        if (buttonsShownByLongPress) { hideButtons(); }
+                        try { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } } catch(_) {}
+                        longPressFired = false;
+                        longPressStartPos = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastPointer) ? { x: window.__SIMPLE_KLINE__.lastPointer.x, y: window.__SIMPLE_KLINE__.lastPointer.y } : null;
+                        movedBeyondTolerance = false;
+                        longPressTimer = setTimeout(function(){
+                          try {
+                            if (touchStartTime !== null) {
+                              var targetY = null;
+                              var lastCrosshair = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshair;
+                              if (lastCrosshair && typeof lastCrosshair.y === 'number') targetY = lastCrosshair.y;
+                              else if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastPointer) targetY = window.__SIMPLE_KLINE__.lastPointer.y;
+                              if (!movedBeyondTolerance && typeof targetY === 'number') { showButtons(targetY, true); longPressFired = true; lastLongPressTime = Date.now(); }
+                            }
+                          } catch(_) {}
+                        }, LONG_PRESS_MS);
                       } catch(_) {}
                     };
-                    
+
+                    container.addEventListener('pointermove', updatePointer, { passive: true });
                     container.addEventListener('pointerdown', handlePointerStart, { passive: true });
                     container.addEventListener('touchstart', handlePointerStart, { passive: true });
                     container.addEventListener('touchmove', updatePointer, { passive: true });
-                    
-                    // Additional event listeners to detect when crosshair should be hidden
+
                     container.addEventListener('pointerleave', function() {
-                      if (false) { post({ debug: 'Pointer left chart area' }); }
-                      // Only hide buttons if they weren't shown by long press
-                      if (!buttonsShownByLongPress) {
-                        hideButtonsDelayed(50);
-                      }
-                      // Reset tracking when leaving chart area
+                      if (!buttonsShownByLongPress) { hideButtonsDelayed(50); }
                       touchStartTime = null;
-                      isLongPressActive = false;
+                      movedBeyondTolerance = false;
+                      try { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } } catch(_) {}
                     }, { passive: true });
-                    
-                    // Handle touch/pointer end with duration calculation
+
                     var handlePointerEnd = function(e) {
                       try {
                         var touchEndTime = Date.now();
                         var touchDuration = touchStartTime ? (touchEndTime - touchStartTime) : 0;
-                        
-                        if (false) { post({ debug: 'Touch/pointer ended', duration: touchDuration, wasLongPress: touchDuration >= 2000, buttonsShownByLongPress: buttonsShownByLongPress }); }
-                        
-                        if (touchDuration >= 1000) {
-                          // Long press (1+ seconds) - show buttons at last known crosshair position
-                          lastLongPressTime = touchEndTime; // Record when long press occurred
+                        if (touchDuration >= LONG_PRESS_MS && (longPressFired || !movedBeyondTolerance)) {
+                          lastLongPressTime = touchEndTime;
                           var lastCrosshair = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshair;
-                          if (lastCrosshair && typeof lastCrosshair.y === 'number') {
-                            showButtons(lastCrosshair.y, true); // Mark as from long press
-                            if (false) { post({ debug: 'Showing buttons after long press', y: lastCrosshair.y }); }
-                          } else if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastPointer) {
-                            // Fallback to last pointer position if crosshair data not available
-                            var lastY = window.__SIMPLE_KLINE__.lastPointer.y;
-                            if (typeof lastY === 'number') {
-                              showButtons(lastY, true); // Mark as from long press
-                              if (false) { post({ debug: 'Showing buttons after long press (fallback)', y: lastY }); }
-                            }
+                          if (lastCrosshair && typeof lastCrosshair.y === 'number') { showButtons(lastCrosshair.y, true); }
+                          else if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastPointer) {
+                            var lastY = window.__SIMPLE_KLINE__.lastPointer.y; if (typeof lastY === 'number') { showButtons(lastY, true); }
                           }
-                          // Don't process as short press - this was a long press
                         } else if (touchStartTime !== null) {
-                          // Check if this is too soon after a long press (cooldown period)
                           var timeSinceLastLongPress = lastLongPressTime ? (touchEndTime - lastLongPressTime) : Infinity;
-                          var cooldownPeriod = 500; // 500ms cooldown after long press
-                          
+                          var cooldownPeriod = 500;
                           if (timeSinceLastLongPress < cooldownPeriod) {
-                            if (false) { post({ debug: 'Short press ignored - too soon after long press', timeSince: timeSinceLastLongPress }); }
-                            // Ignore this short press as it's too soon after a long press
+                            // ignore
                           } else {
-                            // Process as genuine short press
-                            if (buttonsShownByLongPress) {
-                              if (false) { post({ debug: 'Short press detected - hiding buttons that were shown by long press' }); }
-                              hideButtons();
-                            } else {
-                              // If buttons weren't shown by long press, hide them with delay (normal crosshair behavior)
-                              hideButtonsDelayed(100);
-                            }
+                            if (buttonsShownByLongPress) { hideButtons(); }
+                            else { hideButtonsDelayed(100); }
                           }
                         }
-                        
-                        // Reset tracking variables
                         touchStartTime = null;
-                        isLongPressActive = false;
+                        movedBeyondTolerance = false;
+                        try { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } } catch(_) {}
                       } catch(_) {}
                     };
-                    
+
                     container.addEventListener('pointerup', handlePointerEnd, { passive: true });
                     container.addEventListener('touchend', handlePointerEnd, { passive: true });
-                    
+
                     container.addEventListener('touchcancel', function() {
-                      if (false) { post({ debug: 'Touch cancelled on chart' }); }
                       hideButtons();
-                      // Reset tracking variables on cancel
                       touchStartTime = null;
-                      isLongPressActive = false;
+                      movedBeyondTolerance = false;
+                      try { if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; } } catch(_) {}
                     }, { passive: true });
-                    
-                    // Global pointer events to catch when user moves outside the entire chart area
+
                     document.addEventListener('pointermove', function(e) {
                       try {
                         if (!buttonsVisible || !container) return;
                         var rect = container.getBoundingClientRect();
-                        var x = e.clientX;
-                        var y = e.clientY;
-                        
-                        // Check if pointer is outside the chart bounds
+                        var x = e.clientX; var y = e.clientY;
                         if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-                          if (false) { post({ debug: 'Pointer moved outside chart bounds' }); }
-                          // Only hide buttons if they weren't shown by long press
-                          if (!buttonsShownByLongPress) {
-                            hideButtonsDelayed(50);
-                          }
-                          // Reset tracking when moving outside chart bounds
-                          touchStartTime = null;
-                          isLongPressActive = false;
+                          if (!buttonsShownByLongPress) { hideButtonsDelayed(50); }
                         }
                       } catch(_) {}
                     }, { passive: true });
 
-                    // Helper to get pixel Y for a price
                     if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                     window.__SIMPLE_KLINE__.getYForPrice = function(price){
-                      try {
-                        if (chart && typeof chart.convertToPixel === 'function') {
-                          var px = chart.convertToPixel({ value: Number(price) });
-                          if (px && typeof px.y === 'number') return px.y;
-                        }
-                      } catch(_) {}
+                      try { if (chart && typeof chart.convertToPixel === 'function') { var px = chart.convertToPixel({ value: Number(price) }); if (px && typeof px.y === 'number') return px.y; } } catch(_) {}
                       return null;
                     };
 
-                    // Drag state
                     window.__SIMPLE_KLINE__.draggingAlert = null;
                     window.__SIMPLE_KLINE__.dragPreviewId = null;
 
-                    // Start drag or select near alert line
                     var handlePointerDown = function(e){
                       try {
                         var rect = container.getBoundingClientRect();
                         var x = (e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] && e.touches[0].clientX)) - rect.left;
                         var y = (e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] && e.touches[0].clientY)) - rect.top;
                         var reg = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.alertsRegistry) || [];
-                        // Check for alert line hits
-                        if (!reg || !reg.length) return;
                         var best = null;
-                        for (var i = 0; i < reg.length; i++) {
-                          var r = reg[i];
-                          var ay = window.__SIMPLE_KLINE__.getYForPrice ? window.__SIMPLE_KLINE__.getYForPrice(r.price) : null;
-                          if (ay == null) continue;
-                          var dy = Math.abs(y - ay);
-                          if (best == null || dy < best.dy) best = { id: r.id, price: r.price, y: ay, dy: dy };
+                        if (reg && reg.length) {
+                          for (var i = 0; i < reg.length; i++) {
+                            var r = reg[i];
+                            var ay = window.__SIMPLE_KLINE__.getYForPrice ? window.__SIMPLE_KLINE__.getYForPrice(r.price) : null;
+                            if (ay == null) continue;
+                            var dy = Math.abs(y - ay);
+                            if (best == null || dy < best.dy) best = { id: r.id, price: r.price, y: ay, dy: dy };
+                          }
                         }
                         if (best && best.dy <= 12) {
-                          // Mark selection
                           if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                           window.__SIMPLE_KLINE__.selectedAlertId = best.id;
-                          try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){}
+                          try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){ }
                           post({ type: 'alertSelected', id: best.id, price: best.price, y: best.y });
-                          // Begin drag
                           window.__SIMPLE_KLINE__.draggingAlert = { id: best.id, startY: y, price: best.price };
                           window.__SIMPLE_KLINE__.draggingCurrentPrice = best.price;
                         } else {
-                          // Tap outside: clear selection and hide label
                           if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                           window.__SIMPLE_KLINE__.selectedAlertId = null;
-                          try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){}
+                          try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){ }
+                          if (buttonsShownByLongPress) { hideButtons(); }
                         }
                       } catch(_) {}
                     };
                     container.addEventListener('pointerdown', handlePointerDown, { passive: true });
                     container.addEventListener('touchstart', handlePointerDown, { passive: true });
 
-                    // Move drag
                     var handlePointerMove = function(e){
                       try {
                         var drag = window.__SIMPLE_KLINE__.draggingAlert;
@@ -1651,16 +1084,10 @@ export default function SimpleKLineChart({
                           var val = (converted && (typeof converted.value === 'number' ? converted.value : converted.price));
                           if (typeof val === 'number' && isFinite(val)) {
                             window.__SIMPLE_KLINE__.draggingCurrentPrice = val;
-                            // Update preview overlay
                             var prevId = window.__SIMPLE_KLINE__.dragPreviewId;
                             try { if (prevId && typeof chart.removeOverlay === 'function') chart.removeOverlay(prevId); } catch(_){ }
                             try {
-                              var pid = chart.createOverlay({
-                                name: 'horizontalStraightLine',
-                                lock: true,
-                                points: [{ value: Number(val) }],
-                                styles: { line: { color: '#F59E0B', size: 1, style: 'dashed', dashedValue: [6, 4] } }
-                              });
+                              var pid = chart.createOverlay({ name: 'horizontalStraightLine', lock: true, points: [{ value: Number(val) }], styles: { line: { color: '#F59E0B', size: 1, style: 'dashed', dashedValue: [6, 4] } } });
                               window.__SIMPLE_KLINE__.dragPreviewId = pid;
                             } catch(_){ }
                           }
@@ -1670,36 +1097,28 @@ export default function SimpleKLineChart({
                     container.addEventListener('pointermove', handlePointerMove, { passive: true });
                     container.addEventListener('touchmove', handlePointerMove, { passive: true });
 
-                    // End drag and emit
                     var handlePointerUp = function(e){
                       try {
                         var drag = window.__SIMPLE_KLINE__.draggingAlert;
                         if (!drag) return;
-                        // Clean preview
                         try { if (window.__SIMPLE_KLINE__.dragPreviewId && typeof chart.removeOverlay === 'function') chart.removeOverlay(window.__SIMPLE_KLINE__.dragPreviewId); } catch(_){ }
                         var finalPrice = window.__SIMPLE_KLINE__.draggingCurrentPrice;
                         window.__SIMPLE_KLINE__.draggingAlert = null;
                         window.__SIMPLE_KLINE__.dragPreviewId = null;
-                        if (typeof finalPrice === 'number') {
-                          post({ type: 'alertDragEnd', id: drag.id, price: Number(finalPrice) });
-                        }
+                        if (typeof finalPrice === 'number') { post({ type: 'alertDragEnd', id: drag.id, price: Number(finalPrice) }); }
                       } catch(_) {}
                     };
                     container.addEventListener('pointerup', handlePointerUp, { passive: true });
                     container.addEventListener('touchend', handlePointerUp, { passive: true });
                   }
                 } catch(_) {}
-                
               } catch(e) { post({ warn: 'crosshair_events_setup_failed', message: String(e && e.message || e) }); }
             })();
 
             post({ ready: true, symbol: SYMBOL });
-
-              // Apply initial levels if provided
-              try { applyLevels(LEVELS); } catch(_){}
-              // Initial alerts will be applied via postMessage after ready
-              try { applySessionBackgrounds(); } catch(_){}
-              return true;
+            try { applyLevels(LEVELS); } catch(_){ }
+            try { applySessionBackgrounds(); } catch(_){ }
+            return true;
           } catch (err) { post({ error: String(err && err.message || err) }); return false; }
         }
 
@@ -1718,7 +1137,6 @@ export default function SimpleKLineChart({
     showPriceAxisText,
     showTimeAxisText,
     levels,
-    // alerts removed from deps to prevent WebView reload
     customBars,
     customData,
     indicatorsKey,
@@ -1743,7 +1161,6 @@ export default function SimpleKLineChart({
             const data = JSON.parse(event.nativeEvent.data || "{}");
             if (data && data.ready) {
               isReadyRef.current = true;
-              // Push initial alerts after ready
               try {
                 if (webRef.current) {
                   const msg = JSON.stringify({ type: "setAlerts", alerts });
@@ -1774,13 +1191,11 @@ export default function SimpleKLineChart({
                 onAlertMoved({ id: data.id, price: data.price });
               }
             } else if (data.type === "measureClick" && onMeasureClick) {
-              if (data && typeof data.price === "number") {
+              if (data && typeof data.price === "number")
                 onMeasureClick(data.price);
-              }
             } else if (data.type === "crosshairClick" && onCrosshairClick) {
-              if (data && typeof data.price === "number") {
+              if (data && typeof data.price === "number")
                 onCrosshairClick(data.price);
-              }
             } else if (data.error) {
               console.warn("[SimpleKLineChart:error]", data);
             } else if (data.warn) {
