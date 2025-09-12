@@ -18,7 +18,6 @@ interface Props {
   showPriceAxisText?: boolean;
   showTimeAxisText?: boolean;
   showLastPriceLabel?: boolean;
-  flushRightEdge?: boolean;
   showSessions?: boolean;
   levels?: {
     entries?: number[];
@@ -125,37 +124,14 @@ export default function SimpleKLineChart({
           styles,
           calcParams,
         });
-        // console.log("📤 Sending message to WebView:", message);
-
-        // Try both methods
         webRef.current.postMessage(message);
-
-        // Also try injecting JavaScript directly with correct API signature
-        const indicatorName = typeof id === "string" ? id : id.name;
-        const jsCode = `
-          if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.overrideIndicator) {
-            console.log('Direct injection: calling overrideIndicator for ${indicatorName}');
-            var overrideObj = {
-              name: '${indicatorName}',
-              styles: ${JSON.stringify(styles)},
-              calcParams: ${JSON.stringify(calcParams || null)}
-            };
-            console.log('Direct injection: override object', overrideObj);
-            window.__SIMPLE_KLINE__.overrideIndicator(overrideObj, 'candle_pane', function() {
-              console.log('Direct injection: override callback executed');
-            });
-          } else {
-            console.log('Direct injection: overrideIndicator not available');
-          }
-        `;
-        webRef.current.injectJavaScript(jsCode);
       } else {
-        console.log(
-          "❌ Cannot send message - isReady:",
-          isReadyRef.current,
-          "webRef:",
-          !!webRef.current
-        );
+        if (typeof __DEV__ !== "undefined" && __DEV__) {
+          console.log(
+            "[SimpleKLineChart] WebView not ready for overrideIndicator",
+            { isReady: isReadyRef.current, hasRef: !!webRef.current }
+          );
+        }
       }
     },
     []
@@ -329,17 +305,8 @@ export default function SimpleKLineChart({
                   } catch(_){ }
                 }
               } catch(e) { post({ warn: 'setAlerts handler failed', message: String(e && e.message || e) }); }
-            } else if (data.type === 'getYForPrice') {
-              try {
-                var price = Number(data.price);
-                var y = null;
-                if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.getYForPrice) {
-                  y = window.__SIMPLE_KLINE__.getYForPrice(price);
-                }
-                post({ type: 'pricePosition', price: price, y: y });
-              } catch(e) { post({ warn: 'getYForPrice failed', message: String(e && e.message || e) }); }
             } else {
-              post({ debug: 'Unknown message type', type: data.type });
+              if (false) { post({ debug: 'Unknown message type', type: data.type }); }
             }
           } catch(e) {
             post({ error: 'message_handler_failed', message: String(e && e.message || e), rawData: event.data });
@@ -629,7 +596,7 @@ export default function SimpleKLineChart({
                 }
               });
               window.__LABELED_LINE_REGISTERED__ = true;
-              post({ debug: 'Custom labeled line overlay registered' });
+              if (false) { post({ debug: 'Custom labeled line overlay registered' }); }
             }
 
             // Register session background overlay
@@ -661,13 +628,11 @@ export default function SimpleKLineChart({
                 }
               });
               window.__SESSION_BG_REGISTERED__ = true;
-              post({ debug: 'Session background overlay registered' });
+              if (false) { post({ debug: 'Session background overlay registered' }); }
             }
             
             var chart = window.klinecharts.init('k-line-chart');
-            try {
-              post({ debug: 'Chart init', symbol: SYMBOL, timeframe: TF, hasCustomBars: (CUSTOM_BARS||[]).length, hasCustomData: (CUSTOM_DATA||[]).length });
-            } catch(_){ }
+            try { if (false) { post({ debug: 'Chart init', symbol: SYMBOL, timeframe: TF, hasCustomBars: (CUSTOM_BARS||[]).length, hasCustomData: (CUSTOM_DATA||[]).length }); } } catch(_){ }
             // Default toggles
             if (SHOW_MA) { try { chart.createIndicator && chart.createIndicator('MA', false, { id: 'candle_pane' }); } catch(_){} }
             if (SHOW_VOL) { try { chart.createIndicator && chart.createIndicator('VOL'); } catch(_){} }
@@ -687,13 +652,13 @@ export default function SimpleKLineChart({
               try {
                 var bars = (Array.isArray(CUSTOM_BARS) && CUSTOM_BARS.length > 0) ? CUSTOM_BARS : CUSTOM_DATA;
                 try { bars = bars.slice().sort(function(a,b){ return (a.timestamp||0) - (b.timestamp||0); }); } catch(_){ }
-                post({ debug: 'Applying custom bars', count: (bars||[]).length, first: bars && bars[0], last: bars && bars[bars.length-1] });
+                if (false) { post({ debug: 'Applying custom bars', count: (bars||[]).length, first: bars && bars[0], last: bars && bars[bars.length-1] }); }
                 var applied = false;
                 try {
                   if (chart && typeof chart.setData === 'function') {
                     chart.setData(bars);
                     applied = true;
-                    post({ debug: 'setData used' });
+                    if (false) { post({ debug: 'setData used' }); }
                   }
                 } catch (e1) { post({ warn: 'setData failed', message: String(e1 && e1.message || e1) }); }
                 if (!applied) {
@@ -701,7 +666,7 @@ export default function SimpleKLineChart({
                     if (chart && typeof chart.applyNewData === 'function') {
                       chart.applyNewData(bars);
                       applied = true;
-                      post({ debug: 'applyNewData used' });
+                      if (false) { post({ debug: 'applyNewData used' }); }
                     }
                   } catch (e2) { post({ warn: 'applyNewData failed', message: String(e2 && e2.message || e2) }); }
                 }
@@ -710,7 +675,7 @@ export default function SimpleKLineChart({
                     if (chart && typeof chart.applyData === 'function') {
                       chart.applyData(bars);
                       applied = true;
-                      post({ debug: 'applyData used' });
+                      if (false) { post({ debug: 'applyData used' }); }
                     }
                   } catch (e3) { post({ warn: 'applyData failed', message: String(e3 && e3.message || e3) }); }
                 }
@@ -726,7 +691,7 @@ export default function SimpleKLineChart({
                           } catch (e4) { post({ error: 'custom_loader_callback_failed', message: String(e4 && e4.message || e4) }); }
                         }
                       });
-                      post({ debug: 'setDataLoader(custom) used' });
+                      if (false) { post({ debug: 'setDataLoader(custom) used' }); }
                       applied = true;
                     }
                   } catch (e5) { post({ error: 'setDataLoader_custom_failed', message: String(e5 && e5.message || e5) }); }
@@ -838,7 +803,7 @@ export default function SimpleKLineChart({
                       // Alert overlay created successfully
                     }
                   } catch(customError) {
-                    post({ debug: 'Custom overlay failed', error: String(customError) });
+                    post({ warn: 'Custom overlay failed', error: String(customError) });
                   }
                 } else {
                   // For levels or non-draggable lines, use standard overlay
@@ -888,45 +853,12 @@ export default function SimpleKLineChart({
                 post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); 
               }
             }
-            function addAlertLine(price, color, label){
-              try {
-                if (!price || isNaN(price)) return;
-                var idCounter = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.overlayIdCounter) || 1;
-                var customId = 'alert_line_' + (idCounter++);
-                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                window.__SIMPLE_KLINE__.overlayIdCounter = idCounter;
-                var lineId = undefined;
-                if (chart && typeof chart.createOverlay === 'function') {
-                  try {
-                    var overlayCfg = {
-                      name: 'priceLine',
-                      id: customId,
-                      lock: false,
-                      extendData: { price: price, label: label },
-                      styles: {
-                        line: { color: color || '#F59E0B', size: 1, style: 'dashed' },
-                        text: { color: color || '#F59E0B', size: 10, backgroundColor: 'rgba(0,0,0,0.4)' }
-                      }
-                    };
-                    lineId = chart.createOverlay(overlayCfg);
-                    post({ debug: 'Alert line created', id: lineId || customId, price: price, label: label });
-                  } catch(e) { post({ warn: 'createOverlay failed for alert', message: String(e && e.message || e) }); }
-                }
-                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                var ids = [lineId, customId].filter(function(id) { return id !== undefined; });
-                if (isAlert) {
-                  window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids);
-                } else {
-                  window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids);
-                }
-              } catch(e){ post({ error: 'addPriceLine failed', message: String(e && e.message || e) }); }
-            }
             function applyLevels(levels){
               try {
                 clearLevels();
                 
-                // Debug logging
-                post({ debug: 'applyLevels called', levels: JSON.stringify(levels) });
+                // Minimal diagnostics only in dev
+                if (false) { post({ debug: 'applyLevels called', levels: JSON.stringify(levels) }); }
                 
                 // Enhanced level handling with specific labels
                 var hasDetailedLevels = levels && (
@@ -935,7 +867,7 @@ export default function SimpleKLineChart({
                   levels.stop !== undefined || (levels.targets && levels.targets.length > 0)
                 );
                 
-                post({ debug: 'hasDetailedLevels', value: hasDetailedLevels });
+                if (false) { post({ debug: 'hasDetailedLevels', value: hasDetailedLevels }); }
                 
                 if (hasDetailedLevels) {
                   // Use detailed level information with specific labels
@@ -1096,14 +1028,14 @@ export default function SimpleKLineChart({
             // Indicator creation helpers
             function clearAllIndicators(){
               try {
-                post({ debug: 'Clearing all indicators' });
+                if (false) { post({ debug: 'Clearing all indicators' }); }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 var ids = window.__SIMPLE_KLINE__.indicatorIds || [];
                 if (ids && ids.length && typeof chart.removeIndicator === 'function') {
                   ids.forEach(function(id){
                     try { 
                       chart.removeIndicator(id); 
-                      post({ debug: 'Removed indicator by ID', id: id });
+                      if (false) { post({ debug: 'Removed indicator by ID', id: id }); }
                     } catch(_) {}
                   });
                 }
@@ -1114,7 +1046,7 @@ export default function SimpleKLineChart({
                 commonNames.forEach(function(name) {
                   try { 
                     chart.removeIndicator(name); 
-                    post({ debug: 'Removed indicator by name', name: name });
+                    if (false) { post({ debug: 'Removed indicator by name', name: name }); }
                   } catch(_) {}
                 });
                 
@@ -1122,22 +1054,22 @@ export default function SimpleKLineChart({
                 try {
                   if (typeof chart.getIndicators === 'function') {
                     var remaining = chart.getIndicators() || [];
-                    post({ debug: 'Found remaining indicators', count: remaining.length });
+                    if (false) { post({ debug: 'Found remaining indicators', count: remaining.length }); }
                     remaining.forEach(function(ind){
                       try {
                         if (ind && ind.id) {
                           chart.removeIndicator(ind.id);
-                          post({ debug: 'Removed remaining indicator by ID', id: ind.id });
+                          if (false) { post({ debug: 'Removed remaining indicator by ID', id: ind.id }); }
                         } else if (ind && ind.name) {
                           chart.removeIndicator(ind.name);
-                          post({ debug: 'Removed remaining indicator by name', name: ind.name });
+                          if (false) { post({ debug: 'Removed remaining indicator by name', name: ind.name }); }
                         }
                       } catch(_) {}
                     });
                   }
                 } catch(_) {}
                 
-                post({ debug: 'Indicator clearing completed' });
+                if (false) { post({ debug: 'Indicator clearing completed' }); }
               } catch(e) {
                 post({ warn: 'clearAllIndicators failed', message: String(e && e.message || e) });
               }
@@ -1147,7 +1079,7 @@ export default function SimpleKLineChart({
               try {
                 if (!cfg || !cfg.name) return;
                 var nm = String(cfg.name).toUpperCase();
-                post({ debug: 'Attempting to create indicator', name: nm, config: cfg });
+                if (false) { post({ debug: 'Attempting to create indicator', name: nm, config: cfg }); }
                 var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA'];
                 var wantsOverlay = !!cfg.overlay || overlayCompat.indexOf(nm) >= 0;
                 var options = {};
@@ -1202,7 +1134,7 @@ export default function SimpleKLineChart({
                   window.__SIMPLE_KLINE__.indicatorIds = window.__SIMPLE_KLINE__.indicatorIds || [];
                   if (created) { 
                     window.__SIMPLE_KLINE__.indicatorIds.push(created);
-                    post({ debug: 'Successfully created indicator', name: nm, id: created });
+                    if (false) { post({ debug: 'Successfully created indicator', name: nm, id: created }); }
                   } else {
                     post({ warn: 'Failed to create indicator', name: nm });
                   }
@@ -1236,7 +1168,7 @@ export default function SimpleKLineChart({
                   id = actualId;
                   styles = actualStyles;
                   calcParams = actualCalcParams;
-                  post({ debug: 'Corrected parameters', id: id, styles: styles, calcParams: calcParams });
+                  if (false) { post({ debug: 'Corrected parameters', id: id, styles: styles, calcParams: calcParams }); }
                 }
                 
                 if (!chart) {
@@ -1254,7 +1186,7 @@ export default function SimpleKLineChart({
                     allIndicators = chart.getIndicators() || [];
                   }
                 } catch(e) {
-                  post({ debug: 'Error getting indicators list', error: String(e) });
+                  if (false) { post({ debug: 'Error getting indicators list', error: String(e) }); }
                 }
                 
                 var foundIndicator = allIndicators.find(function(ind) {
@@ -1275,7 +1207,7 @@ export default function SimpleKLineChart({
                 // Add calcParams if provided
                 if (calcParams && Array.isArray(calcParams) && calcParams.length > 0) {
                   overrideObject.calcParams = calcParams;
-                  post({ debug: 'Adding calcParams to override', calcParams: calcParams });
+                  if (false) { post({ debug: 'Adding calcParams to override', calcParams: calcParams }); }
                 }
                 
                 // Process styles to handle line styles properly
@@ -1303,14 +1235,14 @@ export default function SimpleKLineChart({
                     processedStyles.lines.push(lineStyle);
                   });
                   overrideObject.styles = processedStyles;
-                  post({ debug: 'Processed line styles', processedStyles: processedStyles });
+                  if (false) { post({ debug: 'Processed line styles', processedStyles: processedStyles }); }
                 }
                 
                 // Call overrideIndicator with the complete object
                 if (typeof chart.overrideIndicator === 'function') {
-                  post({ debug: 'Calling overrideIndicator', overrideObject: overrideObject });
+                  if (false) { post({ debug: 'Calling overrideIndicator', overrideObject: overrideObject }); }
                   chart.overrideIndicator(overrideObject, 'candle_pane', function() {
-                    post({ debug: 'Override callback executed successfully' });
+                    if (false) { post({ debug: 'Override callback executed successfully' }); }
                   });
                 } else {
                   post({ error: 'overrideIndicator method not available on chart instance' });
@@ -1374,7 +1306,7 @@ export default function SimpleKLineChart({
                     e.stopPropagation();
                     try {
                       // Implement measure tool functionality
-                      post({ debug: 'Measure tool clicked' });
+                      if (false) { post({ debug: 'Measure tool clicked' }); }
                       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
                         window.ReactNativeWebView.postMessage(JSON.stringify({
                           type: 'measureClick',
@@ -1391,7 +1323,7 @@ export default function SimpleKLineChart({
                     e.stopPropagation();
                     try {
                       // Implement crosshair tool functionality
-                      post({ debug: 'Crosshair tool clicked' });
+                      if (false) { post({ debug: 'Crosshair tool clicked' }); }
                       if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
                         window.ReactNativeWebView.postMessage(JSON.stringify({
                           type: 'crosshairClick',
@@ -1434,7 +1366,7 @@ export default function SimpleKLineChart({
                         clearTimeout(hideButtonsTimeout);
                         hideButtonsTimeout = null;
                       }
-                      post({ debug: 'Buttons shown at Y', y: y, fromLongPress: !!isFromLongPress });
+                      if (false) { post({ debug: 'Buttons shown at Y', y: y, fromLongPress: !!isFromLongPress }); }
                     }
                   } catch(_) {}
                 }
@@ -1446,7 +1378,7 @@ export default function SimpleKLineChart({
                       buttonsContainer.style.display = 'none';
                       buttonsVisible = false;
                       buttonsShownByLongPress = false; // Reset long press flag
-                      post({ debug: 'Buttons hidden' });
+                      if (false) { post({ debug: 'Buttons hidden' }); }
                     }
                   } catch(_) {}
                 }
@@ -1466,7 +1398,7 @@ export default function SimpleKLineChart({
                   try {
                     if (typeof chart.subscribeAction === 'function') {
                       chart.subscribeAction(name, cb);
-                      post({ debug: 'Subscribed action', name: name });
+                      if (false) { post({ debug: 'Subscribed action', name: name }); }
                       return true;
                     }
                   } catch(e) { post({ warn: 'subscribeAction failed', name: name, message: String(e && e.message || e) }); }
@@ -1484,7 +1416,7 @@ export default function SimpleKLineChart({
                     }
                     
                     // Debug logging to understand crosshair parameter structure
-                    post({ debug: 'Crosshair change event', param: param });
+                    if (false) { post({ debug: 'Crosshair change event', param: param }); }
                     
                     // Update custom button positions - only show when crosshair is actually visible
                     var isVisible = false;
@@ -1507,7 +1439,7 @@ export default function SimpleKLineChart({
                       }
                     }
                     
-                    post({ debug: 'Button visibility decision', isVisible: isVisible, paramY: param ? param.y : 'no param' });
+                    if (false) { post({ debug: 'Button visibility decision', isVisible: isVisible, paramY: param ? param.y : 'no param' }); }
                     
                     if (isVisible && typeof param.y === 'number') {
                       showButtons(param.y);
@@ -1550,7 +1482,7 @@ export default function SimpleKLineChart({
                       try {
                         touchStartTime = Date.now();
                         isLongPressActive = false;
-                        post({ debug: 'Touch/pointer started', time: touchStartTime });
+                        if (false) { post({ debug: 'Touch/pointer started', time: touchStartTime }); }
                         updatePointer(e); // Also update pointer position
                       } catch(_) {}
                     };
@@ -1561,7 +1493,7 @@ export default function SimpleKLineChart({
                     
                     // Additional event listeners to detect when crosshair should be hidden
                     container.addEventListener('pointerleave', function() {
-                      post({ debug: 'Pointer left chart area' });
+                      if (false) { post({ debug: 'Pointer left chart area' }); }
                       // Only hide buttons if they weren't shown by long press
                       if (!buttonsShownByLongPress) {
                         hideButtonsDelayed(50);
@@ -1577,7 +1509,7 @@ export default function SimpleKLineChart({
                         var touchEndTime = Date.now();
                         var touchDuration = touchStartTime ? (touchEndTime - touchStartTime) : 0;
                         
-                        post({ debug: 'Touch/pointer ended', duration: touchDuration, wasLongPress: touchDuration >= 2000, buttonsShownByLongPress: buttonsShownByLongPress });
+                        if (false) { post({ debug: 'Touch/pointer ended', duration: touchDuration, wasLongPress: touchDuration >= 2000, buttonsShownByLongPress: buttonsShownByLongPress }); }
                         
                         if (touchDuration >= 1000) {
                           // Long press (1+ seconds) - show buttons at last known crosshair position
@@ -1585,13 +1517,13 @@ export default function SimpleKLineChart({
                           var lastCrosshair = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshair;
                           if (lastCrosshair && typeof lastCrosshair.y === 'number') {
                             showButtons(lastCrosshair.y, true); // Mark as from long press
-                            post({ debug: 'Showing buttons after long press', y: lastCrosshair.y });
+                            if (false) { post({ debug: 'Showing buttons after long press', y: lastCrosshair.y }); }
                           } else if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastPointer) {
                             // Fallback to last pointer position if crosshair data not available
                             var lastY = window.__SIMPLE_KLINE__.lastPointer.y;
                             if (typeof lastY === 'number') {
                               showButtons(lastY, true); // Mark as from long press
-                              post({ debug: 'Showing buttons after long press (fallback)', y: lastY });
+                              if (false) { post({ debug: 'Showing buttons after long press (fallback)', y: lastY }); }
                             }
                           }
                           // Don't process as short press - this was a long press
@@ -1601,12 +1533,12 @@ export default function SimpleKLineChart({
                           var cooldownPeriod = 500; // 500ms cooldown after long press
                           
                           if (timeSinceLastLongPress < cooldownPeriod) {
-                            post({ debug: 'Short press ignored - too soon after long press', timeSince: timeSinceLastLongPress });
+                            if (false) { post({ debug: 'Short press ignored - too soon after long press', timeSince: timeSinceLastLongPress }); }
                             // Ignore this short press as it's too soon after a long press
                           } else {
                             // Process as genuine short press
                             if (buttonsShownByLongPress) {
-                              post({ debug: 'Short press detected - hiding buttons that were shown by long press' });
+                              if (false) { post({ debug: 'Short press detected - hiding buttons that were shown by long press' }); }
                               hideButtons();
                             } else {
                               // If buttons weren't shown by long press, hide them with delay (normal crosshair behavior)
@@ -1625,7 +1557,7 @@ export default function SimpleKLineChart({
                     container.addEventListener('touchend', handlePointerEnd, { passive: true });
                     
                     container.addEventListener('touchcancel', function() {
-                      post({ debug: 'Touch cancelled on chart' });
+                      if (false) { post({ debug: 'Touch cancelled on chart' }); }
                       hideButtons();
                       // Reset tracking variables on cancel
                       touchStartTime = null;
@@ -1642,7 +1574,7 @@ export default function SimpleKLineChart({
                         
                         // Check if pointer is outside the chart bounds
                         if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
-                          post({ debug: 'Pointer moved outside chart bounds' });
+                          if (false) { post({ debug: 'Pointer moved outside chart bounds' }); }
                           // Only hide buttons if they weren't shown by long press
                           if (!buttonsShownByLongPress) {
                             hideButtonsDelayed(50);
@@ -1852,11 +1784,9 @@ export default function SimpleKLineChart({
             } else if (data.error) {
               console.warn("[SimpleKLineChart:error]", data);
             } else if (data.warn) {
-              console.warn("[SimpleKLineChart:warn]", data);
-            } else if (data.debug) {
-              console.log("[SimpleKLineChart:debug]", data);
-            } else {
-              console.log("[SimpleKLineChart:msg]", data);
+              if (typeof __DEV__ !== "undefined" && __DEV__) {
+                console.warn("[SimpleKLineChart:warn]", data);
+              }
             }
           } catch (e) {
             console.log("[SimpleKLineChart:raw]", event.nativeEvent.data);
