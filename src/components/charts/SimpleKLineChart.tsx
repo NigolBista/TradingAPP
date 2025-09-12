@@ -2,6 +2,8 @@ import React, { useMemo, useRef, useEffect } from "react";
 import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
+import * as FileSystem from "expo-file-system";
+import { Asset } from "expo-asset";
 
 interface Props {
   symbol: string;
@@ -58,6 +60,12 @@ interface Props {
   onAlertClick?: (price: number) => void;
   // Alerts to display as price lines
   alerts?: Array<{ price: number; condition: string; isActive: boolean }>;
+  // Load klinecharts from local asset instead of CDN
+  useLocalKline?: boolean;
+  // Provide an Expo asset module (e.g., require("../../../assets/web/klinecharts.min.txt"))
+  localKlineAsset?: number;
+  // Or a file/asset URI to read script text from
+  localKlineUri?: string;
 }
 
 export interface IndicatorConfig {
@@ -91,9 +99,56 @@ export default function SimpleKLineChart({
   onOverrideIndicator,
   onAlertClick,
   alerts = [],
+  useLocalKline = false,
+  localKlineAsset,
+  localKlineUri,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
+  const [klineScriptText, setKlineScriptText] = React.useState<string | null>(
+    null
+  );
+
+  // Optionally load klinecharts UMD bundle from a local Expo asset/URI
+  useEffect(() => {
+    let cancelled = false;
+    async function loadLocalScript() {
+      try {
+        if (!useLocalKline) {
+          if (!cancelled) setKlineScriptText(null);
+          return;
+        }
+        let script: string | null = null;
+        if (typeof localKlineAsset === "number") {
+          const asset = Asset.fromModule(localKlineAsset);
+          await asset.downloadAsync();
+          const uri = asset.localUri || asset.uri;
+          if (uri) {
+            script = await FileSystem.readAsStringAsync(uri, {
+              encoding: "utf8",
+            });
+          }
+        } else if (localKlineUri && typeof localKlineUri === "string") {
+          if (/^https?:\/\//i.test(localKlineUri)) {
+            const res = await fetch(localKlineUri);
+            script = await res.text();
+          } else {
+            script = await FileSystem.readAsStringAsync(localKlineUri, {
+              encoding: "utf8",
+            });
+          }
+        }
+        if (!cancelled) setKlineScriptText(script || null);
+      } catch (e) {
+        console.warn("[SimpleKLineChart:kline_local_load_failed]", e);
+        if (!cancelled) setKlineScriptText(null);
+      }
+    }
+    loadLocalScript();
+    return () => {
+      cancelled = true;
+    };
+  }, [useLocalKline, localKlineAsset, localKlineUri]);
 
   // Method to override indicator styles and parameters
   const overrideIndicator = React.useCallback(
@@ -200,6 +255,13 @@ export default function SimpleKLineChart({
     const showXAxisText =
       typeof showTimeAxisText === "boolean" ? showTimeAxisText : true;
 
+    // Build the script tag for klinecharts: use local text if available, else CDN
+    const klineLibTag = klineScriptText
+      ? `<script>${(klineScriptText || "")
+          .split("</script>")
+          .join("<\\/script>")}</script>`
+      : '<script src="https://unpkg.com/klinecharts@10.0.0-alpha9/dist/umd/klinecharts.min.js"></script>';
+
     return `<!doctype html>
 <html>
   <head>
@@ -215,7 +277,7 @@ export default function SimpleKLineChart({
   </head>
   <body>
     <div id="k-line-wrap"><div id="k-line-chart"></div></div>
-    <script src="https://unpkg.com/klinecharts@10.0.0-alpha9/dist/umd/klinecharts.min.js"></script>
+    ${klineLibTag}
     <script>
       (function(){
         function post(msg){ try { window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch(e) {} }
@@ -1374,13 +1436,17 @@ export default function SimpleKLineChart({
     customData,
     indicatorsKey,
     showSessions,
+    useLocalKline,
+    klineScriptText,
   ]);
 
   return (
     <View style={[styles.container, { height }]}>
       <WebView
         ref={webRef}
-        key={`${symbol}-${timeframe}-${chartType}-${dataKey}-${indicatorsKey}-${showSessions}`}
+        key={`${symbol}-${timeframe}-${chartType}-${dataKey}-${indicatorsKey}-${showSessions}-${
+          useLocalKline ? "local" : "cdn"
+        }-${klineScriptText ? klineScriptText.length : 0}`}
         originWhitelist={["*"]}
         source={{ html }}
         style={{ height, width: "100%" }}
