@@ -67,6 +67,9 @@ interface Props {
   onAlertSelected?: (payload: { id: string; price: number; y: number }) => void;
   // Fired when user drags an alert line and releases with a new price
   onAlertMoved?: (payload: { id: string; price: number }) => void;
+  // Custom button callbacks
+  onMeasureClick?: (price: number) => void;
+  onCrosshairClick?: (price: number) => void;
 }
 
 export interface IndicatorConfig {
@@ -102,6 +105,8 @@ export default function SimpleKLineChart({
   alerts = [],
   onAlertSelected,
   onAlertMoved,
+  onMeasureClick,
+  onCrosshairClick,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
@@ -229,13 +234,58 @@ export default function SimpleKLineChart({
       html, body { margin: 0; padding: 0; background: ${
         theme === "dark" ? "#0a0a0a" : "#ffffff"
       }; width: 100%; height: 100%; }
-      #k-line-wrap { width: 100%; height: ${height}px; }
+      #k-line-wrap { width: 100%; height: ${height}px; position: relative; }
       #k-line-chart { width: 100%; height: 100%; }
       * { touch-action: none; }
+      
+      .custom-crosshair-buttons {
+        position: absolute;
+        display: none;
+        flex-direction: row;
+        gap: 8px;
+        right: 140px;
+        z-index: 1000;
+        pointer-events: auto;
+      }
+      
+      .custom-button {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: 'Material Icons';
+        font-size: 18px;
+        transition: all 0.2s ease;
+        background: ${JSON.stringify(theme === "dark" ? "#2B313B" : "#E6E9EE")};
+        color: #76808F;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      }
+      
+      .custom-button:hover {
+        background: ${JSON.stringify(theme === "dark" ? "#3A4451" : "#D8DEE6")};
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      }
+      
+      .custom-button:active {
+        transform: translateY(0);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      }
     </style>
   </head>
   <body>
-    <div id="k-line-wrap"><div id="k-line-chart"></div></div>
+    <div id="k-line-wrap">
+      <div id="k-line-chart"></div>
+      <div class="custom-crosshair-buttons" id="crosshair-buttons">
+        <button class="custom-button" id="btn-alert" title="Add Alert">notifications</button>
+        <button class="custom-button" id="btn-measure" title="Measure">straighten</button>
+        <button class="custom-button" id="btn-crosshair" title="Crosshair">add</button>
+      </div>
+    </div>
     <script src="https://unpkg.com/klinecharts@10.0.0-alpha9/dist/umd/klinecharts.min.js"></script>
     <script>
       (function(){
@@ -396,90 +446,7 @@ export default function SimpleKLineChart({
                   paddingBottom: 4,
                   backgroundColor: '#686D76'
                 },
-                features: [                 {
-                   id: 'crosshair_tool',
-                   position: 'left', // 'left' | 'middle' | 'right'
-                   marginLeft: 8,
-                   marginTop: 0,
-                   marginRight: 32,
-                   marginBottom: 0,
-                   paddingLeft: 1,
-                   paddingTop: 1,
-                   paddingRight: 1,
-                   paddingBottom: 1,
-                   size: 32,
-                   color: '#76808F',
-                   activeColor: '#76808F',
-                   backgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#2B313B" : "#E6E9EE"
-                   )},
-                   activeBackgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#3A4451" : "#D8DEE6"
-                   )},
-                   borderRadius: 6,
-                   type: 'path', // 'path', 'icon_font'
-                   content: {
-                     style: 'stroke', // 'stroke', 'fill'
-                     path: 'M16,4L16,12M16,20L16,28M4,16L12,16M20,16L28,16M16,16L16,16',
-                     lineWidth: 3,
-                   }
-                 },
-                 {
-                   id: 'alert_tool',
-                   position: 'left', // 'left' | 'middle' | 'right'
-                   marginLeft: 8,
-                   marginTop: 0,
-                   marginRight: 8,
-                   marginBottom: 0,
-                   paddingLeft: 1,
-                   paddingTop: 1,
-                   paddingRight: 1,
-                   paddingBottom: 1,
-                   size: 32,
-                   color: '#76808F',
-                   activeColor: '#76808F',
-                   backgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#2B313B" : "#E6E9EE"
-                   )},
-                   activeBackgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#3A4451" : "#D8DEE6"
-                   )},
-                   borderRadius: 6,
-                   type: 'path', // 'path', 'icon_font'
-                     content: {
-                       style: 'stroke', // 'stroke', 'fill'
-                       path: 'M16,6C12,6 8,8 8,12L8,18C8,20 10,22 12,22L20,22C22,22 24,20 24,18L24,12C24,8 20,6 16,6M16,6L16,4M12,24L14,24M18,24L20,24',
-                       lineWidth: 2,
-                     }
-                 },
-                 {
-                   id: 'measure_tool',
-                   position: 'left', // 'left' | 'middle' | 'right'
-                   marginLeft: 8,
-                   marginTop: 0,
-                   marginRight: 8,
-                   marginBottom: 0,
-                   paddingLeft: 1,
-                   paddingTop: 1,
-                   paddingRight: 1,
-                   paddingBottom: 1,
-                   size: 32,
-                   color: '#76808F',
-                   activeColor: '#76808F',
-                   backgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#2B313B" : "#E6E9EE"
-                   )},
-                   activeBackgroundColor: ${JSON.stringify(
-                     theme === "dark" ? "#3A4451" : "#D8DEE6"
-                   )},
-                   borderRadius: 6,
-                   type: 'path', // 'path', 'icon_font'
-                   content: {
-                     style: 'stroke', // 'stroke', 'fill'
-                     path: 'M4,4L28,4M4,8L28,8M4,12L28,12M4,16L28,16M4,20L28,20M4,24L28,24M4,28L28,28M4,4L4,28M8,4L8,28M12,4L12,28M16,4L16,28M20,4L20,28M24,4L24,28M28,4L28,28',
-                     lineWidth: 2,
-                   }
-                 }]
+                features: []
               },
                 vertical: { text: { show: true } }
               },
@@ -1367,6 +1334,70 @@ export default function SimpleKLineChart({
               sessionOverlayIds: []
             };
 
+            // Setup custom button event handlers
+            (function(){
+              try {
+                // Add click handlers for custom buttons
+                var alertBtn = document.getElementById('btn-alert');
+                var measureBtn = document.getElementById('btn-measure');
+                var crosshairBtn = document.getElementById('btn-crosshair');
+                
+                if (alertBtn) {
+                  alertBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try {
+                      var price = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice;
+                      if (typeof price === 'number') {
+                        addPriceLine(price, '#F59E0B', 'Alert', false, true);
+                        // Call the onAlertClick callback if provided
+                        if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                          window.ReactNativeWebView.postMessage(JSON.stringify({
+                            type: 'alertClick',
+                            price: price
+                          }));
+                        }
+                      }
+                    } catch(err) { post({ error: 'Alert button click failed', message: String(err) }); }
+                  });
+                }
+                
+                if (measureBtn) {
+                  measureBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try {
+                      // Implement measure tool functionality
+                      post({ debug: 'Measure tool clicked' });
+                      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                          type: 'measureClick',
+                          price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice
+                        }));
+                      }
+                    } catch(err) { post({ error: 'Measure button click failed', message: String(err) }); }
+                  });
+                }
+                
+                if (crosshairBtn) {
+                  crosshairBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try {
+                      // Implement crosshair tool functionality
+                      post({ debug: 'Crosshair tool clicked' });
+                      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+                        window.ReactNativeWebView.postMessage(JSON.stringify({
+                          type: 'crosshairClick',
+                          price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice
+                        }));
+                      }
+                    } catch(err) { post({ error: 'Crosshair button click failed', message: String(err) }); }
+                  });
+                }
+              } catch(e) { post({ warn: 'Custom button setup failed', message: String(e && e.message || e) }); }
+            })();
+
             // Crosshair events: capture price on move and handle feature clicks (alert button)
             (function(){
               try {
@@ -1393,32 +1424,49 @@ export default function SimpleKLineChart({
                     if (typeof ptr === 'number') {
                       window.__SIMPLE_KLINE__.lastCrosshairPrice = ptr;
                     }
+                    
+                    // Debug logging to understand crosshair parameter structure
+                    post({ debug: 'Crosshair change event', param: param });
+                    
+                    // Update custom button positions - only show when crosshair is actually visible
+                    var buttonsContainer = document.getElementById('crosshair-buttons');
+                    if (buttonsContainer) {
+                      // Check if crosshair is visible based on the parameter structure
+                      var isVisible = false;
+                      
+                      if (param) {
+                        // Different chart libraries may use different parameter structures
+                        if (typeof param.y === 'number') {
+                          // Basic check - if we have Y coordinate, crosshair might be visible
+                          isVisible = true;
+                        }
+                        
+                        // Check for explicit visibility flags
+                        if (param.visible === false || param.show === false || param.display === false) {
+                          isVisible = false;
+                        }
+                        
+                        // If param is null/undefined, crosshair is hidden
+                        if (!param) {
+                          isVisible = false;
+                        }
+                      }
+                      
+                      post({ debug: 'Button visibility decision', isVisible: isVisible, paramY: param ? param.y : 'no param' });
+                      
+                      if (isVisible && typeof param.y === 'number') {
+                        // Show buttons and position them at crosshair Y position
+                        buttonsContainer.style.display = 'flex';
+                        buttonsContainer.style.top = (param.y - 18) + 'px';
+                      } else {
+                        // Hide buttons when crosshair is not visible
+                        buttonsContainer.style.display = 'none';
+                      }
+                    }
                   } catch(_) {}
                 });
 
-                var CLICK_EVT = ActionType.OnCrosshairFeatureClick || 'onCrosshairFeatureClick';
-                subscribeActionSafe(CLICK_EVT, function(param){
-                  try {
-                    var fid = (param && (param.featureId || (param.feature && param.feature.id) || param.id)) || '';
-                    var price = null;
-                    if (window.__SIMPLE_KLINE__) {
-                      price = (window.__SIMPLE_KLINE__.lastPointerPrice != null)
-                        ? window.__SIMPLE_KLINE__.lastPointerPrice
-                        : window.__SIMPLE_KLINE__.lastCrosshairPrice || null;
-                    }
-                    post({ debug: 'onCrosshairFeatureClick', featureId: fid, price: price });
-                    if (fid === 'alert_tool' && typeof price === 'number') {
-                      addPriceLine(price, '#F59E0B', 'Alert', false, true);
-                      // Call the onAlertClick callback if provided
-                      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-                        window.ReactNativeWebView.postMessage(JSON.stringify({
-                          type: 'alertClick',
-                          price: price
-                        }));
-                      }
-                    }
-                  } catch(e) { post({ warn: 'onCrosshairFeatureClick handler failed', message: String(e && e.message || e) }); }
-                });
+                // Feature click handler removed - using custom buttons instead
 
                 // Track last pointer position over the chart and derive price via convertFromPixel
                 try {
@@ -1631,6 +1679,14 @@ export default function SimpleKLineChart({
                 typeof data.price === "number"
               ) {
                 onAlertMoved({ id: data.id, price: data.price });
+              }
+            } else if (data.type === "measureClick" && onMeasureClick) {
+              if (data && typeof data.price === "number") {
+                onMeasureClick(data.price);
+              }
+            } else if (data.type === "crosshairClick" && onCrosshairClick) {
+              if (data && typeof data.price === "number") {
+                onCrosshairClick(data.price);
               }
             } else if (data.error) {
               console.warn("[SimpleKLineChart:error]", data);
