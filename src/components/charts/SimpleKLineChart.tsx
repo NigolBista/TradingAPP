@@ -1194,13 +1194,25 @@ export default function SimpleKLineChart({
   ]);
 
   return (
-    <View style={[styles.container, { height }]}>
+    <View
+      style={[
+        styles.container,
+        { height, backgroundColor: theme === "dark" ? "#0a0a0a" : "#ffffff" },
+      ]}
+    >
       <WebView
         ref={webRef}
         key={`${symbol}-${timeframe}-${chartType}-${dataKey}-${indicatorsKey}-${showSessions}-${alertsKey}`}
         originWhitelist={["*"]}
         source={{ html }}
-        style={{ height, width: "100%" }}
+        style={{
+          height,
+          width: "100%",
+          backgroundColor: theme === "dark" ? "#0a0a0a" : "#ffffff",
+        }}
+        containerStyle={{
+          backgroundColor: theme === "dark" ? "#0a0a0a" : "#ffffff",
+        }}
         javaScriptEnabled
         domStorageEnabled
         startInLoadingState={false}
