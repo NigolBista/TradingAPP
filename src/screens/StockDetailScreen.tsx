@@ -412,8 +412,30 @@ export default function StockDetailScreen() {
   const { messages, addAnalysisMessage, clearSymbolMessages } = useChatStore();
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
-  const { addAlert, checkAlerts, getAlertsForSymbol, updateAlert } =
-    useAlertStore();
+  const { addAlert, checkAlerts, updateAlert } = useAlertStore();
+  const allAlerts = useAlertStore((s) => s.alerts);
+  const alertsForSymbol = React.useMemo(
+    () => allAlerts.filter((a) => a.symbol === symbol),
+    [allAlerts, symbol]
+  );
+  const alertLines = React.useMemo(
+    () =>
+      alertsForSymbol.map((alert) => ({
+        id: alert.id,
+        price: alert.price,
+        condition: alert.condition,
+        isActive: alert.isActive,
+      })),
+    [alertsForSymbol]
+  );
+
+  // Debug logging for alert changes
+  React.useEffect(() => {
+    console.log(
+      `[StockDetailScreen] Alerts for ${symbol}:`,
+      alertsForSymbol.length
+    );
+  }, [symbol, alertsForSymbol]);
   const [activeTab, setActiveTab] = useState<"overview" | "signals" | "news">(
     "signals"
   );
@@ -1273,12 +1295,7 @@ export default function StockDetailScreen() {
                 // Show the alerts modal to display the new alert
                 setShowAlertsModal(true);
               }}
-              alerts={getAlertsForSymbol(symbol).map((alert) => ({
-                id: alert.id,
-                price: alert.price,
-                condition: alert.condition,
-                isActive: alert.isActive,
-              }))}
+              alerts={alertLines}
               onAlertSelected={({ id, price }) => {
                 setSelectedAlertId(id);
                 setProposedAlertPrice(price);

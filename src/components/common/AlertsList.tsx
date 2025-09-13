@@ -17,14 +17,12 @@ interface AlertsListProps {
 }
 
 export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
-  const {
-    getAlertsForSymbol,
-    addAlert,
-    deleteAlert,
-    toggleAlert,
-    updateAlert,
-  } = useAlertStore();
-  const alerts = getAlertsForSymbol(symbol);
+  const { addAlert, deleteAlert, toggleAlert, updateAlert } = useAlertStore();
+  const allAlerts = useAlertStore((s) => s.alerts);
+  const alerts = React.useMemo(
+    () => allAlerts.filter((a) => a.symbol === symbol),
+    [allAlerts, symbol]
+  );
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingAlert, setEditingAlert] = useState<PriceAlert | null>(null);

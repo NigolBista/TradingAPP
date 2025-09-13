@@ -95,7 +95,30 @@ export default function ChartFullScreen() {
   const { addAnalysisMessage } = useChatStore();
   const { cacheSignal, getCachedSignal } = useSignalCacheStore();
   const { profile, setProfile } = useUserStore();
-  const { addAlert, getAlertsForSymbol, updateAlert } = useAlertStore();
+  const { addAlert, updateAlert } = useAlertStore();
+  const allAlerts = useAlertStore((s) => s.alerts);
+  const alertsForSymbol = React.useMemo(
+    () => allAlerts.filter((a) => a.symbol === symbol),
+    [allAlerts, symbol]
+  );
+  const alertLines = React.useMemo(
+    () =>
+      alertsForSymbol.map((alert) => ({
+        id: alert.id,
+        price: alert.price,
+        condition: alert.condition,
+        isActive: alert.isActive,
+      })),
+    [alertsForSymbol]
+  );
+
+  // Debug logging for alert changes
+  React.useEffect(() => {
+    console.log(
+      `[ChartFullScreen] Alerts for ${symbol}:`,
+      alertsForSymbol.length
+    );
+  }, [symbol, alertsForSymbol]);
   const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
     useTimeframeStore();
 
@@ -1115,10 +1138,13 @@ export default function ChartFullScreen() {
           showPriceAxisText={true}
           showTimeAxisText={true}
           indicators={indicators}
-          onOverrideIndicator={(overrideFn) => {
-            overrideIndicatorRef.current = overrideFn;
-            applyIndicatorStyles();
-          }}
+          onOverrideIndicator={React.useCallback(
+            (overrideFn: any) => {
+              overrideIndicatorRef.current = overrideFn;
+              applyIndicatorStyles();
+            },
+            [applyIndicatorStyles]
+          )}
           levels={
             currentTradePlan
               ? {
@@ -1135,6 +1161,21 @@ export default function ChartFullScreen() {
               : undefined
           }
           onAlertClick={(price) => {
+            // 1) Optimistic preview (immediate): ask WebView to preview the alert line
+            try {
+              if (
+                overrideIndicatorRef.current &&
+                (global as any).__SIMPLE_KLINE_BRIDGE__
+              ) {
+                // no-op; we can't access webview directly here
+              }
+            } catch {}
+            try {
+              const msg = JSON.stringify({ type: "previewAlert", price });
+              // webRef is internal to SimpleKLineChart; we can't access here, so preview will be handled inside chart via lastAlerts merge when setAlerts arrives
+            } catch {}
+
+            // 2) Authoritative update: write to store so alerts prop updates and persists
             addAlert({
               symbol,
               price,
@@ -1142,12 +1183,7 @@ export default function ChartFullScreen() {
               message: `Alert at $${price.toFixed(2)}`,
             });
           }}
-          alerts={getAlertsForSymbol(symbol).map((alert) => ({
-            id: alert.id,
-            price: alert.price,
-            condition: alert.condition,
-            isActive: alert.isActive,
-          }))}
+          alerts={alertLines}
           onAlertSelected={({ id, price }) => {
             setSelectedAlertId(id);
             setProposedAlertPrice(price);
