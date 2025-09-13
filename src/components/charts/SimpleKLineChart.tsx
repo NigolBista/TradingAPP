@@ -1,4 +1,10 @@
-import React, { useMemo, useRef, useEffect, useState } from "react";
+import React, {
+  useMemo,
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
@@ -50,6 +56,15 @@ interface Props {
       calcParams?: any
     ) => void
   ) => void;
+  onChartBridge?: (bridge: {
+    updateTimeframe: (timeframe: string) => void;
+    updateChartType: (chartType: string) => void;
+    updateIndicators: (indicators: IndicatorConfig[]) => void;
+    updateDisplayOptions: (options: any) => void;
+    updateTheme: (theme: string) => void;
+    updateAlerts: (alerts: any[]) => void;
+    updateLevels: (levels: any) => void;
+  }) => void;
   onAlertClick?: (price: number) => void;
   alerts?: Array<{
     id?: string;
@@ -92,6 +107,7 @@ export default function SimpleKLineChart({
   customData,
   indicators = [],
   onOverrideIndicator,
+  onChartBridge,
   onAlertClick,
   alerts = [],
   onAlertSelected,
@@ -102,6 +118,145 @@ export default function SimpleKLineChart({
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
   const [libCode, setLibCode] = useState<string | null>(null);
+
+  // Create stable initial alerts reference that only changes with symbol
+  const initialAlertsRef = useRef<typeof alerts>([]);
+  useEffect(() => {
+    // Only update initial alerts when symbol changes (for HTML generation)
+    initialAlertsRef.current = alerts;
+  }, [symbol]);
+
+  // Bridge methods to update chart without re-rendering WebView
+  const sendToWebView = useCallback((message: any) => {
+    if (webRef.current && isReadyRef.current) {
+      webRef.current.postMessage(JSON.stringify(message));
+    }
+  }, []);
+
+  const updateTimeframe = useCallback(
+    (newTimeframe: string) => {
+      sendToWebView({ type: "updateTimeframe", timeframe: newTimeframe });
+    },
+    [sendToWebView]
+  );
+
+  const updateChartType = useCallback(
+    (newChartType: string) => {
+      sendToWebView({ type: "updateChartType", chartType: newChartType });
+    },
+    [sendToWebView]
+  );
+
+  const updateIndicators = useCallback(
+    (newIndicators: IndicatorConfig[]) => {
+      sendToWebView({ type: "updateIndicators", indicators: newIndicators });
+    },
+    [sendToWebView]
+  );
+
+  const updateDisplayOptions = useCallback(
+    (options: any) => {
+      sendToWebView({ type: "updateDisplayOptions", options });
+    },
+    [sendToWebView]
+  );
+
+  const updateTheme = useCallback(
+    (newTheme: string) => {
+      sendToWebView({ type: "updateTheme", theme: newTheme });
+    },
+    [sendToWebView]
+  );
+
+  const updateAlerts = useCallback(
+    (newAlerts: any[]) => {
+      sendToWebView({ type: "updateAlerts", alerts: newAlerts });
+    },
+    [sendToWebView]
+  );
+
+  const updateLevels = useCallback(
+    (newLevels: any) => {
+      sendToWebView({ type: "updateLevels", levels: newLevels });
+    },
+    [sendToWebView]
+  );
+
+  // Expose bridge methods to parent component
+  useEffect(() => {
+    if (onChartBridge) {
+      onChartBridge({
+        updateTimeframe,
+        updateChartType,
+        updateIndicators,
+        updateDisplayOptions,
+        updateTheme,
+        updateAlerts,
+        updateLevels,
+      });
+    }
+  }, [
+    onChartBridge,
+    updateTimeframe,
+    updateChartType,
+    updateIndicators,
+    updateDisplayOptions,
+    updateTheme,
+    updateAlerts,
+    updateLevels,
+  ]);
+
+  // Handle timeframe changes via bridge after initial load
+  useEffect(() => {
+    if (isReadyRef.current) {
+      // Add a small delay to ensure chart is fully initialized
+      setTimeout(() => {
+        updateTimeframe(timeframe);
+      }, 100);
+    }
+  }, [timeframe, updateTimeframe]);
+
+  // Handle chart type changes via bridge after initial load
+  useEffect(() => {
+    if (isReadyRef.current) {
+      updateChartType(chartType);
+    }
+  }, [chartType, updateChartType]);
+
+  // Handle theme changes via bridge after initial load
+  useEffect(() => {
+    if (isReadyRef.current) {
+      updateTheme(theme);
+    }
+  }, [theme, updateTheme]);
+
+  // Handle indicators changes via bridge after initial load
+  useEffect(() => {
+    if (isReadyRef.current) {
+      updateIndicators(indicators);
+    }
+  }, [indicators, updateIndicators]);
+
+  // Handle display options changes via bridge after initial load
+  useEffect(() => {
+    if (isReadyRef.current) {
+      updateDisplayOptions({ showSessions });
+    }
+  }, [showSessions, updateDisplayOptions]);
+
+  // Handle alerts changes via bridge after initial load
+  useEffect(() => {
+    if (isReadyRef.current) {
+      updateAlerts(alerts);
+    }
+  }, [alerts, updateAlerts]);
+
+  // Handle levels changes via bridge after initial load
+  useEffect(() => {
+    if (isReadyRef.current) {
+      updateLevels(levels);
+    }
+  }, [levels, updateLevels]);
 
   // Load klinecharts library from bundled asset (with CDN fallback)
   useEffect(() => {
@@ -339,17 +494,133 @@ export default function SimpleKLineChart({
         function post(msg){ try { window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch(e) {} }
         window.onerror = function(m, s, l, c, e){ post({ error: m || (e && e.message) || 'unknown' }); };
 
-        // Simple message bridge for overrideIndicator only
+        // Enhanced message bridge for all chart operations
         function handleRNMessage(event){
           try {
             var payload = (event && event.data != null) ? event.data : event;
             var data = {};
             try { data = JSON.parse(payload || '{}'); } catch(_) { data = {}; }
+            
             if (data.type === 'overrideIndicator') {
               if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.overrideIndicator) {
                 window.__SIMPLE_KLINE__.overrideIndicator(data.id, data.styles, data.calcParams);
               } else {
                 post({ error: 'overrideIndicator function not available in __SIMPLE_KLINE__' });
+              }
+            } else if (data.type === 'updateTimeframe') {
+              TF = data.timeframe;
+              if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) {
+                try {
+                  var period = mapPeriod(data.timeframe);
+                  window.__SIMPLE_KLINE__.chart.setPeriod(period);
+                  // Reapply alerts after timeframe change
+                  if (window.__SIMPLE_KLINE__.applyAlerts && window.__SIMPLE_KLINE__.lastAlerts) {
+                    window.__SIMPLE_KLINE__.applyAlerts(window.__SIMPLE_KLINE__.lastAlerts);
+                  }
+                  post({ success: 'timeframe_updated', timeframe: data.timeframe });
+                } catch(e) {
+                  post({ error: 'timeframe_update_failed', message: String(e && e.message || e) });
+                }
+              } else {
+                post({ error: 'chart_not_ready_for_timeframe_update', hasSimpleKline: !!window.__SIMPLE_KLINE__, hasChart: !!(window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) });
+              }
+            } else if (data.type === 'updateChartType') {
+              CHART_TYPE = data.chartType;
+              if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) {
+                try {
+                  applyChartType(window.__SIMPLE_KLINE__.chart, data.chartType);
+                  post({ success: 'chart_type_updated', chartType: data.chartType });
+                } catch(e) {
+                  post({ error: 'chart_type_update_failed', message: String(e && e.message || e) });
+                }
+              }
+            } else if (data.type === 'updateIndicators') {
+              INDICATORS = data.indicators || [];
+              if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) {
+                try {
+                  // Remove all existing indicators first
+                  var existingIndicators = window.__SIMPLE_KLINE__.chart.getIndicators() || [];
+                  existingIndicators.forEach(function(ind) {
+                    try {
+                      window.__SIMPLE_KLINE__.chart.removeIndicator(ind.name);
+                    } catch(_) {}
+                  });
+                  
+                  // Add new indicators
+                  INDICATORS.forEach(function(indicator) {
+                    try {
+                      var config = {
+                        name: indicator.name,
+                        calcParams: indicator.calcParams,
+                        styles: indicator.styles,
+                        overlay: indicator.overlay
+                      };
+                      if (indicator.overlay) {
+                        window.__SIMPLE_KLINE__.chart.createIndicator(config, true);
+                      } else {
+                        window.__SIMPLE_KLINE__.chart.createIndicator(config);
+                      }
+                    } catch(e) {
+                      post({ warn: 'indicator_add_failed', indicator: indicator.name, message: String(e && e.message || e) });
+                    }
+                  });
+                  post({ success: 'indicators_updated', count: INDICATORS.length });
+                } catch(e) {
+                  post({ error: 'indicators_update_failed', message: String(e && e.message || e) });
+                }
+              } else {
+                post({ error: 'indicators_chart_not_available', hasSimpleKline: !!window.__SIMPLE_KLINE__, hasChart: !!(window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) });
+              }
+            } else if (data.type === 'updateDisplayOptions') {
+              var options = data.options || {};
+              if (typeof options.showVolume === 'boolean') SHOW_VOL = options.showVolume;
+              if (typeof options.showMA === 'boolean') SHOW_MA = options.showMA;
+              if (typeof options.showGrid === 'boolean') SHOW_GRID = options.showGrid;
+              if (typeof options.showSessions === 'boolean') SHOW_SESSIONS = options.showSessions;
+              
+              if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) {
+                try {
+                  // Update chart styles based on new options
+                  applyChartType(window.__SIMPLE_KLINE__.chart, CHART_TYPE);
+                  post({ success: 'display_options_updated', options: options });
+                } catch(e) {
+                  post({ error: 'display_options_update_failed', message: String(e && e.message || e) });
+                }
+              }
+            } else if (data.type === 'updateTheme') {
+              THEME = data.theme;
+              if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) {
+                try {
+                  // Update chart theme
+                  applyChartType(window.__SIMPLE_KLINE__.chart, CHART_TYPE);
+                  post({ success: 'theme_updated', theme: data.theme });
+                } catch(e) {
+                  post({ error: 'theme_update_failed', message: String(e && e.message || e) });
+                }
+              }
+            } else if (data.type === 'updateAlerts') {
+              ALERTS = data.alerts || [];
+              if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.applyAlerts && window.__SIMPLE_KLINE__.chart) {
+                try {
+                  window.__SIMPLE_KLINE__.applyAlerts(ALERTS);
+                  post({ success: 'alerts_updated', count: ALERTS.length });
+                } catch(e) {
+                  post({ error: 'alerts_update_failed', message: String(e && e.message || e) });
+                }
+              } else {
+                post({ error: 'applyAlerts_not_available', hasSimpleKline: !!window.__SIMPLE_KLINE__, hasApplyAlerts: !!(window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.applyAlerts), hasChart: !!(window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) });
+              }
+            } else if (data.type === 'updateLevels') {
+              LEVELS = data.levels || {};
+              if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.applyLevels && window.__SIMPLE_KLINE__.chart) {
+                try {
+                  window.__SIMPLE_KLINE__.applyLevels(LEVELS);
+                  post({ success: 'levels_updated' });
+                } catch(e) {
+                  post({ error: 'levels_update_failed', message: String(e && e.message || e) });
+                }
+              } else {
+                post({ error: 'applyLevels_not_available', hasSimpleKline: !!window.__SIMPLE_KLINE__, hasApplyLevels: !!(window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.applyLevels), hasChart: !!(window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) });
               }
             }
           } catch(e) {
@@ -373,6 +644,7 @@ export default function SimpleKLineChart({
         var SHOW_LAST_PRICE_LABEL = ${JSON.stringify(showLastPriceLabel)};
         var SHOW_SESSIONS = ${JSON.stringify(showSessions)};
         var LEVELS = ${JSON.stringify(levels || {})};
+        var ALERTS = ${JSON.stringify(initialAlertsRef.current || [])};
         var POLY_API_KEY = ${JSON.stringify(polygonApiKey || "")};
         var CUSTOM_BARS = ${JSON.stringify(customBars || [])};
         var CUSTOM_DATA = ${JSON.stringify(
@@ -692,6 +964,7 @@ export default function SimpleKLineChart({
 
             function clearAlerts(){
               try {
+                var chart = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart;
                 var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.alertOverlayIds) || [];
                 if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') { ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} }); }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
@@ -702,6 +975,7 @@ export default function SimpleKLineChart({
             function applyAlerts(alerts){
               try {
                 clearAlerts();
+                var chart = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart;
                 if (!alerts || !Array.isArray(alerts) || !chart) return;
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 window.__SIMPLE_KLINE__.lastAlerts = alerts.slice();
@@ -721,13 +995,70 @@ export default function SimpleKLineChart({
               } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
             }
 
+            // Define applyLevels function
+            function applyLevels(levels) {
+              try {
+                var chart = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart;
+                if (!levels || typeof levels !== 'object' || !chart) return;
+                // Clear existing level overlays
+                if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.levelOverlayIds) {
+                  window.__SIMPLE_KLINE__.levelOverlayIds.forEach(function(id) {
+                    try { chart.removeOverlay(id); } catch(_) {}
+                  });
+                }
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.levelOverlayIds = [];
+                
+                // Apply new levels
+                var colors = {
+                  entry: '#10B981',
+                  lateEntry: '#059669', 
+                  exit: '#EF4444',
+                  lateExit: '#DC2626',
+                  stop: '#F59E0B',
+                  targets: '#8B5CF6'
+                };
+                
+                Object.keys(levels).forEach(function(key) {
+                  var value = levels[key];
+                  if (Array.isArray(value)) {
+                    // Handle arrays (like targets)
+                    value.forEach(function(price, i) {
+                      if (typeof price === 'number') {
+                        var id = chart.createOverlay({
+                          name: 'horizontalStraightLine',
+                          lock: true,
+                          points: [{ value: price }],
+                          styles: { line: { color: colors[key] || '#6B7280', size: 1, style: 'dashed' } }
+                        });
+                        if (id) window.__SIMPLE_KLINE__.levelOverlayIds.push(id);
+                      }
+                    });
+                  } else if (typeof value === 'number') {
+                    // Handle single values
+                    var id = chart.createOverlay({
+                      name: 'horizontalStraightLine',
+                      lock: true,
+                      points: [{ value: value }],
+                      styles: { line: { color: colors[key] || '#6B7280', size: 1, style: 'solid' } }
+                    });
+                    if (id) window.__SIMPLE_KLINE__.levelOverlayIds.push(id);
+                  }
+                });
+              } catch(e) {
+                post({ warn: 'applyLevels failed', message: String(e && e.message || e) });
+              }
+            }
+
             if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
             window.__SIMPLE_KLINE__.applyAlerts = applyAlerts;
+            window.__SIMPLE_KLINE__.applyLevels = applyLevels;
             try { if (document.fonts && document.fonts.load) { document.fonts.load('16px "Material Icons"'); } } catch(_){ }
 
-            // Apply initial alerts snapshot passed from React Native
+            // Apply initial alerts and levels snapshot passed from React Native
             try { applyAlerts(Array.isArray(ALERTS) ? ALERTS : []); } catch(_){ }
-            try { if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function(){ try { applyAlerts(Array.isArray(ALERTS) ? ALERTS : []); } catch(_){ } }); } } catch(_){ }
+            try { applyLevels(LEVELS); } catch(_){ }
+            try { if (document.fonts && document.fonts.ready) { document.fonts.ready.then(function(){ try { applyAlerts(Array.isArray(ALERTS) ? ALERTS : []); applyLevels(LEVELS); } catch(_){ } }); } } catch(_){ }
 
             // Sessions
             function clearSessionBackgrounds(){
@@ -874,14 +1205,14 @@ export default function SimpleKLineChart({
               } catch(e) { post({ error: 'overrideIndicator failed', message: String(e && e.message || e), stack: e.stack }); return false; }
             }
 
-            window.__SIMPLE_KLINE__ = {
-              setChartType: function(t){ try { applyChartType(chart, t); } catch(e) {} },
-              setLevels: function(lvls){ try { applyLevels(lvls); } catch(_){} },
-              setIndicators: function(list){ try { clearAllIndicators(); if (Array.isArray(list)) { list.forEach(function(ic){ createIndicatorSafe(ic); }); } } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); } },
-              overrideIndicator: overrideIndicator,
-              levelOverlayIds: [],
-              sessionOverlayIds: []
-            };
+            if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+            window.__SIMPLE_KLINE__.chart = chart; // Add chart reference for bridge operations
+            window.__SIMPLE_KLINE__.setChartType = function(t){ try { applyChartType(chart, t); } catch(e) {} };
+            window.__SIMPLE_KLINE__.setLevels = function(lvls){ try { applyLevels(lvls); } catch(_){} };
+            window.__SIMPLE_KLINE__.setIndicators = function(list){ try { clearAllIndicators(); if (Array.isArray(list)) { list.forEach(function(ic){ createIndicatorSafe(ic); }); } } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); } };
+            window.__SIMPLE_KLINE__.overrideIndicator = overrideIndicator;
+            window.__SIMPLE_KLINE__.levelOverlayIds = window.__SIMPLE_KLINE__.levelOverlayIds || [];
+            window.__SIMPLE_KLINE__.sessionOverlayIds = window.__SIMPLE_KLINE__.sessionOverlayIds || [];
 
             // Custom buttons
             (function(){
@@ -1225,18 +1556,13 @@ export default function SimpleKLineChart({
 </html>`;
   }, [
     symbol,
-    timeframe,
+    // timeframe removed - handled via bridge after initial load
     height,
-    theme,
-    chartType,
     showPriceAxisText,
     showTimeAxisText,
-    levels,
     customBars,
     customData,
-    indicatorsKey,
-    showSessions,
-    alertsKey,
+    // theme, chartType, indicatorsKey, showSessions, alertsKey, levels - handled via bridge after initial load
   ]);
 
   return (
@@ -1248,7 +1574,7 @@ export default function SimpleKLineChart({
     >
       <WebView
         ref={webRef}
-        key={`${symbol}-${timeframe}-${chartType}-${dataKey}-${indicatorsKey}-${showSessions}-${alertsKey}`}
+        key={`chart-${symbol}`}
         originWhitelist={["*"]}
         source={{ html }}
         style={{

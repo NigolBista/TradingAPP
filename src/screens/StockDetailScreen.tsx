@@ -450,6 +450,17 @@ export default function StockDetailScreen() {
     { time: number; value: number }[]
   >([]);
 
+  // Chart bridge ref for direct WebView communication
+  const chartBridgeRef = React.useRef<{
+    updateTimeframe: (timeframe: string) => void;
+    updateChartType: (chartType: string) => void;
+    updateIndicators: (indicators: any[]) => void;
+    updateDisplayOptions: (options: any) => void;
+    updateTheme: (theme: string) => void;
+    updateAlerts: (alerts: any[]) => void;
+    updateLevels: (levels: any) => void;
+  } | null>(null);
+
   // (removed duplicate symbol effect)
 
   // Clear cache and reload chart when timeframe or extended hours setting changes
@@ -465,8 +476,8 @@ export default function StockDetailScreen() {
 
     // Reset local view state
 
-    // Load new timeframe data
-    load();
+    // Load only chart data (not news/sentiment) for timeframe changes
+    loadChartData();
   }, [extendedTf, showExtendedHours]);
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
   const [unifiedBottomSheetTab, setUnifiedBottomSheetTab] = useState<
@@ -716,7 +727,8 @@ export default function StockDetailScreen() {
     }
   }
 
-  async function load() {
+  // Load chart data only (for timeframe changes)
+  async function loadChartData() {
     // Chart data is now handled directly by KLineProChart via Polygon API
     setLoading(false);
 
@@ -725,6 +737,12 @@ export default function StockDetailScreen() {
       console.error("Line chart loading failed:", error);
       setLineChartData([]);
     });
+  }
+
+  // Load all data including news and sentiment (for symbol changes)
+  async function load() {
+    // Load chart data first
+    await loadChartData();
 
     // Load news and sentiment stats in parallel (truly non-blocking - fire and forget)
     loadNewsInBackground().catch((error) => {
@@ -825,6 +843,11 @@ export default function StockDetailScreen() {
       // Chart data now handled by KLineProChart via Polygon API
       // Keep extendedTf as "1D" so spacing works, but realtime disabled below
       setExtendedTf("1D");
+
+      // Also update chart directly via bridge for immediate feedback
+      if (chartBridgeRef.current) {
+        chartBridgeRef.current.updateTimeframe("1D");
+      }
       return;
     }
 
@@ -841,6 +864,11 @@ export default function StockDetailScreen() {
     };
     const target = map[tf];
     setExtendedTf(target);
+
+    // Also update chart directly via bridge for immediate feedback
+    if (chartBridgeRef.current) {
+      chartBridgeRef.current.updateTimeframe(target);
+    }
   }
 
   // Navigate to chart with signal data
@@ -1267,7 +1295,7 @@ export default function StockDetailScreen() {
           {/* Chart */}
           <View style={styles.chartContainer}>
             <SimpleKLineChart
-              key={`${symbol}-${extendedTf}-${chartType}`}
+              key={`chart-${symbol}`}
               symbol={symbol}
               timeframe={extendedTf}
               height={280}
@@ -1312,6 +1340,9 @@ export default function StockDetailScreen() {
                 setSelectedAlertId(null);
                 setProposedAlertPrice(null);
                 setShowAlertsModal(true);
+              }}
+              onChartBridge={(bridge) => {
+                chartBridgeRef.current = bridge;
               }}
             />
             {/* In-chart drag handles replace the separate overlay controls */}

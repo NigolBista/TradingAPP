@@ -216,6 +216,14 @@ export default function ChartFullScreen() {
     | null
   >(null);
 
+  const chartBridgeRef = React.useRef<{
+    updateTimeframe: (timeframe: string) => void;
+    updateChartType: (chartType: string) => void;
+    updateIndicators: (indicators: IndicatorConfig[]) => void;
+    updateDisplayOptions: (options: any) => void;
+    updateTheme: (theme: string) => void;
+  } | null>(null);
+
   // Layout calculations
   const headerHeight = 52;
   const ohlcRowHeight = 24;
@@ -278,7 +286,8 @@ export default function ChartFullScreen() {
       async perform(action: ChartAction) {
         switch (action.type) {
           case "addIndicator":
-            setIndicators((prev) => {
+            // Use bridge to update indicators directly in WebView without React re-render
+            if (chartBridgeRef.current) {
               const base = getDefaultIndicator(action.indicator);
               const options: any = action.options || {};
 
@@ -309,44 +318,83 @@ export default function ChartFullScreen() {
                 styles: { ...(base.styles as any), lines },
               } as IndicatorConfig;
 
-              const existingIndex = prev.findIndex(
-                (i) => i.name.toLowerCase() === action.indicator.toLowerCase()
-              );
+              // Update local state for consistency but don't trigger re-render
+              setIndicators((prev) => {
+                const existingIndex = prev.findIndex(
+                  (i) => i.name.toLowerCase() === action.indicator.toLowerCase()
+                );
 
-              if (existingIndex >= 0) {
-                const copy = prev.slice();
-                copy[existingIndex] = cfg;
+                if (existingIndex >= 0) {
+                  const copy = prev.slice();
+                  copy[existingIndex] = cfg;
+                  // Update WebView directly
+                  chartBridgeRef.current?.updateIndicators(copy);
+                  updateChartState({
+                    indicators: copy.map((i) => ({
+                      indicator: i.name,
+                      options: { calcParams: i.calcParams, styles: i.styles },
+                    })),
+                  });
+                  return copy;
+                }
+
+                const next = [...prev, cfg];
+                // Update WebView directly
+                chartBridgeRef.current?.updateIndicators(next);
                 updateChartState({
-                  indicators: copy.map((i) => ({
+                  indicators: next.map((i) => ({
                     indicator: i.name,
                     options: { calcParams: i.calcParams, styles: i.styles },
                   })),
                 });
-                return copy;
-              }
-
-              const next = [...prev, cfg];
-              updateChartState({
-                indicators: next.map((i) => ({
-                  indicator: i.name,
-                  options: { calcParams: i.calcParams, styles: i.styles },
-                })),
+                return next;
               });
-              return next;
-            });
+            } else {
+              console.warn("Chart bridge not available for indicator update");
+            }
             break;
           case "setTimeframe":
-            setExtendedTf(action.timeframe as ExtendedTimeframe);
-            updateChartState({ timeframe: action.timeframe });
+            // Use bridge to update timeframe directly in WebView
+            if (chartBridgeRef.current) {
+              chartBridgeRef.current.updateTimeframe(action.timeframe);
+              setExtendedTf(action.timeframe as ExtendedTimeframe);
+              updateChartState({ timeframe: action.timeframe });
+            } else {
+              console.warn("Chart bridge not available for timeframe update");
+            }
             break;
           case "setChartType":
-            setChartType(action.chartType as ChartType);
-            updateChartState({ chartType: action.chartType });
+            // Use bridge to update chart type directly in WebView
+            if (chartBridgeRef.current) {
+              chartBridgeRef.current.updateChartType(action.chartType);
+              setChartType(action.chartType as ChartType);
+              updateChartState({ chartType: action.chartType });
+            } else {
+              console.warn("Chart bridge not available for chart type update");
+            }
             break;
           case "toggleDisplayOption":
-            if (action.option === "ma") setShowMA(action.enabled);
-            if (action.option === "volume") setShowVolume(action.enabled);
-            if (action.option === "sessions") setShowSessions(action.enabled);
+            // Use bridge to update display options directly in WebView
+            if (chartBridgeRef.current) {
+              const options: any = {};
+              if (action.option === "ma") {
+                options.showMA = action.enabled;
+                setShowMA(action.enabled);
+              }
+              if (action.option === "volume") {
+                options.showVolume = action.enabled;
+                setShowVolume(action.enabled);
+              }
+              if (action.option === "sessions") {
+                options.showSessions = action.enabled;
+                setShowSessions(action.enabled);
+              }
+              chartBridgeRef.current.updateDisplayOptions(options);
+            } else {
+              console.warn(
+                "Chart bridge not available for display options update"
+              );
+            }
             break;
           default:
             console.warn("Unhandled chart action", action);
@@ -1123,7 +1171,7 @@ export default function ChartFullScreen() {
       {/* Chart */}
       <View style={{ marginBottom: 8, position: "relative" }}>
         <SimpleKLineChart
-          key={`${symbol}-${extendedTf}-${chartType}`}
+          key={`chart-${symbol}`}
           symbol={symbol}
           timeframe={extendedTf as any}
           height={chartHeight}
@@ -1145,6 +1193,9 @@ export default function ChartFullScreen() {
             },
             [applyIndicatorStyles]
           )}
+          onChartBridge={React.useCallback((bridge: any) => {
+            chartBridgeRef.current = bridge;
+          }, [])}
           levels={
             currentTradePlan
               ? {
