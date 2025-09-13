@@ -1,7 +1,9 @@
-import React, { useMemo, useRef, useEffect } from "react";
+import React, { useMemo, useRef, useEffect, useState } from "react";
 import { View, StyleSheet } from "react-native";
 import { WebView } from "react-native-webview";
 import Constants from "expo-constants";
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system";
 
 interface Props {
   symbol: string;
@@ -99,6 +101,49 @@ export default function SimpleKLineChart({
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
+  const [libCode, setLibCode] = useState<string | null>(null);
+
+  // Load klinecharts library from bundled asset (with CDN fallback)
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const mod = require("../../../assets/web/klinecharts.min.txt");
+        const asset = Asset.fromModule(mod);
+        if (!asset.downloaded) {
+          await asset.downloadAsync();
+        }
+        const uri = asset.localUri || asset.uri;
+        if (uri) {
+          try {
+            const text = await FileSystem.readAsStringAsync(uri, {
+              encoding: "utf8",
+            });
+            if (isMounted && text && text.trim().length > 0) {
+              setLibCode(text);
+              return;
+            }
+          } catch (_) {
+            // If FileSystem read fails, try fetch as a fallback (mainly web)
+            try {
+              const res = await fetch(uri);
+              const text = await res.text();
+              if (isMounted && text && text.trim().length > 0) {
+                setLibCode(text);
+                return;
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {
+        // ignore and fallback to CDN
+      }
+      if (isMounted) setLibCode(null);
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const overrideIndicator = React.useCallback(
     (
@@ -181,6 +226,21 @@ export default function SimpleKLineChart({
     const showXAxisText =
       typeof showTimeAxisText === "boolean" ? showTimeAxisText : true;
 
+    // Prefer local asset script; fallback to CDN
+    const libraryTag = (() => {
+      try {
+        if (libCode && libCode.trim().length > 0) {
+          const safe = libCode
+            .replace(/<\\\/?script>/gi, (m) => m.replace("/", "\\/"))
+            .replace(/<\/(script)>/gi, "<\\/$1>");
+          console.log("[SimpleKLineChart] Using embedded klinecharts");
+          return `<script>\n${safe}\n</script>`;
+        }
+      } catch (_) {}
+      console.log("[SimpleKLineChart] Falling back to CDN for klinecharts");
+      return '<script src="https://unpkg.com/klinecharts@10.0.0-alpha9/dist/umd/klinecharts.min.js"></script>';
+    })();
+
     return `<!doctype html>
 <html>
   <head>
@@ -248,7 +308,7 @@ export default function SimpleKLineChart({
         <button class="custom-button" id="btn-crosshair" title="Crosshair">add</button>
       </div>
     </div>
-    <script src="https://unpkg.com/klinecharts@10.0.0-alpha9/dist/umd/klinecharts.min.js"></script>
+    ${libraryTag}
     <script>
       (function(){
         function post(msg){ try { window.ReactNativeWebView && window.ReactNativeWebView.postMessage(JSON.stringify(msg)); } catch(e) {} }
