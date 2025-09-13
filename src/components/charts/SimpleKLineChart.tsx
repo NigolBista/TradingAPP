@@ -296,6 +296,22 @@ export default function SimpleKLineChart({
       #btn-alert:hover { background: #F59E0B; }
       #btn-alert:active { background: #F59E0B; }
 
+      #btn-measure {
+        background: #10B981;
+        color: #FFFFFF;
+        border-radius: 50%;
+      }
+      #btn-measure:hover { background: #10B981; }
+      #btn-measure:active { background: #10B981; }
+
+      #btn-crosshair {
+        background: #10B981;
+        color: #FFFFFF;
+        border-radius: 50%;
+      }
+      #btn-crosshair:hover { background: #10B981; }
+      #btn-crosshair:active { background: #10B981; }
+
       .custom-button:hover {
         background: ${JSON.stringify(theme === "dark" ? "#3A4451" : "#D8DEE6")};
         transform: translateY(-1px);
