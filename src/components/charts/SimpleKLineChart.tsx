@@ -287,6 +287,15 @@ export default function SimpleKLineChart({
         -webkit-tap-highlight-color: transparent;
       }
 
+      /* Make the alert button circular and match the alert line color */
+      #btn-alert {
+        background: #F59E0B;
+        color: #FFFFFF;
+        border-radius: 50%;
+      }
+      #btn-alert:hover { background: #F59E0B; }
+      #btn-alert:active { background: #F59E0B; }
+
       .custom-button:hover {
         background: ${JSON.stringify(theme === "dark" ? "#3A4451" : "#D8DEE6")};
         transform: translateY(-1px);
@@ -365,6 +374,7 @@ export default function SimpleKLineChart({
         )};
         var INDICATORS = ${JSON.stringify(indicators || [])};
         var ALERTS = ${JSON.stringify(alerts || [])};
+        var THEME = ${JSON.stringify(theme)};
 
         function mapPeriod(tf){
           try {
@@ -498,18 +508,18 @@ export default function SimpleKLineChart({
                   var label = extendData.label || '';
                   var price = extendData.price || 0;
                   var color = extendData.color || '#10B981';
-                  var isSelected = !!extendData.dragHintArrows;
+                  var showArrows = !!extendData.dragHintArrows;
                   var figs = [
                     { type: 'line', attrs: { coordinates: [ { x: 0, y: point.y }, { x: 9999, y: point.y } ] }, styles: { color: color, size: 1, style: 'dashed', dashedValue: [10, 6] } }
                   ];
-                  if (isSelected) {
-                    figs.push({ type: 'text', attrs: { x: 12, y: point.y - 5, text: label + ' $' + Number(price).toFixed(2), baseline: 'bottom', align: 'left' }, styles: { color: '#FFFFFF', size: 11, backgroundColor: color, borderColor: color, borderSize: 1, borderRadius: 3, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2 } });
+                  if (showArrows) {
                     figs.push(
-                      { type: 'text', attrs: { x: 6, y: point.y - 8, text: '\u25B2', baseline: 'bottom', align: 'left' }, styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' } },
-                      { type: 'text', attrs: { x: 6, y: point.y + 8, text: '\u25BC', baseline: 'top', align: 'left' }, styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' } }
+                      { type: 'text', attrs: { x: 6, y: point.y - 2, text: '\u25B2', baseline: 'bottom', align: 'left' }, styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' } },
+                      { type: 'text', attrs: { x: 6, y: point.y + 2, text: '\u25BC', baseline: 'top', align: 'left' }, styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' } }
                     );
                   } else {
-                    figs.push({ type: 'text', attrs: { x: 8, y: point.y - 6, text: '\uE7F4', baseline: 'bottom', align: 'left' }, styles: { color: color, family: 'Material Icons', size: 16, backgroundColor: 'transparent' } });
+                    // Alert icon centered on the line with circular background matching the line color
+                    figs.push({ type: 'text', attrs: { x: 8, y: point.y, text: '\uE7F4', baseline: 'middle', align: 'left' }, styles: { color: '#FFFFFF', family: 'Material Icons', size: 12, backgroundColor: color, borderColor: color, borderSize: 1, borderRadius: 999, paddingLeft: 3, paddingRight: 3, paddingTop: 3, paddingBottom: 3 } });
                   }
                   return figs;
                 }
@@ -680,14 +690,14 @@ export default function SimpleKLineChart({
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 window.__SIMPLE_KLINE__.lastAlerts = alerts.slice();
                 var registry = [];
-                var selectedId = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.selectedAlertId) || null;
+                var editId = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.editModeAlertId) || null;
                 alerts.forEach(function(alert, i) {
                   if (alert && typeof alert.price === 'number' && alert.isActive) {
                     var color = '#F59E0B';
                     var label = 'Alert ' + (i + 1);
                     var aid = String(alert.id || ('alert_' + (i + 1)));
-                    var isSel = selectedId != null && String(selectedId) === aid;
-                    addPriceLine(alert.price, color, label, !!isSel, true);
+                    var showArrows = editId != null && String(editId) === aid;
+                    addPriceLine(alert.price, color, label, !!showArrows, true);
                     registry.push({ id: aid, price: Number(alert.price) });
                   }
                 });
@@ -1106,14 +1116,34 @@ export default function SimpleKLineChart({
                         }
                         if (best && best.dy <= 12) {
                           if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                          window.__SIMPLE_KLINE__.selectedAlertId = best.id;
-                          try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){ }
-                          post({ type: 'alertSelected', id: best.id, price: best.price, y: best.y });
-                          window.__SIMPLE_KLINE__.draggingAlert = { id: best.id, startY: y, price: best.price };
-                          window.__SIMPLE_KLINE__.draggingCurrentPrice = best.price;
+                          var now = Date.now();
+                          var lastTap = window.__SIMPLE_KLINE__.lastAlertTap || null;
+                          var isDoubleTap = !!(lastTap && lastTap.id === best.id && (now - lastTap.time) < 350);
+
+                          if (isDoubleTap) {
+                            var currentEdit = window.__SIMPLE_KLINE__.editModeAlertId || null;
+                            window.__SIMPLE_KLINE__.editModeAlertId = (currentEdit === best.id) ? null : best.id;
+                            try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){ }
+                            window.__SIMPLE_KLINE__.lastDoubleTapTime = now;
+                            // On double tap, toggle edit mode but do not start dragging in the same gesture
+                          } else {
+                            window.__SIMPLE_KLINE__.selectedAlertId = best.id;
+                            try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){ }
+                            post({ type: 'alertSelected', id: best.id, price: best.price, y: best.y });
+                            var allowDrag = (window.__SIMPLE_KLINE__.editModeAlertId === best.id) && (!(window.__SIMPLE_KLINE__.lastDoubleTapTime) || ((now - window.__SIMPLE_KLINE__.lastDoubleTapTime) > 250));
+                            if (allowDrag) {
+                              window.__SIMPLE_KLINE__.draggingAlert = { id: best.id, startY: y, price: best.price };
+                              window.__SIMPLE_KLINE__.draggingCurrentPrice = best.price;
+                            } else {
+                              window.__SIMPLE_KLINE__.draggingAlert = null;
+                            }
+                          }
+                          window.__SIMPLE_KLINE__.lastAlertTap = { id: best.id, time: now };
                         } else {
                           if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                           window.__SIMPLE_KLINE__.selectedAlertId = null;
+                          window.__SIMPLE_KLINE__.editModeAlertId = null;
+                          window.__SIMPLE_KLINE__.draggingAlert = null;
                           try { applyAlerts(window.__SIMPLE_KLINE__.lastAlerts || []); } catch(_){ }
                           if (buttonsShownByLongPress) { hideButtons(); }
                         }
