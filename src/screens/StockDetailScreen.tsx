@@ -23,11 +23,10 @@ import TimeframePickerModal, {
   type ExtendedTimeframe,
 } from "../components/charts/TimeframePickerModal";
 import {
-  type Candle,
   fetchCandles,
   fetchCandlesForTimeframe,
 } from "../services/marketProviders";
-import { getUpcomingFedEvents } from "../services/federalReserve";
+// removed unused federal reserve import
 import {
   performComprehensiveAnalysis,
   type MarketAnalysis,
@@ -46,7 +45,7 @@ import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
-import { useAlertStore, PriceAlert } from "../store/alertStore";
+import { useAlertStore } from "../store/alertStore";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
 import AlertsList from "../components/common/AlertsList";
@@ -704,54 +703,19 @@ export default function StockDetailScreen() {
     }
   }
 
-  // Auto-analysis function for immediate signal display
-  async function performAutoAnalysis() {
-    try {
-      setSignalLoading(true);
-
-      // Check if we have a fresh cached signal first
-      const cached = getCachedSignal(symbol);
-      if (cached && isSignalFresh(symbol)) {
-        setCachedSignal(cached);
-        setSignalLoading(false);
-        return;
-      }
-
-      // Analysis now requires Polygon API key for candle data
-      console.log("Auto-analysis requires Polygon API key for candle data");
-      return;
-    } catch (error) {
-      console.error("Auto-analysis failed:", error);
-    } finally {
-      setSignalLoading(false);
-    }
-  }
+  // removed unused performAutoAnalysis
 
   // Load chart data only (for timeframe changes)
   async function loadChartData() {
-    // Chart data is now handled directly by KLineProChart via Polygon API
     setLoading(false);
-
-    // Load simple line chart data
-    loadLineChartData().catch((error) => {
-      console.error("Line chart loading failed:", error);
-      setLineChartData([]);
-    });
+    loadLineChartData().catch(() => setLineChartData([]));
   }
 
   // Load all data including news and sentiment (for symbol changes)
   async function load() {
-    // Load chart data first
     await loadChartData();
-
-    // Load news and sentiment stats in parallel (truly non-blocking - fire and forget)
-    loadNewsInBackground().catch((error) => {
-      console.error("News loading failed:", error);
-    });
-
-    loadSentimentStats().catch((error) => {
-      console.error("Sentiment stats loading failed:", error);
-    });
+    loadNewsInBackground().catch(() => {});
+    loadSentimentStats().catch(() => {});
   }
 
   async function loadLineChartData() {
@@ -767,7 +731,6 @@ export default function StockDetailScreen() {
       }));
       setLineChartData(series);
     } catch (e) {
-      console.error("Failed to load line data:", e);
       setLineChartData([]);
     }
   }
@@ -778,15 +741,9 @@ export default function StockDetailScreen() {
   async function loadSentimentStats() {
     setSentimentLoading(true);
     try {
-      console.log(`Loading sentiment stats for ${symbol}...`);
       const stats = await fetchSentimentStats(symbol, "last30days");
       setSentimentStats(stats);
-      console.log(
-        `Sentiment stats loaded for ${symbol}:`,
-        stats.sentimentScore
-      );
     } catch (error) {
-      console.error("Failed to load sentiment stats:", error);
       setSentimentStats(null);
     } finally {
       setSentimentLoading(false);
@@ -802,33 +759,17 @@ export default function StockDetailScreen() {
       let items: NewsItem[] = [];
 
       try {
-        console.log(`Loading news for ${symbol} using Stock News API...`);
         items = await fetchStockNewsApi(symbol, 25);
-        console.log(
-          `Stock News API returned ${items.length} articles for ${symbol}`
-        );
       } catch (stockNewsError) {
-        console.log(
-          "Stock News API failed, falling back to default provider:",
-          stockNewsError
-        );
-
         try {
-          // Fallback to default news provider
-          console.log(`Falling back to default news provider for ${symbol}...`);
           items = await fetchSymbolNews(symbol);
-          console.log(
-            `Default provider returned ${items.length} articles for ${symbol}`
-          );
         } catch (fallbackError) {
-          console.error("Default news provider also failed:", fallbackError);
           items = [];
         }
       }
 
       setNews(items);
     } catch (error) {
-      console.error("All news providers failed:", error);
       setNews([]);
     } finally {
       setNewsLoading(false);
@@ -992,14 +933,7 @@ export default function StockDetailScreen() {
           source: n.source,
         }));
 
-        // Fetch FOMC events
-        const events = await getUpcomingFedEvents();
-        fedBrief = (events || []).slice(0, 3).map((e: any) => ({
-          title: e.title,
-          date: e.date,
-          impact: e.impact,
-          type: e.type,
-        }));
+        // Omit FOMC events in streamlined build
       } catch (error) {
         console.warn("Failed to fetch context data:", error);
       }
@@ -1312,6 +1246,20 @@ export default function StockDetailScreen() {
               showPriceAxisText={false}
               showTimeAxisText={true}
               showLastPriceLabel={false}
+              onChartReady={() => {
+                try {
+                  if (chartBridgeRef.current) {
+                    chartBridgeRef.current.updateAlerts(alertLines);
+                  }
+                } catch (_) {}
+              }}
+              onDataApplied={() => {
+                try {
+                  if (chartBridgeRef.current) {
+                    chartBridgeRef.current.updateAlerts(alertLines);
+                  }
+                } catch (_) {}
+              }}
               onAlertClick={(price) => {
                 // Create a new alert with the clicked price
                 addAlert({

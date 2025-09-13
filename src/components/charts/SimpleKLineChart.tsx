@@ -76,6 +76,8 @@ interface Props {
   onAlertMoved?: (payload: { id: string; price: number }) => void;
   onMeasureClick?: (price: number) => void;
   onCrosshairClick?: (price: number) => void;
+  onChartReady?: () => void;
+  onDataApplied?: () => void;
 }
 
 export interface IndicatorConfig {
@@ -114,13 +116,15 @@ export default function SimpleKLineChart({
   onAlertMoved,
   onMeasureClick,
   onCrosshairClick,
+  onChartReady,
+  onDataApplied,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
   const [libCode, setLibCode] = useState<string | null>(null);
 
-  // Create stable initial alerts reference that only changes with symbol
-  const initialAlertsRef = useRef<typeof alerts>([]);
+  // Create stable initial alerts reference seeded with current alerts
+  const initialAlertsRef = useRef<typeof alerts>(alerts);
   useEffect(() => {
     // Only update initial alerts when symbol changes (for HTML generation)
     initialAlertsRef.current = alerts;
@@ -206,13 +210,15 @@ export default function SimpleKLineChart({
     updateLevels,
   ]);
 
-  // Handle timeframe changes via bridge after initial load
+  // Handle timeframe changes via bridge after initial load and immediately re-apply alerts/levels
   useEffect(() => {
     if (isReadyRef.current) {
-      // Add a small delay to ensure chart is fully initialized
-      setTimeout(() => {
-        updateTimeframe(timeframe);
-      }, 100);
+      updateTimeframe(timeframe);
+      // Ensure alerts/levels are promptly re-applied on TF change for instant visibility
+      try {
+        if (alerts) updateAlerts(alerts);
+        if (levels) updateLevels(levels);
+      } catch (_) {}
     }
   }, [timeframe, updateTimeframe]);
 
@@ -330,48 +336,8 @@ export default function SimpleKLineChart({
     if (onOverrideIndicator) onOverrideIndicator(overrideIndicator);
   }, [onOverrideIndicator, overrideIndicator]);
 
-  // Simple alerts key for WebView reload when alerts change
-  const alertsKey = useMemo(() => {
-    return alerts.map((a) => `${a.id}-${a.price}-${a.isActive}`).join(",");
-  }, [alerts]);
-
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
-
-  const dataKey = useMemo(() => {
-    try {
-      const bars =
-        customBars && customBars.length > 0
-          ? customBars
-          : customData && customData.length > 0
-          ? customData
-          : [];
-      if (!Array.isArray(bars) || bars.length === 0) return "0";
-      const first = (bars[0] as any).timestamp ?? (bars[0] as any).time ?? 0;
-      const last =
-        (bars[bars.length - 1] as any).timestamp ??
-        (bars[bars.length - 1] as any).time ??
-        0;
-      return `${bars.length}-${first}-${last}`;
-    } catch (_) {
-      return "0";
-    }
-  }, [customBars, customData]);
-
-  const indicatorsKey = useMemo(() => {
-    try {
-      if (!indicators || indicators.length === 0) return "none";
-      const norm = indicators.map((i) => ({
-        n: String(i.name || ""),
-        o: !!i.overlay,
-        p: i.calcParams,
-        s: i.styles,
-      }));
-      return JSON.stringify(norm);
-    } catch (_) {
-      return "err";
-    }
-  }, [indicators]);
 
   const html = useMemo(() => {
     const safeSymbol = (symbol || "AAPL").toUpperCase();
@@ -388,11 +354,9 @@ export default function SimpleKLineChart({
           const safe = libCode
             .replace(/<\\\/?script>/gi, (m) => m.replace("/", "\\/"))
             .replace(/<\/(script)>/gi, "<\\/$1>");
-          console.log("[SimpleKLineChart] Using embedded klinecharts");
           return `<script>\n${safe}\n</script>`;
         }
       } catch (_) {}
-      console.log("[SimpleKLineChart] Falling back to CDN for klinecharts");
       return '<script src="https://unpkg.com/klinecharts@10.0.0-alpha9/dist/umd/klinecharts.min.js"></script>';
     })();
 
@@ -661,7 +625,6 @@ export default function SimpleKLineChart({
           })
         )};
         var INDICATORS = ${JSON.stringify(indicators || [])};
-        var ALERTS = ${JSON.stringify(alerts || [])};
         var THEME = ${JSON.stringify(theme)};
 
         function mapPeriod(tf){
@@ -846,12 +809,12 @@ export default function SimpleKLineChart({
                 var bars = (Array.isArray(CUSTOM_BARS) && CUSTOM_BARS.length > 0) ? CUSTOM_BARS : CUSTOM_DATA;
                 try { bars = bars.slice().sort(function(a,b){ return (a.timestamp||0) - (b.timestamp||0); }); } catch(_){ }
                 var applied = false;
-                try { if (chart && typeof chart.setData === 'function') { chart.setData(bars); applied = true; } } catch(_){ }
-                if (!applied) { try { if (chart && typeof chart.applyNewData === 'function') { chart.applyNewData(bars); applied = true; } } catch(_){ } }
+                try { if (chart && typeof chart.setData === 'function') { chart.setData(bars); applied = true; try { post({ type: 'dataApplied' }); } catch(_){ } } } catch(_){ }
+                if (!applied) { try { if (chart && typeof chart.applyNewData === 'function') { chart.applyNewData(bars); applied = true; try { post({ type: 'dataApplied' }); } catch(_){ } } } catch(_){ } }
                 if (!applied) {
                   try {
                     if (typeof chart.setDataLoader === 'function') {
-                      chart.setDataLoader({ getBars: function(ctx){ try { (ctx && ctx.callback ? ctx.callback : function(){}) (bars); } catch (e4) { post({ error: 'custom_loader_callback_failed', message: String(e4 && e4.message || e4) }); } } });
+                      chart.setDataLoader({ getBars: function(ctx){ try { (ctx && ctx.callback ? ctx.callback : function(){}) (bars); try { post({ type: 'dataApplied' }); } catch(_){ } } catch (e4) { post({ error: 'custom_loader_callback_failed', message: String(e4 && e4.message || e4) }); } } });
                       applied = true;
                     }
                   } catch(_){ }
@@ -876,6 +839,7 @@ export default function SimpleKLineChart({
                           var list = (result && result.results) || [];
                           var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
                           callback(out);
+                          try { post({ type: 'dataApplied' }); } catch(_){ }
                           setTimeout(applySessionBackgrounds, 0);
                         })
                         .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); callback([]); setTimeout(applySessionBackgrounds, 0); });
@@ -895,6 +859,7 @@ export default function SimpleKLineChart({
                       var list = (result && result.results) || [];
                       var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
                       try { chart.applyNewData(out || []); } catch(e) { post({ error: 'applyNewData failed', message: String(e && e.message || e) }); }
+                      try { post({ type: 'dataApplied' }); } catch(_){ }
                       setTimeout(applySessionBackgrounds, 0);
                     })
                     .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); setTimeout(applySessionBackgrounds, 0); });
@@ -902,7 +867,7 @@ export default function SimpleKLineChart({
               }
             }
 
-            // Levels
+            // Levels helpers
             function clearLevels(){
               try {
                 var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.levelOverlayIds) || [];
@@ -931,35 +896,6 @@ export default function SimpleKLineChart({
                 if (isAlert) { window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids); }
                 else { window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids); }
               } catch(e){ post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); }
-            }
-
-            function applyLevels(levels){
-              try {
-                clearLevels();
-                var hasDetailedLevels = levels && (
-                  levels.entry !== undefined || levels.lateEntry !== undefined ||
-                  levels.exit !== undefined || levels.lateExit !== undefined ||
-                  levels.stop !== undefined || (levels.targets && levels.targets.length > 0)
-                );
-
-                if (hasDetailedLevels) {
-                  if (levels.entry != null) addPriceLine(levels.entry, '#10B981', 'Entry', false, false);
-                  if (levels.lateEntry != null) addPriceLine(levels.lateEntry, '#059669', 'Late Entry', false, false);
-                  if (levels.exit != null) addPriceLine(levels.exit, '#EF4444', 'Exit', false, false);
-                  if (levels.lateExit != null) addPriceLine(levels.lateExit, '#DC2626', 'Extended Stop', false, false);
-                  if (levels.stop != null) addPriceLine(levels.stop, '#EF4444', 'Stop', false, false);
-                  if (levels.targets && Array.isArray(levels.targets)) {
-                    levels.targets.forEach(function(target, i) { if (target != null) addPriceLine(target, '#3B82F6', 'Target ' + (i + 1), false, false); });
-                  }
-                } else {
-                  var entries = Array.isArray(levels && levels.entries) ? levels.entries : [];
-                  var exits = Array.isArray(levels && levels.exits) ? levels.exits : [];
-                  var tps = Array.isArray(levels && levels.takeProfits) ? levels.takeProfits : [];
-                  entries.forEach(function(p, i){ addPriceLine(p, '#10B981', entries.length === 1 ? 'Entry' : 'Entry ' + (i + 1), false, false); });
-                  exits.forEach(function(p, i){ addPriceLine(p, '#EF4444', exits.length === 1 ? 'Exit' : 'Exit ' + (i + 1), false, false); });
-                  tps.forEach(function(p, i){ addPriceLine(p, '#3B82F6', 'TP' + (i+1), false, false); });
-                }
-              } catch(e){ post({ warn: 'applyLevels failed', message: String(e && e.message || e) }); }
             }
 
             function clearAlerts(){
@@ -995,7 +931,7 @@ export default function SimpleKLineChart({
               } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
             }
 
-            // Define applyLevels function
+            // Define applyLevels function (final implementation)
             function applyLevels(levels) {
               try {
                 var chart = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart;
@@ -1595,6 +1531,33 @@ export default function SimpleKLineChart({
             const data = JSON.parse(event.nativeEvent.data || "{}");
             if (data && data.ready) {
               isReadyRef.current = true;
+              // Push current props immediately on ready to avoid waiting for state changes
+              try {
+                updateTimeframe(timeframe);
+                updateChartType(chartType);
+                updateTheme(theme);
+                updateIndicators(indicators);
+                updateDisplayOptions({ showSessions });
+                if (alerts) updateAlerts(alerts);
+                if (levels) updateLevels(levels);
+              } catch (_) {}
+              if (onChartReady) {
+                try {
+                  onChartReady();
+                } catch (_) {}
+              }
+            }
+            if (data && data.type === "dataApplied") {
+              // Data finished applying on the chart; ensure alerts/levels are applied immediately
+              try {
+                if (alerts) updateAlerts(alerts);
+                if (levels) updateLevels(levels);
+              } catch (_) {}
+              if (onDataApplied) {
+                try {
+                  onDataApplied();
+                } catch (_) {}
+              }
             }
             if (data.type === "alertClick" && data.price && onAlertClick) {
               onAlertClick(data.price);

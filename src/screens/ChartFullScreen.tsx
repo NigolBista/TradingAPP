@@ -8,7 +8,6 @@ import {
   useColorScheme,
   Modal,
   TextInput,
-  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -54,13 +53,13 @@ import { useUserStore } from "../store/userStore";
 import { useAlertStore } from "../store/alertStore";
 import { StrategyComplexity } from "../logic/types";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
-import { getUpcomingFedEvents } from "../services/federalReserve";
+// removed unused federalReserve import
 import {
   fetchCandles,
   fetchCandlesForTimeframe,
   type Candle,
 } from "../services/marketProviders";
-import { timeframeSpacingMs } from "./ChartFullScreen/utils";
+// removed unused timeframeSpacingMs
 import { buildDayTradePlan } from "../logic/dayTrade";
 import { buildSwingTradePlan } from "../logic/swingTrade";
 
@@ -141,7 +140,7 @@ export default function ChartFullScreen() {
   const [showMA, setShowMA] = useState<boolean>(false);
   const [showVolume, setShowVolume] = useState<boolean>(false);
   const [showSessions, setShowSessions] = useState<boolean>(true);
-  const [indicatorsExpanded, setIndicatorsExpanded] = useState<boolean>(false);
+  // Use accordion expansion to influence layout height; no separate expanded state
 
   // Indicators state
   const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
@@ -206,7 +205,6 @@ export default function ChartFullScreen() {
 
   // Refs
   const [pinError, setPinError] = useState<string | null>(null);
-  const barSpacingRef = React.useRef<number>(60_000);
   const overrideIndicatorRef = React.useRef<
     | ((
         id: string | { name: string; paneId?: string },
@@ -222,12 +220,14 @@ export default function ChartFullScreen() {
     updateIndicators: (indicators: IndicatorConfig[]) => void;
     updateDisplayOptions: (options: any) => void;
     updateTheme: (theme: string) => void;
+    updateAlerts: (alerts: any[]) => void;
+    updateLevels: (levels: any) => void;
   } | null>(null);
 
   // Layout calculations
   const headerHeight = 52;
   const ohlcRowHeight = 24;
-  const indicatorBarHeight = indicatorsExpanded ? 88 : 28;
+  const indicatorBarHeight = showIndicatorsAccordion ? 88 : 28;
   const timeframeRowHeight = 48;
   const bottomNavHeight = 56;
   const chartHeight = Math.max(
@@ -243,25 +243,7 @@ export default function ChartFullScreen() {
       8
   );
 
-  // Recalculate chart height when screen dimensions change
-  useEffect(() => {
-    // Force re-render when screen dimensions change
-    const subscription = Dimensions.addEventListener("change", () => {
-      // This will trigger a re-render with new dimensions
-    });
-    return () => subscription?.remove();
-  }, []);
-
-  // Initialize bar spacing from initial data
-  React.useEffect(() => {
-    if (initialDataParam && initialDataParam.length >= 2) {
-      const last = initialDataParam[initialDataParam.length - 1];
-      const prev = initialDataParam[initialDataParam.length - 2];
-      barSpacingRef.current = Math.max(1, last.time - prev.time);
-    } else {
-      barSpacingRef.current = timeframeSpacingMs(extendedTf);
-    }
-  }, [extendedTf]);
+  // Removed unused dimensions listener and bar spacing calculations
 
   // Update indicators ref and cleanup
   useEffect(() => {
@@ -1196,6 +1178,44 @@ export default function ChartFullScreen() {
           onChartBridge={React.useCallback((bridge: any) => {
             chartBridgeRef.current = bridge;
           }, [])}
+          onChartReady={() => {
+            try {
+              if (chartBridgeRef.current) {
+                chartBridgeRef.current.updateAlerts(alertLines);
+                chartBridgeRef.current.updateLevels(
+                  currentTradePlan
+                    ? {
+                        entry: currentTradePlan.entry,
+                        lateEntry: currentTradePlan.lateEntry,
+                        exit: currentTradePlan.exit,
+                        lateExit: currentTradePlan.lateExit,
+                        stop: currentTradePlan.stop,
+                        targets: (currentTradePlan.targets || []).slice(0, 3),
+                      }
+                    : undefined
+                );
+              }
+            } catch (_) {}
+          }}
+          onDataApplied={() => {
+            try {
+              if (chartBridgeRef.current) {
+                chartBridgeRef.current.updateAlerts(alertLines);
+                chartBridgeRef.current.updateLevels(
+                  currentTradePlan
+                    ? {
+                        entry: currentTradePlan.entry,
+                        lateEntry: currentTradePlan.lateEntry,
+                        exit: currentTradePlan.exit,
+                        lateExit: currentTradePlan.lateExit,
+                        stop: currentTradePlan.stop,
+                        targets: (currentTradePlan.targets || []).slice(0, 3),
+                      }
+                    : undefined
+                );
+              }
+            } catch (_) {}
+          }}
           levels={
             currentTradePlan
               ? {
@@ -1235,10 +1255,8 @@ export default function ChartFullScreen() {
             });
           }}
           alerts={alertLines}
-          onAlertSelected={({ id, price }) => {
-            setSelectedAlertId(id);
-            setProposedAlertPrice(price);
-          }}
+          // selection is handled in WebView; no RN state needed
+          onAlertSelected={undefined as any}
           onAlertMoved={({ id, price }) => {
             if (!id || !(price > 0)) return;
             updateAlert(id, { price, isActive: true, triggeredAt: undefined });
