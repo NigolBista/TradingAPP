@@ -26,6 +26,7 @@ interface Props {
     | "candle_up_stroke"
     | "candle_down_stroke"
     | "ohlc";
+  tooltipRule?: "always" | "follow_cross" | "none";
   showVolume?: boolean;
   showMA?: boolean;
   showTopInfo?: boolean;
@@ -104,6 +105,7 @@ export default function SimpleKLineChart({
   height = 280,
   theme = "dark",
   chartType = "candle",
+  tooltipRule = "always",
   showVolume = true,
   showMA = true,
   showTopInfo = true,
@@ -257,9 +259,9 @@ export default function SimpleKLineChart({
   // Handle display options changes via bridge after initial load
   useEffect(() => {
     if (isReadyRef.current) {
-      updateDisplayOptions({ showSessions });
+      updateDisplayOptions({ showSessions, tooltipRule });
     }
-  }, [showSessions, updateDisplayOptions]);
+  }, [showSessions, tooltipRule, updateDisplayOptions]);
 
   // Handle alerts changes via bridge after initial load
   useEffect(() => {
@@ -555,6 +557,7 @@ export default function SimpleKLineChart({
               if (typeof options.showMA === 'boolean') SHOW_MA = options.showMA;
               if (typeof options.showGrid === 'boolean') SHOW_GRID = options.showGrid;
               if (typeof options.showSessions === 'boolean') SHOW_SESSIONS = options.showSessions;
+              if (typeof options.tooltipRule === 'string') TOOLTIP_RULE = options.tooltipRule;
               
               if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) {
                 try {
@@ -641,6 +644,7 @@ export default function SimpleKLineChart({
         var INDICATORS = ${JSON.stringify(indicators || [])};
         var THEME = ${JSON.stringify(theme)};
         var MOCK_REALTIME = ${JSON.stringify(mockRealtime)};
+        var TOOLTIP_RULE = ${JSON.stringify(tooltipRule)};
 
         function mapPeriod(tf){
           try {
@@ -678,6 +682,7 @@ export default function SimpleKLineChart({
             var opts = {
               candle: {
                 type: type,
+                tooltip: { showRule: (TOOLTIP_RULE || 'follow_cross') },
                 priceMark: {
                   last: {
                     show: SHOW_LAST_PRICE_LABEL,
@@ -752,6 +757,12 @@ export default function SimpleKLineChart({
               )} }
             };
             if (!SHOW_TOP_INFO) { opts.candle.tooltip = { showRule: 'none' }; }
+            // Apply indicator tooltip rule to all panes if API exists
+            try {
+              var rule = (TOOLTIP_RULE || 'follow_cross');
+              opts.indicator = opts.indicator || {};
+              opts.indicator.tooltip = { showRule: rule };
+            } catch(_) {}
             if (typeof chart.setStyles === 'function') chart.setStyles(opts);
             else if (typeof chart.setStyleOptions === 'function') chart.setStyleOptions(opts);
           } catch (e) { post({ warn: 'applyChartType failed', message: String(e && e.message || e) }); }
