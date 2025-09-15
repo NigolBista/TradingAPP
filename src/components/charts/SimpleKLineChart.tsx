@@ -27,6 +27,7 @@ interface Props {
   showTimeAxisText?: boolean;
   showLastPriceLabel?: boolean;
   showSessions?: boolean;
+  mockRealtime?: boolean;
   levels?: {
     entries?: number[];
     exits?: number[];
@@ -104,6 +105,7 @@ export default function SimpleKLineChart({
   showTimeAxisText,
   showLastPriceLabel = true,
   showSessions = false,
+  mockRealtime = true,
   levels,
   customBars,
   customData,
@@ -626,6 +628,7 @@ export default function SimpleKLineChart({
         )};
         var INDICATORS = ${JSON.stringify(indicators || [])};
         var THEME = ${JSON.stringify(theme)};
+        var MOCK_REALTIME = ${JSON.stringify(mockRealtime)};
 
         function mapPeriod(tf){
           try {
@@ -800,8 +803,37 @@ export default function SimpleKLineChart({
             if (SHOW_VOL) { try { chart.createIndicator && chart.createIndicator('VOL'); } catch(_){} }
             applyChartType(chart, CHART_TYPE);
 
-            if (typeof chart.setSymbol === 'function') { try { chart.setSymbol({ ticker: SYMBOL }); } catch(_){} }
-            if (typeof chart.setPeriod === 'function') { try { chart.setPeriod(mapPeriod(TF)); } catch(_){} }
+            // Note: setDataLoader must be configured before triggering getBars via setSymbol/setPeriod.
+
+            function genData(ts, length, stepMs){
+              try {
+                var now = (typeof ts === 'number' ? ts : Date.now());
+                var p = mapPeriod(TF);
+                var step = (typeof stepMs === 'number' && stepMs > 0) ? stepMs : periodToMs(p);
+                var basePrice = 5000;
+                var start = Math.floor(now / step) * step - (length * step);
+                var list = [];
+                for (var i = 0; i < length; i++) {
+                  var prices = [];
+                  for (var j = 0; j < 4; j++) { prices.push(basePrice + Math.random() * 60 - 30); }
+                  prices.sort(function(a,b){ return a - b; });
+                  var open = Number(prices[Math.round(Math.random() * 3)].toFixed(2));
+                  var high = Number(prices[3].toFixed(2));
+                  var low = Number(prices[0].toFixed(2));
+                  var close = Number(prices[Math.round(Math.random() * 3)].toFixed(2));
+                  var volume = Math.round(Math.random() * 100) + 10;
+                  var turnover = (open + high + low + close) / 4 * volume;
+                  list.push({ timestamp: start, open: open, high: high, low: low, close: close, volume: volume, turnover: turnover });
+                  basePrice = close;
+                  start += step;
+                }
+                return list;
+              } catch(_) { return []; }
+            }
+
+            // After data loader is configured, trigger initial data load and subscription.
+            try { if (typeof chart.setSymbol === 'function') { chart.setSymbol({ ticker: SYMBOL }); } } catch(_){ }
+            try { if (typeof chart.setPeriod === 'function') { chart.setPeriod(mapPeriod(TF)); } } catch(_){ }
 
             var hasCustom = (Array.isArray(CUSTOM_BARS) && CUSTOM_BARS.length > 0) || (Array.isArray(CUSTOM_DATA) && CUSTOM_DATA.length > 0);
             if (hasCustom) {
@@ -809,61 +841,132 @@ export default function SimpleKLineChart({
                 var bars = (Array.isArray(CUSTOM_BARS) && CUSTOM_BARS.length > 0) ? CUSTOM_BARS : CUSTOM_DATA;
                 try { bars = bars.slice().sort(function(a,b){ return (a.timestamp||0) - (b.timestamp||0); }); } catch(_){ }
                 var applied = false;
-                try { if (chart && typeof chart.setData === 'function') { chart.setData(bars); applied = true; try { post({ type: 'dataApplied' }); } catch(_){ } } } catch(_){ }
-                if (!applied) { try { if (chart && typeof chart.applyNewData === 'function') { chart.applyNewData(bars); applied = true; try { post({ type: 'dataApplied' }); } catch(_){ } } } catch(_){ } }
+                try {
+                  if (chart && typeof chart.setDataLoader === 'function') {
+                    chart.setDataLoader({
+                      getBars: function(ctx){
+                        try {
+                          var cb = ctx && ctx.callback ? ctx.callback : function(){};
+                          cb(bars);
+                          try { post({ type: 'dataApplied' }); } catch(_){ }
+                        } catch (e4) { post({ error: 'custom_loader_callback_failed', message: String(e4 && e4.message || e4) }); }
+                      },
+                      subscribeBar: function(params){},
+                      unsubscribeBar: function(params){},
+                      // backward compatibility if library accepts these keys
+                      subscribe: function(params){},
+                      unsubscribe: function(params){}
+                    });
+                    applied = true;
+                  }
+                } catch(_){ }
                 if (!applied) {
-                  try {
-                    if (typeof chart.setDataLoader === 'function') {
-                      chart.setDataLoader({ getBars: function(ctx){ try { (ctx && ctx.callback ? ctx.callback : function(){}) (bars); try { post({ type: 'dataApplied' }); } catch(_){ } } catch (e4) { post({ error: 'custom_loader_callback_failed', message: String(e4 && e4.message || e4) }); } } });
-                      applied = true;
-                    }
-                  } catch(_){ }
+                  try { if (chart && typeof chart.setData === 'function') { chart.setData(bars); applied = true; try { post({ type: 'dataApplied' }); } catch(_){ } } } catch(_){ }
                 }
                 if (!applied) { post({ error: 'apply_custom_failed', message: 'No supported API to set data' }); }
               } catch(e) { post({ error: 'apply_custom_failed', message: String(e && e.message || e) }); }
               setTimeout(applySessionBackgrounds, 0);
             } else {
               if (typeof chart.setDataLoader === 'function') {
-                chart.setDataLoader({
-                  getBars: function(ctx){
-                    try {
-                      var callback = ctx && ctx.callback ? ctx.callback : function(){};
-                      var p = mapPeriod(TF);
-                      var to = Date.now();
-                      var from = to - 500 * periodToMs(p);
-                      if (!POLY_API_KEY) { post({ warn: 'Missing Polygon API key' }); callback([]); setTimeout(applySessionBackgrounds, 0); return; }
-                      var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) + '/range/' + p.span + '/' + p.type + '/' + from + '/' + to + '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
-                      fetch(url)
-                        .then(function(res){ return res.json(); })
-                        .then(function(result){
-                          var list = (result && result.results) || [];
-                          var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
-                          callback(out);
-                          try { post({ type: 'dataApplied' }); } catch(_){ }
-                          setTimeout(applySessionBackgrounds, 0);
-                        })
-                        .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); callback([]); setTimeout(applySessionBackgrounds, 0); });
-                    } catch (e) { post({ error: 'getBars_failed', message: String(e && e.message || e) }); }
-                  }
-                });
-              } else {
-                (function(){
-                  var p = mapPeriod(TF);
-                  var to = Date.now();
-                  var from = to - 500 * periodToMs(p);
-                  if (!POLY_API_KEY) return;
-                  var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) + '/range/' + p.span + '/' + p.type + '/' + from + '/' + to + '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
-                  fetch(url)
-                    .then(function(res){ return res.json(); })
-                    .then(function(result){
-                      var list = (result && result.results) || [];
-                      var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
-                      try { chart.applyNewData(out || []); } catch(e) { post({ error: 'applyNewData failed', message: String(e && e.message || e) }); }
-                      try { post({ type: 'dataApplied' }); } catch(_){ }
-                      setTimeout(applySessionBackgrounds, 0);
-                    })
-                    .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); setTimeout(applySessionBackgrounds, 0); });
-                })();
+                if (MOCK_REALTIME) {
+                  // Mock realtime via generator
+                  var mockBars = genData(Date.now(), 800);
+                  if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                  window.__SIMPLE_KLINE__.mockBars = mockBars.slice();
+                  window.__SIMPLE_KLINE__.mockTimer = null;
+                  chart.setDataLoader({
+                    getBars: function(ctx){
+                      try {
+                        var callback = ctx && ctx.callback ? ctx.callback : function(){};
+                        callback(window.__SIMPLE_KLINE__.mockBars || []);
+                        try { post({ type: 'dataApplied' }); } catch(_){ }
+                        setTimeout(applySessionBackgrounds, 0);
+                      } catch (e) { post({ error: 'mock_getBars_failed', message: String(e && e.message || e) }); }
+                    },
+                    subscribeBar: function(params){
+                      try {
+                        var step = periodToMs(mapPeriod(TF));
+                        if (window.__SIMPLE_KLINE__.mockTimer) { try { clearInterval(window.__SIMPLE_KLINE__.mockTimer); } catch(_){} }
+                        function deliver(bar){
+                          try {
+                            if (params && typeof params.callback === 'function') { params.callback(bar); return; }
+                            if (params && typeof params.onData === 'function') { params.onData(bar); return; }
+                            if (params && typeof params.emit === 'function') { params.emit(bar); return; }
+                          } catch(_) {}
+                        }
+                        window.__SIMPLE_KLINE__.mockTimer = setInterval(function(){
+                          try {
+                            var list = window.__SIMPLE_KLINE__.mockBars || [];
+                            if (!Array.isArray(list) || list.length === 0) return;
+                            var last = list[list.length - 1];
+                            var now = Date.now();
+                            var needNew = (now - Number(last.timestamp || 0)) >= step;
+                            if (needNew) {
+                              // create new bar based on last close
+                              var basePrice = Number(last.close || last.open || 5000);
+                              var prices = [];
+                              for (var j = 0; j < 4; j++) { prices.push(basePrice + Math.random() * 60 - 30); }
+                              prices.sort(function(a,b){ return a - b; });
+                              var open = Number(prices[Math.round(Math.random() * 3)].toFixed(2));
+                              var high = Number(prices[3].toFixed(2));
+                              var low = Number(prices[0].toFixed(2));
+                              var close = Number(prices[Math.round(Math.random() * 3)].toFixed(2));
+                              var volume = Math.round(Math.random() * 100) + 10;
+                              var turnover = (open + high + low + close) / 4 * volume;
+                              var nb = { timestamp: Math.floor(now / step) * step, open: open, high: high, low: low, close: close, volume: volume, turnover: turnover };
+                              list.push(nb);
+                              deliver(nb);
+                            } else {
+                              // update last bar
+                              var delta = (Math.random() * 20 - 10);
+                              last.close = Number((last.close + delta).toFixed(2));
+                              last.high = Math.max(last.high, last.close);
+                              last.low = Math.min(last.low, last.close);
+                              last.volume = Number((last.volume + Math.round(Math.random() * 10)).toFixed(0));
+                              last.turnover = Number(((last.open + last.high + last.low + last.close) / 4 * last.volume).toFixed(2));
+                              deliver(Object.assign({}, last));
+                            }
+                          } catch(_){ }
+                        }, 600);
+                      } catch(e) { post({ error: 'mock_subscribe_failed', message: String(e && e.message || e) }); }
+                    },
+                    unsubscribeBar: function(params){
+                      try { if (window.__SIMPLE_KLINE__.mockTimer) { clearInterval(window.__SIMPLE_KLINE__.mockTimer); window.__SIMPLE_KLINE__.mockTimer = null; } } catch(_){ }
+                    },
+                    // backward compatibility if library accepts these keys
+                    subscribe: function(params){ return this.subscribeBar && this.subscribeBar(params); },
+                    unsubscribe: function(params){ return this.unsubscribeBar && this.unsubscribeBar(params); }
+                  });
+                } else {
+                  // Live data via Polygon
+                  chart.setDataLoader({
+                    getBars: function(ctx){
+                      try {
+                        var callback = ctx && ctx.callback ? ctx.callback : function(){};
+                        var p = mapPeriod(TF);
+                        var to = Date.now();
+                        var from = to - 500 * periodToMs(p);
+                        if (!POLY_API_KEY) { post({ warn: 'Missing Polygon API key' }); callback([]); setTimeout(applySessionBackgrounds, 0); return; }
+                        var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) + '/range/' + p.span + '/' + p.type + '/' + from + '/' + to + '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
+                        fetch(url)
+                          .then(function(res){ return res.json(); })
+                          .then(function(result){
+                            var list = (result && result.results) || [];
+                            var out = list.map(function(d){ return { timestamp: d.t, open: d.o, high: d.h, low: d.l, close: d.c, volume: d.v, turnover: d.vw }; });
+                            callback(out);
+                            try { post({ type: 'dataApplied' }); } catch(_){ }
+                            setTimeout(applySessionBackgrounds, 0);
+                          })
+                          .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); callback([]); setTimeout(applySessionBackgrounds, 0); });
+                      } catch (e) { post({ error: 'getBars_failed', message: String(e && e.message || e) }); }
+                    },
+                    subscribeBar: function(params){},
+                    unsubscribeBar: function(params){},
+                    // backward compatibility if library accepts these keys
+                    subscribe: function(params){},
+                    unsubscribe: function(params){}
+                  });
+                }
               }
             }
 
