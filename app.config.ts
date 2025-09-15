@@ -19,6 +19,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
     plugins: [
       "expo-secure-store",
       "expo-web-browser",
+      "expo-font",
       [
         "@stripe/stripe-react-native",
         {
@@ -32,7 +33,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       [
         "expo-notifications",
         {
-          icon: "./assets/notification-icon.png",
+          icon: "./assets/icon.png",
           color: "#4F46E5",
         },
       ],

@@ -8,7 +8,6 @@ import {
   useColorScheme,
   Modal,
   TextInput,
-  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -51,15 +50,16 @@ import {
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { useUserStore } from "../store/userStore";
+import { useAlertStore } from "../store/alertStore";
 import { StrategyComplexity } from "../logic/types";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
-import { getUpcomingFedEvents } from "../services/federalReserve";
+// removed unused federalReserve import
 import {
   fetchCandles,
   fetchCandlesForTimeframe,
   type Candle,
 } from "../services/marketProviders";
-import { timeframeSpacingMs } from "./ChartFullScreen/utils";
+// removed unused timeframeSpacingMs
 import { buildDayTradePlan } from "../logic/dayTrade";
 import { buildSwingTradePlan } from "../logic/swingTrade";
 
@@ -94,6 +94,30 @@ export default function ChartFullScreen() {
   const { addAnalysisMessage } = useChatStore();
   const { cacheSignal, getCachedSignal } = useSignalCacheStore();
   const { profile, setProfile } = useUserStore();
+  const { addAlert, updateAlert } = useAlertStore();
+  const allAlerts = useAlertStore((s) => s.alerts);
+  const alertsForSymbol = React.useMemo(
+    () => allAlerts.filter((a) => a.symbol === symbol),
+    [allAlerts, symbol]
+  );
+  const alertLines = React.useMemo(
+    () =>
+      alertsForSymbol.map((alert) => ({
+        id: alert.id,
+        price: alert.price,
+        condition: alert.condition,
+        isActive: alert.isActive,
+      })),
+    [alertsForSymbol]
+  );
+
+  // Debug logging for alert changes
+  React.useEffect(() => {
+    console.log(
+      `[ChartFullScreen] Alerts for ${symbol}:`,
+      alertsForSymbol.length
+    );
+  }, [symbol, alertsForSymbol]);
   const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
     useTimeframeStore();
 
@@ -116,7 +140,7 @@ export default function ChartFullScreen() {
   const [showMA, setShowMA] = useState<boolean>(false);
   const [showVolume, setShowVolume] = useState<boolean>(false);
   const [showSessions, setShowSessions] = useState<boolean>(true);
-  const [indicatorsExpanded, setIndicatorsExpanded] = useState<boolean>(false);
+  // Use accordion expansion to influence layout height; no separate expanded state
 
   // Indicators state
   const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
@@ -174,10 +198,13 @@ export default function ChartFullScreen() {
   const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
     useState<boolean>(false);
   const [showReasonIcon, setShowReasonIcon] = useState<boolean>(true);
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
+  const [proposedAlertPrice, setProposedAlertPrice] = useState<number | null>(
+    null
+  );
 
   // Refs
   const [pinError, setPinError] = useState<string | null>(null);
-  const barSpacingRef = React.useRef<number>(60_000);
   const overrideIndicatorRef = React.useRef<
     | ((
         id: string | { name: string; paneId?: string },
@@ -187,10 +214,20 @@ export default function ChartFullScreen() {
     | null
   >(null);
 
+  const chartBridgeRef = React.useRef<{
+    updateTimeframe: (timeframe: string) => void;
+    updateChartType: (chartType: string) => void;
+    updateIndicators: (indicators: IndicatorConfig[]) => void;
+    updateDisplayOptions: (options: any) => void;
+    updateTheme: (theme: string) => void;
+    updateAlerts: (alerts: any[]) => void;
+    updateLevels: (levels: any) => void;
+  } | null>(null);
+
   // Layout calculations
   const headerHeight = 52;
   const ohlcRowHeight = 24;
-  const indicatorBarHeight = indicatorsExpanded ? 88 : 28;
+  const indicatorBarHeight = showIndicatorsAccordion ? 88 : 28;
   const timeframeRowHeight = 48;
   const bottomNavHeight = 56;
   const chartHeight = Math.max(
@@ -206,25 +243,7 @@ export default function ChartFullScreen() {
       8
   );
 
-  // Recalculate chart height when screen dimensions change
-  useEffect(() => {
-    // Force re-render when screen dimensions change
-    const subscription = Dimensions.addEventListener("change", () => {
-      // This will trigger a re-render with new dimensions
-    });
-    return () => subscription?.remove();
-  }, []);
-
-  // Initialize bar spacing from initial data
-  React.useEffect(() => {
-    if (initialDataParam && initialDataParam.length >= 2) {
-      const last = initialDataParam[initialDataParam.length - 1];
-      const prev = initialDataParam[initialDataParam.length - 2];
-      barSpacingRef.current = Math.max(1, last.time - prev.time);
-    } else {
-      barSpacingRef.current = timeframeSpacingMs(extendedTf);
-    }
-  }, [extendedTf]);
+  // Removed unused dimensions listener and bar spacing calculations
 
   // Update indicators ref and cleanup
   useEffect(() => {
@@ -249,7 +268,8 @@ export default function ChartFullScreen() {
       async perform(action: ChartAction) {
         switch (action.type) {
           case "addIndicator":
-            setIndicators((prev) => {
+            // Use bridge to update indicators directly in WebView without React re-render
+            if (chartBridgeRef.current) {
               const base = getDefaultIndicator(action.indicator);
               const options: any = action.options || {};
 
@@ -280,44 +300,83 @@ export default function ChartFullScreen() {
                 styles: { ...(base.styles as any), lines },
               } as IndicatorConfig;
 
-              const existingIndex = prev.findIndex(
-                (i) => i.name.toLowerCase() === action.indicator.toLowerCase()
-              );
+              // Update local state for consistency but don't trigger re-render
+              setIndicators((prev) => {
+                const existingIndex = prev.findIndex(
+                  (i) => i.name.toLowerCase() === action.indicator.toLowerCase()
+                );
 
-              if (existingIndex >= 0) {
-                const copy = prev.slice();
-                copy[existingIndex] = cfg;
+                if (existingIndex >= 0) {
+                  const copy = prev.slice();
+                  copy[existingIndex] = cfg;
+                  // Update WebView directly
+                  chartBridgeRef.current?.updateIndicators(copy);
+                  updateChartState({
+                    indicators: copy.map((i) => ({
+                      indicator: i.name,
+                      options: { calcParams: i.calcParams, styles: i.styles },
+                    })),
+                  });
+                  return copy;
+                }
+
+                const next = [...prev, cfg];
+                // Update WebView directly
+                chartBridgeRef.current?.updateIndicators(next);
                 updateChartState({
-                  indicators: copy.map((i) => ({
+                  indicators: next.map((i) => ({
                     indicator: i.name,
                     options: { calcParams: i.calcParams, styles: i.styles },
                   })),
                 });
-                return copy;
-              }
-
-              const next = [...prev, cfg];
-              updateChartState({
-                indicators: next.map((i) => ({
-                  indicator: i.name,
-                  options: { calcParams: i.calcParams, styles: i.styles },
-                })),
+                return next;
               });
-              return next;
-            });
+            } else {
+              console.warn("Chart bridge not available for indicator update");
+            }
             break;
           case "setTimeframe":
-            setExtendedTf(action.timeframe as ExtendedTimeframe);
-            updateChartState({ timeframe: action.timeframe });
+            // Use bridge to update timeframe directly in WebView
+            if (chartBridgeRef.current) {
+              chartBridgeRef.current.updateTimeframe(action.timeframe);
+              setExtendedTf(action.timeframe as ExtendedTimeframe);
+              updateChartState({ timeframe: action.timeframe });
+            } else {
+              console.warn("Chart bridge not available for timeframe update");
+            }
             break;
           case "setChartType":
-            setChartType(action.chartType as ChartType);
-            updateChartState({ chartType: action.chartType });
+            // Use bridge to update chart type directly in WebView
+            if (chartBridgeRef.current) {
+              chartBridgeRef.current.updateChartType(action.chartType);
+              setChartType(action.chartType as ChartType);
+              updateChartState({ chartType: action.chartType });
+            } else {
+              console.warn("Chart bridge not available for chart type update");
+            }
             break;
           case "toggleDisplayOption":
-            if (action.option === "ma") setShowMA(action.enabled);
-            if (action.option === "volume") setShowVolume(action.enabled);
-            if (action.option === "sessions") setShowSessions(action.enabled);
+            // Use bridge to update display options directly in WebView
+            if (chartBridgeRef.current) {
+              const options: any = {};
+              if (action.option === "ma") {
+                options.showMA = action.enabled;
+                setShowMA(action.enabled);
+              }
+              if (action.option === "volume") {
+                options.showVolume = action.enabled;
+                setShowVolume(action.enabled);
+              }
+              if (action.option === "sessions") {
+                options.showSessions = action.enabled;
+                setShowSessions(action.enabled);
+              }
+              chartBridgeRef.current.updateDisplayOptions(options);
+            } else {
+              console.warn(
+                "Chart bridge not available for display options update"
+              );
+            }
             break;
           default:
             console.warn("Unhandled chart action", action);
@@ -1094,6 +1153,7 @@ export default function ChartFullScreen() {
       {/* Chart */}
       <View style={{ marginBottom: 8, position: "relative" }}>
         <SimpleKLineChart
+          key={`chart-${symbol}`}
           symbol={symbol}
           timeframe={extendedTf as any}
           height={chartHeight}
@@ -1108,9 +1168,53 @@ export default function ChartFullScreen() {
           showPriceAxisText={true}
           showTimeAxisText={true}
           indicators={indicators}
-          onOverrideIndicator={(overrideFn) => {
-            overrideIndicatorRef.current = overrideFn;
-            applyIndicatorStyles();
+          onOverrideIndicator={React.useCallback(
+            (overrideFn: any) => {
+              overrideIndicatorRef.current = overrideFn;
+              applyIndicatorStyles();
+            },
+            [applyIndicatorStyles]
+          )}
+          onChartBridge={React.useCallback((bridge: any) => {
+            chartBridgeRef.current = bridge;
+          }, [])}
+          onChartReady={() => {
+            try {
+              if (chartBridgeRef.current) {
+                chartBridgeRef.current.updateAlerts(alertLines);
+                chartBridgeRef.current.updateLevels(
+                  currentTradePlan
+                    ? {
+                        entry: currentTradePlan.entry,
+                        lateEntry: currentTradePlan.lateEntry,
+                        exit: currentTradePlan.exit,
+                        lateExit: currentTradePlan.lateExit,
+                        stop: currentTradePlan.stop,
+                        targets: (currentTradePlan.targets || []).slice(0, 3),
+                      }
+                    : undefined
+                );
+              }
+            } catch (_) {}
+          }}
+          onDataApplied={() => {
+            try {
+              if (chartBridgeRef.current) {
+                chartBridgeRef.current.updateAlerts(alertLines);
+                chartBridgeRef.current.updateLevels(
+                  currentTradePlan
+                    ? {
+                        entry: currentTradePlan.entry,
+                        lateEntry: currentTradePlan.lateEntry,
+                        exit: currentTradePlan.exit,
+                        lateExit: currentTradePlan.lateExit,
+                        stop: currentTradePlan.stop,
+                        targets: (currentTradePlan.targets || []).slice(0, 3),
+                      }
+                    : undefined
+                );
+              }
+            } catch (_) {}
           }}
           levels={
             currentTradePlan
@@ -1127,7 +1231,40 @@ export default function ChartFullScreen() {
                 }
               : undefined
           }
+          onAlertClick={(price) => {
+            // 1) Optimistic preview (immediate): ask WebView to preview the alert line
+            try {
+              if (
+                overrideIndicatorRef.current &&
+                (global as any).__SIMPLE_KLINE_BRIDGE__
+              ) {
+                // no-op; we can't access webview directly here
+              }
+            } catch {}
+            try {
+              const msg = JSON.stringify({ type: "previewAlert", price });
+              // webRef is internal to SimpleKLineChart; we can't access here, so preview will be handled inside chart via lastAlerts merge when setAlerts arrives
+            } catch {}
+
+            // 2) Authoritative update: write to store so alerts prop updates and persists
+            addAlert({
+              symbol,
+              price,
+              condition: "above",
+              message: `Alert at $${price.toFixed(2)}`,
+            });
+          }}
+          alerts={alertLines}
+          // selection is handled in WebView; no RN state needed
+          onAlertSelected={undefined as any}
+          onAlertMoved={({ id, price }) => {
+            if (!id || !(price > 0)) return;
+            updateAlert(id, { price, isActive: true, triggeredAt: undefined });
+            setSelectedAlertId(null);
+            setProposedAlertPrice(null);
+          }}
         />
+        {/* Dragging is handled in-chart; removed separate overlay controls */}
         {showReasonIcon ? (
           <Pressable
             onPress={() => setShowReasoningBottomSheet(true)}
