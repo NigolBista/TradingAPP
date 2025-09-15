@@ -106,7 +106,11 @@ export default function UnifiedBottomSheet({
             >
               <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
                 <Text style={styles.sectionTitle}>Chart Type</Text>
-                <View style={styles.chartTypeRow}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.chartTypeRow}
+                >
                   {[
                     {
                       type: "line" as ChartType,
@@ -114,14 +118,44 @@ export default function UnifiedBottomSheet({
                       icon: "trending-up",
                     },
                     {
+                      type: "area" as ChartType,
+                      label: "Area",
+                      icon: "analytics",
+                    },
+                    {
                       type: "candlestick" as ChartType,
                       label: "Candles",
                       icon: "bar-chart",
                     },
                     {
-                      type: "area" as ChartType,
-                      label: "Area",
-                      icon: "analytics",
+                      type: "bar" as ChartType,
+                      label: "Bar (OHLC)",
+                      icon: "stats-chart",
+                    },
+                    {
+                      type: "candle_solid" as ChartType,
+                      label: "Solid",
+                      icon: "bar-chart",
+                    },
+                    {
+                      type: "candle_stroke" as ChartType,
+                      label: "Hollow",
+                      icon: "bar-chart",
+                    },
+                    {
+                      type: "candle_up_stroke" as ChartType,
+                      label: "Up",
+                      icon: "bar-chart",
+                    },
+                    {
+                      type: "candle_down_stroke" as ChartType,
+                      label: "Down",
+                      icon: "bar-chart",
+                    },
+                    {
+                      type: "ohlc" as ChartType,
+                      label: "OHLC",
+                      icon: "stats-chart",
                     },
                   ].map((item) => (
                     <Pressable
@@ -152,7 +186,7 @@ export default function UnifiedBottomSheet({
                       </Text>
                     </Pressable>
                   ))}
-                </View>
+                </ScrollView>
               </View>
 
               {/* Trading Session + Reasoning side-by-side */}
@@ -289,12 +323,12 @@ const styles = StyleSheet.create({
   },
   chartTypeRow: { flexDirection: "row", gap: 12 },
   chartTypeButton: {
-    flex: 1,
     paddingVertical: 16,
     paddingHorizontal: 12,
     borderRadius: 12,
     backgroundColor: "#2a2a2a",
     alignItems: "center",
+    minWidth: 110,
   },
   chartTypeButtonActive: { backgroundColor: "#00D4AA" },
   chartTypeButtonText: { color: "#fff", fontSize: 12, fontWeight: "600" },

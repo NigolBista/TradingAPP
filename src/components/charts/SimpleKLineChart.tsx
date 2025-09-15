@@ -16,7 +16,16 @@ interface Props {
   timeframe?: string;
   height?: number;
   theme?: "dark" | "light";
-  chartType?: "candle" | "line" | "area";
+  chartType?:
+    | "candle"
+    | "line"
+    | "area"
+    | "bar"
+    | "candle_solid"
+    | "candle_stroke"
+    | "candle_up_stroke"
+    | "candle_down_stroke"
+    | "ohlc";
   showVolume?: boolean;
   showMA?: boolean;
   showTopInfo?: boolean;
@@ -504,32 +513,35 @@ export default function SimpleKLineChart({
               INDICATORS = data.indicators || [];
               if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) {
                 try {
-                  // Remove all existing indicators first
-                  var existingIndicators = window.__SIMPLE_KLINE__.chart.getIndicators() || [];
-                  existingIndicators.forEach(function(ind) {
+                  // Prefer the internal helper which targets overlay indicators to the main candle pane
+                  if (window.__SIMPLE_KLINE__.setIndicators) {
+                    window.__SIMPLE_KLINE__.setIndicators(INDICATORS);
+                  } else {
+                    // Fallback: clear and add with candle pane targeting for overlays
                     try {
-                      window.__SIMPLE_KLINE__.chart.removeIndicator(ind.name);
+                      var existingIndicators = window.__SIMPLE_KLINE__.chart.getIndicators() || [];
+                      existingIndicators.forEach(function(ind) {
+                        try { window.__SIMPLE_KLINE__.chart.removeIndicator(ind.name || ind.id); } catch(_) {}
+                      });
                     } catch(_) {}
-                  });
-                  
-                  // Add new indicators
-                  INDICATORS.forEach(function(indicator) {
-                    try {
-                      var config = {
-                        name: indicator.name,
-                        calcParams: indicator.calcParams,
-                        styles: indicator.styles,
-                        overlay: indicator.overlay
-                      };
-                      if (indicator.overlay) {
-                        window.__SIMPLE_KLINE__.chart.createIndicator(config, true);
-                      } else {
-                        window.__SIMPLE_KLINE__.chart.createIndicator(config);
+
+                    var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA'];
+                    INDICATORS.forEach(function(indicator) {
+                      try {
+                        var nm = String(indicator && indicator.name || '').toUpperCase();
+                        var wantsOverlay = !!(indicator && indicator.overlay) || overlayCompat.indexOf(nm) >= 0;
+                        var opts = {};
+                        if (indicator && indicator.calcParams) opts.calcParams = indicator.calcParams;
+                        if (indicator && indicator.styles) opts.styles = indicator.styles;
+                        if (wantsOverlay) opts.id = 'candle_pane';
+                        if (typeof window.__SIMPLE_KLINE__.chart.createIndicator === 'function') {
+                          window.__SIMPLE_KLINE__.chart.createIndicator(nm, false, opts);
+                        }
+                      } catch(e) {
+                        post({ warn: 'indicator_add_failed', indicator: indicator && indicator.name, message: String(e && e.message || e) });
                       }
-                    } catch(e) {
-                      post({ warn: 'indicator_add_failed', indicator: indicator.name, message: String(e && e.message || e) });
-                    }
-                  });
+                    });
+                  }
                   post({ success: 'indicators_updated', count: INDICATORS.length });
                 } catch(e) {
                   post({ error: 'indicators_update_failed', message: String(e && e.message || e) });
@@ -649,7 +661,20 @@ export default function SimpleKLineChart({
 
         function applyChartType(chart, t){
           try {
-            var type = (t === 'candle') ? 'candle_solid' : 'area';
+            var SUPPORTED_TYPES = ['candle_solid','candle_stroke','candle_up_stroke','candle_down_stroke','ohlc','area'];
+            var type;
+            if (t === 'candlestick' || t === 'candle') {
+              type = 'candle_solid';
+            } else if (t === 'bar') {
+              type = 'ohlc';
+            } else if (SUPPORTED_TYPES.indexOf(t) >= 0) {
+              type = t;
+            } else if (t === 'line') {
+              // map "line" to area rendering for now
+              type = 'area';
+            } else {
+              type = 'candle_solid';
+            }
             var opts = {
               candle: {
                 type: type,

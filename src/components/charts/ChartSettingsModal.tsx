@@ -9,7 +9,16 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-export type ChartType = "line" | "candlestick" | "area" | "bar";
+export type ChartType =
+  | "line"
+  | "candlestick"
+  | "area"
+  | "bar"
+  | "candle_solid"
+  | "candle_stroke"
+  | "candle_up_stroke"
+  | "candle_down_stroke"
+  | "ohlc";
 
 interface ChartSettingsModalProps {
   visible: boolean;
@@ -22,9 +31,14 @@ interface ChartSettingsModalProps {
 
 const chartTypes: { type: ChartType; label: string; icon: string }[] = [
   { type: "line", label: "Line Chart", icon: "trending-up" },
-  { type: "candlestick", label: "Candlestick", icon: "bar-chart" },
   { type: "area", label: "Area Chart", icon: "analytics" },
-  { type: "bar", label: "Bar Chart", icon: "stats-chart" },
+  { type: "candlestick", label: "Candlestick", icon: "bar-chart" },
+  { type: "bar", label: "Bar (OHLC)", icon: "stats-chart" },
+  { type: "candle_solid", label: "Solid Candle", icon: "bar-chart" },
+  { type: "candle_stroke", label: "Hollow Candle", icon: "bar-chart" },
+  { type: "candle_up_stroke", label: "Up Candle", icon: "bar-chart" },
+  { type: "candle_down_stroke", label: "Down Candle", icon: "bar-chart" },
+  { type: "ohlc", label: "OHLC", icon: "stats-chart" },
 ];
 
 export default function ChartSettingsModal({

@@ -19,6 +19,27 @@ export const CHART_TYPES = [
   },
   { value: "area", label: "Area", description: "Filled area chart" },
   { value: "bar", label: "Bar", description: "OHLC bar chart" },
+  {
+    value: "candle_solid",
+    label: "Solid candle",
+    description: "Filled body candles",
+  },
+  {
+    value: "candle_stroke",
+    label: "Hollow candle",
+    description: "Hollow body candles",
+  },
+  {
+    value: "candle_up_stroke",
+    label: "Up candle",
+    description: "Up candles stroked",
+  },
+  {
+    value: "candle_down_stroke",
+    label: "Down candle",
+    description: "Down candles stroked",
+  },
+  { value: "ohlc", label: "OHLC", description: "Open-High-Low-Close bars" },
 ] as const;
 
 // Available timeframes
