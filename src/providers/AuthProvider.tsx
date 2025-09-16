@@ -5,10 +5,19 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { registerForPushNotificationsAsync } from "../services/notifications";
+import {
+  registerForPushNotificationsAsync,
+  scheduleSignalAlert,
+  sendLocalNotification,
+} from "../services/notifications";
 import { useUserStore } from "../store/userStore";
 import { supabase } from "../lib/supabase";
 import type { User } from "@supabase/supabase-js";
+import alertsService, {
+  type AlertRow,
+  type TradeSignalRow,
+} from "../services/alertsService";
+import { useAlertStore } from "../store/alertStore";
 
 export type AuthUser = { id: string; email?: string; user_metadata?: any };
 
@@ -33,8 +42,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const setProfile = useUserStore((s) => s.setProfile);
   const resetProfile = useUserStore((s) => s.reset);
+  const setAlerts = useAlertStore((s) => s.setAlerts);
+  const upsertAlert = useAlertStore((s) => s.upsertAlert);
+
+  // track realtime subscription cleanup
+  const [cleanupRealtime, setCleanupRealtime] = useState<null | (() => void)>(
+    null
+  );
 
   useEffect(() => {
+    // Ask permissions early
     registerForPushNotificationsAsync();
 
     // Get initial session
@@ -82,6 +99,89 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // When user is available, register device token and start realtime
+  useEffect(() => {
+    let isMounted = true;
+    async function setupForUser(u: AuthUser) {
+      try {
+        const token = await registerForPushNotificationsAsync();
+        if (token) {
+          await alertsService.registerDeviceToken(u.id, token);
+        }
+
+        // hydrate alerts initially
+        const serverAlerts = await alertsService.fetchAlerts(u.id);
+        if (!isMounted) return;
+        setAlerts(serverAlerts);
+
+        // start realtime
+        const stop = alertsService.startRealtime(u.id, {
+          onTradeSignal: async (sig: TradeSignalRow) => {
+            try {
+              if (sig.entry_price && sig.confidence) {
+                await scheduleSignalAlert(
+                  sig.symbol,
+                  sig.action,
+                  sig.confidence,
+                  sig.entry_price
+                );
+              } else {
+                await sendLocalNotification(
+                  `${sig.symbol} ${sig.kind}`,
+                  `${sig.action.toUpperCase()} signal received`
+                );
+              }
+            } catch (e) {}
+          },
+          onAlertEvent: async (evt) => {
+            try {
+              await sendLocalNotification(
+                `${evt.symbol} Alert`,
+                `${evt.condition.replace("_", " ")}: $${evt.price.toFixed(2)}`
+              );
+            } catch (e) {}
+          },
+          onAlertChange: (row: AlertRow) => {
+            // map to local store shape
+            upsertAlert({
+              id: row.id,
+              symbol: row.symbol,
+              price: row.price,
+              condition: row.condition,
+              message: row.message ?? undefined,
+              isActive: row.is_active,
+              createdAt: Date.parse(row.created_at),
+              triggeredAt: row.triggered_at
+                ? Date.parse(row.triggered_at)
+                : undefined,
+              lastPrice: row.last_price ?? undefined,
+            });
+          },
+        });
+        setCleanupRealtime(() => stop);
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (user) {
+      setupForUser(user);
+    } else {
+      // clean up realtime on logout
+      if (cleanupRealtime) {
+        try {
+          cleanupRealtime();
+        } catch {}
+        setCleanupRealtime(null);
+      }
+      setAlerts([]);
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
 
   function demoLogin() {
     const demo: AuthUser = { id: "demo-user", email: "demo@TradingApp.app" };
