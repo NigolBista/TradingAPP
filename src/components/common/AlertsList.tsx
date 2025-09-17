@@ -76,7 +76,8 @@ export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
             if (user) {
               try {
                 await alertsService.deleteAlert(user.id, alert.id);
-              } catch (e) {
+              } finally {
+                // Optimistically update local store regardless of server outcome
                 deleteAlert(alert.id);
               }
             } else {

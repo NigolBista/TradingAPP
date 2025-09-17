@@ -184,6 +184,7 @@ export const alertsService = {
       onTradeSignal?: (signal: TradeSignalRow) => void;
       onAlertEvent?: (evt: AlertEventRow) => void;
       onAlertChange?: (row: AlertRow) => void;
+      onAlertDelete?: (id: string) => void;
     }
   ) {
     const channel = supabase.channel(`alerts_and_signals_${userId}`);
@@ -223,7 +224,20 @@ export const alertsService = {
         filter: `user_id=eq.${userId}`,
       },
       (payload) => {
-        handlers.onAlertChange?.(payload.new as AlertRow);
+        const eventType = (payload as any).eventType as
+          | "INSERT"
+          | "UPDATE"
+          | "DELETE";
+
+        if (eventType === "DELETE") {
+          const oldRow = (payload as any).old as AlertRow | undefined;
+          if (oldRow?.id) {
+            handlers.onAlertDelete?.(oldRow.id);
+          }
+          return;
+        }
+
+        handlers.onAlertChange?.((payload as any).new as AlertRow);
       }
     );
 

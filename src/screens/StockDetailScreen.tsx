@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a0a0a",
     paddingHorizontal: 16,
     paddingTop: 48,
-    paddingBottom: 16,
+    paddingBottom: 6,
   },
   headerRow: {
     flexDirection: "row",
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: "700",
     color: "#fff",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   todayChange: {
     fontSize: 14,
@@ -496,6 +496,7 @@ export default function StockDetailScreen() {
   const [proposedAlertPrice, setProposedAlertPrice] = useState<number | null>(
     null
   );
+  const [regularClose, setRegularClose] = useState<number | null>(null);
 
   // Batch edge requests from WebView to avoid excessive API calls while panning
   // Removed edge batching state; no longer needed with simple lazy loading
@@ -606,6 +607,27 @@ export default function StockDetailScreen() {
     loadStockName().catch((error) => {
       console.error("Stock name loading failed:", error);
     });
+  }, [symbol]);
+
+  // Load latest regular session daily close for after-hours calculations
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await fetchCandles(symbol, { resolution: "D", limit: 1 });
+        if (!cancelled) {
+          const close = d && d.length ? d[d.length - 1].close : null;
+          setRegularClose(
+            typeof close === "number" && isFinite(close) ? close : null
+          );
+        }
+      } catch {
+        if (!cancelled) setRegularClose(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [symbol]);
 
   // If no initialQuote provided, try hydrate from cached quotes quickly
@@ -1115,6 +1137,22 @@ export default function StockDetailScreen() {
   const showAfterHours = currentSession === "after-hours";
   const showPreMarket = currentSession === "pre-market";
 
+  // After-hours delta vs regular session close
+  const afterHoursDiff =
+    showAfterHours && typeof currentPrice === "number" && regularClose
+      ? currentPrice - regularClose
+      : null;
+  const afterHoursPct =
+    afterHoursDiff !== null && regularClose
+      ? (afterHoursDiff / regularClose) * 100
+      : null;
+
+  // Display price: show regular-session close as the title during after-hours
+  const displayPrice =
+    showAfterHours && typeof regularClose === "number" && isFinite(regularClose)
+      ? regularClose
+      : currentPrice;
+
   async function onSetAlert() {
     setShowAlertsModal(true);
   }
@@ -1187,7 +1225,7 @@ export default function StockDetailScreen() {
 
         {/* Price Information */}
         <View style={styles.priceRow}>
-          <Text style={styles.mainPrice}>${currentPrice.toFixed(2)}</Text>
+          <Text style={styles.mainPrice}>${displayPrice.toFixed(2)}</Text>
           {todayChange !== null && todayChangePercent !== null && (
             <Text
               style={[
@@ -1199,29 +1237,25 @@ export default function StockDetailScreen() {
               {todayChangePercent.toFixed(2)}%) Today
             </Text>
           )}
-          {(showAfterHours || showPreMarket) && (
+          {showAfterHours &&
+          afterHoursDiff !== null &&
+          afterHoursPct !== null ? (
             <Text
               style={[
                 styles.afterHours,
-                {
-                  color:
-                    currentSession === "pre-market"
-                      ? "#3b82f6"
-                      : todayChange !== null && todayChange < 0
-                      ? "#16a34a"
-                      : "#dc2626",
-                },
+                { color: afterHoursDiff >= 0 ? "#00D4AA" : "#FF6B6B" },
               ]}
             >
-              {currentSession === "pre-market" ? "Pre-market" : "After hours"}
+              {`After: ${currentPrice.toFixed(2)} ${
+                afterHoursDiff >= 0 ? "+" : ""
+              }${afterHoursDiff.toFixed(2)} ${
+                afterHoursPct >= 0 ? "+" : ""
+              }${afterHoursPct.toFixed(2)}%`}
             </Text>
-          )}
-          {currentSession !== "closed" && (
-            <Text style={styles.sessionIndicator}>
-              Market:{" "}
-              {currentSession === "regular"
-                ? "Open"
-                : currentSession.replace("-", " ")}
+          ) : null}
+          {showPreMarket && (
+            <Text style={[styles.afterHours, { color: "#3b82f6" }]}>
+              Pre-market
             </Text>
           )}
         </View>

@@ -46,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resetProfile = useUserStore((s) => s.reset);
   const setAlerts = useAlertStore((s) => s.setAlerts);
   const upsertAlert = useAlertStore((s) => s.upsertAlert);
+  const removeAlert = useAlertStore((s) => s.removeAlert);
   const alerts = useAlertStore((s) => s.alerts);
 
   // track realtime subscription cleanup
@@ -172,6 +173,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ? Date.parse((row as any).last_notified_at)
                 : undefined,
             });
+          },
+          onAlertDelete: (id: string) => {
+            try {
+              removeAlert(id);
+            } catch {}
           },
         });
         setCleanupRealtime(() => stop);

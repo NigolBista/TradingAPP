@@ -1,5 +1,4 @@
 import Constants from "expo-constants";
-import { saveQuotes, SimpleQuote } from "./quotes";
 
 type PriceListener = (symbol: string, price: number, ts: number) => void;
 type CandleListener = (symbol: string, candle: RealtimeCandle) => void;
@@ -396,19 +395,4 @@ class PolygonRealtimeClient {
 }
 
 export const polygonRealtime = new PolygonRealtimeClient();
-
-// Convenience: attach to save quotes so watchlists update live
-polygonRealtime.onPrice(async (symbol, price, ts) => {
-  try {
-    const q: SimpleQuote = {
-      symbol,
-      last: price,
-      change: 0,
-      changePercent: 0,
-      updated: Math.floor(ts / 1000),
-    };
-    await saveQuotes({ [symbol]: q });
-  } catch {}
-});
-
 export default polygonRealtime;

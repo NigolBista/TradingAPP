@@ -39,6 +39,10 @@ import { type SimpleQuote } from "../services/quotes";
 import { safeFetchBulkQuotes } from "../services/quoteFetcher";
 import { realtimeDataManager } from "../services/realtimeDataManager";
 import { useFocusEffect } from "@react-navigation/native";
+import {
+  isPolygonApiAvailable,
+  fetchPolygonBulkQuotes,
+} from "../services/polygonQuotes";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -234,6 +238,47 @@ const createStyles = (theme: any) =>
     },
   });
 
+function getNewYorkTimeParts(now: Date = new Date()): {
+  isWeekend: boolean;
+  minutes: number;
+} {
+  try {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour12: false,
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const parts = fmt.formatToParts(now);
+    const weekday = parts.find((p) => p.type === "weekday")?.value || "";
+    const hourStr = parts.find((p) => p.type === "hour")?.value || "0";
+    const minuteStr = parts.find((p) => p.type === "minute")?.value || "0";
+    const hour = Math.max(0, Math.min(23, parseInt(hourStr, 10) || 0));
+    const minute = Math.max(0, Math.min(59, parseInt(minuteStr, 10) || 0));
+    const isWeekend = /Sat|Sun/i.test(weekday);
+    return { isWeekend, minutes: hour * 60 + minute };
+  } catch {
+    const local = new Date(now);
+    const minutes = local.getHours() * 60 + local.getMinutes();
+    const day = local.getDay();
+    const isWeekend = day === 0 || day === 6;
+    return { isWeekend, minutes };
+  }
+}
+
+function isUSMarketOpen(): boolean {
+  const { isWeekend, minutes } = getNewYorkTimeParts();
+  if (isWeekend) return false;
+  return minutes >= 9 * 60 + 30 && minutes < 16 * 60;
+}
+
+function isUSAfterHoursNow(): boolean {
+  const { isWeekend, minutes } = getNewYorkTimeParts();
+  if (isWeekend) return false;
+  return minutes >= 16 * 60 && minutes < 20 * 60;
+}
+
 interface StockData extends ScanResult {
   currentPrice: number;
   change: number;
@@ -283,11 +328,55 @@ export default function WatchlistScreen() {
   const quotesSignatureRef = useRef<string | null>(null);
   const companyNamesRef = useRef<Record<string, string>>({});
   const stockDataRef = useRef<StockData[]>([]);
+  const closePriceRef = useRef<Record<string, number>>({});
+  const afterHoursPctRef = useRef<Record<string, number>>({});
   useEffect(() => {
     stockDataRef.current = stockData;
   }, [stockData]);
 
   const activeWatchlist = getActiveWatchlist();
+
+  const computeSymbols = React.useCallback((): string[] => {
+    if (viewMode === "favorites") return profile.favorites;
+    if (selectedWatchlistId) {
+      const watchlist = profile.watchlists.find(
+        (w) => w.id === selectedWatchlistId
+      );
+      return watchlist?.items.map((item) => item.symbol) || [];
+    }
+    return [];
+  }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists]);
+
+  const updateFromRealtime = React.useCallback(() => {
+    const symbols = computeSymbols();
+    if (!symbols || symbols.length === 0) return;
+    const lastPrices = realtimeDataManager.getLastPrices();
+
+    const existingMap = new Map<string, StockData>();
+    for (const sd of stockDataRef.current) existingMap.set(sd.symbol, sd);
+
+    const updated: StockData[] = symbols.map((symbol) => {
+      const prev = existingMap.get(symbol);
+      const price = lastPrices[symbol] ?? prev?.currentPrice ?? 0;
+      const close = closePriceRef.current[symbol];
+      if (typeof close === "number" && close > 0) {
+        afterHoursPctRef.current[symbol] = ((price - close) / close) * 100;
+      }
+      return {
+        symbol,
+        analysis: prev?.analysis || ({} as any),
+        alerts: prev?.alerts || [],
+        score: prev?.score || 0,
+        currentPrice: price,
+        change: prev?.change ?? 0,
+        changePercent: prev?.changePercent ?? 0,
+        companyName:
+          prev?.companyName || companyNamesRef.current[symbol] || symbol,
+      };
+    });
+    // Keep ordering stable by previous or sort by symbol
+    setStockData(updated);
+  }, [computeSymbols]);
 
   useEffect(() => {
     loadDisplayData();
@@ -296,17 +385,6 @@ export default function WatchlistScreen() {
   // Start/stop real-time refresh when screen is focused/unfocused
   useFocusEffect(
     React.useCallback(() => {
-      const computeSymbols = (): string[] => {
-        if (viewMode === "favorites") return profile.favorites;
-        if (selectedWatchlistId) {
-          const watchlist = profile.watchlists.find(
-            (w) => w.id === selectedWatchlistId
-          );
-          return watchlist?.items.map((item) => item.symbol) || [];
-        }
-        return [];
-      };
-
       const symbols = computeSymbols();
       if (symbols && symbols.length > 0) {
         if (__DEV__)
@@ -316,8 +394,9 @@ export default function WatchlistScreen() {
             "stocks"
           );
         realtimeDataManager.startWatchlistRefresh(symbols, () => {
-          // Refresh callback - update the UI when new data arrives
-          setRefreshing(false); // Ensure refresh indicator is off
+          // Refresh callback - update the UI when new data arrives (1/sec)
+          updateFromRealtime();
+          setRefreshing(false);
         });
       }
 
@@ -325,28 +404,29 @@ export default function WatchlistScreen() {
         if (__DEV__) console.log("⏹️ Stopping watchlist refresh");
         realtimeDataManager.stopWatchlistRefresh();
       };
-    }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists])
+    }, [computeSymbols, updateFromRealtime])
   );
 
-  // Poll cached quotes periodically so UI reflects background quote refreshes
+  // Ensure UI ticks every second with websocket (defensive in case callbacks stall)
   useEffect(() => {
+    if (!isPolygonApiAvailable()) return;
+    const id = setInterval(() => {
+      updateFromRealtime();
+    }, 1000);
+    return () => clearInterval(id);
+  }, [updateFromRealtime]);
+
+  // Poll cached quotes only when websocket is unavailable; otherwise rely on 1s websocket updates
+  useEffect(() => {
+    const polygonOn = isPolygonApiAvailable();
+    if (polygonOn) return; // Websocket active; no polling
+
     let isMounted = true;
     quotesSignatureRef.current = null; // reset when dependencies change
 
-    const computeSymbols = (): string[] => {
-      if (viewMode === "favorites") return profile.favorites;
-      if (selectedWatchlistId) {
-        const watchlist = profile.watchlists.find(
-          (w) => w.id === selectedWatchlistId
-        );
-        return watchlist?.items.map((item) => item.symbol) || [];
-      }
-      return [];
-    };
-
+    const symbols = computeSymbols();
     const tick = async () => {
       if (!isMounted) return;
-      const symbols = computeSymbols();
       if (!symbols || symbols.length === 0) return;
 
       try {
@@ -365,7 +445,6 @@ export default function WatchlistScreen() {
         if (signature === quotesSignatureRef.current) return;
         quotesSignatureRef.current = signature;
 
-        // Build updated display data using existing company names when available
         const existingNameMap = new Map<string, string>();
         for (const sd of stockDataRef.current) {
           existingNameMap.set(sd.symbol, sd.companyName || sd.symbol);
@@ -392,58 +471,23 @@ export default function WatchlistScreen() {
         });
         updated.sort((a, b) => b.changePercent - a.changePercent);
         setStockData(updated);
-
-        // Backfill any missing names asynchronously and update list once
-        const missingSymbols = symbols.filter(
-          (s) =>
-            !companyNamesRef.current[s] &&
-            (!existingNameMap.get(s) || existingNameMap.get(s) === s)
-        );
-        if (missingSymbols.length > 0) {
-          Promise.all(
-            missingSymbols.map(async (s) => {
-              try {
-                const info = await getStockBySymbol(s);
-                if (info?.name) companyNamesRef.current[s] = info.name;
-              } catch {}
-            })
-          ).then(() => {
-            const refreshed: StockData[] = symbols.map((symbol) => {
-              const q = cached[symbol] as SimpleQuote | undefined;
-              const price = q?.last ?? 0;
-              const change = q?.change ?? 0;
-              const pct = q?.changePercent ?? 0;
-              return {
-                symbol,
-                analysis: {} as any,
-                alerts: [],
-                score: 0,
-                currentPrice: price,
-                change,
-                changePercent: pct,
-                companyName:
-                  companyNamesRef.current[symbol] ||
-                  existingNameMap.get(symbol) ||
-                  symbol,
-              };
-            });
-            refreshed.sort((a, b) => b.changePercent - a.changePercent);
-            setStockData(refreshed);
-          });
-        }
-      } catch {
-        // ignore cache polling errors
-      }
+      } catch {}
     };
 
-    // Initial tick and interval
+    // Initial tick and interval (5s fallback)
     tick();
     const id = setInterval(tick, 5000);
     return () => {
       isMounted = false;
       clearInterval(id);
     };
-  }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists]);
+  }, [
+    computeSymbols,
+    viewMode,
+    selectedWatchlistId,
+    profile.favorites,
+    profile.watchlists,
+  ]);
 
   useEffect(() => {
     // Reset selected stocks when modal opens
@@ -513,6 +557,12 @@ export default function WatchlistScreen() {
           const price = q?.last ?? 0;
           const change = q?.change ?? 0;
           const pct = q?.changePercent ?? 0;
+          // seed close price as price - change if plausible
+          if (typeof price === "number" && typeof change === "number") {
+            const close = price - change;
+            if (isFinite(close) && close > 0)
+              closePriceRef.current[symbol] = close;
+          }
           return {
             symbol,
             analysis: {} as any,
@@ -532,11 +582,30 @@ export default function WatchlistScreen() {
 
       // Background fetch fresh quotes (bulk)
       const fresh = await safeFetchBulkQuotes(symbols);
+      // If after-hours and Polygon is available, fetch day close snapshot to freeze display price
+      const afterHours = !isUSMarketOpen() && isUSAfterHoursNow();
+      if (afterHours && isPolygonApiAvailable()) {
+        try {
+          const polygon = await fetchPolygonBulkQuotes(symbols);
+          for (const s of symbols) {
+            const snap = polygon[s];
+            if (snap && typeof snap.last === "number" && snap.last > 0) {
+              closePriceRef.current[s] = snap.last;
+            }
+          }
+        } catch {}
+      }
       const updated: StockData[] = symbols.map((symbol) => {
         const q = fresh[symbol] as SimpleQuote | undefined;
         const price = q?.last ?? 0;
         const change = q?.change ?? 0;
         const pct = q?.changePercent ?? 0;
+        // update close price again from fresh data
+        if (typeof price === "number" && typeof change === "number") {
+          const close = price - change;
+          if (isFinite(close) && close > 0)
+            closePriceRef.current[symbol] = close;
+        }
         return {
           symbol,
           analysis: {} as any,
@@ -884,16 +953,25 @@ export default function WatchlistScreen() {
             </View>
           ) : (
             stockData.map((stock) => {
+              const isAfterHours = !isUSMarketOpen() && isUSAfterHoursNow();
+              const afterHoursPercent = isAfterHours
+                ? afterHoursPctRef.current[stock.symbol]
+                : undefined;
               const isGlobalFav = isGlobalFavorite(stock.symbol);
+              const displayPrice = isAfterHours
+                ? closePriceRef.current[stock.symbol] ?? stock.currentPrice
+                : stock.currentPrice;
 
               return (
                 <SwipeableStockItem
                   key={stock.symbol}
                   symbol={stock.symbol}
                   companyName={stock.companyName}
-                  currentPrice={stock.currentPrice}
+                  currentPrice={displayPrice}
                   change={stock.change}
                   changePercent={stock.changePercent}
+                  isAfterHours={isAfterHours}
+                  afterHoursPercent={afterHoursPercent}
                   isGlobalFavorite={isGlobalFav}
                   onPress={() => handleStockPress(stock)}
                   onToggleFavorite={() => toggleGlobalFavorite(stock.symbol)}
