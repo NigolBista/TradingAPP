@@ -1,7 +1,13 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SERVICE_ROLE =
+  Deno.env.get("SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+if (!SERVICE_ROLE) {
+  throw new Error(
+    "Missing service role key. Set SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE_KEY"
+  );
+}
 const EXPO_ACCESS_TOKEN = Deno.env.get("EXPO_ACCESS_TOKEN") || "";
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -27,11 +33,12 @@ async function sendPush(
 Deno.serve(async () => {
   try {
     // pull a small batch of ready jobs
+    const nowIso = new Date().toISOString();
     const { data: jobs, error } = await supabase
       .from("notifications_queue")
       .select("*")
       .in("status", ["queued", "retrying"])
-      .lte("scheduled_at", new Date().toISOString())
+      .or(`scheduled_at.is.null,scheduled_at.lte.${nowIso}`)
       .order("priority", { ascending: false })
       .order("created_at", { ascending: true })
       .limit(50);

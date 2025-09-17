@@ -110,6 +110,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await alertsService.registerDeviceToken(u.id, token);
         }
 
+        // In development, trigger processing the notifications queue so push tests send immediately
+        if ((process.env.NODE_ENV || "development") !== "production") {
+          try {
+            await alertsService.processNotificationQueue();
+          } catch {}
+        }
+
         // hydrate alerts initially
         const serverAlerts = await alertsService.fetchAlerts(u.id);
         if (!isMounted) return;

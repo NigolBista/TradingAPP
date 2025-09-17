@@ -1,7 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SERVICE_ROLE = Deno.env.get("SERVICE_ROLE_KEY");
+if (!SERVICE_ROLE) {
+  throw new Error("Missing service role key. Set SERVICE_ROLE_KEY");
+}
 const POLYGON_API_KEY = Deno.env.get("POLYGON_API_KEY")!;
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -103,6 +106,7 @@ Deno.serve(async (req) => {
           data: { symbol: a.symbol, condition: a.condition, price: current },
         },
         status: "queued",
+        scheduled_at: new Date().toISOString(),
         priority: 5,
       });
 

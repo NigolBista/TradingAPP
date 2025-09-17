@@ -152,6 +152,22 @@ export const alertsService = {
     if (error) throw error;
   },
 
+  async processNotificationQueue(): Promise<{
+    ok: boolean;
+    processed: number;
+    sent: number;
+  } | null> {
+    try {
+      const { data, error } = await supabase.functions.invoke("notify", {
+        body: {},
+      });
+      if (error) throw error;
+      return (data as any) ?? null;
+    } catch {
+      return null;
+    }
+  },
+
   startRealtime(
     userId: string,
     handlers: {
