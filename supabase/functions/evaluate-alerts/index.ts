@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -113,9 +114,24 @@ Deno.serve(async (req) => {
       fired++;
     }
 
+    // Immediately process queued notifications for instant delivery
+    try {
+      const notifyUrl = `${SUPABASE_URL}/functions/v1/notify`;
+      await fetch(notifyUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${SERVICE_ROLE}`,
+        },
+        body: JSON.stringify({ reason: "alerts-fired" }),
+      });
+    } catch (_) {}
+
     return new Response(
       JSON.stringify({ ok: true, symbols: symbols.length, fired }),
-      { headers: { "content-type": "application/json" } }
+      {
+        headers: { "content-type": "application/json" },
+      }
     );
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String(e) }), {
