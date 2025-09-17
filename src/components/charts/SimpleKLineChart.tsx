@@ -351,6 +351,9 @@ export default function SimpleKLineChart({
 
   const polygonApiKey: string | undefined = (Constants.expoConfig?.extra as any)
     ?.polygonApiKey;
+  const realtimeProvider: string | undefined = (
+    Constants.expoConfig?.extra as any
+  )?.realtimeProvider;
 
   const html = useMemo(() => {
     const safeSymbol = (symbol || "AAPL").toUpperCase();
@@ -495,6 +498,8 @@ export default function SimpleKLineChart({
                     window.__SIMPLE_KLINE__.applyAlerts(window.__SIMPLE_KLINE__.lastAlerts);
                   }
                   post({ success: 'timeframe_updated', timeframe: data.timeframe });
+                  // Re-subscribe live Polygon stream with the new timeframe if active
+                  try { if (window.__SIMPLE_KLINE__ && typeof window.__SIMPLE_KLINE__.resubscribeLive === 'function') { window.__SIMPLE_KLINE__.resubscribeLive(); } } catch(_){}
                 } catch(e) {
                   post({ error: 'timeframe_update_failed', message: String(e && e.message || e) });
                 }
@@ -627,6 +632,9 @@ export default function SimpleKLineChart({
         var LEVELS = ${JSON.stringify(levels || {})};
         var ALERTS = ${JSON.stringify(initialAlertsRef.current || [])};
         var POLY_API_KEY = ${JSON.stringify(polygonApiKey || "")};
+        var REALTIME_PROVIDER = ${JSON.stringify(
+          realtimeProvider || "polygon"
+        )};
         var CUSTOM_BARS = ${JSON.stringify(customBars || [])};
         var CUSTOM_DATA = ${JSON.stringify(
           (customData || []).map(function (p) {
@@ -893,6 +901,9 @@ export default function SimpleKLineChart({
                       subscribe: function(params){},
                       unsubscribe: function(params){}
                     });
+                    // Ensure loader is active by (re)setting symbol/period AFTER loader assignment
+                    try { if (typeof chart.setSymbol === 'function') { chart.setSymbol({ ticker: SYMBOL }); } } catch(_){ }
+                    try { if (typeof chart.setPeriod === 'function') { chart.setPeriod(mapPeriod(TF)); } } catch(_){ }
                     applied = true;
                   }
                 } catch(_){ }
@@ -973,6 +984,9 @@ export default function SimpleKLineChart({
                     subscribe: function(params){ return this.subscribeBar && this.subscribeBar(params); },
                     unsubscribe: function(params){ return this.unsubscribeBar && this.unsubscribeBar(params); }
                   });
+                  // Ensure loader is active by (re)setting symbol/period AFTER loader assignment
+                  try { if (typeof chart.setSymbol === 'function') { chart.setSymbol({ ticker: SYMBOL }); } } catch(_){ }
+                  try { if (typeof chart.setPeriod === 'function') { chart.setPeriod(mapPeriod(TF)); } } catch(_){ }
                 } else {
                   // Live data via Polygon
                   chart.setDataLoader({
@@ -996,12 +1010,173 @@ export default function SimpleKLineChart({
                           .catch(function(err){ post({ error: 'polygon_load_failed', message: String(err && err.message || err) }); callback([]); setTimeout(applySessionBackgrounds, 0); });
                       } catch (e) { post({ error: 'getBars_failed', message: String(e && e.message || e) }); }
                     },
-                    subscribeBar: function(params){},
-                    unsubscribeBar: function(params){},
+                    subscribeBar: function(params){
+                      try {
+                        if (!POLY_API_KEY) { post({ warn: 'Missing Polygon API key for realtime' }); return; }
+                        if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                        // Clean up any existing ws
+                        try { if (window.__SIMPLE_KLINE__.polyWS) { window.__SIMPLE_KLINE__.polyWS.close(); } } catch(_){ }
+
+                        var p = mapPeriod(TF);
+                        var step = periodToMs(p);
+
+                        function deliver(bar){
+                          try {
+                            if (params && typeof params.callback === 'function') { params.callback(bar); return; }
+                            if (params && typeof params.onData === 'function') { params.onData(bar); return; }
+                            if (params && typeof params.emit === 'function') { params.emit(bar); return; }
+                          } catch(_){}
+                        }
+
+                        function align(ts){ try { return Math.floor(Number(ts) / step) * step; } catch(_) { return Number(ts) || Date.now(); } }
+
+                        var lastBar = null;
+                        function upsertFromAggregate(msg){
+                          try {
+                            var ts = (msg && (msg.t != null ? msg.t : (msg.s != null ? msg.s : msg.e)));
+                            var t = align(ts);
+                            var vwap = (msg && (msg.vw != null ? msg.vw : msg.a));
+                            var bar = { timestamp: t, open: Number(msg.o), high: Number(msg.h), low: Number(msg.l), close: Number(msg.c), volume: Number(msg.v), turnover: Number(vwap || 0) };
+                            lastBar = bar;
+                            deliver(bar);
+                          } catch(_){}
+                        }
+
+                        function updateFromTrade(msg){
+                          try {
+                            var price = Number(msg.p);
+                            var ts = (msg && (msg.t != null ? msg.t : (msg.s != null ? msg.s : msg.e))) || Date.now();
+                            var t = align(ts);
+                            if (!lastBar || lastBar.timestamp !== t) {
+                              // start a new bar using last known close as open if available
+                              var openPrice = (lastBar && typeof lastBar.close === 'number') ? Number(lastBar.close) : price;
+                              lastBar = { timestamp: t, open: openPrice, high: price, low: price, close: price, volume: 1, turnover: price };
+                            } else {
+                              lastBar.close = price;
+                              lastBar.high = Math.max(lastBar.high, price);
+                              lastBar.low = Math.min(lastBar.low, price);
+                              lastBar.volume = Number((Number(lastBar.volume || 0) + 1).toFixed(0));
+                              lastBar.turnover = Number(((Number(lastBar.turnover || 0)) + price).toFixed(2));
+                            }
+                            deliver(Object.assign({}, lastBar));
+                          } catch(_){}
+                        }
+
+                        function getAggChannel(){
+                          try {
+                            var t = (p && p.type) || 'minute';
+                            if (t === 'minute') return 'AM.' + SYMBOL;
+                            if (t === 'hour') return 'AH.' + SYMBOL;
+                            if (t === 'day' || t === 'week' || t === 'month' || t === 'year') return 'AD.' + SYMBOL;
+                            return 'AM.' + SYMBOL;
+                          } catch(_) { return 'AM.' + SYMBOL; }
+                        }
+
+                        var hosts = ['wss://socket.polygon.io/stocks', 'wss://delayed.polygon.io/stocks'];
+                        var hostIndex = (String(REALTIME_PROVIDER || '').toLowerCase().includes('delayed') ? 1 : 0);
+                        var ws = null;
+                        var dataTimer = null;
+                        var dataTimeoutMs = 12000;
+                        function clearDataTimer(){ try { if (dataTimer) { clearTimeout(dataTimer); dataTimer = null; } } catch(_){} }
+                        function startDataTimer(){
+                          clearDataTimer();
+                          dataTimer = setTimeout(function(){
+                            try {
+                              // No data received shortly after subscribe; fallback to delayed if not already
+                              if (hostIndex === 0) { try { switchToHost(1); } catch(_){} }
+                            } catch(_){}
+                          }, dataTimeoutMs);
+                        }
+
+                        function switchToHost(index){
+                          try {
+                            hostIndex = index;
+                            try { if (ws && ws.readyState <= 1) ws.close(); } catch(_){}
+                          } catch(_){}
+                          openSocket();
+                        }
+
+                        function openSocket(){
+                          try {
+                            var host = hosts[Math.max(0, Math.min(hostIndex, hosts.length - 1))];
+                            ws = new WebSocket(host);
+                            window.__SIMPLE_KLINE__.polyWS = ws;
+                            window.__SIMPLE_KLINE__.polyWSHost = host;
+                            window.__SIMPLE_KLINE__.liveParams = params;
+                            window.__SIMPLE_KLINE__.liveSymbol = SYMBOL;
+                          } catch(_){}
+
+                          if (!ws) return;
+
+                          ws.onopen = function(){
+                            try { ws.send(JSON.stringify({ action: 'auth', params: POLY_API_KEY })); } catch(_){}
+                          };
+
+                          ws.onmessage = function(ev){
+                            try {
+                              var payload = null;
+                              try { payload = JSON.parse(ev.data); } catch(_) { payload = ev && ev.data ? [ev.data] : []; }
+                              var msgs = Array.isArray(payload) ? payload : [payload];
+                              for (var i = 0; i < msgs.length; i++) {
+                                var m = msgs[i] || {};
+                                var evName = m.ev || m.event;
+                                if (evName === 'status') {
+                                  if (m.status === 'auth_success' || m.message === 'authenticated') {
+                                    try {
+                                      // Subscribe to trades, second-level aggregates, and timeframe aggregate
+                                      var agg = getAggChannel();
+                                      var chans = ['T.' + SYMBOL, 'A.' + SYMBOL, agg];
+                                      try { ws.send(JSON.stringify({ action: 'subscribe', params: chans.join(',') })); } catch(_){}
+                                      try { post({ info: 'ws_subscribed', host: (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.polyWSHost) || 'unknown', channels: chans }); } catch(_){ }
+                                      startDataTimer();
+                                    } catch(_){}
+                                  } else if ((m.status && String(m.status).includes('auth')) || (m.message && String(m.message).toLowerCase().includes('auth'))) {
+                                    // Auth failed, try delayed host
+                                    if (hostIndex === 0) { try { switchToHost(1); return; } catch(_){} }
+                                  }
+                                  continue;
+                                }
+                                if (evName === 'AM' || evName === 'AH' || evName === 'AD' || evName === 'A') { clearDataTimer(); upsertFromAggregate(m); continue; }
+                                if (evName === 'T') { clearDataTimer(); updateFromTrade(m); continue; }
+                              }
+                            } catch(_){}
+                          };
+
+                          ws.onerror = function(){ /* noop */ };
+                          ws.onclose = function(){ try { window.__SIMPLE_KLINE__.polyWS = null; clearDataTimer(); } catch(_){} };
+                        }
+
+                        openSocket();
+
+                        // expose resubscribe helper
+                        window.__SIMPLE_KLINE__.resubscribeLive = function(){
+                          try {
+                            p = mapPeriod(TF);
+                            step = periodToMs(p);
+                            lastBar = null;
+                            clearDataTimer();
+                            try { if (ws && ws.readyState <= 1) { ws.close(); } } catch(_){}
+                            setTimeout(function(){ openSocket(); }, 200);
+                          } catch(_){}
+                        };
+                      } catch(e) { post({ error: 'subscribeBar_failed', message: String(e && e.message || e) }); }
+                    },
+                    unsubscribeBar: function(params){
+                      try {
+                        if (window.__SIMPLE_KLINE__) {
+                          try { if (window.__SIMPLE_KLINE__.polyWS) { try { window.__SIMPLE_KLINE__.polyWS.close(); } catch(_){} } } catch(_){}
+                          window.__SIMPLE_KLINE__.polyWS = null;
+                        }
+                        try { if (dataTimer) { clearTimeout(dataTimer); dataTimer = null; } } catch(_){}
+                      } catch(_){ }
+                    },
                     // backward compatibility if library accepts these keys
-                    subscribe: function(params){},
-                    unsubscribe: function(params){}
+                    subscribe: function(params){ return this.subscribeBar && this.subscribeBar(params); },
+                    unsubscribe: function(params){ return this.unsubscribeBar && this.unsubscribeBar(params); }
                   });
+                  // Ensure loader is active by (re)setting symbol/period AFTER loader assignment
+                  try { if (typeof chart.setSymbol === 'function') { chart.setSymbol({ ticker: SYMBOL }); } } catch(_){ }
+                  try { if (typeof chart.setPeriod === 'function') { chart.setPeriod(mapPeriod(TF)); } } catch(_){ }
                 }
               }
             }
