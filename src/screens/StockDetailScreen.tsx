@@ -49,6 +49,8 @@ import { useAlertStore } from "../store/alertStore";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
 import AlertsList from "../components/common/AlertsList";
+import alertsService from "../services/alertsService";
+import { useAuth } from "../providers/AuthProvider";
 
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
@@ -412,6 +414,8 @@ export default function StockDetailScreen() {
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
   const { addAlert, checkAlerts, updateAlert } = useAlertStore();
+  const upsertAlert = useAlertStore((s) => s.upsertAlert);
+  const { user } = useAuth();
   const allAlerts = useAlertStore((s) => s.alerts);
   const alertsForSymbol = React.useMemo(
     () => allAlerts.filter((a) => a.symbol === symbol),
@@ -1260,16 +1264,42 @@ export default function StockDetailScreen() {
                   }
                 } catch (_) {}
               }}
-              onAlertClick={(price) => {
-                // Create a new alert with the clicked price
-                addAlert({
-                  symbol,
-                  price,
-                  condition: "above",
-                  message: `Alert at $${price.toFixed(2)}`,
-                });
-                // Show the alerts modal to display the new alert
-                setShowAlertsModal(true);
+              onAlertClick={async (price) => {
+                try {
+                  if (user) {
+                    const created = await alertsService.createAlert(user.id, {
+                      symbol,
+                      price,
+                      condition: "above",
+                      message: `Alert at $${price.toFixed(2)}`,
+                      isActive: true,
+                      repeat: "unlimited",
+                    } as any);
+                    try {
+                      upsertAlert(created);
+                    } catch (_) {}
+                  } else {
+                    // Fallback to local when not authenticated
+                    addAlert({
+                      symbol,
+                      price,
+                      condition: "above",
+                      message: `Alert at $${price.toFixed(2)}`,
+                      repeat: "unlimited",
+                    });
+                  }
+                } catch (e) {
+                  // Fallback local if server insert fails
+                  addAlert({
+                    symbol,
+                    price,
+                    condition: "above",
+                    message: `Alert at $${price.toFixed(2)}`,
+                    repeat: "unlimited",
+                  });
+                } finally {
+                  setShowAlertsModal(true);
+                }
               }}
               alerts={alertLines}
               onAlertSelected={({ id, price }) => {

@@ -40,6 +40,9 @@ export default function AlertModal({
   const [condition, setCondition] = useState<PriceAlert["condition"]>("above");
   const [message, setMessage] = useState("");
   const [isActive, setIsActive] = useState(true);
+  const [repeat, setRepeat] = useState<
+    "unlimited" | "once_per_min" | "once_per_day"
+  >("unlimited");
 
   useEffect(() => {
     if (editingAlert) {
@@ -47,11 +50,13 @@ export default function AlertModal({
       setCondition(editingAlert.condition);
       setMessage(editingAlert.message || "");
       setIsActive(editingAlert.isActive);
+      setRepeat(editingAlert.repeat || "unlimited");
     } else {
       setPrice(currentPrice.toFixed(2));
       setCondition("above");
       setMessage("");
       setIsActive(true);
+      setRepeat("unlimited");
     }
   }, [editingAlert, currentPrice, visible]);
 
@@ -69,6 +74,7 @@ export default function AlertModal({
         condition,
         message: message.trim() || undefined,
         isActive,
+        repeat,
       });
     } else {
       onSave({
@@ -77,6 +83,7 @@ export default function AlertModal({
         condition,
         message: message.trim() || undefined,
         isActive,
+        repeat,
       });
     }
     onClose();
@@ -202,6 +209,38 @@ export default function AlertModal({
                 maxLength={100}
               />
               <Text style={styles.characterCount}>{message.length}/100</Text>
+            </View>
+
+            {/* Repeat Frequency */}
+            <View style={styles.section}>
+              <Text style={styles.label}>Repeat</Text>
+              <View style={styles.repeatRow}>
+                {(
+                  [
+                    { key: "unlimited", label: "Unlimited" },
+                    { key: "once_per_min", label: "Once / min" },
+                    { key: "once_per_day", label: "Once / day" },
+                  ] as const
+                ).map((opt) => (
+                  <Pressable
+                    key={opt.key}
+                    onPress={() => setRepeat(opt.key)}
+                    style={[
+                      styles.repeatButton,
+                      repeat === opt.key && styles.repeatButtonActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.repeatButtonText,
+                        repeat === opt.key && styles.repeatButtonTextActive,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
 
             {/* Active Toggle */}
@@ -410,6 +449,29 @@ const styles = StyleSheet.create({
     gap: 12,
     borderTopWidth: 1,
     borderTopColor: "#333",
+  },
+  repeatRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  repeatButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: "#2a2a2a",
+  },
+  repeatButtonActive: {
+    backgroundColor: "#00D4AA",
+  },
+  repeatButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  repeatButtonTextActive: {
+    color: "#000",
   },
   cancelButton: {
     flex: 1,

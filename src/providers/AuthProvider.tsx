@@ -3,6 +3,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -18,6 +19,7 @@ import alertsService, {
   type TradeSignalRow,
 } from "../services/alertsService";
 import { useAlertStore } from "../store/alertStore";
+import barsService from "../services/barsService";
 
 export type AuthUser = { id: string; email?: string; user_metadata?: any };
 
@@ -44,11 +46,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resetProfile = useUserStore((s) => s.reset);
   const setAlerts = useAlertStore((s) => s.setAlerts);
   const upsertAlert = useAlertStore((s) => s.upsertAlert);
+  const alerts = useAlertStore((s) => s.alerts);
 
   // track realtime subscription cleanup
   const [cleanupRealtime, setCleanupRealtime] = useState<null | (() => void)>(
     null
   );
+  const barUnsubsRef = useRef<Record<string, () => void>>({});
 
   useEffect(() => {
     // Ask permissions early
@@ -163,6 +167,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 ? Date.parse(row.triggered_at)
                 : undefined,
               lastPrice: row.last_price ?? undefined,
+              repeat: (row as any).repeat,
+              lastNotifiedAt: (row as any).last_notified_at
+                ? Date.parse((row as any).last_notified_at)
+                : undefined,
             });
           },
         });
@@ -189,6 +197,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
     };
   }, [user?.id]);
+
+  // Subscribe to realtime bars for symbols with active alerts and update local lastPrice
+  useEffect(() => {
+    function currentSymbolsSet(): Set<string> {
+      const set = new Set<string>();
+      alerts.filter((a) => a.isActive).forEach((a) => set.add(a.symbol));
+      return set;
+    }
+
+    if (!user) {
+      // Cleanup all bar subscriptions when logging out
+      Object.values(barUnsubsRef.current).forEach((unsub) => {
+        try {
+          unsub();
+        } catch {}
+      });
+      barUnsubsRef.current = {};
+      return;
+    }
+
+    const desired = currentSymbolsSet();
+    const existing = new Set(Object.keys(barUnsubsRef.current));
+
+    // Unsubscribe symbols we no longer need
+    for (const sym of existing) {
+      if (!desired.has(sym)) {
+        try {
+          barUnsubsRef.current[sym]!();
+        } catch {}
+        delete barUnsubsRef.current[sym];
+      }
+    }
+
+    // Subscribe new symbols
+    for (const sym of desired) {
+      if (!barUnsubsRef.current[sym]) {
+        const unsub = barsService.subscribeBars(sym, (bar) => {
+          const lastClose = Number(bar.c);
+          try {
+            const state = useAlertStore.getState();
+            state.alerts
+              .filter((a) => a.symbol === sym)
+              .forEach((a) =>
+                state.updateAlert(a.id, { lastPrice: lastClose })
+              );
+          } catch {}
+        });
+        barUnsubsRef.current[sym] = unsub;
+      }
+    }
+
+    return () => {
+      // Do not eagerly tear down here; handled on next run or user logout
+    };
+  }, [user?.id, alerts]);
 
   function demoLogin() {
     const demo: AuthUser = { id: "demo-user", email: "demo@TradingApp.app" };

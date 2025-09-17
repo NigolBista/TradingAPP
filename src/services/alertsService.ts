@@ -9,6 +9,8 @@ export type AlertCondition =
   | "crosses_above"
   | "crosses_below";
 
+export type AlertRepeat = "unlimited" | "once_per_min" | "once_per_day";
+
 export type AlertRow = {
   id: string;
   user_id: string;
@@ -19,6 +21,8 @@ export type AlertRow = {
   is_active: boolean;
   last_price: number | null;
   triggered_at: string | null;
+  repeat: AlertRepeat;
+  last_notified_at: string | null;
   created_at: string;
   updated_at: string | null;
 };
@@ -60,6 +64,10 @@ function mapAlertRowToStore(a: AlertRow): PriceAlert {
     createdAt: Date.parse(a.created_at),
     triggeredAt: a.triggered_at ? Date.parse(a.triggered_at) : undefined,
     lastPrice: a.last_price ?? undefined,
+    repeat: a.repeat,
+    lastNotifiedAt: a.last_notified_at
+      ? Date.parse(a.last_notified_at)
+      : undefined,
   };
 }
 
@@ -89,6 +97,7 @@ export const alertsService = {
       condition: alert.condition,
       message: alert.message ?? null,
       is_active: alert.isActive,
+      repeat: (alert.repeat as AlertRepeat) || ("unlimited" as AlertRepeat),
     };
 
     const { data, error } = await supabase
@@ -113,6 +122,7 @@ export const alertsService = {
       condition: updates.condition as any,
       message: updates.message ?? null,
       is_active: updates.isActive,
+      repeat: updates.repeat as AlertRepeat | undefined,
     };
 
     const { data, error } = await supabase

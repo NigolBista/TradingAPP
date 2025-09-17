@@ -51,6 +51,8 @@ import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { useUserStore } from "../store/userStore";
 import { useAlertStore } from "../store/alertStore";
+import alertsService from "../services/alertsService";
+import { useAuth } from "../providers/AuthProvider";
 import { StrategyComplexity } from "../logic/types";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 // removed unused federalReserve import
@@ -95,6 +97,8 @@ export default function ChartFullScreen() {
   const { cacheSignal, getCachedSignal } = useSignalCacheStore();
   const { profile, setProfile } = useUserStore();
   const { addAlert, updateAlert } = useAlertStore();
+  const upsertAlert = useAlertStore((s) => s.upsertAlert);
+  const { user } = useAuth();
   const allAlerts = useAlertStore((s) => s.alerts);
   const alertsForSymbol = React.useMemo(
     () => allAlerts.filter((a) => a.symbol === symbol),
@@ -1231,35 +1235,62 @@ export default function ChartFullScreen() {
                 }
               : undefined
           }
-          onAlertClick={(price) => {
-            // 1) Optimistic preview (immediate): ask WebView to preview the alert line
+          onAlertClick={async (price) => {
+            // Persist to Supabase when authenticated, otherwise fall back to local
             try {
-              if (
-                overrideIndicatorRef.current &&
-                (global as any).__SIMPLE_KLINE_BRIDGE__
-              ) {
-                // no-op; we can't access webview directly here
+              if (user) {
+                const created = await alertsService.createAlert(user.id, {
+                  symbol,
+                  price,
+                  condition: "above",
+                  message: `Alert at $${price.toFixed(2)}`,
+                  isActive: true,
+                  repeat: "unlimited",
+                } as any);
+                try {
+                  upsertAlert(created);
+                } catch (_) {}
+              } else {
+                addAlert({
+                  symbol,
+                  price,
+                  condition: "above",
+                  message: `Alert at $${price.toFixed(2)}`,
+                  repeat: "unlimited",
+                });
               }
-            } catch {}
-            try {
-              const msg = JSON.stringify({ type: "previewAlert", price });
-              // webRef is internal to SimpleKLineChart; we can't access here, so preview will be handled inside chart via lastAlerts merge when setAlerts arrives
-            } catch {}
-
-            // 2) Authoritative update: write to store so alerts prop updates and persists
-            addAlert({
-              symbol,
-              price,
-              condition: "above",
-              message: `Alert at $${price.toFixed(2)}`,
-            });
+            } catch (e) {
+              // fallback local if server insert fails
+              addAlert({
+                symbol,
+                price,
+                condition: "above",
+                message: `Alert at $${price.toFixed(2)}`,
+                repeat: "unlimited",
+              });
+            }
           }}
           alerts={alertLines}
           // selection is handled in WebView; no RN state needed
           onAlertSelected={undefined as any}
-          onAlertMoved={({ id, price }) => {
+          onAlertMoved={async ({ id, price }) => {
             if (!id || !(price > 0)) return;
             updateAlert(id, { price, isActive: true, triggeredAt: undefined });
+            try {
+              if (user) {
+                const existing = alertsForSymbol.find((a) => a.id === id);
+                if (existing) {
+                  await alertsService.updateAlert(user.id, id, {
+                    symbol: existing.symbol,
+                    price,
+                    condition: existing.condition,
+                    message: existing.message,
+                    isActive: true,
+                    repeat: existing.repeat,
+                  } as any);
+                }
+              }
+            } catch (_) {}
             setSelectedAlertId(null);
             setProposedAlertPrice(null);
           }}

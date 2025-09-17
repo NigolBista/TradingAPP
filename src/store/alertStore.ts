@@ -12,6 +12,8 @@ export interface PriceAlert {
   createdAt: number;
   triggeredAt?: number;
   lastPrice?: number;
+  repeat?: "unlimited" | "once_per_min" | "once_per_day";
+  lastNotifiedAt?: number;
 }
 
 interface AlertState {
@@ -58,6 +60,7 @@ export const useAlertStore = create<AlertState>()(
           id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           createdAt: Date.now(),
           isActive: true,
+          repeat: alertData.repeat || "unlimited",
         };
         set((state) => ({
           alerts: [...state.alerts, newAlert],

@@ -42,6 +42,18 @@ function shouldTrigger(
   }
 }
 
+function repeatIntervalMs(repeat: string | null | undefined): number {
+  switch (repeat) {
+    case "once_per_min":
+      return 60_000;
+    case "once_per_day":
+      return 24 * 60 * 60_000;
+    case "unlimited":
+    default:
+      return 0; // no throttle
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     // fetch active alerts
@@ -78,11 +90,19 @@ Deno.serve(async (req) => {
 
       if (!trigger) continue;
 
-      // mark alert and emit event
-      await supabase
-        .from("alerts")
-        .update({ is_active: false, triggered_at: new Date().toISOString() })
-        .eq("id", a.id);
+      // throttle by repeat setting
+      const now = new Date();
+      const interval = repeatIntervalMs(a.repeat);
+      const lastNotified = a.last_notified_at
+        ? new Date(a.last_notified_at)
+        : null;
+      if (
+        interval > 0 &&
+        lastNotified &&
+        now.getTime() - lastNotified.getTime() < interval
+      ) {
+        continue; // skip due to frequency limit
+      }
 
       const title = `${a.symbol} Alert`;
       const body = `${a.condition.replace("_", " ")} ${a.symbol} at $${Number(
@@ -96,6 +116,15 @@ Deno.serve(async (req) => {
         price: current,
         condition: a.condition,
       });
+
+      // update last_notified_at and triggered_at (most recent trigger time)
+      await supabase
+        .from("alerts")
+        .update({
+          triggered_at: now.toISOString(),
+          last_notified_at: now.toISOString(),
+        })
+        .eq("id", a.id);
 
       // enqueue push
       await supabase.from("notifications_queue").insert({

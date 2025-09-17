@@ -88,8 +88,21 @@ export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
     );
   };
 
-  const handleToggleAlert = (alert: PriceAlert) => {
+  const handleToggleAlert = async (alert: PriceAlert) => {
     toggleAlert(alert.id);
+    if (!user) return;
+    try {
+      await alertsService.updateAlert(user.id, alert.id, {
+        symbol: alert.symbol,
+        price: alert.price,
+        condition: alert.condition,
+        message: alert.message,
+        isActive: !alert.isActive,
+        repeat: alert.repeat,
+      } as any);
+    } catch (e) {
+      // noop, local toggle already applied
+    }
   };
 
   const getConditionIcon = (condition: PriceAlert["condition"]) => {
