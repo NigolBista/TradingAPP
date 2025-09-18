@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { fetchYahooCandles } from "../../services/marketProviders";
+import { fetchYahooCandles } from "../../shared/services/marketProviders";
 
 type ETFInfo = {
   symbol: string;

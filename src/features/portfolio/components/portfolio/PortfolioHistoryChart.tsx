@@ -12,7 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   portfolioAggregationService,
   PortfolioHistory,
-} from '../../services/portfolioAggregationService';
+} from "../../shared/services/portfolioAggregationService";
 
 const { width } = Dimensions.get('window');
 const chartWidth = width - 40;

@@ -11,7 +11,11 @@
       "Bash(do mkdir -p src/features/$feature/{components,screens,hooks,services,types})",
       "Bash(done)",
       "Bash(mv:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(grep:*)",
+      "Bash(node fix-imports.js)",
+      "Bash(node:*)",
+      "Bash(xargs sed:*)"
     ],
     "deny": [],
     "ask": []

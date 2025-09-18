@@ -12,9 +12,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { useTheme } from "../providers/ThemeProvider";
-import { useUserStore } from "../store/userStore";
-import { useEarningsStore } from "../store/earningsStore";
+import { useTheme } from "../../../providers/ThemeProvider";
+import { useUserStore } from "../../../store/userStore";
+import { useEarningsStore } from "../../../store/earningsStore";
 import {
   fetchUpcomingEarnings,
   fetchRecentEarnings,
@@ -25,7 +25,7 @@ import {
   formatCurrency,
   formatEarningsTime,
   calculateEPSSurprise,
-} from "../services/earningsData";
+} from "../shared/services/earningsData";
 
 const createStyles = (theme: any) =>
   StyleSheet.create({

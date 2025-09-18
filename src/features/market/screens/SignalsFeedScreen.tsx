@@ -11,12 +11,12 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { MarketScanner, type ScanResult } from "../services/marketScanner";
+import { MarketScanner, type ScanResult } from "../shared/services/marketScanner";
 import {
   generateSignalSummary,
   type SignalSummary,
-} from "../services/signalEngine";
-import { useUserStore } from "../store/userStore";
+} from "../shared/services/signalEngine";
+import { useUserStore } from "../../../store/userStore";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },

@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useRef } from 'react';
-import { performanceMonitor, measureAsync } from '../utils/performanceMonitor';
+import { performanceMonitor, measureAsync } from "../shared/utils/performanceMonitor";
 
 /**
  * Hook to instrument StockDetail screen performance

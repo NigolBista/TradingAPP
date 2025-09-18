@@ -8,15 +8,15 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../../providers/ThemeProvider";
-import { useUserStore } from "../../store/userStore";
+import { useTheme } from "../../../providers/ThemeProvider";
+import { useUserStore } from "../../../store/userStore";
 import {
   fetchRecentEarnings,
   RecentEarningsItem,
   formatEPS,
   formatCurrency,
   calculateEPSSurprise,
-} from "../../services/earningsData";
+} from "../../shared/services/earningsData";
 
 interface Props {
   onEarningsPress?: (symbol: string) => void;

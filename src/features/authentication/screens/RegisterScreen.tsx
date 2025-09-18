@@ -11,7 +11,7 @@ import {
   Alert,
   StyleSheet,
 } from "react-native";
-import { useAuth } from "../providers/AuthProvider";
+import { useAuth } from "../../../providers/AuthProvider";
 import { Ionicons } from "@expo/vector-icons";
 
 const styles = StyleSheet.create({

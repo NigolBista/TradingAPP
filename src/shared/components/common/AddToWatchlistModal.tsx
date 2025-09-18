@@ -11,10 +11,10 @@ import {
   Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useUserStore, type Watchlist } from "../../store/userStore";
-import { StockSearchResult } from "../../services/stockSearch";
+import { useUserStore, type Watchlist } from "../../../store/userStore";
+import { StockSearchResult } from "../../shared/services/stockSearch";
 import StockAutocomplete from "./StockAutocomplete";
-import { useTheme } from "../../providers/ThemeProvider";
+import { useTheme } from "../../../providers/ThemeProvider";
 
 interface AddToWatchlistModalProps {
   visible: boolean;

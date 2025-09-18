@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { fetchYahooCandles } from "../../services/marketProviders";
+import { fetchYahooCandles } from "../../shared/services/marketProviders";
 
 interface Position {
   symbol: string;

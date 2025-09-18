@@ -7,7 +7,7 @@ import {
   fetchWeeklyEarnings,
   fetchUpcomingEarnings,
   fetchRecentEarnings,
-} from "../services/earningsData";
+} from "../shared/services/earningsData";
 
 interface EarningsStore {
   // Data

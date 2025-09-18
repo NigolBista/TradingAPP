@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { PriceAlert } from "../../store/alertStore";
+import { PriceAlert } from "../../../store/alertStore";
 
 interface AlertModalProps {
   visible: boolean;

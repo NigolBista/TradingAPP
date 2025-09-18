@@ -2,7 +2,7 @@ import React from "react";
 import { Modal, View, Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import AlertsList from "../../components/common/AlertsList";
+import AlertsList from "../../../../shared/components/common/AlertsList";
 
 export interface StockAlertsModalProps {
   visible: boolean;

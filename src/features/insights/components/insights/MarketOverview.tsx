@@ -14,13 +14,13 @@ import {
   generateMarketOverview,
   generateMarketOverviewWithData,
   type MarketOverview,
-} from "../../services/marketOverview";
-import { refreshGlobalCache } from "../../services/marketDataCache";
-import type { NewsItem } from "../../services/newsProviders";
+} from "../../shared/services/marketOverview";
+import { refreshGlobalCache } from "../../shared/services/marketDataCache";
+import type { NewsItem } from "../../shared/services/newsProviders";
 import NewsList from "./NewsList";
 import UpcomingEarningsCard from "./UpcomingEarningsCard";
-import { useAppDataStore } from "../../store/appDataStore";
-import { useTheme } from "../../providers/ThemeProvider";
+import { useAppDataStore } from "../../../store/appDataStore";
+import { useTheme } from "../../../providers/ThemeProvider";
 
 interface Props {
   onNewsPress?: () => void;

@@ -8,9 +8,9 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { PriceAlert, useAlertStore } from "../../store/alertStore";
-import { useAuth } from "../../providers/AuthProvider";
-import alertsService from "../../services/alertsService";
+import { PriceAlert, useAlertStore } from "../../../store/alertStore";
+import { useAuth } from "../../../providers/AuthProvider";
+import alertsService from "../../shared/services/alertsService";
 import AlertModal from "./AlertModal";
 
 interface AlertsListProps {

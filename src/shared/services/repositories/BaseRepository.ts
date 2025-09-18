@@ -1,4 +1,4 @@
-import { CacheManager } from '../../utils/cacheManager';
+import { CacheManager } from "../../shared/utils/cacheManager";
 
 // Base interface for API clients
 export interface ApiClient {

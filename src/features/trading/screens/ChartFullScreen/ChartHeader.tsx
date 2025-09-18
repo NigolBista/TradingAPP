@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Pressable, Text, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import StockSearchBar from "../../components/common/StockSearchBar";
+import StockSearchBar from "../../../../shared/components/common/StockSearchBar";
 
 type Props = {
   onBack: () => void;

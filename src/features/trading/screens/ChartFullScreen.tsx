@@ -33,9 +33,9 @@ import {
   getDefaultIndicator,
   buildDefaultLines,
 } from "./ChartFullScreen/indicators";
-import { searchStocksAutocomplete } from "../services/stockData";
-import { useTimeframeStore } from "../store/timeframeStore";
-import { fetchNews as fetchSymbolNews } from "../services/newsProviders";
+import { searchStocksAutocomplete } from "../shared/services/stockData";
+import { useTimeframeStore } from "../../../store/timeframeStore";
+import { fetchNews as fetchSymbolNews } from "../shared/services/newsProviders";
 import {
   runAIStrategy,
   aiOutputToTradePlan,
@@ -47,24 +47,24 @@ import {
   type ChartAction,
   updateChartState,
 } from "../logic/chartBridge";
-import { useChatStore } from "../store/chatStore";
-import { useSignalCacheStore } from "../store/signalCacheStore";
-import { useUserStore } from "../store/userStore";
-import { useAlertStore } from "../store/alertStore";
-import alertsService from "../services/alertsService";
-import { useAuth } from "../providers/AuthProvider";
+import { useChatStore } from "../../../store/chatStore";
+import { useSignalCacheStore } from "../../../store/signalCacheStore";
+import { useUserStore } from "../../../store/userStore";
+import { useAlertStore } from "../../../store/alertStore";
+import alertsService from "../shared/services/alertsService";
+import { useAuth } from "../../../providers/AuthProvider";
 import { StrategyComplexity } from "../logic/types";
-import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
+import { fetchSingleQuote, type SimpleQuote } from "../shared/services/quotes";
 // removed unused federalReserve import
 import {
   fetchCandles,
   fetchCandlesForTimeframe,
   type Candle,
-} from "../services/marketProviders";
+} from "../shared/services/marketProviders";
 // removed unused timeframeSpacingMs
 import { buildDayTradePlan } from "../logic/dayTrade";
 import { buildSwingTradePlan } from "../logic/swingTrade";
-import useMarketStatus from "../hooks/useMarketStatus";
+import useMarketStatus from "../shared/hooks/useMarketStatus";
 
 // Types
 type AIMeta = {

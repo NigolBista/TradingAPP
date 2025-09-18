@@ -14,8 +14,8 @@ import {
   brokerageAuthService,
   BrokerageProvider,
   AuthResult,
-} from "../../services/brokerageAuth";
-import { brokerageApiService } from "../../services/brokerageApiService";
+} from "../../shared/services/brokerageAuth";
+import { brokerageApiService } from "../../shared/services/brokerageApiService";
 import BrokerageAuthWebView from "./BrokerageAuthWebView";
 
 interface Props {

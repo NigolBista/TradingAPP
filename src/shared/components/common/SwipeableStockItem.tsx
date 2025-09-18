@@ -2,7 +2,7 @@ import React, { useRef } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../../providers/ThemeProvider";
+import { useTheme } from "../../../providers/ThemeProvider";
 
 interface SwipeableStockItemProps {
   symbol: string;

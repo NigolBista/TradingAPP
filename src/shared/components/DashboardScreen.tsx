@@ -11,17 +11,17 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { useAppDataStore, type PortfolioHistory } from "../store/appDataStore";
+import { useAppDataStore, type PortfolioHistory } from "../../../store/appDataStore";
 import { useNavigation } from "@react-navigation/native";
 import { useNavigationHelpers } from "../navigation/hooks";
 import MarketOverview from "../components/insights/MarketOverview";
-import type { NewsItem } from "../services/newsProviders";
+import type { NewsItem } from "../shared/services/newsProviders";
 // Removed useMarketOverviewStore to prevent loops - using centralized store instead
 import DecalpXMini from "../components/insights/DecalpXMini";
 import PerformanceCard from "../components/insights/PerformanceCard";
 import TopGainersCard from "../components/insights/TopGainersCard";
 import AccountsList from "../components/insights/AccountsList";
-import { useTheme } from "../providers/ThemeProvider";
+import { useTheme } from "../../../providers/ThemeProvider";
 
 const { width } = Dimensions.get("window");
 

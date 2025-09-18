@@ -10,19 +10,19 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import OpenAI from "openai";
-import { useTheme } from "../providers/ThemeProvider";
+import { useTheme } from "../../../providers/ThemeProvider";
 import {
   getGlobalMarketData,
   refreshGlobalCache,
-} from "../services/marketDataCache";
+} from "../shared/services/marketDataCache";
 import type {
   NewsItem,
   TrendingStock,
   MarketEvent,
-} from "../services/newsProviders";
-import type { FedEvent, EconomicIndicator } from "../services/federalReserve";
-import { useUserStore } from "../store/userStore";
-import { fetchNewsWithDateFilter } from "../services/newsProviders";
+} from "../shared/services/newsProviders";
+import type { FedEvent, EconomicIndicator } from "../shared/services/federalReserve";
+import { useUserStore } from "../../../store/userStore";
+import { fetchNewsWithDateFilter } from "../shared/services/newsProviders";
 
 type TimeframeKey = "today" | "week" | "month";
 

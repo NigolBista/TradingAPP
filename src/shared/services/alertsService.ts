@@ -1,7 +1,7 @@
-import { supabase } from "../lib/supabase";
+import { supabase } from "../shared/lib/supabase";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
-import type { PriceAlert } from "../store/alertStore";
+import type { PriceAlert } from "../../../store/alertStore";
 
 export type AlertCondition =
   | "above"

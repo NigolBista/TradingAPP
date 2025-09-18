@@ -1,4 +1,4 @@
-import type { Candle } from "../../services/marketProviders";
+import type { Candle } from "../../shared/services/marketProviders";
 
 export function timeframeSpacingMs(tf: string): number {
   switch (tf) {

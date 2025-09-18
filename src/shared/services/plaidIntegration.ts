@@ -2,8 +2,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 
 // Import mock data
-import mockAccountsData from "../data/mockPlaidAccounts.json";
-import mockHoldingsData from "../data/mockPlaidHoldings.json";
+import mockAccountsData from "../shared/data/mockPlaidAccounts.json";
+import mockHoldingsData from "../shared/data/mockPlaidHoldings.json";
 
 const { plaidClientId, plaidSecret, plaidEnvironment } = Constants.expoConfig
   ?.extra as any;

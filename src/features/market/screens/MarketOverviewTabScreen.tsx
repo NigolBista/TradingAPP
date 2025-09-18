@@ -19,14 +19,14 @@ import MarketOverview from "../components/insights/MarketOverview";
 import UpcomingEarningsCard from "../components/insights/UpcomingEarningsCard";
 import ETFStrip from "../components/insights/ETFStrip";
 import DecalpXMini from "../components/insights/DecalpXMini";
-import { MarketScanner, type ScanResult } from "../services/marketScanner";
+import { MarketScanner, type ScanResult } from "../shared/services/marketScanner";
 import {
   generateSignalSummary,
   type SignalSummary,
-} from "../services/signalEngine";
-import { useUserStore } from "../store/userStore";
-import { useAppDataStore } from "../store/appDataStore";
-import { useTheme } from "../providers/ThemeProvider";
+} from "../shared/services/signalEngine";
+import { useUserStore } from "../../../store/userStore";
+import { useAppDataStore } from "../../../store/appDataStore";
+import { useTheme } from "../../../providers/ThemeProvider";
 
 const createStyles = (theme: any) =>
   StyleSheet.create({

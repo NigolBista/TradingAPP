@@ -2,9 +2,9 @@ import React, { useCallback } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { useAppDataStore } from "../../store/appDataStore";
-import { useTheme } from "../../providers/ThemeProvider";
-import { useUserStore, type TraderType } from "../../store/userStore";
+import { useAppDataStore } from "../../../store/appDataStore";
+import { useTheme } from "../../../providers/ThemeProvider";
+import { useUserStore, type TraderType } from "../../../store/userStore";
 
 type SentimentSummary = {
   overall: "bullish" | "bearish" | "neutral";

@@ -8,8 +8,8 @@ import {
   ScrollView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTimeframeStore } from "../../store/timeframeStore";
-import { useTheme } from "../../providers/ThemeProvider";
+import { useTimeframeStore } from "../../../store/timeframeStore";
+import { useTheme } from "../../../providers/ThemeProvider";
 
 export type ExtendedTimeframe =
   | "1m"

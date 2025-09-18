@@ -3,8 +3,8 @@ import { useAppDataStore } from "./appDataStore";
 import {
   generateMarketOverviewWithData,
   type MarketOverview,
-} from "../services/marketOverview";
-import type { NewsItem } from "../services/newsProviders";
+} from "../shared/services/marketOverview";
+import type { NewsItem } from "../shared/services/newsProviders";
 
 type Timeframe = "1D" | "1W" | "1M";
 

@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, FlatList } from "react-native";
-import type { AggregatedPosition } from "../../services/portfolioAggregationService";
+import type { AggregatedPosition } from "../../shared/services/portfolioAggregationService";
 
 interface Props {
   positions: AggregatedPosition[];

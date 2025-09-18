@@ -12,18 +12,18 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useAuth } from "../providers/AuthProvider";
-import { useUserStore } from "../store/userStore";
-import { useTheme, type ThemeMode } from "../providers/ThemeProvider";
-import Card from "../components/common/Card";
-import Button from "../components/common/Button";
-import Input from "../components/common/Input";
+import { useAuth } from "../../../providers/AuthProvider";
+import { useUserStore } from "../../../store/userStore";
+import { useTheme, type ThemeMode } from "../../../providers/ThemeProvider";
+import Card from "../../../shared/components/common/Card";
+import Button from "../../../shared/components/common/Button";
+import Input from "../../../shared/components/common/Input";
 import {
   scheduleDailyBriefing,
   scheduleWeeklyDigest,
   scheduleEducationalTip,
   cancelAllScheduledNotifications,
-} from "../services/notifications";
+} from "../shared/services/notifications";
 
 export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuth();

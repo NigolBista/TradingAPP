@@ -10,9 +10,9 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useUserStore } from "../store/userStore";
-import Card from "../components/common/Card";
-import Button from "../components/common/Button";
+import { useUserStore } from "../../../store/userStore";
+import Card from "../../../shared/components/common/Card";
+import Button from "../../../shared/components/common/Button";
 
 const { width: screenWidth } = Dimensions.get("window");
 

@@ -19,32 +19,32 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useNavigationHelpers } from "../navigation/hooks";
-import { ScanResult } from "../services/marketScanner";
+import { ScanResult } from "../shared/services/marketScanner";
 import {
   useUserStore,
   type Watchlist,
   type WatchlistItem,
-} from "../store/userStore";
+} from "../../../store/userStore";
 // Removed AdvancedTradingChart import - now handled in StockDetailScreen
 import {
   searchStocks,
   getPopularStocks,
   type StockSearchResult,
-} from "../services/stockSearch";
-import { getStockBySymbol } from "../services/stockData";
-import StockAutocomplete from "../components/common/StockAutocomplete";
-import AddToWatchlistModal from "../components/common/AddToWatchlistModal";
-import SwipeableStockItem from "../components/common/SwipeableStockItem";
-import { useTheme } from "../providers/ThemeProvider";
-import { type SimpleQuote } from "../services/quotes";
-import { safeFetchBulkQuotes } from "../services/quoteFetcher";
-import { realtimeDataManager } from "../services/realtimeDataManager";
+} from "../shared/services/stockSearch";
+import { getStockBySymbol } from "../shared/services/stockData";
+import StockAutocomplete from "../../../shared/components/common/StockAutocomplete";
+import AddToWatchlistModal from "../../../shared/components/common/AddToWatchlistModal";
+import SwipeableStockItem from "../../../shared/components/common/SwipeableStockItem";
+import { useTheme } from "../../../providers/ThemeProvider";
+import { type SimpleQuote } from "../shared/services/quotes";
+import { safeFetchBulkQuotes } from "../shared/services/quoteFetcher";
+import { realtimeDataManager } from "../shared/services/realtimeDataManager";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   isPolygonApiAvailable,
   fetchPolygonBulkQuotes,
-} from "../services/polygonQuotes";
-import useMarketStatus from "../hooks/useMarketStatus";
+} from "../shared/services/polygonQuotes";
+import useMarketStatus from "../shared/hooks/useMarketStatus";
 
 const { width: screenWidth } = Dimensions.get("window");
 

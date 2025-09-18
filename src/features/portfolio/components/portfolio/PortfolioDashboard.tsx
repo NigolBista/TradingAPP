@@ -16,7 +16,7 @@ import {
   PortfolioSummary,
   AggregatedPosition,
   PortfolioHistory,
-} from '../../services/portfolioAggregationService';
+} from "../../shared/services/portfolioAggregationService";
 
 const { width } = Dimensions.get('window');
 

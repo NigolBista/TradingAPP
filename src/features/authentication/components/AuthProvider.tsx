@@ -10,16 +10,16 @@ import {
   registerForPushNotificationsAsync,
   scheduleSignalAlert,
   sendLocalNotification,
-} from "../services/notifications";
-import { useUserStore } from "../store/userStore";
-import { supabase } from "../lib/supabase";
+} from "../shared/services/notifications";
+import { useUserStore } from "../../../store/userStore";
+import { supabase } from "../shared/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import alertsService, {
   type AlertRow,
   type TradeSignalRow,
-} from "../services/alertsService";
-import { useAlertStore } from "../store/alertStore";
-import barsService from "../services/barsService";
+} from "../shared/services/alertsService";
+import { useAlertStore } from "../../../store/alertStore";
+import barsService from "../shared/services/barsService";
 
 export type AuthUser = { id: string; email?: string; user_metadata?: any };
 

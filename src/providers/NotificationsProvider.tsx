@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import { navigate, navigationRef } from "../navigation";
-import alertsService from "../services/alertsService";
+import alertsService from "../shared/services/alertsService";
 import { useAlertStore } from "../store/alertStore";
 import { useAuth } from "./AuthProvider";
 

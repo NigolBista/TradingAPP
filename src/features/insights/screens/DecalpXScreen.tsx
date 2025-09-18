@@ -15,15 +15,15 @@ import { buildSwingTradePlan } from "../logic/swingTrade";
 import { aiOutputToTradePlan, runAIStrategy } from "../logic/aiStrategyEngine";
 import type { TradePlanOverlay } from "../logic/types";
 import { useNavigation } from "@react-navigation/native";
-import { useAppDataStore } from "../store/appDataStore";
-import StockAutocomplete from "../components/common/StockAutocomplete";
-import { StockSearchResult } from "../services/stockSearch";
-import { fetchCandles } from "../services/marketProviders";
-import { fetchNewsWithDateFilter } from "../services/newsProviders";
+import { useAppDataStore } from "../../../store/appDataStore";
+import StockAutocomplete from "../../../shared/components/common/StockAutocomplete";
+import { StockSearchResult } from "../shared/services/stockSearch";
+import { fetchCandles } from "../shared/services/marketProviders";
+import { fetchNewsWithDateFilter } from "../shared/services/newsProviders";
 // import AmChartsLine from "../components/charts/AmChartsLine";
-import { useTheme } from "../providers/ThemeProvider";
-import { useUserStore, type TraderType } from "../store/userStore";
-import { buildSignalContext } from "../services/signalEngine";
+import { useTheme } from "../../../providers/ThemeProvider";
+import { useUserStore, type TraderType } from "../../../store/userStore";
+import { buildSignalContext } from "../shared/services/signalEngine";
 
 const { width } = Dimensions.get("window");
 

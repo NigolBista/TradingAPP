@@ -9,8 +9,8 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../providers/ThemeProvider";
-import { useChatStore } from "../store/chatStore";
+import { useTheme } from "../../../providers/ThemeProvider";
+import { useChatStore } from "../../../store/chatStore";
 import * as Clipboard from "expo-clipboard";
 
 export default function ChatScreen() {

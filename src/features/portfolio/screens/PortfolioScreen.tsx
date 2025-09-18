@@ -17,7 +17,7 @@ import PortfolioHistoryChart from "../components/portfolio/PortfolioHistoryChart
 import {
   portfolioAggregationService,
   AggregatedPosition,
-} from "../services/portfolioAggregationService";
+} from "../shared/services/portfolioAggregationService";
 // Removed old brokerage auth - now using Plaid integration
 
 export default function PortfolioScreen() {
