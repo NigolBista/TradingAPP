@@ -9,7 +9,7 @@ import { z } from "zod";
 import {
   generateChartContextConfig,
   getIndicatorByName,
-} from "../../../logic/chartContextConfig";
+} from "../../trading/services/chartContextConfig";
 
 const planSchema = z.object({
   version: z.string().default("1.0"),

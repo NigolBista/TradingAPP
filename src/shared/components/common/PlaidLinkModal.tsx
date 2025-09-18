@@ -16,7 +16,7 @@ import {
   LinkSuccess,
   LinkExit,
 } from "react-native-plaid-link-sdk";
-import { plaidIntegrationService } from "../../../shared/services/plaidIntegration";
+import { plaidIntegrationService } from "../../../../shared/services/plaidIntegration";
 import { useTheme } from "../../../providers/ThemeProvider";
 
 interface Props {

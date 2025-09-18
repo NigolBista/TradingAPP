@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { fetchCandlesForTimeframe } from "../../../shared/services/marketProviders";
+import { fetchCandlesForTimeframe } from "../../../../shared/services/marketProviders";
 
 type ETFInfo = {
   symbol: string;

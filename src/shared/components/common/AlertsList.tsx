@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PriceAlert, useAlertStore } from "../../../store/alertStore";
-import { useAuth } from "../../../providers/AuthProvider";
+import { useAuth } from "../../features/authentication";
 import alertsService from "../../shared/services/alertsService";
 import AlertModal from "./AlertModal";
 

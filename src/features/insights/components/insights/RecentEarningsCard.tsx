@@ -9,14 +9,14 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../providers/ThemeProvider";
-import { useUserStore } from "../../../../../store/userStore";
+import { useUserStore } from "../../../../store/userStore";
 import {
   fetchRecentEarnings,
   RecentEarningsItem,
   formatEPS,
   formatCurrency,
   calculateEPSSurprise,
-} from "../../../shared/services/earningsData";
+} from "../../../../shared/services/earningsData";
 
 interface Props {
   onEarningsPress?: (symbol: string) => void;

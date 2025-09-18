@@ -1,5 +1,5 @@
 import { Agent, AgentContext, AgentResponse } from "./types";
-import { STRATEGY_COMPLEXITY_CONFIGS } from "../../../logic/strategyComplexity";
+import { STRATEGY_COMPLEXITY_CONFIGS } from "../../trading/services/strategyComplexity";
 
 export class StrategyAgent implements Agent {
   name = "strategy";

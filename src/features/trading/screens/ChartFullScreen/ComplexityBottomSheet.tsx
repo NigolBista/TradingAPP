@@ -10,7 +10,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { StrategyComplexity } from "../../logic/types";
+import { StrategyComplexity } from "../../types";
 import { ExtendedTimeframe } from "../../../shared/services/marketProviders";
 import { STRATEGY_COMPLEXITY_CONFIGS } from "../../services/strategyComplexity";
 

@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { fetchCandlesForTimeframe } from "../../../shared/services/marketProviders";
+import { fetchCandlesForTimeframe } from "../../../../shared/services/marketProviders";
 
 interface Position {
   symbol: string;

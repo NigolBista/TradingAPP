@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useUserStore, type Watchlist } from "../../../store/userStore";
-import { StockSearchResult } from "../../../shared/services/stockSearch";
+import { StockSearchResult } from "../../../../shared/services/stockSearch";
 import StockAutocomplete from "./StockAutocomplete";
 import { useTheme } from "../../../providers/ThemeProvider";
 
