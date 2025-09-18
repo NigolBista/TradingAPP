@@ -36,7 +36,6 @@ import {
   fetchStockNewsApi,
 } from "../services/newsProviders";
 // Removed viewportBars dependency; using simple lazy loading on visible range change
-import NewsList from "../components/insights/NewsList";
 import { sendLocalNotification } from "../services/notifications";
 import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
@@ -52,6 +51,8 @@ import {
   StockHeader,
   StockPriceSummary,
   StockAlertsModal,
+  StockOverviewSection,
+  StockNewsSection,
 } from "../components/stock-details";
 
 type RootStackParamList = {
@@ -1636,191 +1637,20 @@ export default function StockDetailScreen() {
 
         {/* Overview Tab */}
         {activeTab === "overview" && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Market Overview</Text>
-            </View>
-
-            {/* Price and Change Info */}
-            <View style={{ padding: 16 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 16,
-                }}
-              >
-                <View>
-                  <Text
-                    style={{
-                      color: "#E5E7EB",
-                      fontSize: 24,
-                      fontWeight: "700",
-                    }}
-                  >
-                    ${currentPrice.toFixed(2)}
-                  </Text>
-                  {todayChange !== null && todayChangePercent !== null && (
-                    <Text
-                      style={{
-                        color: todayChangePercent >= 0 ? "#10B981" : "#EF4444",
-                        fontSize: 14,
-                        fontWeight: "600",
-                      }}
-                    >
-                      {todayChangePercent >= 0 ? "+" : ""}
-                      {todayChangePercent.toFixed(2)}% (
-                      {todayChange >= 0 ? "+" : ""}${todayChange.toFixed(2)})
-                    </Text>
-                  )}
-                </View>
-                {symbolSentimentSummary && (
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-                      Sentiment
-                    </Text>
-                    <Text
-                      style={{
-                        color:
-                          symbolSentimentSummary.overall === "bullish"
-                            ? "#10B981"
-                            : symbolSentimentSummary.overall === "bearish"
-                            ? "#EF4444"
-                            : "#9CA3AF",
-                        fontSize: 14,
-                        fontWeight: "600",
-                        textTransform: "capitalize",
-                      }}
-                    >
-                      {symbolSentimentSummary.overall} (
-                      {symbolSentimentSummary.confidence}%)
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Analysis Summary */}
-              {analysis && (
-                <View style={{ marginBottom: 16 }}>
-                  <Text
-                    style={{
-                      color: "#E5E7EB",
-                      fontSize: 16,
-                      fontWeight: "600",
-                      marginBottom: 8,
-                    }}
-                  >
-                    Technical Analysis
-                  </Text>
-                  {analysis.signals && analysis.signals.length > 0 && (
-                    <View
-                      style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
-                    >
-                      {analysis.signals.slice(0, 3).map((signal, index) => (
-                        <View
-                          key={index}
-                          style={{
-                            paddingHorizontal: 8,
-                            paddingVertical: 4,
-                            borderRadius: 12,
-                            backgroundColor:
-                              signal.action === "buy"
-                                ? "rgba(16, 185, 129, 0.2)"
-                                : "rgba(239, 68, 68, 0.2)",
-                            borderWidth: 1,
-                            borderColor:
-                              signal.action === "buy"
-                                ? "rgba(16, 185, 129, 0.3)"
-                                : "rgba(239, 68, 68, 0.3)",
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color:
-                                signal.action === "buy" ? "#10B981" : "#EF4444",
-                              fontSize: 11,
-                              fontWeight: "600",
-                            }}
-                          >
-                            {signal.type.toUpperCase()}{" "}
-                            {signal.action.toUpperCase()}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
-
-              {/* News Sentiment Breakdown */}
-              {symbolSentimentCounts && (
-                <View>
-                  <Text
-                    style={{
-                      color: "#E5E7EB",
-                      fontSize: 16,
-                      fontWeight: "600",
-                      marginBottom: 8,
-                    }}
-                  >
-                    News Sentiment
-                  </Text>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <View style={{ alignItems: "center" }}>
-                      <Text
-                        style={{
-                          color: "#10B981",
-                          fontSize: 18,
-                          fontWeight: "700",
-                        }}
-                      >
-                        {symbolSentimentCounts.positive}
-                      </Text>
-                      <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-                        Positive
-                      </Text>
-                    </View>
-                    <View style={{ alignItems: "center" }}>
-                      <Text
-                        style={{
-                          color: "#9CA3AF",
-                          fontSize: 18,
-                          fontWeight: "700",
-                        }}
-                      >
-                        {symbolSentimentCounts.neutral}
-                      </Text>
-                      <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-                        Neutral
-                      </Text>
-                    </View>
-                    <View style={{ alignItems: "center" }}>
-                      <Text
-                        style={{
-                          color: "#EF4444",
-                          fontSize: 18,
-                          fontWeight: "700",
-                        }}
-                      >
-                        {symbolSentimentCounts.negative}
-                      </Text>
-                      <Text style={{ color: "#9CA3AF", fontSize: 12 }}>
-                        Negative
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-              )}
-            </View>
-          </View>
+          <StockOverviewSection
+            currentPrice={currentPrice}
+            todayChange={todayChange}
+            todayChangePercent={todayChangePercent}
+            symbolSentimentSummary={symbolSentimentSummary}
+            symbolSentimentCounts={symbolSentimentCounts}
+            analysis={analysis}
+            displayPrice={displayPrice}
+            showAfterHours={showAfterHours}
+            afterHoursDiff={afterHoursDiff}
+            afterHoursPct={afterHoursPct}
+            showPreMarket={showPreMarket}
+          />
         )}
-
         {/* Timeframe modal */}
         <TimeframePickerModal
           visible={tfModalVisible}
@@ -1831,58 +1661,12 @@ export default function StockDetailScreen() {
 
         {/* News */}
         {activeTab === "news" && (
-          <View style={styles.newsSection}>
-            {newsLoading ? (
-              <View style={styles.newsSectionHeader}>
-                <View style={{ alignItems: "center", paddingVertical: 20 }}>
-                  <ActivityIndicator size="small" color="#00D4AA" />
-                  <Text style={{ color: "#888", fontSize: 14, marginTop: 8 }}>
-                    Loading latest news for {symbol}...
-                  </Text>
-                </View>
-              </View>
-            ) : news.length > 0 ? (
-              <NewsList items={news.slice(0, 20)} fullScreen={true} />
-            ) : (
-              <>
-                <View style={styles.newsSectionHeader}>
-                  <Text style={styles.newsSectionTitle}>Latest News</Text>
-                </View>
-                <View style={{ paddingHorizontal: 16, paddingVertical: 20 }}>
-                  <Text
-                    style={{
-                      color: "#888",
-                      textAlign: "center",
-                      fontSize: 14,
-                      marginBottom: 12,
-                    }}
-                  >
-                    No recent news found for {symbol}
-                  </Text>
-                  <Pressable
-                    onPress={refreshNews}
-                    style={{
-                      backgroundColor: "#1a1a1a",
-                      paddingHorizontal: 16,
-                      paddingVertical: 10,
-                      borderRadius: 8,
-                      alignSelf: "center",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        color: "#00D4AA",
-                        fontSize: 14,
-                        fontWeight: "600",
-                      }}
-                    >
-                      Retry Loading News
-                    </Text>
-                  </Pressable>
-                </View>
-              </>
-            )}
-          </View>
+          <StockNewsSection
+            symbol={symbol}
+            news={news}
+            newsLoading={newsLoading}
+            onRetry={refreshNews}
+          />
         )}
 
         <View style={{ height: 32 }} />
