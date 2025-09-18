@@ -15,7 +15,9 @@
       "Bash(grep:*)",
       "Bash(node fix-imports.js)",
       "Bash(node:*)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "Bash(npx expo doctor:*)",
+      "Bash(npx expo-doctor:*)"
     ],
     "deny": [],
     "ask": []

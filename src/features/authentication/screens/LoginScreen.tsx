@@ -12,7 +12,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { useAuth } from "../../../providers/AuthProvider";
+import { useAuth } from "../components/AuthProvider";
 import { Ionicons } from "@expo/vector-icons";
 
 const styles = StyleSheet.create({

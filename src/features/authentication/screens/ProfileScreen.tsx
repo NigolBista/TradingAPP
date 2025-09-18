@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useAuth } from "../../../providers/AuthProvider";
+import { useAuth } from "../components/AuthProvider";
 import { useUserStore } from "../../../store/userStore";
 import { useTheme, type ThemeMode } from "../../../providers/ThemeProvider";
 import Card from "../../../shared/components/common/Card";
