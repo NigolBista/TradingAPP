@@ -1,14 +1,14 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MarketStackParamList } from './types';
-import MarketScreenerScreen from '../screens/MarketScreenerScreen';
-import AIInsightsScreen from '../screens/AIInsightsScreen';
-import MarketOverviewScreen from '../screens/MarketOverviewScreen';
-import FederalReserveScreen from '../screens/FederalReserveScreen';
-import DecalpXScreen from '../screens/DecalpXScreen';
-import MarketOverviewPage from '../screens/MarketOverviewPage';
-import EarningsCalendarScreen from '../screens/EarningsCalendarScreen';
-import ChatScreen from '../screens/ChatScreen';
+import {
+  MarketScreenerScreen,
+  MarketOverviewScreen,
+  FederalReserveScreen,
+  MarketOverviewPage,
+  EarningsCalendarScreen
+} from '../features/market';
+import { AIInsightsScreen, DecalpXScreen, ChatScreen } from '../features/insights';
 
 const MarketStack = createNativeStackNavigator<MarketStackParamList>();
 

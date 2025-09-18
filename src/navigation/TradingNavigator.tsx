@@ -1,10 +1,12 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { TradingStackParamList } from './types';
-import StockDetailScreen from '../screens/StockDetailScreen';
-import ChartFullScreen from '../screens/ChartFullScreen';
-import ChartChatScreen from '../screens/ChartChatScreen';
-import IndicatorConfigScreen from '../screens/IndicatorConfigScreen';
+import {
+  StockDetailScreen,
+  ChartFullScreen,
+  ChartChatScreen,
+  IndicatorConfigScreen
+} from '../features/trading';
 
 const TradingStack = createNativeStackNavigator<TradingStackParamList>();
 

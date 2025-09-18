@@ -5,11 +5,10 @@ import { MainTabParamList } from './types';
 import { useTheme } from '../providers/ThemeProvider';
 
 // Import screens
-import DashboardScreen from '../screens/DashboardScreen';
-import WatchlistScreen from '../screens/WatchlistScreen';
-import MarketOverviewTabScreen from '../screens/MarketOverviewTabScreen';
-import FocusScreen from '../screens/FocusScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import DashboardScreen from '../shared/components/DashboardScreen';
+import { WatchlistScreen, MarketOverviewTabScreen } from '../features/market';
+import { FocusScreen } from '../features/trading';
+import { ProfileScreen } from '../features/authentication';
 
 const MainTab = createBottomTabNavigator<MainTabParamList>();
 
