@@ -118,19 +118,19 @@ export class ChartContextAgent implements Agent {
 
     switch (elementType) {
       case 'colors':
-        options = contextConfig.colorPalette;
+        options = [...contextConfig.colorPalette];
         break;
       case 'timeframes':
-        options = contextConfig.timeframes;
+        options = [...contextConfig.timeframes];
         break;
       case 'indicators':
-        options = contextConfig.availableIndicators;
+        options = [...contextConfig.availableIndicators];
         break;
       case 'chartTypes':
-        options = contextConfig.chartTypes;
+        options = [...contextConfig.chartTypes];
         break;
       case 'lineStyles':
-        options = contextConfig.lineStyles;
+        options = [...contextConfig.lineStyles];
         break;
       default:
         return {

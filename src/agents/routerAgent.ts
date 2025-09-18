@@ -19,7 +19,7 @@ const planSchema = z.object({
     .array(
       z.object({
         tool: z.string(),
-        args: z.record(z.any()),
+        args: z.record(z.string(), z.any()),
       })
     )
     .default([]),

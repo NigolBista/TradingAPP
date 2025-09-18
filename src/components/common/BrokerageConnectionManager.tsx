@@ -30,12 +30,12 @@ export default function BrokerageConnectionManager({
     null
   );
   const [connectionStatus, setConnectionStatus] = useState<
-    Record<BrokerageProvider, boolean>
+    Partial<Record<BrokerageProvider, boolean>>
   >({
     robinhood: false,
     webull: false,
   });
-  const [checking, setChecking] = useState<Record<BrokerageProvider, boolean>>({
+  const [checking, setChecking] = useState<Partial<Record<BrokerageProvider, boolean>>>({
     robinhood: false,
     webull: false,
   });
@@ -45,11 +45,12 @@ export default function BrokerageConnectionManager({
   }, []);
 
   const loadActiveSessions = async () => {
-    const sessions = brokerageAuthService.getActiveSessions();
-    setActiveSessions(sessions);
+    const sessions = await brokerageAuthService.getActiveSessions();
+    const providers = sessions.map(session => session.provider as BrokerageProvider);
+    setActiveSessions(providers);
 
     // Check connection status for each active session
-    const statusPromises = sessions.map(async (provider) => {
+    const statusPromises = providers.map(async (provider) => {
       setChecking((prev) => ({ ...prev, [provider]: true }));
       try {
         const isConnected = await brokerageApiService.checkConnection(provider);
@@ -62,7 +63,7 @@ export default function BrokerageConnectionManager({
     });
 
     await Promise.all(statusPromises);
-    onConnectionChange?.(sessions);
+    onConnectionChange?.(providers);
   };
 
   const handleConnect = (provider: BrokerageProvider) => {
@@ -78,16 +79,16 @@ export default function BrokerageConnectionManager({
       // Automatically test the connection and try to fetch initial data
       setTimeout(async () => {
         console.log(
-          `Testing connection for ${result.session.provider} after auth success`
+          `Testing connection for ${result.session!.provider} after auth success`
         );
-        await testConnectionAndFetchData(result.session.provider);
+        await testConnectionAndFetchData(result.session!.provider as BrokerageProvider);
       }, 2000);
 
       Alert.alert(
         "Success!",
         `Successfully connected to ${
-          result.session.provider.charAt(0).toUpperCase() +
-          result.session.provider.slice(1)
+          result.session!.provider.charAt(0).toUpperCase() +
+          result.session!.provider.slice(1)
         }. Fetching your data...`,
         [{ text: "OK" }]
       );
@@ -193,6 +194,13 @@ export default function BrokerageConnectionManager({
           icon: "bar-chart" as keyof typeof Ionicons.glyphMap,
           color: "#FFD700",
           description: "Advanced trading platform",
+        };
+      default:
+        return {
+          name: provider.charAt(0).toUpperCase() + provider.slice(1),
+          icon: "business" as keyof typeof Ionicons.glyphMap,
+          color: "#666666",
+          description: "Financial services provider",
         };
     }
   };

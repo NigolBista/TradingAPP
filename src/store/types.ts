@@ -1,4 +1,40 @@
 // Core store types and interfaces
+import type {
+  User,
+  UserProfile,
+  NotificationPreferences,
+  TradingPreferences,
+  PrivacySettings,
+  AuthSession,
+  LoginCredentials,
+  Watchlist,
+} from '../services/repositories/UserRepository';
+
+import type {
+  Order,
+  OrderRequest,
+  Position as TradingPosition,
+  TradingAlert,
+  TradingStrategy,
+  TradingSignal,
+  RiskMetrics,
+} from '../services/repositories/TradingRepository';
+
+import type {
+  Account,
+  Position as PortfolioPosition,
+  PortfolioSummary,
+  PortfolioHistory,
+  Transaction,
+} from '../services/repositories/PortfolioRepository';
+
+import type {
+  Quote,
+  ChartData,
+  NewsItem,
+  MarketSummary,
+  SearchResult,
+} from '../services/repositories/MarketDataRepository';
 
 // State slice type helpers
 export interface BaseSlice {

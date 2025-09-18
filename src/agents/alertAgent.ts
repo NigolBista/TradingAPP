@@ -183,7 +183,13 @@ export class AlertAgent implements Agent {
       success: true,
       data: { alert },
       message: `Price alert created for ${symbol}`,
-      alert,
+      alert: {
+        type: "price" as const,
+        condition: `${condition} ${price}`,
+        value: price,
+        message: message || `${symbol} price ${condition} ${price}`,
+        priority: "medium" as const,
+      },
     };
   }
 
@@ -215,7 +221,13 @@ export class AlertAgent implements Agent {
       success: true,
       data: { alert },
       message: `Indicator alert created for ${symbol}`,
-      alert,
+      alert: {
+        type: "indicator" as const,
+        condition: `${indicator} ${condition}`,
+        value,
+        message: message || `${symbol} ${indicator} ${condition} ${value || "threshold"}`,
+        priority: "medium" as const,
+      },
     };
   }
 
@@ -246,7 +258,13 @@ export class AlertAgent implements Agent {
       success: true,
       data: { alert },
       message: `Pattern alert created for ${symbol}`,
-      alert,
+      alert: {
+        type: "custom" as const,
+        condition: `${pattern} pattern detected`,
+        value: timeframe || "1D",
+        message: message || `${symbol} ${pattern} pattern detected on ${timeframe || "1D"}`,
+        priority: "high" as const,
+      },
     };
   }
 
@@ -277,7 +295,13 @@ export class AlertAgent implements Agent {
       success: true,
       data: { alert },
       message: `News alert created for ${symbol}`,
-      alert,
+      alert: {
+        type: "news" as const,
+        condition: `${sentiment || "neutral"} sentiment`,
+        value: keywords,
+        message: message || `News alert for ${symbol} with ${sentiment || "neutral"} sentiment`,
+        priority: "medium" as const,
+      },
     };
   }
 
@@ -305,7 +329,12 @@ export class AlertAgent implements Agent {
       success: true,
       data: { alert },
       message: `Custom alert created for ${symbol}`,
-      alert,
+      alert: {
+        type: "custom" as const,
+        condition: condition || "custom condition",
+        message: message || `Custom alert for ${symbol}: ${condition}`,
+        priority: (priority as "low" | "medium" | "high" | "critical") || "medium",
+      },
     };
   }
 

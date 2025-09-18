@@ -1,23 +1,22 @@
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, NavigationProp, RouteProp } from '@react-navigation/native';
 import type {
   AllStackParamList,
-  ScreenNavigationProp,
-  ScreenRouteProp,
+  RootStackParamList,
 } from './types';
 
 // Typed navigation hook
-export function useTypedNavigation<T extends keyof AllStackParamList>() {
-  return useNavigation<ScreenNavigationProp<T>>();
+export function useTypedNavigation() {
+  return useNavigation<NavigationProp<RootStackParamList>>();
 }
 
 // Typed route hook
 export function useTypedRoute<T extends keyof AllStackParamList>() {
-  return useRoute<ScreenRouteProp<T>>();
+  return useRoute<RouteProp<AllStackParamList, T>>();
 }
 
 // Combined navigation and route hook
 export function useScreenProps<T extends keyof AllStackParamList>() {
-  const navigation = useTypedNavigation<T>();
+  const navigation = useTypedNavigation();
   const route = useTypedRoute<T>();
 
   return { navigation, route };
@@ -25,26 +24,26 @@ export function useScreenProps<T extends keyof AllStackParamList>() {
 
 // Navigation helpers for common actions
 export function useNavigationHelpers() {
-  const navigation = useNavigation<ScreenNavigationProp<keyof AllStackParamList>>();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
 
   return {
     // Trading navigation
     navigateToStock: (symbol: string, name?: string, source?: string) => {
-      navigation.navigate('Trading', {
+      (navigation as any).navigate('Trading', {
         screen: 'StockDetail',
         params: { symbol, name, source },
       });
     },
 
     navigateToChart: (symbol: string, timeframe?: string) => {
-      navigation.navigate('Trading', {
+      (navigation as any).navigate('Trading', {
         screen: 'ChartFullScreen',
         params: { symbol, timeframe },
       });
     },
 
     navigateToChartChat: (symbol: string, chartData?: any) => {
-      navigation.navigate('Trading', {
+      (navigation as any).navigate('Trading', {
         screen: 'ChartChat',
         params: { symbol, chartData },
       });
@@ -52,19 +51,19 @@ export function useNavigationHelpers() {
 
     // Market navigation
     navigateToScanner: () => {
-      navigation.navigate('Market', { screen: 'Scanner' });
+      (navigation as any).navigate('Market', { screen: 'Scanner' });
     },
 
     navigateToInsights: () => {
-      navigation.navigate('Market', { screen: 'AIInsights' });
+      (navigation as any).navigate('Market', { screen: 'AIInsights' });
     },
 
     navigateToMarketOverview: () => {
-      navigation.navigate('Market', { screen: 'MarketOverview' });
+      (navigation as any).navigate('Market', { screen: 'MarketOverview' });
     },
 
     navigateToChat: (context?: 'market' | 'stock' | 'general', symbol?: string) => {
-      navigation.navigate('Market', {
+      (navigation as any).navigate('Market', {
         screen: 'Chat',
         params: { context, symbol },
       });
@@ -72,33 +71,33 @@ export function useNavigationHelpers() {
 
     // Portfolio navigation
     navigateToAccounts: () => {
-      navigation.navigate('Portfolio', { screen: 'BrokerageAccounts' });
+      (navigation as any).navigate('Portfolio', { screen: 'BrokerageAccounts' });
     },
 
     navigateToJourney: () => {
-      navigation.navigate('Portfolio', { screen: 'Journey' });
+      (navigation as any).navigate('Portfolio', { screen: 'Journey' });
     },
 
     // Main tabs
     navigateToDashboard: () => {
-      navigation.navigate('Main', { screen: 'Dashboard' });
+      (navigation as any).navigate('Main', { screen: 'Dashboard' });
     },
 
     navigateToWatchlist: () => {
-      navigation.navigate('Main', { screen: 'Watchlist' });
+      (navigation as any).navigate('Main', { screen: 'Watchlist' });
     },
 
     navigateToProfile: () => {
-      navigation.navigate('Main', { screen: 'Profile' });
+      (navigation as any).navigate('Main', { screen: 'Profile' });
     },
 
     // Auth navigation
     navigateToLogin: () => {
-      navigation.navigate('Auth', { screen: 'Login' });
+      (navigation as any).navigate('Auth', { screen: 'Login' });
     },
 
     navigateToRegister: () => {
-      navigation.navigate('Auth', { screen: 'Register' });
+      (navigation as any).navigate('Auth', { screen: 'Register' });
     },
 
     // Utility functions
@@ -114,7 +113,7 @@ export function useDeepLinking() {
   return {
     // Handle stock deep links (e.g., tradingapp://stock/AAPL)
     handleStockLink: (symbol: string, name?: string) => {
-      navigation.navigate('Trading', {
+      (navigation as any).navigate('Trading', {
         screen: 'StockDetail',
         params: { symbol, name, source: 'deeplink' },
       });
@@ -122,7 +121,7 @@ export function useDeepLinking() {
 
     // Handle chart deep links (e.g., tradingapp://chart/AAPL)
     handleChartLink: (symbol: string, timeframe?: string) => {
-      navigation.navigate('Trading', {
+      (navigation as any).navigate('Trading', {
         screen: 'ChartFullScreen',
         params: { symbol, timeframe },
       });
@@ -130,7 +129,7 @@ export function useDeepLinking() {
 
     // Handle market scanner deep links
     handleScannerLink: () => {
-      navigation.navigate('Market', { screen: 'Scanner' });
+      (navigation as any).navigate('Market', { screen: 'Scanner' });
     },
 
     // Reset to a specific screen (useful for notifications)
