@@ -1,6 +1,6 @@
 import { StateCreator } from 'zustand';
 import { AppState, AuthState, StoreActions, LoginCredentials } from '../types';
-import { UserRepository } from "../../../shared/services/repositories";
+import { UserRepository } from "../shared/services/repositories";
 
 // Initial auth state
 const initialAuthState: AuthState = {

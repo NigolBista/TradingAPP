@@ -17,7 +17,10 @@
       "Bash(node:*)",
       "Bash(xargs sed:*)",
       "Bash(npx expo doctor:*)",
-      "Bash(npx expo-doctor:*)"
+      "Bash(npx expo-doctor:*)",
+      "Bash(npx expo export:*)",
+      "Bash(while IFS=':' read -r file line)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

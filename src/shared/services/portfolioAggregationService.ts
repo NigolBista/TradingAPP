@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { plaidIntegrationService } from "./plaidIntegration";
 
 // Import mock portfolio history data
-import mockPortfolioHistory from "../shared/data/mockPortfolioHistory.json";
+import mockPortfolioHistory from "../data/mockPortfolioHistory.json";
 
 // Mock mode flag - should match the one in plaidIntegration.ts
 const USE_MOCK_DATA = true;

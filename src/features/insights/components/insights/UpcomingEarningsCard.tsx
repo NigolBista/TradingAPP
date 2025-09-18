@@ -10,8 +10,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../providers/ThemeProvider";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
-import { useUserStore } from "../../../store/userStore";
-import { useEarningsStore } from "../../../store/earningsStore";
+import { useUserStore } from "../../../../../store/userStore";
+import { useEarningsStore } from "../../../../../store/earningsStore";
 import { useCallback } from "react";
 import {
   fetchUpcomingEarnings,

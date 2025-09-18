@@ -40,20 +40,20 @@ import {
   runAIStrategy,
   aiOutputToTradePlan,
   applyComplexityToPlan,
-} from "../../../logic/aiStrategyEngine";
+} from "../services/aiStrategyEngine";
 import {
   registerChartBridge,
   unregisterChartBridge,
   type ChartAction,
   updateChartState,
-} from "../../../logic/chartBridge";
+} from "../services/chartBridge";
 import { useChatStore } from "../../../store/chatStore";
 import { useSignalCacheStore } from "../../../store/signalCacheStore";
 import { useUserStore } from "../../../store/userStore";
 import { useAlertStore } from "../../../store/alertStore";
-import alertsService from "../shared/services/alertsService";
-import { useAuth } from "../../../providers/AuthProvider";
-import { StrategyComplexity } from "../../../logic/types";
+import alertsService from "../../../shared/services/alertsService";
+import { useAuth } from "../../authentication";
+import { StrategyComplexity } from "../services/types";
 import { fetchSingleQuote, type SimpleQuote } from "../../../shared/services/quotes";
 // removed unused federalReserve import
 import {
@@ -62,9 +62,9 @@ import {
   type Candle,
 } from "../../../shared/services/marketProviders";
 // removed unused timeframeSpacingMs
-import { buildDayTradePlan } from "../../../logic/dayTrade";
-import { buildSwingTradePlan } from "../../../logic/swingTrade";
-import useMarketStatus from "../shared/hooks/useMarketStatus";
+import { buildDayTradePlan } from "../services/dayTrade";
+import { buildSwingTradePlan } from "../services/swingTrade";
+import useMarketStatus from "../../../shared/hooks/useMarketStatus";
 
 // Types
 type AIMeta = {

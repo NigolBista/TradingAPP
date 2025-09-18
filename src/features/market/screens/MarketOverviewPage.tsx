@@ -10,12 +10,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { COLORS } from "../shared/constants/colors";
-import MarketOverview from "../components/insights/MarketOverview";
-import IndexStrip from "../components/insights/IndexStrip";
-import ETFStrip from "../components/insights/ETFStrip";
-import RecentEarningsCard from "../components/insights/RecentEarningsCard";
-import UpcomingEarningsCard from "../components/insights/UpcomingEarningsCard";
+import { COLORS } from "../../../shared/constants/colors";
+import { MarketOverview, IndexStrip, ETFStrip, RecentEarningsCard, UpcomingEarningsCard } from "../../insights";
 import { useAppDataStore } from "../../../store/appDataStore";
 // Remove marketOverviewStore to prevent loops
 

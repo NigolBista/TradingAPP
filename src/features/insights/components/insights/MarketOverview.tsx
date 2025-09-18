@@ -19,7 +19,7 @@ import { refreshGlobalCache } from "../../../shared/services/marketDataCache";
 import type { NewsItem } from "../../../shared/services/newsProviders";
 import NewsList from "./NewsList";
 import UpcomingEarningsCard from "./UpcomingEarningsCard";
-import { useAppDataStore } from "../../../store/appDataStore";
+import { useAppDataStore } from "../../../../../store/appDataStore";
 import { useTheme } from "../../../providers/ThemeProvider";
 
 interface Props {

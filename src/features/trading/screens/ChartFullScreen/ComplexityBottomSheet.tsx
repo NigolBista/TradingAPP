@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { StrategyComplexity } from "../../logic/types";
 import { ExtendedTimeframe } from "../../../shared/services/marketProviders";
-import { STRATEGY_COMPLEXITY_CONFIGS } from "../../logic/strategyComplexity";
+import { STRATEGY_COMPLEXITY_CONFIGS } from "../../services/strategyComplexity";
 
 type Props = {
   visible: boolean;

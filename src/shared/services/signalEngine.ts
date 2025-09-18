@@ -7,9 +7,9 @@ import {
 } from "./aiAnalytics";
 import { detectPatterns } from "./patternDetection";
 import { buildTradePlan, TradePlan } from "./riskManager";
-import { buildDayTradePlan } from "../../../logic/dayTrade";
-import { buildSwingTradePlan } from "../../../logic/swingTrade";
-import { TradePlanOverlay, StrategyContext } from "../../../logic/types";
+import { buildDayTradePlan } from "../../features/trading/services/dayTrade";
+import { buildSwingTradePlan } from "../../features/trading/services/swingTrade";
+import { TradePlanOverlay, StrategyContext } from "../../features/trading/types";
 
 export interface SignalContext {
   symbol: string;

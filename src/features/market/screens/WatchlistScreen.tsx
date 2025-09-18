@@ -44,7 +44,7 @@ import {
   isPolygonApiAvailable,
   fetchPolygonBulkQuotes,
 } from "../../../shared/services/polygonQuotes";
-import useMarketStatus from "../shared/hooks/useMarketStatus";
+import useMarketStatus from "../../../shared/hooks/useMarketStatus";
 
 const { width: screenWidth } = Dimensions.get("window");
 

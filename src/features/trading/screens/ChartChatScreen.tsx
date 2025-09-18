@@ -15,7 +15,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../providers/ThemeProvider";
 import { useLLMChatStore } from "../../../store/llmChatStore";
-import { sendChartChatMessage } from "../../../logic/llmChartChat";
+import { sendChartChatMessage } from "../services/llmChartChat";
 import * as Clipboard from "expo-clipboard";
 
 export default function ChartChatScreen() {

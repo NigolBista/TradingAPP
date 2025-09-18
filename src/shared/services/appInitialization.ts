@@ -1,8 +1,8 @@
 import { preloadStocksData } from "./stockData";
-import { initializeAppDataStore } from "../../../store/appDataStore";
-import { useEarningsStore } from "../../../store/earningsStore";
+import { initializeAppDataStore } from "../../store/appDataStore";
+import { useEarningsStore } from "../../store/earningsStore";
 import { realtimeDataManager } from "./realtimeDataManager";
-import { useUserStore } from "../../../store/userStore";
+import { useUserStore } from "../../store/userStore";
 import { getGlobalMarketData } from "./marketDataCache";
 
 /**

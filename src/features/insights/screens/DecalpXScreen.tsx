@@ -10,10 +10,10 @@ import {
   SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { buildDayTradePlan } from "../../../logic/dayTrade";
-import { buildSwingTradePlan } from "../../../logic/swingTrade";
-import { aiOutputToTradePlan, runAIStrategy } from "../../../logic/aiStrategyEngine";
-import type { TradePlanOverlay } from "../../../logic/types";
+import { buildDayTradePlan } from "../../trading/services/dayTrade";
+import { buildSwingTradePlan } from "../../trading/services/swingTrade";
+import { aiOutputToTradePlan, runAIStrategy } from "../../trading/services/aiStrategyEngine";
+import type { TradePlanOverlay } from "../../trading/types";
 import { useNavigation } from "@react-navigation/native";
 import { useAppDataStore } from "../../../store/appDataStore";
 import StockAutocomplete from "../../../shared/components/common/StockAutocomplete";

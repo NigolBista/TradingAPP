@@ -15,10 +15,7 @@ import {
 } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import MarketOverview from "../components/insights/MarketOverview";
-import UpcomingEarningsCard from "../components/insights/UpcomingEarningsCard";
-import ETFStrip from "../components/insights/ETFStrip";
-import DecalpXMini from "../components/insights/DecalpXMini";
+import { MarketOverview, UpcomingEarningsCard, ETFStrip, DecalpXMini } from "../../insights";
 import { MarketScanner, type ScanResult } from "../../../shared/services/marketScanner";
 import {
   generateSignalSummary,

@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 
-import NewsList from "../../components/insights/NewsList";
+import { NewsList } from "../../../insights";
 
 export interface StockNewsSectionProps {
   symbol: string;

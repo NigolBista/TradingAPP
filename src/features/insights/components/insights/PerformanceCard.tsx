@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import type { PortfolioHistory } from "../../../shared/services/portfolioAggregationService";
-import { COLORS } from "../../shared/constants/colors";
+import { COLORS } from "../../../shared/constants/colors";
 import { useTheme } from "../../../providers/ThemeProvider";
 import SimpleKLineChart from "../charts/SimpleKLineChart";
 

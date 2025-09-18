@@ -24,9 +24,9 @@ import {
 // Removed sentiment analysis - we get sentiment from Stock News API directly
 import { useUserStore } from "../../../store/userStore";
 import { useNavigation } from "@react-navigation/native";
-import { useMarketData } from "../shared/hooks/useMarketData";
+import { useMarketData } from "../../../shared/hooks/useMarketData";
 import { getAllCachedData } from "../../../shared/services/marketDataCache";
-import NewsList from "../components/insights/NewsList";
+import { NewsList } from "../../insights";
 import { useTheme } from "../../../providers/ThemeProvider";
 
 const createStyles = (theme: any) =>

@@ -1,4 +1,4 @@
-import { initializeAppDataStore } from "../../../store/appDataStore";
+import { initializeAppDataStore } from "../../store/appDataStore";
 
 /**
  * App Initializer

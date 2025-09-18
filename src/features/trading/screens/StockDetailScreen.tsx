@@ -41,16 +41,16 @@ import { searchStocksAutocomplete } from "../../../shared/services/stockData";
 import { useTimeframeStore } from "../../../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../../../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../../../store/signalCacheStore";
-import { useStockDetails } from "../shared/hooks/useStockDetails";
-import { useOptimizedStockDetails } from "../shared/hooks/useOptimizedStockDetails";
-import { useSymbolSentimentSummary } from "../shared/hooks/useSymbolSentimentSummary";
-import { useStockDetailPerformance } from "../shared/hooks/usePerformanceInstrumentation";
-import { PERFORMANCE_CONFIG } from "../shared/config/performanceConfig";
-import { runAIStrategy, aiOutputToTradePlan } from "../../../logic/aiStrategyEngine";
+import { useStockDetails } from "../../../shared/hooks/useStockDetails";
+import { useOptimizedStockDetails } from "../../../shared/hooks/useOptimizedStockDetails";
+import { useSymbolSentimentSummary } from "../../../shared/hooks/useSymbolSentimentSummary";
+import { useStockDetailPerformance } from "../../../shared/hooks/usePerformanceInstrumentation";
+import { PERFORMANCE_CONFIG } from "../../../shared/config/performanceConfig";
+import { runAIStrategy, aiOutputToTradePlan } from "../services/aiStrategyEngine";
 import { type SimpleQuote } from "../../../shared/services/quotes";
-import alertsService from "../shared/services/alertsService";
-import useMarketStatus from "../shared/hooks/useMarketStatus";
-import { useAuth } from "../../../providers/AuthProvider";
+import alertsService from "../../../shared/services/alertsService";
+import useMarketStatus from "../../../shared/hooks/useMarketStatus";
+import { useAuth } from "../../authentication";
 import {
   StockHeader,
   StockPriceSummary,

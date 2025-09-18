@@ -6,10 +6,10 @@ import {
   fetchSentimentStats,
   type NewsItem,
   type SentimentStats,
-} from "../../../shared/services/newsProviders";
-import { fetchSingleQuote, type SimpleQuote } from "../../../shared/services/quotes";
-import { useAlertStore, type PriceAlert } from "../../../store/alertStore";
-import { requestDeduplicator, createRequestKey } from "../shared/utils/requestDeduplication";
+} from "../services/newsProviders";
+import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
+import { useAlertStore, type PriceAlert } from "../../store/alertStore";
+import { requestDeduplicator, createRequestKey } from "../utils/requestDeduplication";
 
 interface UseStockDetailsOptions {
   initialQuote?: SimpleQuote;

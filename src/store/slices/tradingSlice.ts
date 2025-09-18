@@ -1,6 +1,6 @@
 import { StateCreator } from 'zustand';
 import { AppState, StoreActions, TradingState, RealTimeUpdate } from '../types';
-import { TradingRepository } from "../../../shared/services/repositories/TradingRepository";
+import { TradingRepository } from "../shared/services/repositories/TradingRepository";
 
 // Initial trading state
 const initialTradingState: TradingState = {

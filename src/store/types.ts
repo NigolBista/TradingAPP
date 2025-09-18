@@ -8,7 +8,7 @@ import type {
   AuthSession,
   LoginCredentials,
   Watchlist,
-} from "../../../shared/services/repositories/UserRepository";
+} from "../shared/services/repositories/UserRepository";
 
 import type {
   Order,
@@ -18,7 +18,7 @@ import type {
   TradingStrategy,
   TradingSignal,
   RiskMetrics,
-} from "../../../shared/services/repositories/TradingRepository";
+} from "../shared/services/repositories/TradingRepository";
 
 import type {
   Account,
@@ -26,7 +26,7 @@ import type {
   PortfolioSummary,
   PortfolioHistory,
   Transaction,
-} from "../../../shared/services/repositories/PortfolioRepository";
+} from "../shared/services/repositories/PortfolioRepository";
 
 import type {
   Quote,
@@ -34,7 +34,7 @@ import type {
   NewsItem,
   MarketSummary,
   SearchResult,
-} from "../../../shared/services/repositories/MarketDataRepository";
+} from "../shared/services/repositories/MarketDataRepository";
 
 // State slice type helpers
 export interface BaseSlice {
@@ -303,7 +303,7 @@ export type {
   AuthSession,
   LoginCredentials,
   Watchlist,
-} from "../../../shared/services/repositories/UserRepository";
+} from "../shared/services/repositories/UserRepository";
 
 export type {
   Order,
@@ -313,7 +313,7 @@ export type {
   TradingStrategy,
   TradingSignal,
   RiskMetrics,
-} from "../../../shared/services/repositories/TradingRepository";
+} from "../shared/services/repositories/TradingRepository";
 
 export type {
   Account,
@@ -321,7 +321,7 @@ export type {
   PortfolioSummary,
   PortfolioHistory,
   Transaction,
-} from "../../../shared/services/repositories/PortfolioRepository";
+} from "../shared/services/repositories/PortfolioRepository";
 
 export type {
   Quote,
@@ -329,7 +329,7 @@ export type {
   NewsItem,
   MarketSummary,
   SearchResult,
-} from "../../../shared/services/repositories/MarketDataRepository";
+} from "../shared/services/repositories/MarketDataRepository";
 
 // Performance metrics type
 export interface PerformanceMetrics {

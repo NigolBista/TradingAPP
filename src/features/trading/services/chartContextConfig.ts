@@ -3,7 +3,7 @@ import {
   buildDefaultLines,
 } from "../screens/ChartFullScreen/indicators";
 import { STRATEGY_COMPLEXITY_CONFIGS } from "./strategyComplexity";
-import { COLORS } from "../shared/constants/colors";
+import { COLORS } from "../../shared/constants/colors";
 
 // Available chart types
 export const CHART_TYPES = [

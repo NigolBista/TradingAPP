@@ -5,12 +5,12 @@ import {
   getCachedNews,
   getCachedTrendingStocks,
   getCachedMarketEvents,
-} from "../../../shared/services/marketDataCache";
+} from "../services/marketDataCache";
 import type {
   NewsItem,
   TrendingStock,
   MarketEvent,
-} from "../../../shared/services/newsProviders";
+} from "../services/newsProviders";
 
 /**
  * Hook to access cached market data without making additional API calls
