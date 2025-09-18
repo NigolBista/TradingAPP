@@ -18,8 +18,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { useNavigationHelpers } from "../navigation/hooks";
-import { ScanResult } from "../shared/services/marketScanner";
+import { useNavigationHelpers } from "../../../navigation/hooks";
+import { ScanResult } from "../../../shared/services/marketScanner";
 import {
   useUserStore,
   type Watchlist,
@@ -30,20 +30,20 @@ import {
   searchStocks,
   getPopularStocks,
   type StockSearchResult,
-} from "../shared/services/stockSearch";
-import { getStockBySymbol } from "../shared/services/stockData";
+} from "../../../shared/services/stockSearch";
+import { getStockBySymbol } from "../../../shared/services/stockData";
 import StockAutocomplete from "../../../shared/components/common/StockAutocomplete";
 import AddToWatchlistModal from "../../../shared/components/common/AddToWatchlistModal";
 import SwipeableStockItem from "../../../shared/components/common/SwipeableStockItem";
 import { useTheme } from "../../../providers/ThemeProvider";
-import { type SimpleQuote } from "../shared/services/quotes";
-import { safeFetchBulkQuotes } from "../shared/services/quoteFetcher";
-import { realtimeDataManager } from "../shared/services/realtimeDataManager";
+import { type SimpleQuote } from "../../../shared/services/quotes";
+import { safeFetchBulkQuotes } from "../../../shared/services/quoteFetcher";
+import { realtimeDataManager } from "../../../shared/services/realtimeDataManager";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   isPolygonApiAvailable,
   fetchPolygonBulkQuotes,
-} from "../shared/services/polygonQuotes";
+} from "../../../shared/services/polygonQuotes";
 import useMarketStatus from "../shared/hooks/useMarketStatus";
 
 const { width: screenWidth } = Dimensions.get("window");

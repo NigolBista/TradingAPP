@@ -18,7 +18,7 @@ import PlaidLinkModal from "../../../shared/components/common/PlaidLinkModal";
 import {
   plaidIntegrationService,
   PlaidAccount,
-} from "../shared/services/plaidIntegration";
+} from "../../../shared/services/plaidIntegration";
 import HoldingsList from "../components/portfolio/HoldingsList";
 
 interface ConnectedAccount {

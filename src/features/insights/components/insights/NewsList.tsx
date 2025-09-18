@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Image,
 } from "react-native";
-import type { NewsItem } from "../../shared/services/newsProviders";
+import type { NewsItem } from "../../../shared/services/newsProviders";
 import { useTheme } from "../../../providers/ThemeProvider";
 
 interface Props {

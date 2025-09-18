@@ -14,15 +14,15 @@ import { useTheme } from "../../../providers/ThemeProvider";
 import {
   getGlobalMarketData,
   refreshGlobalCache,
-} from "../shared/services/marketDataCache";
+} from "../../../shared/services/marketDataCache";
 import type {
   NewsItem,
   TrendingStock,
   MarketEvent,
-} from "../shared/services/newsProviders";
-import type { FedEvent, EconomicIndicator } from "../shared/services/federalReserve";
+} from "../../../shared/services/newsProviders";
+import type { FedEvent, EconomicIndicator } from "../../../shared/services/federalReserve";
 import { useUserStore } from "../../../store/userStore";
-import { fetchNewsWithDateFilter } from "../shared/services/newsProviders";
+import { fetchNewsWithDateFilter } from "../../../shared/services/newsProviders";
 
 type TimeframeKey = "today" | "week" | "month";
 

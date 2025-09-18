@@ -10,16 +10,16 @@ import {
   registerForPushNotificationsAsync,
   scheduleSignalAlert,
   sendLocalNotification,
-} from "../shared/services/notifications";
+} from "../../../shared/services/notifications";
 import { useUserStore } from "../../../store/userStore";
-import { supabase } from "../shared/lib/supabase";
+import { supabase } from "../../../shared/lib/supabase";
 import type { User } from "@supabase/supabase-js";
 import alertsService, {
   type AlertRow,
   type TradeSignalRow,
-} from "../shared/services/alertsService";
+} from "../../../shared/services/alertsService";
 import { useAlertStore } from "../../../store/alertStore";
-import barsService from "../shared/services/barsService";
+import barsService from "../../../shared/services/barsService";
 
 export type AuthUser = { id: string; email?: string; user_metadata?: any };
 
@@ -356,3 +356,5 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
+
+export default AuthProvider;

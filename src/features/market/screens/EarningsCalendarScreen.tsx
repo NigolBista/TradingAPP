@@ -25,7 +25,7 @@ import {
   formatCurrency,
   formatEarningsTime,
   calculateEPSSurprise,
-} from "../shared/services/earningsData";
+} from "../../../shared/services/earningsData";
 
 const createStyles = (theme: any) =>
   StyleSheet.create({

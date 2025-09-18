@@ -10,12 +10,12 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { StockSearchResult } from "../../shared/services/stockSearch";
+import { StockSearchResult } from "../../../shared/services/stockSearch";
 import {
   searchStocksAutocomplete,
   preloadStocksData,
   getLoadingStatus,
-} from "../../shared/services/stockData";
+} from "../../../shared/services/stockData";
 import { useTheme } from "../../../providers/ThemeProvider";
 
 const { width: screenWidth } = Dimensions.get("window");

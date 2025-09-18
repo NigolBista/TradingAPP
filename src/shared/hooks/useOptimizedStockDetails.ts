@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { optimizedWebSocketManager, initializeWebSocketManager } from "../shared/services/optimizedWebSocketManager";
+import { optimizedWebSocketManager, initializeWebSocketManager } from "../../../shared/services/optimizedWebSocketManager";
 import { useWebSocketPerformanceMonitoring } from "./usePerformanceInstrumentation";
 import {
   fetchNews as fetchSymbolNews,
@@ -7,8 +7,8 @@ import {
   fetchSentimentStats,
   type NewsItem,
   type SentimentStats,
-} from "../shared/services/newsProviders";
-import { fetchSingleQuote, type SimpleQuote } from "../shared/services/quotes";
+} from "../../../shared/services/newsProviders";
+import { fetchSingleQuote, type SimpleQuote } from "../../../shared/services/quotes";
 import { useAlertStore, type PriceAlert } from "../../../store/alertStore";
 import { requestDeduplicator, createRequestKey } from "../shared/utils/requestDeduplication";
 import Constants from "expo-constants";

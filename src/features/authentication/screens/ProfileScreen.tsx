@@ -23,7 +23,7 @@ import {
   scheduleWeeklyDigest,
   scheduleEducationalTip,
   cancelAllScheduledNotifications,
-} from "../shared/services/notifications";
+} from "../../../shared/services/notifications";
 
 export default function ProfileScreen({ navigation }: any) {
   const { user, logout } = useAuth();

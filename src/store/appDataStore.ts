@@ -1,10 +1,10 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { plaidIntegrationService } from "../shared/services/plaidIntegration";
-import { plaidPortfolioService } from "../shared/services/portfolioAggregationService";
-import { MockDataInitializer } from "../shared/services/mockDataInitializer";
-import { fetchAndCacheBulkQuotes } from "../shared/services/quotes";
+import { plaidIntegrationService } from "../../../shared/services/plaidIntegration";
+import { plaidPortfolioService } from "../../../shared/services/portfolioAggregationService";
+import { MockDataInitializer } from "../../../shared/services/mockDataInitializer";
+import { fetchAndCacheBulkQuotes } from "../../../shared/services/quotes";
 import { useUserStore } from "./userStore";
 
 // Import mock data for immediate hydration (portfolio data only)
@@ -13,8 +13,8 @@ import mockHoldingsData from "../shared/data/mockPlaidHoldings.json";
 import mockPortfolioHistory from "../shared/data/mockPortfolioHistory.json";
 
 // Import real API services for market data
-import { generateMarketOverviewWithData } from "../shared/services/marketOverview";
-import { fetchGeneralMarketNews } from "../shared/services/newsProviders";
+import { generateMarketOverviewWithData } from "../../../shared/services/marketOverview";
+import { fetchGeneralMarketNews } from "../../../shared/services/newsProviders";
 
 // Types
 export interface Account {
@@ -77,8 +77,8 @@ import type {
   NewsItem,
   TrendingStock,
   MarketEvent,
-} from "../shared/services/newsProviders";
-import type { MarketOverview } from "../shared/services/marketOverview";
+} from "../../../shared/services/newsProviders";
+import type { MarketOverview } from "../../../shared/services/marketOverview";
 
 type Timeframe = "1D" | "1W" | "1M";
 

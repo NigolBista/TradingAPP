@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { MarketScanner, MarketScreenerData, ScanResult } from "../shared/services/marketScanner";
+import { MarketScanner, MarketScreenerData, ScanResult } from "../../../shared/services/marketScanner";
 
 const { width } = Dimensions.get("window");
 

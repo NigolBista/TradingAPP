@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { ExtendedTimeframe } from "../shared/services/marketProviders";
+import type { ExtendedTimeframe } from "../../../shared/services/marketProviders";
 
 type TimeframeState = {
   pinned: ExtendedTimeframe[];

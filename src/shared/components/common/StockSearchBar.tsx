@@ -12,8 +12,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { searchStocksAutocomplete } from "../../shared/services/stockData";
-import type { StockSearchResult } from "../../shared/services/stockSearch";
+import { searchStocksAutocomplete } from "../../../shared/services/stockData";
+import type { StockSearchResult } from "../../../shared/services/stockSearch";
 
 interface StockSearchBarProps {
   currentSymbol: string;

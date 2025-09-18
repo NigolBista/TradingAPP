@@ -11,8 +11,8 @@ import {
   fetchSentimentStats,
   type NewsItem,
   type SentimentStats,
-} from "../shared/services/newsProviders";
-import { fetchSingleQuote, type SimpleQuote } from "../shared/services/quotes";
+} from "../../../shared/services/newsProviders";
+import { fetchSingleQuote, type SimpleQuote } from "../../../shared/services/quotes";
 
 interface CacheConfig {
   refreshInterval?: number;

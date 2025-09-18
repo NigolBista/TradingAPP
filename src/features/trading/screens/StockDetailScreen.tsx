@@ -25,19 +25,19 @@ import TimeframePickerModal, {
 import {
   fetchCandles,
   fetchCandlesForTimeframe,
-} from "../shared/services/marketProviders";
+} from "../../../shared/services/marketProviders";
 // removed unused federal reserve import
 import {
   performComprehensiveAnalysis,
   type MarketAnalysis,
-} from "../shared/services/aiAnalytics";
+} from "../../../shared/services/aiAnalytics";
 import {
   fetchNews as fetchSymbolNews,
   fetchStockNewsApi,
-} from "../shared/services/newsProviders";
+} from "../../../shared/services/newsProviders";
 // Removed viewportBars dependency; using simple lazy loading on visible range change
-import { sendLocalNotification } from "../shared/services/notifications";
-import { searchStocksAutocomplete } from "../shared/services/stockData";
+import { sendLocalNotification } from "../../../shared/services/notifications";
+import { searchStocksAutocomplete } from "../../../shared/services/stockData";
 import { useTimeframeStore } from "../../../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../../../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../../../store/signalCacheStore";
@@ -46,8 +46,8 @@ import { useOptimizedStockDetails } from "../shared/hooks/useOptimizedStockDetai
 import { useSymbolSentimentSummary } from "../shared/hooks/useSymbolSentimentSummary";
 import { useStockDetailPerformance } from "../shared/hooks/usePerformanceInstrumentation";
 import { PERFORMANCE_CONFIG } from "../shared/config/performanceConfig";
-import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
-import { type SimpleQuote } from "../shared/services/quotes";
+import { runAIStrategy, aiOutputToTradePlan } from "../../../logic/aiStrategyEngine";
+import { type SimpleQuote } from "../../../shared/services/quotes";
 import alertsService from "../shared/services/alertsService";
 import useMarketStatus from "../shared/hooks/useMarketStatus";
 import { useAuth } from "../../../providers/AuthProvider";

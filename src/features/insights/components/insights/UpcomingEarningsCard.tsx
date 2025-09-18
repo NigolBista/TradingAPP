@@ -22,7 +22,7 @@ import {
   formatEPS,
   formatCurrency,
   formatEarningsTime,
-} from "../../shared/services/earningsData";
+} from "../../../shared/services/earningsData";
 
 interface Props {
   onEarningsPress?: (symbol: string) => void;

@@ -11,11 +11,11 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { MarketScanner, type ScanResult } from "../shared/services/marketScanner";
+import { MarketScanner, type ScanResult } from "../../../shared/services/marketScanner";
 import {
   generateSignalSummary,
   type SignalSummary,
-} from "../shared/services/signalEngine";
+} from "../../../shared/services/signalEngine";
 import { useUserStore } from "../../../store/userStore";
 
 const styles = StyleSheet.create({

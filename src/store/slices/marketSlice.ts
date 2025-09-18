@@ -1,6 +1,6 @@
 import { StateCreator } from 'zustand';
 import { AppState, StoreActions, MarketState } from '../types';
-import { MarketDataRepository } from "../../shared/services/repositories/MarketDataRepository";
+import { MarketDataRepository } from "../../../shared/services/repositories/MarketDataRepository";
 
 // Initial market state
 const initialMarketState: MarketState = {

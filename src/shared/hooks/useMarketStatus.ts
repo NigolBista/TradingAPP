@@ -4,7 +4,7 @@ import {
   fetchPolygonMarketUpcoming,
   type MarketSessionInfo,
   type PolygonUpcomingItem,
-} from "../shared/services/polygonMarketStatus";
+} from "../../../shared/services/polygonMarketStatus";
 
 export interface UseMarketStatusState extends MarketSessionInfo {
   now: MarketSessionInfo | null;

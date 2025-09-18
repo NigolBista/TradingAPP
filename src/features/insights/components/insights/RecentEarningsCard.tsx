@@ -16,7 +16,7 @@ import {
   formatEPS,
   formatCurrency,
   calculateEPSSurprise,
-} from "../../shared/services/earningsData";
+} from "../../../shared/services/earningsData";
 
 interface Props {
   onEarningsPress?: (symbol: string) => void;

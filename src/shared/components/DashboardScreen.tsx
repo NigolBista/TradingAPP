@@ -13,9 +13,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAppDataStore, type PortfolioHistory } from "../../../store/appDataStore";
 import { useNavigation } from "@react-navigation/native";
-import { useNavigationHelpers } from "../navigation/hooks";
+import { useNavigationHelpers } from "../../navigation/hooks";
 import MarketOverview from "../components/insights/MarketOverview";
-import type { NewsItem } from "../shared/services/newsProviders";
+import type { NewsItem } from "../../../shared/services/newsProviders";
 // Removed useMarketOverviewStore to prevent loops - using centralized store instead
 import DecalpXMini from "../components/insights/DecalpXMini";
 import PerformanceCard from "../components/insights/PerformanceCard";

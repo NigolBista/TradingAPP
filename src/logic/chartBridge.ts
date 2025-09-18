@@ -1,4 +1,4 @@
-import { captureChartScreenshot } from "../shared/services/chartScreenshot";
+import { captureChartScreenshot } from "../../../shared/services/chartScreenshot";
 
 // Unified chart actions that both user and LLM engines can dispatch
 export type ChartAction =

@@ -10,22 +10,22 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { MarketScanner, ScanResult } from "../shared/services/marketScanner";
+import { MarketScanner, ScanResult } from "../../../shared/services/marketScanner";
 import {
   performComprehensiveAnalysis,
   MarketAnalysis,
   TradingSignal,
-} from "../shared/services/aiAnalytics";
+} from "../../../shared/services/aiAnalytics";
 // Removed sentiment analysis - using Stock News API sentiment directly
-import { fetchCandles } from "../shared/services/marketProviders";
-import { fetchNews } from "../shared/services/newsProviders";
-import { generateSignalSummary } from "../shared/services/signalEngine";
-import { generateEventSignals, EventSignal } from "../shared/services/eventSignals";
+import { fetchCandles } from "../../../shared/services/marketProviders";
+import { fetchNews } from "../../../shared/services/newsProviders";
+import { generateSignalSummary } from "../../../shared/services/signalEngine";
+import { generateEventSignals, EventSignal } from "../../../shared/services/eventSignals";
 import { useUserStore } from "../../../store/userStore";
 import {
   sendLocalNotification,
   registerForPushNotificationsAsync,
-} from "../shared/services/notifications";
+} from "../../../shared/services/notifications";
 
 const styles = StyleSheet.create({
   container: {

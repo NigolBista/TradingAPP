@@ -24,7 +24,7 @@ import { PortfolioNavigator } from './PortfolioNavigator';
 import { MarketNavigator } from './MarketNavigator';
 
 // Providers and hooks
-import { useAuth } from '../providers/AuthProvider';
+import { useAuth } from '../features/authentication';
 import { useTheme } from '../providers/ThemeProvider';
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();

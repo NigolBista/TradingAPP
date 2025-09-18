@@ -16,7 +16,7 @@ import {
   type FedEvent,
   type EconomicIndicator,
   type FedRelease,
-} from "../shared/services/federalReserve";
+} from "../../../shared/services/federalReserve";
 import { useTheme } from "../../../providers/ThemeProvider";
 
 interface Props {

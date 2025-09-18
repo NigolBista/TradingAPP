@@ -20,12 +20,12 @@ import {
   fetchTrendingStocks,
   type NewsItem,
   type TrendingStock,
-} from "../shared/services/newsProviders";
+} from "../../../shared/services/newsProviders";
 // Removed sentiment analysis - we get sentiment from Stock News API directly
 import { useUserStore } from "../../../store/userStore";
 import { useNavigation } from "@react-navigation/native";
 import { useMarketData } from "../shared/hooks/useMarketData";
-import { getAllCachedData } from "../shared/services/marketDataCache";
+import { getAllCachedData } from "../../../shared/services/marketDataCache";
 import NewsList from "../components/insights/NewsList";
 import { useTheme } from "../../../providers/ThemeProvider";
 
