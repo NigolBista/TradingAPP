@@ -9,6 +9,7 @@ import {
 } from "../services/newsProviders";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 import { useAlertStore, type PriceAlert } from "../store/alertStore";
+import { requestDeduplicator, createRequestKey } from "../utils/requestDeduplication";
 
 interface UseStockDetailsOptions {
   initialQuote?: SimpleQuote;
@@ -74,8 +75,12 @@ export function useStockDetails(
   useEffect(() => {
     return () => {
       isMounted.current = false;
+      // Cancel all requests for this symbol when component unmounts
+      requestDeduplicator.cancelRequestsWithPrefix(`quote:${symbol}`);
+      requestDeduplicator.cancelRequestsWithPrefix(`news:${symbol}`);
+      requestDeduplicator.cancelRequestsWithPrefix(`sentiment:${symbol}`);
     };
-  }, []);
+  }, [symbol]);
 
   useEffect(() => {
     if (!isMounted.current) return;
@@ -87,8 +92,14 @@ export function useStockDetails(
 
   const refreshQuote = useCallback(async () => {
     setQuoteLoading(true);
+
     try {
-      const latest = await fetchSingleQuote(symbol);
+      const requestKey = createRequestKey('quote', symbol);
+      const latest = await requestDeduplicator.deduplicate(
+        requestKey,
+        () => fetchSingleQuote(symbol)
+      );
+
       if (isMounted.current) {
         setQuote(latest);
       }
@@ -113,17 +124,23 @@ export function useStockDetails(
 
   const refreshNews = useCallback(async () => {
     setNewsLoading(true);
+
     try {
-      let items: NewsItem[] = [];
-      try {
-        items = await fetchStockNewsApi(symbol, 25);
-      } catch (primaryError) {
-        try {
-          items = await fetchSymbolNews(symbol);
-        } catch (fallbackError) {
-          items = [];
+      const requestKey = createRequestKey('news', symbol, { limit: 25 });
+      const items = await requestDeduplicator.deduplicate(
+        requestKey,
+        async () => {
+          try {
+            return await fetchStockNewsApi(symbol, 25);
+          } catch (primaryError) {
+            try {
+              return await fetchSymbolNews(symbol);
+            } catch (fallbackError) {
+              return [];
+            }
+          }
         }
-      }
+      );
 
       if (isMounted.current) {
         setNews(items);
@@ -138,8 +155,14 @@ export function useStockDetails(
 
   const refreshSentiment = useCallback(async () => {
     setSentimentLoading(true);
+
     try {
-      const stats = await fetchSentimentStats(symbol, "last30days");
+      const requestKey = createRequestKey('sentiment', symbol, { period: 'last30days' });
+      const stats = await requestDeduplicator.deduplicate(
+        requestKey,
+        () => fetchSentimentStats(symbol, "last30days")
+      );
+
       if (isMounted.current) {
         setSentimentStats(stats);
       }

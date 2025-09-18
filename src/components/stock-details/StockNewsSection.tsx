@@ -10,7 +10,7 @@ export interface StockNewsSectionProps {
   onRetry: () => void;
 }
 
-export function StockNewsSection({ symbol, news, newsLoading, onRetry }: StockNewsSectionProps) {
+export const StockNewsSection = React.memo(function StockNewsSection({ symbol, news, newsLoading, onRetry }: StockNewsSectionProps) {
   return (
     <View style={styles.newsSection}>
       {newsLoading ? (
@@ -41,7 +41,7 @@ export function StockNewsSection({ symbol, news, newsLoading, onRetry }: StockNe
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   newsSection: {

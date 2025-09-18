@@ -42,6 +42,10 @@ import { useTimeframeStore } from "../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
 import { useStockDetails } from "../hooks/useStockDetails";
+import { useOptimizedStockDetails } from "../hooks/useOptimizedStockDetails";
+import { useSymbolSentimentSummary } from "../hooks/useSymbolSentimentSummary";
+import { useStockDetailPerformance } from "../hooks/usePerformanceInstrumentation";
+import { PERFORMANCE_CONFIG } from "../config/performanceConfig";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { type SimpleQuote } from "../services/quotes";
 import alertsService from "../services/alertsService";
@@ -299,6 +303,11 @@ export default function StockDetailScreen() {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
 
+  // Use optimized or original implementation based on config
+  const stockDetailsHook = PERFORMANCE_CONFIG.USE_OPTIMIZED_WEBSOCKET
+    ? useOptimizedStockDetails
+    : useStockDetails;
+
   const {
     quote: initialQuote,
     news,
@@ -314,7 +323,16 @@ export default function StockDetailScreen() {
     updateAlert,
     upsertAlert,
     checkAlertsForPrice,
-  } = useStockDetails(symbol, { initialQuote: initialQuoteParam });
+    // Additional properties only available in optimized version
+    connectionStatus,
+    realTimeMetrics,
+  } = stockDetailsHook(symbol, {
+    initialQuote: initialQuoteParam,
+    ...(PERFORMANCE_CONFIG.USE_OPTIMIZED_WEBSOCKET && {
+      throttleMs: PERFORMANCE_CONFIG.WEBSOCKET_THROTTLE_MS,
+      maxUpdatesPerSecond: PERFORMANCE_CONFIG.WEBSOCKET_MAX_UPDATES_PER_SECOND,
+    }),
+  }) as any; // Type assertion needed due to different hook signatures
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [stockName, setStockName] = useState<string>("");
@@ -332,6 +350,19 @@ export default function StockDetailScreen() {
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
   const { user } = useAuth();
+
+  // Performance monitoring
+  const {
+    instrumentedRefreshQuote,
+    instrumentedRefreshNews,
+    instrumentedRefreshSentiment,
+    instrumentedChartDataFetch,
+    recordRender,
+    recordPriceUpdate,
+    recordPriceUpdateApplied,
+    getMetrics,
+    exportMetrics,
+  } = useStockDetailPerformance(symbol);
 
   // Debug logging for alert changes
   React.useEffect(() => {
@@ -401,36 +432,15 @@ export default function StockDetailScreen() {
 
   // Real-time logic is now handled by AmChartsCandles component itself
 
-  // Filter signals for current symbol
+  // Filter signals for current symbol with optimized dependencies
   const symbolSignals = useMemo(() => {
     return messages
       .filter((msg) => msg.symbol === symbol)
       .sort((a, b) => b.timestamp - a.timestamp); // Most recent first
-  }, [messages, symbol]);
+  }, [messages.length, symbol]); // Only re-compute when messages length changes or symbol changes
 
-  const symbolSentimentSummary = useMemo(() => {
-    if (!symbolSentimentCounts) return null;
-    const total =
-      symbolSentimentCounts.positive +
-      symbolSentimentCounts.negative +
-      symbolSentimentCounts.neutral;
-    if (total === 0) return null;
-    const pos = symbolSentimentCounts.positive / total;
-    const neg = symbolSentimentCounts.negative / total;
-    let overall: "bullish" | "bearish" | "neutral";
-    let confidence: number;
-    if (pos > 0.6) {
-      overall = "bullish";
-      confidence = Math.round(pos * 100);
-    } else if (neg > 0.6) {
-      overall = "bearish";
-      confidence = Math.round(neg * 100);
-    } else {
-      overall = "neutral";
-      confidence = Math.round(Math.max(pos, neg) * 100);
-    }
-    return { overall, confidence };
-  }, [symbolSentimentCounts]);
+  // Use optimized hook for sentiment calculation
+  const symbolSentimentSummary = useSymbolSentimentSummary(symbolSentimentCounts);
 
   const showBottomSheet = (type: "timeframe" | "chartType") => {
     if (type === "timeframe") {
@@ -485,21 +495,31 @@ export default function StockDetailScreen() {
   // Load latest regular session daily close for after-hours calculations
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+
     (async () => {
       try {
-        const d = await fetchCandles(symbol, { resolution: "D", limit: 1 });
+        const d = await fetchCandles(symbol, {
+          resolution: "D",
+          limit: 1,
+          signal: controller.signal
+        });
         if (!cancelled) {
           const close = d && d.length ? d[d.length - 1].close : null;
           setRegularClose(
             typeof close === "number" && isFinite(close) ? close : null
           );
         }
-      } catch {
-        if (!cancelled) setRegularClose(null);
+      } catch (error) {
+        if (!cancelled && !controller.signal.aborted) {
+          setRegularClose(null);
+        }
       }
     })();
+
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [symbol]);
 
@@ -550,8 +570,12 @@ export default function StockDetailScreen() {
   useEffect(() => {
     const price = initialQuote?.last ?? analysis?.currentPrice ?? 0;
     if (!(price > 0)) return;
+
+    // Record price update
+    recordPriceUpdate();
+
     // Batch alert checks; avoid calling during renders triggered by alert updates
-    const id = setTimeout(() => {
+    const timeoutId = setTimeout(() => {
       const triggeredAlerts = checkAlertsForPrice(price);
       if (triggeredAlerts && triggeredAlerts.length) {
         for (const alert of triggeredAlerts) {
@@ -563,9 +587,13 @@ export default function StockDetailScreen() {
           );
         }
       }
+      // Record that price update was applied to UI
+      recordPriceUpdateApplied();
     }, 0);
-    return () => clearTimeout(id);
-  }, [initialQuote?.last, analysis?.currentPrice, symbol, checkAlertsForPrice]);
+
+    // Add proper cleanup to prevent memory leaks
+    return () => clearTimeout(timeoutId);
+  }, [initialQuote?.last, analysis?.currentPrice, symbol, checkAlertsForPrice, recordPriceUpdate, recordPriceUpdateApplied]);
 
   // Separate function for loading market overview data
   async function loadMarketOverview() {
@@ -604,9 +632,9 @@ export default function StockDetailScreen() {
 
   // Load all data including news and sentiment (for symbol changes)
   async function load() {
-    await loadChartData();
-    refreshNews().catch(() => {});
-    refreshSentiment().catch(() => {});
+    await instrumentedChartDataFetch(loadChartData);
+    instrumentedRefreshNews(refreshNews).catch(() => {});
+    instrumentedRefreshSentiment(refreshSentiment).catch(() => {});
   }
 
   async function loadLineChartData() {
@@ -928,6 +956,35 @@ export default function StockDetailScreen() {
   const showAfterHours = marketStatus.isAfterHours;
   const showPreMarket = marketStatus.isPreMarket;
 
+  // Add performance debugging in development
+  React.useEffect(() => {
+    if (__DEV__) {
+      // Expose performance metrics to global scope for debugging
+      (global as any).getStockDetailMetrics = () => {
+        const metrics = getMetrics();
+        console.log('📊 StockDetail Performance Metrics:', metrics);
+        return metrics;
+      };
+
+      (global as any).exportStockDetailMetrics = () => {
+        const data = exportMetrics();
+        console.log('📋 Exported Performance Data:', data);
+        return data;
+      };
+
+      // Show current implementation in console
+      const implementation = PERFORMANCE_CONFIG.USE_OPTIMIZED_WEBSOCKET ? 'Optimized' : 'Original';
+      console.log(`📡 StockDetail using ${implementation} WebSocket implementation`);
+
+      if (PERFORMANCE_CONFIG.USE_OPTIMIZED_WEBSOCKET && connectionStatus) {
+        console.log('🔌 WebSocket Status:', connectionStatus);
+        if (realTimeMetrics) {
+          console.log('📊 Real-time Metrics:', realTimeMetrics);
+        }
+      }
+    }
+  }, [getMetrics, exportMetrics, connectionStatus, realTimeMetrics]);
+
   // After-hours delta vs regular session close
   const afterHoursDiff =
     showAfterHours && typeof currentPrice === "number" && regularClose
@@ -979,6 +1036,26 @@ export default function StockDetailScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Development-only implementation indicator */}
+      {__DEV__ && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 50,
+            right: 10,
+            backgroundColor: PERFORMANCE_CONFIG.USE_OPTIMIZED_WEBSOCKET ? '#00D4AA' : '#FF5722',
+            paddingHorizontal: 8,
+            paddingVertical: 4,
+            borderRadius: 12,
+            zIndex: 1000,
+          }}
+        >
+          <Text style={{ color: '#000', fontSize: 10, fontWeight: 'bold' }}>
+            {PERFORMANCE_CONFIG.USE_OPTIMIZED_WEBSOCKET ? '🚀 OPT' : '📊 ORIG'}
+          </Text>
+        </View>
+      )}
+
       {/* Robinhood-Style Header */}
       <View style={styles.header}>
         <StockHeader

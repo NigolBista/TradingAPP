@@ -30,7 +30,7 @@ export interface StockOverviewSectionProps {
   showPreMarket: boolean;
 }
 
-export function StockOverviewSection({
+export const StockOverviewSection = React.memo(function StockOverviewSection({
   currentPrice,
   todayChange,
   todayChangePercent,
@@ -139,7 +139,7 @@ export function StockOverviewSection({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   section: {

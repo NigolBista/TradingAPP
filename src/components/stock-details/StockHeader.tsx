@@ -11,7 +11,7 @@ export interface StockHeaderProps {
   testID?: string;
 }
 
-export function StockHeader({
+export const StockHeader = React.memo(function StockHeader({
   symbol,
   stockName,
   onBackPress,
@@ -45,7 +45,7 @@ export function StockHeader({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   headerRow: {

@@ -11,7 +11,7 @@ export interface StockPriceSummaryProps {
   showPreMarket?: boolean;
 }
 
-export function StockPriceSummary({
+export const StockPriceSummary = React.memo(function StockPriceSummary({
   displayPrice,
   todayChange,
   todayChangePercent,
@@ -76,7 +76,7 @@ export function StockPriceSummary({
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   priceRow: {
