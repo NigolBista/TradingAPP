@@ -960,12 +960,13 @@ export default function StockDetailScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <StockHeader
-            symbol={symbol}
-            stockName={stockName || "Loading..."}
-            onBackPress={() => navigation.goBack()}
-            onAlertPress={onSetAlert}
-          />
+        <StockHeader
+          symbol={symbol}
+          stockName={stockName || "Loading..."}
+          onBackPress={() => navigation.goBack()}
+          onAlertPress={onSetAlert}
+          testID="stock-detail-header"
+        />
         </View>
         <View
           style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
@@ -985,6 +986,7 @@ export default function StockDetailScreen() {
           stockName={stockName}
           onBackPress={() => navigation.goBack()}
           onAlertPress={onSetAlert}
+          testID="stock-detail-header"
         />
 
         <StockPriceSummary

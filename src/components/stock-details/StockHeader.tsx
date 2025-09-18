@@ -8,6 +8,7 @@ export interface StockHeaderProps {
   onBackPress: () => void;
   onAlertPress: () => void;
   onAddPress?: () => void;
+  testID?: string;
 }
 
 export function StockHeader({
@@ -16,9 +17,10 @@ export function StockHeader({
   onBackPress,
   onAlertPress,
   onAddPress,
+  testID,
 }: StockHeaderProps) {
   return (
-    <View style={styles.headerRow}>
+    <View style={styles.headerRow} testID={testID}>
       <View style={styles.headerLeft}>
         <Pressable onPress={onBackPress} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
@@ -89,4 +91,3 @@ const styles = StyleSheet.create({
 });
 
 export default StockHeader;
-
