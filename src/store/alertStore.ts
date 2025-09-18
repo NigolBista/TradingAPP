@@ -12,10 +12,15 @@ export interface PriceAlert {
   createdAt: number;
   triggeredAt?: number;
   lastPrice?: number;
+  repeat?: "unlimited" | "once_per_min" | "once_per_day";
+  lastNotifiedAt?: number;
 }
 
 interface AlertState {
   alerts: PriceAlert[];
+  setAlerts: (alerts: PriceAlert[]) => void;
+  upsertAlert: (alert: PriceAlert) => void;
+  removeAlert: (id: string) => void;
   addAlert: (alert: Omit<PriceAlert, "id" | "createdAt" | "isActive">) => void;
   updateAlert: (id: string, updates: Partial<PriceAlert>) => void;
   deleteAlert: (id: string) => void;
@@ -31,12 +36,31 @@ export const useAlertStore = create<AlertState>()(
     (set, get) => ({
       alerts: [],
 
+      setAlerts: (alerts) => set({ alerts }),
+
+      upsertAlert: (alert) => {
+        set((state) => {
+          const exists = state.alerts.some((a) => a.id === alert.id);
+          if (exists) {
+            return {
+              alerts: state.alerts.map((a) => (a.id === alert.id ? alert : a)),
+            };
+          }
+          return { alerts: [alert, ...state.alerts] };
+        });
+      },
+
+      removeAlert: (id) => {
+        set((state) => ({ alerts: state.alerts.filter((a) => a.id !== id) }));
+      },
+
       addAlert: (alertData) => {
         const newAlert: PriceAlert = {
           ...alertData,
           id: `alert-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           createdAt: Date.now(),
           isActive: true,
+          repeat: alertData.repeat || "unlimited",
         };
         set((state) => ({
           alerts: [...state.alerts, newAlert],

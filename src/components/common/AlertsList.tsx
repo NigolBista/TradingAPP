@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PriceAlert, useAlertStore } from "../../store/alertStore";
+import { useAuth } from "../../providers/AuthProvider";
+import alertsService from "../../services/alertsService";
 import AlertModal from "./AlertModal";
 
 interface AlertsListProps {
@@ -19,6 +21,8 @@ interface AlertsListProps {
 export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
   const { addAlert, deleteAlert, toggleAlert, updateAlert } = useAlertStore();
   const allAlerts = useAlertStore((s) => s.alerts);
+  const setAlerts = useAlertStore((s) => s.setAlerts);
+  const { user } = useAuth();
   const alerts = React.useMemo(
     () => allAlerts.filter((a) => a.symbol === symbol),
     [allAlerts, symbol]
@@ -27,10 +31,19 @@ export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingAlert, setEditingAlert] = useState<PriceAlert | null>(null);
 
-  const handleAddAlert = (
+  const handleAddAlert = async (
     alertData: Omit<PriceAlert, "id" | "createdAt" | "isActive">
   ) => {
-    addAlert(alertData);
+    if (!user) return;
+    try {
+      await alertsService.createAlert(user.id, {
+        ...alertData,
+        isActive: true,
+      });
+    } catch (e) {
+      // fallback local if server fails
+      addAlert(alertData);
+    }
     setShowAddModal(false);
   };
 
@@ -38,13 +51,16 @@ export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
     setEditingAlert(alert);
   };
 
-  const handleUpdateAlert = (
+  const handleUpdateAlert = async (
     alertData: Omit<PriceAlert, "id" | "createdAt" | "isActive">
   ) => {
-    if (editingAlert) {
+    if (!user || !editingAlert) return;
+    try {
+      await alertsService.updateAlert(user.id, editingAlert.id, alertData);
+    } catch (e) {
       updateAlert(editingAlert.id, alertData);
-      setEditingAlert(null);
     }
+    setEditingAlert(null);
   };
 
   const handleDeleteAlert = (alert: PriceAlert) => {
@@ -56,14 +72,38 @@ export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
         {
           text: "Delete",
           style: "destructive",
-          onPress: () => deleteAlert(alert.id),
+          onPress: async () => {
+            if (user) {
+              try {
+                await alertsService.deleteAlert(user.id, alert.id);
+              } finally {
+                // Optimistically update local store regardless of server outcome
+                deleteAlert(alert.id);
+              }
+            } else {
+              deleteAlert(alert.id);
+            }
+          },
         },
       ]
     );
   };
 
-  const handleToggleAlert = (alert: PriceAlert) => {
+  const handleToggleAlert = async (alert: PriceAlert) => {
     toggleAlert(alert.id);
+    if (!user) return;
+    try {
+      await alertsService.updateAlert(user.id, alert.id, {
+        symbol: alert.symbol,
+        price: alert.price,
+        condition: alert.condition,
+        message: alert.message,
+        isActive: !alert.isActive,
+        repeat: alert.repeat,
+      } as any);
+    } catch (e) {
+      // noop, local toggle already applied
+    }
   };
 
   const getConditionIcon = (condition: PriceAlert["condition"]) => {

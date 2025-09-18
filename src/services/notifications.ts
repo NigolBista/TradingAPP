@@ -1,5 +1,17 @@
+import Constants from "expo-constants";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+
+// Ensure notifications show while app is in the foreground
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export async function registerForPushNotificationsAsync(): Promise<
   string | undefined
@@ -12,7 +24,10 @@ export async function registerForPushNotificationsAsync(): Promise<
   }
   if (finalStatus !== "granted") return;
 
-  const tokenData = await Notifications.getExpoPushTokenAsync();
+  const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+  const tokenData = await Notifications.getExpoPushTokenAsync(
+    projectId ? { projectId } : undefined
+  );
   const token = tokenData.data;
 
   if (Platform.OS === "android") {
@@ -41,10 +56,9 @@ export async function scheduleDailyBriefing(
       body: "Your AI-powered market analysis is ready. Check today's signals and opportunities.",
     },
     trigger: {
-      type: "calendar" as const,
+      type: Notifications.SchedulableTriggerInputTypes.DAILY,
       hour,
       minute,
-      repeats: true,
     },
   });
 }
@@ -56,11 +70,10 @@ export async function scheduleWeeklyDigest() {
       body: "Your weekly market summary and upcoming events analysis is ready.",
     },
     trigger: {
-      type: "calendar" as const,
+      type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
       weekday: 1, // Monday
       hour: 7,
       minute: 0,
-      repeats: true,
     },
   });
 }
@@ -82,7 +95,7 @@ export async function scheduleEducationalTip() {
       body: randomTip,
     },
     trigger: {
-      type: "timeInterval" as const,
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
       seconds: 60 * 60 * 24, // 24 hours from now
     },
   });

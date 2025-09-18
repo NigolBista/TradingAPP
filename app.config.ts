@@ -74,7 +74,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       marketDataApiToken: process.env.MARKET_DATA_API_TOKEN,
       polygonApiKey: process.env.POLYGON_API_KEY,
       developerMode: String(process.env.DEVELOPER_MODE || "false") === "true",
-      realtimeProvider: process.env.REALTIME_PROVIDER || "polygon", // polygon | simulator
+      realtimeProvider: process.env.REALTIME_PROVIDER || "delayed",
       expoPublic: {
         sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
       },
