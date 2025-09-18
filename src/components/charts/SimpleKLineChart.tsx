@@ -1337,60 +1337,70 @@ export default function SimpleKLineChart({
               try {
                 clearSessionBackgrounds();
                 if (!SHOW_SESSIONS) return;
+                // Only apply on intraday timeframes
+                var p = mapPeriod(TF);
+                var typ = (p && p.type) || 'day';
+                if (typ !== 'minute' && typ !== 'hour') return;
+
                 var data = chart && typeof chart.getDataList === 'function' ? chart.getDataList() : [];
                 if (!data || !data.length) return;
                 var first = data[0];
-                var last = data[data.length-1];
+                var last = data[data.length - 1];
                 var startTs = Number(first.timestamp || first.time || 0);
                 var endTs = Number(last.timestamp || last.time || 0);
                 if (!startTs || !endTs) return;
-                
-                // Convert timestamps to Eastern Time for proper session calculation
-                // Polygon API returns timestamps in UTC, but market sessions are in ET
-                function toET(timestamp) {
-                  var date = new Date(timestamp);
-                  // Convert to ET (UTC-5 or UTC-4 depending on DST)
-                  // For simplicity, we'll use UTC-5 (EST) - this could be enhanced with DST detection
-                  return new Date(date.getTime() - 5 * 60 * 60 * 1000);
+
+                // Use dynamic ET offset if provided (minutes, e.g. -240/-300)
+                var OFFSET_MIN = (typeof ET_OFFSET_MINUTES === 'number' && isFinite(ET_OFFSET_MINUTES)) ? ET_OFFSET_MINUTES : -300;
+                var MIN = 60 * 1000;
+                var HR = 60 * MIN;
+                var DAY = 24 * HR;
+
+                // Determine bucket size based on timeframe
+                var stepMs = 0;
+                if (p && p.type === 'minute') stepMs = Math.max(1, Number(p.span || 1)) * MIN;
+                else if (p && p.type === 'hour') stepMs = Math.max(1, Number(p.span || 1)) * HR;
+                if (!stepMs || !isFinite(stepMs)) stepMs = MIN; // fallback 1m
+
+                function toEtEpoch(tsUtc){ return Number(tsUtc) + OFFSET_MIN * MIN; }
+                function toUtcEpoch(tsEt){ return Number(tsEt) - OFFSET_MIN * MIN; }
+                function etStartOfDay(tsUtc){ var etTs = toEtEpoch(tsUtc); return Math.floor(etTs / DAY) * DAY; }
+                function ceilAfter(tsEt, step, anchor){
+                  try {
+                    var base = (typeof anchor === 'number') ? anchor : (Math.floor(tsEt / DAY) * DAY);
+                    var off = (tsEt - base) % step;
+                    if (off === 0) return tsEt + step; // strictly greater than tsEt
+                    return tsEt + (step - off);
+                  } catch(_) { return tsEt; }
                 }
-                
-                var dayMs = 24*60*60*1000;
-                var baseDate = toET(startTs);
-                baseDate.setHours(0,0,0,0);
+
+                var startDayEt = etStartOfDay(startTs);
+                var endDayEt = etStartOfDay(endTs);
                 var ids = [];
-                
-                // Calculate session times in ET, then convert back to UTC for display
-                for (var day = baseDate.getTime(); day <= toET(endTs).getTime(); day += dayMs) {
-                  var etDate = new Date(day);
-                  
-                  // Session times in ET
-                  var preStartET = new Date(etDate);
-                  preStartET.setHours(4, 0, 0, 0);
-                  
-                  var regStartET = new Date(etDate);
-                  regStartET.setHours(9, 30, 0, 0);
-                  
-                  var regEndET = new Date(etDate);
-                  regEndET.setHours(16, 0, 0, 0);
-                  
-                  var afterEndET = new Date(etDate);
-                  afterEndET.setHours(20, 0, 0, 0);
-                  
-                  var nextDayET = new Date(etDate.getTime() + dayMs);
-                  
-                  // Convert ET times back to UTC for chart display
-                  var preStart = preStartET.getTime() + 5 * 60 * 60 * 1000;
-                  var regStart = regStartET.getTime() + 5 * 60 * 60 * 1000;
-                  var regEnd = regEndET.getTime() + 5 * 60 * 60 * 1000;
-                  var afterEnd = afterEndET.getTime() + 5 * 60 * 60 * 1000;
-                  var nextDay = nextDayET.getTime() + 5 * 60 * 60 * 1000;
-                  
+
+                for (var dayEt = startDayEt; dayEt <= endDayEt; dayEt += DAY) {
+                  var preStartEt = dayEt + 4 * HR;
+                  var regStartEt = dayEt + 9 * HR + 30 * MIN;
+                  var regEndEt = dayEt + 16 * HR;
+                  var afterEndEt = dayEt + 20 * HR;
+                  var nextDayEt = dayEt + DAY;
+
+                  // Extend regular close and after-hours end to next bucket boundary
+                  var regEndEtExt = ceilAfter(regEndEt, stepMs, dayEt);
+                  var afterEndEtExt = ceilAfter(afterEndEt, stepMs, dayEt);
+                  if (afterEndEtExt > nextDayEt) afterEndEtExt = nextDayEt; // clamp to midnight to avoid overlap
+
                   var sessions = [
-                    { start: day + 5 * 60 * 60 * 1000, end: preStart, color: 'rgba(100,100,100,0.1)' },
-                    { start: preStart, end: regStart, color: 'rgba(151, 151, 151, 0.1)' },
-                    { start: regStart, end: regEnd, color: 'rgba(0, 0, 0, 0.1)' },
-                    { start: regEnd, end: afterEnd, color: 'rgba(45, 45, 45, 0.18)' },
-                    { start: afterEnd, end: nextDay, color: 'rgba(151, 151, 151, 0.1)' }
+                    // midnight -> 4:00 ET (night)
+                    { start: toUtcEpoch(dayEt),       end: toUtcEpoch(preStartEt),   color: 'rgba(100,100,100,0.1)' },
+                    // 4:00 -> 9:30 ET (premarket)
+                    { start: toUtcEpoch(preStartEt),  end: toUtcEpoch(regStartEt),   color: 'rgba(151, 151, 151, 0.1)' },
+                    // 9:30 -> extended close (day; keep transparent)
+                    { start: toUtcEpoch(regStartEt),  end: toUtcEpoch(regEndEtExt),  color: 'rgba(0, 0, 0, 0.0)' },
+                    // extended close -> extended after-hours end (after hours; darker)
+                    { start: toUtcEpoch(regEndEtExt), end: toUtcEpoch(afterEndEtExt), color: 'rgba(45, 45, 45, 0.18)' },
+                    // extended after-hours end -> midnight (night)
+                    { start: toUtcEpoch(afterEndEtExt), end: toUtcEpoch(nextDayEt),  color: 'rgba(100, 100, 100, 0.1)' }
                   ];
                   sessions.forEach(function(s){
                     if (s.end <= startTs || s.start >= endTs) return;
