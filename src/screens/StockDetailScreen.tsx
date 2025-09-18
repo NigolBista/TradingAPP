@@ -48,9 +48,11 @@ import { type SimpleQuote } from "../services/quotes";
 import alertsService from "../services/alertsService";
 import useMarketStatus from "../hooks/useMarketStatus";
 import { useAuth } from "../providers/AuthProvider";
-import AlertsList from "../components/common/AlertsList";
-import StockHeader from "../components/stock-details/StockHeader";
-import StockPriceSummary from "../components/stock-details/StockPriceSummary";
+import {
+  StockHeader,
+  StockPriceSummary,
+  StockAlertsModal,
+} from "../components/stock-details";
 
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
@@ -282,31 +284,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "flex-end",
-  },
-  alertsModalContainer: {
-    backgroundColor: "#0a0a0a",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: "90%",
-    flex: 1,
-  },
-  alertsModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
-  },
-  alertsModalTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
-  },
-  alertsModalCloseButton: {
-    padding: 4,
   },
 });
 
@@ -2469,28 +2446,12 @@ export default function StockDetailScreen() {
         onExtendedHoursChange={setShowExtendedHours}
       />
 
-      {/* Alerts Modal */}
-      <Modal
+      <StockAlertsModal
         visible={showAlertsModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowAlertsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.alertsModalContainer}>
-            <View style={styles.alertsModalHeader}>
-              <Text style={styles.alertsModalTitle}>Price Alerts</Text>
-              <Pressable
-                onPress={() => setShowAlertsModal(false)}
-                style={styles.alertsModalCloseButton}
-              >
-                <Ionicons name="close" size={24} color="#888" />
-              </Pressable>
-            </View>
-            <AlertsList symbol={symbol} currentPrice={currentPrice} />
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setShowAlertsModal(false)}
+        symbol={symbol}
+        currentPrice={currentPrice}
+      />
     </View>
   );
 }
