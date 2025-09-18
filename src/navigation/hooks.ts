@@ -26,24 +26,40 @@ export function useScreenProps<T extends keyof AllStackParamList>() {
 export function useNavigationHelpers() {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
 
+  // Helper function to safely navigate with error handling
+  const safeNavigate = (routeName: string, params?: any) => {
+    try {
+      if (navigation && navigation.navigate) {
+        // Add a small delay to ensure navigation is ready
+        setTimeout(() => {
+          (navigation as any).navigate(routeName, params);
+        }, 50);
+      } else {
+        console.warn(`Navigation not ready for route: ${routeName}`);
+      }
+    } catch (error) {
+      console.error(`Navigation error for route ${routeName}:`, error);
+    }
+  };
+
   return {
     // Trading navigation
     navigateToStock: (symbol: string, name?: string, source?: string) => {
-      (navigation as any).navigate('Trading', {
+      safeNavigate('Trading', {
         screen: 'StockDetail',
         params: { symbol, name, source },
       });
     },
 
     navigateToChart: (symbol: string, timeframe?: string) => {
-      (navigation as any).navigate('Trading', {
+      safeNavigate('Trading', {
         screen: 'ChartFullScreen',
         params: { symbol, timeframe },
       });
     },
 
     navigateToChartChat: (symbol: string, chartData?: any) => {
-      (navigation as any).navigate('Trading', {
+      safeNavigate('Trading', {
         screen: 'ChartChat',
         params: { symbol, chartData },
       });
@@ -51,19 +67,19 @@ export function useNavigationHelpers() {
 
     // Market navigation
     navigateToScanner: () => {
-      (navigation as any).navigate('Market', { screen: 'Scanner' });
+      safeNavigate('Market', { screen: 'Scanner' });
     },
 
     navigateToInsights: () => {
-      (navigation as any).navigate('Market', { screen: 'AIInsights' });
+      safeNavigate('Market', { screen: 'AIInsights' });
     },
 
     navigateToMarketOverview: () => {
-      (navigation as any).navigate('Market', { screen: 'MarketOverview' });
+      safeNavigate('Market', { screen: 'MarketOverview' });
     },
 
     navigateToChat: (context?: 'market' | 'stock' | 'general', symbol?: string) => {
-      (navigation as any).navigate('Market', {
+      safeNavigate('Market', {
         screen: 'Chat',
         params: { context, symbol },
       });
@@ -71,33 +87,33 @@ export function useNavigationHelpers() {
 
     // Portfolio navigation
     navigateToAccounts: () => {
-      (navigation as any).navigate('Portfolio', { screen: 'BrokerageAccounts' });
+      safeNavigate('Portfolio', { screen: 'BrokerageAccounts' });
     },
 
     navigateToJourney: () => {
-      (navigation as any).navigate('Portfolio', { screen: 'Journey' });
+      safeNavigate('Portfolio', { screen: 'Journey' });
     },
 
     // Main tabs
     navigateToDashboard: () => {
-      (navigation as any).navigate('Main', { screen: 'Dashboard' });
+      safeNavigate('Main', { screen: 'Dashboard' });
     },
 
     navigateToWatchlist: () => {
-      (navigation as any).navigate('Main', { screen: 'Watchlist' });
+      safeNavigate('Main', { screen: 'Watchlist' });
     },
 
     navigateToProfile: () => {
-      (navigation as any).navigate('Main', { screen: 'Profile' });
+      safeNavigate('Main', { screen: 'Profile' });
     },
 
     // Auth navigation
     navigateToLogin: () => {
-      (navigation as any).navigate('Auth', { screen: 'Login' });
+      safeNavigate('Auth', { screen: 'Login' });
     },
 
     navigateToRegister: () => {
-      (navigation as any).navigate('Auth', { screen: 'Register' });
+      safeNavigate('Auth', { screen: 'Register' });
     },
 
     // Utility functions
@@ -108,12 +124,28 @@ export function useNavigationHelpers() {
 
 // Hook for deep linking and external navigation
 export function useDeepLinking() {
-  const navigation = useNavigation<ScreenNavigationProp<keyof AllStackParamList>>();
+  const navigation = useNavigation<NavigationProp<RootStackParamList>>();
+
+  // Helper function to safely navigate with error handling
+  const safeNavigate = (routeName: string, params?: any) => {
+    try {
+      if (navigation && navigation.navigate) {
+        // Add a small delay to ensure navigation is ready
+        setTimeout(() => {
+          (navigation as any).navigate(routeName, params);
+        }, 50);
+      } else {
+        console.warn(`Deep link navigation not ready for route: ${routeName}`);
+      }
+    } catch (error) {
+      console.error(`Deep link navigation error for route ${routeName}:`, error);
+    }
+  };
 
   return {
     // Handle stock deep links (e.g., tradingapp://stock/AAPL)
     handleStockLink: (symbol: string, name?: string) => {
-      (navigation as any).navigate('Trading', {
+      safeNavigate('Trading', {
         screen: 'StockDetail',
         params: { symbol, name, source: 'deeplink' },
       });
@@ -121,7 +153,7 @@ export function useDeepLinking() {
 
     // Handle chart deep links (e.g., tradingapp://chart/AAPL)
     handleChartLink: (symbol: string, timeframe?: string) => {
-      (navigation as any).navigate('Trading', {
+      safeNavigate('Trading', {
         screen: 'ChartFullScreen',
         params: { symbol, timeframe },
       });
@@ -129,7 +161,7 @@ export function useDeepLinking() {
 
     // Handle market scanner deep links
     handleScannerLink: () => {
-      (navigation as any).navigate('Market', { screen: 'Scanner' });
+      safeNavigate('Market', { screen: 'Scanner' });
     },
 
     // Reset to a specific screen (useful for notifications)

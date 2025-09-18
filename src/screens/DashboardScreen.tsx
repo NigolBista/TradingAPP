@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useAppDataStore, type PortfolioHistory } from "../store/appDataStore";
 import { useNavigation } from "@react-navigation/native";
+import { useNavigationHelpers } from "../navigation/hooks";
 import MarketOverview from "../components/insights/MarketOverview";
 import type { NewsItem } from "../services/newsProviders";
 // Removed useMarketOverviewStore to prevent loops - using centralized store instead
@@ -30,6 +31,7 @@ interface DashboardData {
 
 export default function DashboardScreen() {
   const navigation = useNavigation();
+  const { navigateToStock } = useNavigationHelpers();
   const { theme } = useTheme();
   // Use centralized store for market data too
   const { getSentimentSummary } = useAppDataStore();
@@ -341,9 +343,7 @@ export default function DashboardScreen() {
                 provider: pos.provider,
               }))}
               onPositionPress={(position) => {
-                (navigation as any).navigate("StockDetail", {
-                  symbol: position.symbol,
-                });
+                navigateToStock(position.symbol, undefined, 'dashboard');
               }}
             />
           </View>

@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useNavigationHelpers } from "../navigation/hooks";
 import { ScanResult } from "../services/marketScanner";
 import {
   useUserStore,
@@ -248,6 +249,7 @@ interface StockData extends ScanResult {
 
 export default function WatchlistScreen() {
   const navigation = useNavigation();
+  const { navigateToStock } = useNavigationHelpers();
   const { theme } = useTheme();
   const profile = useUserStore((s) => s.profile);
   const getActiveWatchlist = useUserStore((s) => s.getActiveWatchlist);
@@ -678,16 +680,8 @@ export default function WatchlistScreen() {
   }
 
   function handleStockPress(stock: StockData) {
-    // Navigate to dedicated stock detail page with initial quote for instant price
-    (navigation as any).navigate("StockDetail", {
-      symbol: stock.symbol,
-      initialQuote: {
-        symbol: stock.symbol,
-        last: stock.currentPrice,
-        change: stock.change,
-        changePercent: stock.changePercent,
-      },
-    });
+    // Navigate to dedicated stock detail page using proper navigation helper
+    navigateToStock(stock.symbol, stock.companyName, 'watchlist');
   }
 
   function handleDeleteWatchlist(watchlistId: string) {
