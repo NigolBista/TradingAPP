@@ -36,6 +36,7 @@ export type ChatMessage = {
     desiredRR: number;
     contextMode: string;
     isAutoAnalysis: boolean;
+    contextLookback?: { mode: "auto" | "fixed"; ms?: number };
   };
 };
 
@@ -71,6 +72,7 @@ interface ChatState {
       desiredRR: number;
       contextMode: string;
       isAutoAnalysis: boolean;
+      contextLookback?: { mode: "auto" | "fixed"; ms?: number };
     };
   }) => void;
   clear: () => void;

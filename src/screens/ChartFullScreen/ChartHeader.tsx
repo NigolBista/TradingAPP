@@ -10,14 +10,22 @@ type Props = {
   onToggleIndicatorsAccordion: () => void;
 };
 
-export default function ChartHeader({ onBack, symbol, stockName, onToggleIndicatorsAccordion }: Props) {
+export default function ChartHeader({
+  onBack,
+  symbol,
+  stockName,
+  onToggleIndicatorsAccordion,
+}: Props) {
   return (
     <View style={styles.header}>
       <Pressable style={styles.backButton} onPress={onBack}>
         <Ionicons name="arrow-back" size={24} color="#fff" />
       </Pressable>
       <View style={styles.headerCenter}>
-        <StockSearchBar currentSymbol={symbol} currentStockName={stockName || "Loading..."} />
+        <StockSearchBar
+          currentSymbol={symbol}
+          currentStockName={stockName || "Loading..."}
+        />
       </View>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         <Pressable
@@ -53,5 +61,3 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 });
-
-

@@ -1,5 +1,6 @@
 import { type SimpleQuote } from "./quotes";
 import { safeFetchBulkQuotes, safeFetchSingleQuote } from "./quoteFetcher";
+import { polygonRealtime } from "./polygonRealtime";
 import Constants from "expo-constants";
 
 type RefreshCallback = () => void;
@@ -16,6 +17,10 @@ class RealtimeDataManager {
   private currentTimeframe: string = "1D";
   private refreshCallbacks: RefreshCallback[] = [];
   private polygonEnabled: boolean = false;
+  private onPriceUnsubscribe: (() => void) | null = null;
+  private lastPrices: Record<string, number> = {};
+  private priceDirty: boolean = false;
+  private watchlistRealtimeActive: boolean = false;
 
   // Pre-cache all watchlist data on app initialization
   async preloadWatchlistData(watchlist: string[]): Promise<void> {
@@ -88,27 +93,126 @@ class RealtimeDataManager {
     return;
   }
 
-  // Start 5-second watchlist refresh
+  // Start watchlist refresh - prefers Polygon websocket if available
   startWatchlistRefresh(watchlist: string[], callback?: RefreshCallback): void {
-    console.log("🔄 Starting watchlist refresh every 5 seconds");
+    this.polygonEnabled = Boolean(
+      (Constants.expoConfig?.extra as any)?.polygonApiKey
+    );
+
     this.currentWatchlist = watchlist;
+    this.watchlistRealtimeActive = false;
 
     if (callback) {
       this.refreshCallbacks.push(callback);
     }
 
-    // Clear any existing interval
+    // Always clear polling interval when (re)starting
     if (this.watchlistInterval) {
       clearInterval(this.watchlistInterval);
+      this.watchlistInterval = null;
     }
 
-    // Start new interval
+    if (this.polygonEnabled && watchlist.length > 0) {
+      console.log("📡 Subscribing to Polygon websocket for watchlist symbols");
+
+      // Reset previous websocket subscriptions
+      try {
+        polygonRealtime.clearAll();
+      } catch {}
+
+      // Subscribe to trades and second aggregates for timely last prices
+      Promise.all([
+        polygonRealtime.subscribeTrades(watchlist).catch((e) => {
+          console.warn("⚠️ Failed to subscribe trades", e);
+          throw e;
+        }),
+        polygonRealtime.subscribeAggSec(watchlist).catch((e) => {
+          console.warn("⚠️ Failed to subscribe second aggs", e);
+          throw e;
+        }),
+      ])
+        .then(() => {
+          // Remove existing onPrice listener if any
+          if (this.onPriceUnsubscribe) {
+            try {
+              this.onPriceUnsubscribe();
+            } catch {}
+            this.onPriceUnsubscribe = null;
+          }
+
+          const watchlistSet = new Set(this.currentWatchlist);
+          this.lastPrices = {};
+          this.priceDirty = false;
+
+          // Listen for live prices and notify UI for symbols in the current watchlist
+          this.onPriceUnsubscribe = polygonRealtime.onPrice((symbol, price) => {
+            if (!watchlistSet.has(symbol)) return;
+            // Only update if price changed meaningfully to avoid unnecessary re-renders
+            const prev = this.lastPrices[symbol];
+            if (prev === undefined || Math.abs(prev - price) >= 0.0001) {
+              this.lastPrices[symbol] = price;
+              this.priceDirty = true;
+            }
+          });
+
+          // Kick an immediate cache refresh so UI hydrates quickly
+          this.loadWatchlistQuotes(this.currentWatchlist)
+            .then(() => {
+              this.refreshCallbacks.forEach((cb) => {
+                try {
+                  cb();
+                } catch {}
+              });
+            })
+            .catch(() => {});
+
+          // Throttle UI updates to once per second; only emit if we got at least one price
+          this.watchlistInterval = setInterval(() => {
+            if (!this.priceDirty) return;
+            this.priceDirty = false;
+            this.refreshCallbacks.forEach((cb) => {
+              try {
+                cb();
+              } catch (error) {
+                console.error("❌ Refresh callback error:", error);
+              }
+            });
+          }, 1000);
+
+          this.watchlistRealtimeActive = true;
+        })
+        .catch(() => {
+          console.warn(
+            "⚠️ Falling back to polling because websocket subscription failed"
+          );
+          this.watchlistRealtimeActive = false;
+          // Start 5s polling fallback
+          if (this.watchlistInterval) {
+            clearInterval(this.watchlistInterval);
+            this.watchlistInterval = null;
+          }
+          this.watchlistInterval = setInterval(async () => {
+            try {
+              await this.loadWatchlistQuotes(this.currentWatchlist);
+              this.refreshCallbacks.forEach((cb) => {
+                try {
+                  cb();
+                } catch (error) {
+                  console.error("❌ Refresh callback error:", error);
+                }
+              });
+            } catch (error) {
+              console.error("❌ Watchlist refresh failed:", error);
+            }
+          }, 5000);
+        });
+      return;
+    }
+
+    console.log("🔄 Polygon not configured; falling back to 5s polling");
     this.watchlistInterval = setInterval(async () => {
       try {
-        console.log("🔄 Refreshing watchlist data...");
         await this.loadWatchlistQuotes(this.currentWatchlist);
-
-        // Notify callbacks
         this.refreshCallbacks.forEach((cb) => {
           try {
             cb();
@@ -129,8 +233,30 @@ class RealtimeDataManager {
       clearInterval(this.watchlistInterval);
       this.watchlistInterval = null;
     }
+    if (this.onPriceUnsubscribe) {
+      try {
+        this.onPriceUnsubscribe();
+      } catch {}
+      this.onPriceUnsubscribe = null;
+    }
+    // Clear websocket subscriptions
+    try {
+      polygonRealtime.clearAll();
+    } catch {}
+    this.lastPrices = {};
+    this.priceDirty = false;
+    this.watchlistRealtimeActive = false;
     this.refreshCallbacks = [];
     // Realtime subscriptions now handled by chart components
+  }
+
+  // Expose last known prices for current watchlist (shallow copy)
+  getLastPrices(): Record<string, number> {
+    return { ...this.lastPrices };
+  }
+
+  isWatchlistRealtimeActive(): boolean {
+    return this.watchlistRealtimeActive;
   }
 
   // Start 5-second stock detail refresh

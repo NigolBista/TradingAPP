@@ -1,16 +1,13 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import {
   View,
   Pressable,
   StyleSheet,
   useWindowDimensions,
   Text,
-  ScrollView,
   useColorScheme,
   Modal,
   TextInput,
-  Animated,
-  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -18,10 +15,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import SimpleKLineChart, {
   type IndicatorConfig,
 } from "../components/charts/SimpleKLineChart";
-// Removed viewportBars usage; we'll lazy-load via timeRangeChange
 import { type ChartType } from "../components/charts/ChartSettingsModal";
 import { ExtendedTimeframe } from "../components/charts/TimeframePickerModal";
-// UI components extracted from monolith
 import ChartHeader from "./ChartFullScreen/ChartHeader";
 import IndicatorsAccordion from "./ChartFullScreen/IndicatorsAccordion";
 import OHLCRow from "./ChartFullScreen/OHLCRow";
@@ -30,37 +25,57 @@ import UnifiedBottomSheet from "./ChartFullScreen/UnifiedBottomSheet";
 import ComplexityBottomSheet from "./ChartFullScreen/ComplexityBottomSheet";
 import ReasoningBottomSheet from "./ChartFullScreen/ReasoningBottomSheet";
 import IndicatorsSheet from "./ChartFullScreen/IndicatorsSheet";
-// Removed IndicatorConfigModal - now using IndicatorConfigScreen
-// LineStyleModal now imported in IndicatorConfigScreen
-// Indicator helpers
 import {
   toggleIndicatorInList,
   updateIndicatorLineInList,
   addIndicatorParamInList,
   removeIndicatorParamInList,
+  getDefaultIndicator,
+  buildDefaultLines,
 } from "./ChartFullScreen/indicators";
 import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
-// Remove direct candle fetching; KLinePro handles candles internally via Polygon
 import { fetchNews as fetchSymbolNews } from "../services/newsProviders";
 import {
   runAIStrategy,
   aiOutputToTradePlan,
   applyComplexityToPlan,
 } from "../logic/aiStrategyEngine";
-// Removed on-the-fly plan generation imports
+import {
+  registerChartBridge,
+  unregisterChartBridge,
+  type ChartAction,
+  updateChartState,
+} from "../logic/chartBridge";
 import { useChatStore } from "../store/chatStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import { useUserStore } from "../store/userStore";
+import { useAlertStore } from "../store/alertStore";
+import alertsService from "../services/alertsService";
+import { useAuth } from "../providers/AuthProvider";
 import { StrategyComplexity } from "../logic/types";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
-import { getUpcomingFedEvents } from "../services/federalReserve";
+// removed unused federalReserve import
 import {
   fetchCandles,
   fetchCandlesForTimeframe,
   type Candle,
 } from "../services/marketProviders";
-import { timeframeSpacingMs } from "./ChartFullScreen/utils";
+// removed unused timeframeSpacingMs
+import { buildDayTradePlan } from "../logic/dayTrade";
+import { buildSwingTradePlan } from "../logic/swingTrade";
+import useMarketStatus from "../hooks/useMarketStatus";
+
+// Types
+type AIMeta = {
+  strategyChosen?: string;
+  side?: "long" | "short";
+  confidence?: number;
+  why?: string[];
+  notes?: string[];
+  targets?: number[];
+  riskReward?: number;
+};
 
 export default function ChartFullScreen() {
   const navigation = useNavigation<any>();
@@ -68,105 +83,82 @@ export default function ChartFullScreen() {
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const scheme = useColorScheme();
+
+  // Route params
   const symbol: string = route.params?.symbol || "AAPL";
+  const initialTimeframe: string | undefined = route.params?.initialTimeframe;
+  const isDayUp: boolean | undefined = route.params?.isDayUp;
+  const initialDataParam: any[] | undefined = route.params?.initialData;
+  const initialTradePlan: any | undefined = route.params?.tradePlan;
+  const initialAiMeta: AIMeta | undefined = route.params?.ai;
+  const initialAnalysisContext = route.params?.analysisContext;
+
+  // Store hooks
   const { addAnalysisMessage } = useChatStore();
   const { cacheSignal, getCachedSignal } = useSignalCacheStore();
   const { profile, setProfile } = useUserStore();
-  const [chartType, setChartType] = useState<ChartType>(
-    (route.params?.chartType as ChartType) || "candlestick"
+  const { addAlert, updateAlert } = useAlertStore();
+  const upsertAlert = useAlertStore((s) => s.upsertAlert);
+  const { user } = useAuth();
+  const allAlerts = useAlertStore((s) => s.alerts);
+  const alertsForSymbol = React.useMemo(
+    () => allAlerts.filter((a) => a.symbol === symbol),
+    [allAlerts, symbol]
+  );
+  const alertLines = React.useMemo(
+    () =>
+      alertsForSymbol.map((alert) => ({
+        id: alert.id,
+        price: alert.price,
+        condition: alert.condition,
+        isActive: alert.isActive,
+      })),
+    [alertsForSymbol]
   );
 
-  const initialTimeframe: string | undefined = route.params?.initialTimeframe;
-  const isDayUp: boolean | undefined = route.params?.isDayUp;
-  const [dayUp, setDayUp] = useState<boolean | undefined>(isDayUp);
-  const initialDataParam: any[] | undefined = route.params?.initialData;
-  const initialTradePlan: any | undefined = route.params?.tradePlan;
-  const initialAiMeta:
-    | undefined
-    | {
-        strategyChosen?: string;
-        side?: "long" | "short";
-        confidence?: number;
-        why?: string[];
-        notes?: string[];
-        targets?: number[];
-        riskReward?: number;
-      } = route.params?.ai;
-  const initialAnalysisContext = route.params?.analysisContext;
+  // Debug logging for alert changes
+  React.useEffect(() => {
+    console.log(
+      `[ChartFullScreen] Alerts for ${symbol}:`,
+      alertsForSymbol.length
+    );
+  }, [symbol, alertsForSymbol]);
   const { pinned, defaultTimeframe, hydrate, setDefaultTimeframe, toggle } =
     useTimeframeStore();
-  const [pinError, setPinError] = useState<string | null>(null);
-  const chartRef = React.useRef<any>(null);
-  const barSpacingRef = React.useRef<number>(60_000);
 
-  // Rate limiting state for historical data requests
-  const lastHistoricalRequestRef = useRef<number>(0);
-  const historicalRequestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // State variables
-  const [data, setData] = useState<any[]>(initialDataParam || []);
+  // Core state
   const [extendedTf, setExtendedTf] = useState<ExtendedTimeframe>(
     (initialTimeframe as ExtendedTimeframe) || defaultTimeframe || "1D"
   );
   const [stockName, setStockName] = useState<string>("");
-  React.useEffect(() => {
-    try {
-      if (initialDataParam && initialDataParam.length >= 2) {
-        const last = initialDataParam[initialDataParam.length - 1];
-        const prev = initialDataParam[initialDataParam.length - 2];
-        const inferred = Math.max(1, last.time - prev.time);
-        barSpacingRef.current = inferred;
-      }
-    } catch {}
-  }, []);
-  React.useEffect(() => {
-    try {
-      if (data && data.length >= 2) {
-        const last = data[data.length - 1];
-        const prev = data[data.length - 2];
-        const inferred = Math.max(1, last.time - prev.time);
-        barSpacingRef.current = inferred;
-      } else {
-        barSpacingRef.current = timeframeSpacingMs(extendedTf);
-      }
-    } catch {
-      barSpacingRef.current = timeframeSpacingMs(extendedTf);
-    }
-  }, [data, extendedTf]);
-  // Real-time logic is now handled by AmChartsCandles component itself
+  const [dayUp, setDayUp] = useState<boolean | undefined>(isDayUp);
+  const [chartType, setChartType] = useState<ChartType>(
+    (route.params?.chartType as ChartType) || "candlestick"
+  );
 
-  // Additional state variables
+  // UI state
   const [showUnifiedBottomSheet, setShowUnifiedBottomSheet] = useState(false);
-  // migrated animations handled in extracted components
   const [analyzing, setAnalyzing] = useState<boolean>(false);
   const [currentTradePlan, setCurrentTradePlan] = useState<any | undefined>(
     initialTradePlan
   );
   const [showMA, setShowMA] = useState<boolean>(false);
   const [showVolume, setShowVolume] = useState<boolean>(false);
-  const [indicatorsExpanded, setIndicatorsExpanded] = useState<boolean>(false);
+  const [showSessions, setShowSessions] = useState<boolean>(true);
+  // Use accordion expansion to influence layout height; no separate expanded state
+
   // Indicators state
   const [indicators, setIndicators] = useState<IndicatorConfig[]>([]);
+  const latestIndicatorsRef = useRef<IndicatorConfig[]>([]);
+  const styleRetryRef = useRef<NodeJS.Timeout | null>(null);
   const [showIndicatorsSheet, setShowIndicatorsSheet] = useState(false);
-  // migrated animations handled in extracted components
   const [showIndicatorsAccordion, setShowIndicatorsAccordion] = useState(false);
-  // Removed indicator config modal state - now using screen navigation
-  // Line style editing now handled in IndicatorConfigScreen
+
+  // Analysis state
   const [lastCandle, setLastCandle] = useState<Candle | null>(null);
-  const [aiMeta, setAiMeta] = useState<
-    | undefined
-    | {
-        strategyChosen?: string;
-        side?: "long" | "short";
-        confidence?: number;
-        why?: string[];
-        notes?: string[];
-        targets?: number[];
-        riskReward?: number;
-      }
-  >(initialAiMeta);
-  // Remove explicit sentiment; use bias with neutral
-  // Initialize state from analysis context if coming from chat
+  const [aiMeta, setAiMeta] = useState<AIMeta | undefined>(initialAiMeta);
+
+  // Trading mode state
   const [mode, setMode] = useState<"auto" | "day_trade" | "swing_trade">(
     initialAnalysisContext?.mode === "day_trade"
       ? "day_trade"
@@ -175,62 +167,73 @@ export default function ChartFullScreen() {
       : "auto"
   );
 
-  const showUnifiedBottomSheetWithTab = () => {
-    setShowUnifiedBottomSheet(true);
-  };
-
-  const hideBottomSheet = () => {
-    setShowUnifiedBottomSheet(false);
-  };
-
-  const showComplexityBottomSheetWithTab = () => {
-    setShowComplexityBottomSheet(true);
-  };
-
-  const hideComplexityBottomSheet = () => {
-    setShowComplexityBottomSheet(false);
-  };
-
+  // Trading configuration
   const [tradePace, setTradePace] = useState<
     "auto" | "day" | "scalp" | "swing"
   >((initialAnalysisContext?.tradePace as any) || "auto");
+  const [contextLookback, setContextLookback] = useState<{
+    mode: "auto" | "fixed";
+    ms?: number;
+  }>({
+    mode: (initialAnalysisContext?.contextLookback?.mode as any) || "auto",
+    ms: initialAnalysisContext?.contextLookback?.ms,
+  });
   const [desiredRR, setDesiredRR] = useState<number>(
     initialAnalysisContext?.desiredRR || 1.5
   );
   const [contextMode, setContextMode] = useState<
     "price_action" | "news_sentiment"
   >((initialAnalysisContext?.contextMode as any) || "price_action");
-  // Simplified: mode is UI-only; analysis runs when user presses Analyze
   const [tradeMode, setTradeMode] = useState<"day" | "swing">("day");
   const [showCustomRrModal, setShowCustomRrModal] = useState<boolean>(false);
 
-  // Auto-analysis and streaming output
-  const [hasAutoAnalyzed, setHasAutoAnalyzed] = useState<boolean>(
-    !!initialAnalysisContext || !!initialAiMeta // Skip auto-analysis if we have existing analysis data
-  );
+  // Analysis and streaming state
   const [streamingText, setStreamingText] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
-
-  // Reasoning box visibility control
   const [showReasoning, setShowReasoning] = useState<boolean>(false);
   const [hasExistingReasoning, setHasExistingReasoning] = useState<boolean>(
     !!initialAiMeta
   );
 
-  // Strategy complexity state
+  // Bottom sheet states
   const [showComplexityBottomSheet, setShowComplexityBottomSheet] =
     useState<boolean>(false);
-  // migrated animations handled in extracted components
   const [selectedComplexity, setSelectedComplexity] =
     useState<StrategyComplexity>(profile.strategyComplexity || "advanced");
-  // Reasoning bottom sheet state
   const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
     useState<boolean>(false);
-  // migrated animations handled in extracted components
+  const [showReasonIcon, setShowReasonIcon] = useState<boolean>(true);
+  const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
+  const [proposedAlertPrice, setProposedAlertPrice] = useState<number | null>(
+    null
+  );
+  const marketStatus = useMarketStatus();
 
+  // Refs
+  const [pinError, setPinError] = useState<string | null>(null);
+  const overrideIndicatorRef = React.useRef<
+    | ((
+        id: string | { name: string; paneId?: string },
+        styles: any,
+        calcParams?: any
+      ) => void)
+    | null
+  >(null);
+
+  const chartBridgeRef = React.useRef<{
+    updateTimeframe: (timeframe: string) => void;
+    updateChartType: (chartType: string) => void;
+    updateIndicators: (indicators: IndicatorConfig[]) => void;
+    updateDisplayOptions: (options: any) => void;
+    updateTheme: (theme: string) => void;
+    updateAlerts: (alerts: any[]) => void;
+    updateLevels: (levels: any) => void;
+  } | null>(null);
+
+  // Layout calculations
   const headerHeight = 52;
   const ohlcRowHeight = 24;
-  const indicatorBarHeight = indicatorsExpanded ? 88 : 28;
+  const indicatorBarHeight = showIndicatorsAccordion ? 88 : 28;
   const timeframeRowHeight = 48;
   const bottomNavHeight = 56;
   const chartHeight = Math.max(
@@ -246,14 +249,195 @@ export default function ChartFullScreen() {
       8
   );
 
+  // Removed unused dimensions listener and bar spacing calculations
+
+  // Update indicators ref and cleanup
+  useEffect(() => {
+    latestIndicatorsRef.current = indicators;
+  }, [indicators]);
+
+  useEffect(() => {
+    return () => {
+      if (styleRetryRef.current) clearInterval(styleRetryRef.current);
+    };
+  }, []);
+
+  // Initialize component
   useEffect(() => {
     loadStockName();
     hydrate();
-    // Only reset auto-analysis flag if we don't have existing analysis data
-    if (!initialAnalysisContext && !initialAiMeta) {
-      setHasAutoAnalyzed(false);
-    }
   }, [symbol]);
+
+  // Register a chart bridge so external agents can manipulate the chart state
+  useEffect(() => {
+    const bridge = {
+      async perform(action: ChartAction) {
+        switch (action.type) {
+          case "addIndicator":
+            // Use bridge to update indicators directly in WebView without React re-render
+            if (chartBridgeRef.current) {
+              const base = getDefaultIndicator(action.indicator);
+              const options: any = action.options || {};
+
+              const calcParams = Array.isArray(options.calcParams)
+                ? options.calcParams.map((v: number) => Math.floor(v))
+                : base.calcParams;
+
+              const lineCount = Array.isArray(calcParams)
+                ? calcParams.length
+                : 1;
+
+              let lines = buildDefaultLines(
+                lineCount,
+                (base.styles as any)?.lines?.[0]?.color
+              );
+
+              if (options.styles?.lines) {
+                lines = lines.map((line, idx) => ({
+                  ...line,
+                  ...(options.styles.lines[idx] || {}),
+                }));
+              }
+
+              const cfg: IndicatorConfig = {
+                ...base,
+                ...options,
+                calcParams,
+                styles: { ...(base.styles as any), lines },
+              } as IndicatorConfig;
+
+              // Update local state for consistency but don't trigger re-render
+              setIndicators((prev) => {
+                const existingIndex = prev.findIndex(
+                  (i) => i.name.toLowerCase() === action.indicator.toLowerCase()
+                );
+
+                if (existingIndex >= 0) {
+                  const copy = prev.slice();
+                  copy[existingIndex] = cfg;
+                  // Update WebView directly
+                  chartBridgeRef.current?.updateIndicators(copy);
+                  updateChartState({
+                    indicators: copy.map((i) => ({
+                      indicator: i.name,
+                      options: { calcParams: i.calcParams, styles: i.styles },
+                    })),
+                  });
+                  return copy;
+                }
+
+                const next = [...prev, cfg];
+                // Update WebView directly
+                chartBridgeRef.current?.updateIndicators(next);
+                updateChartState({
+                  indicators: next.map((i) => ({
+                    indicator: i.name,
+                    options: { calcParams: i.calcParams, styles: i.styles },
+                  })),
+                });
+                return next;
+              });
+            } else {
+              console.warn("Chart bridge not available for indicator update");
+            }
+            break;
+          case "setTimeframe":
+            // Use bridge to update timeframe directly in WebView
+            if (chartBridgeRef.current) {
+              chartBridgeRef.current.updateTimeframe(action.timeframe);
+              setExtendedTf(action.timeframe as ExtendedTimeframe);
+              updateChartState({ timeframe: action.timeframe });
+            } else {
+              console.warn("Chart bridge not available for timeframe update");
+            }
+            break;
+          case "setChartType":
+            // Use bridge to update chart type directly in WebView
+            if (chartBridgeRef.current) {
+              chartBridgeRef.current.updateChartType(action.chartType);
+              setChartType(action.chartType as ChartType);
+              updateChartState({ chartType: action.chartType });
+            } else {
+              console.warn("Chart bridge not available for chart type update");
+            }
+            break;
+          case "toggleDisplayOption":
+            // Use bridge to update display options directly in WebView
+            if (chartBridgeRef.current) {
+              const options: any = {};
+              if (action.option === "ma") {
+                options.showMA = action.enabled;
+                setShowMA(action.enabled);
+              }
+              if (action.option === "volume") {
+                options.showVolume = action.enabled;
+                setShowVolume(action.enabled);
+              }
+              if (action.option === "sessions") {
+                options.showSessions = action.enabled;
+                setShowSessions(action.enabled);
+              }
+              chartBridgeRef.current.updateDisplayOptions(options);
+            } else {
+              console.warn(
+                "Chart bridge not available for display options update"
+              );
+            }
+            break;
+          default:
+            console.warn("Unhandled chart action", action);
+        }
+      },
+    };
+
+    registerChartBridge(bridge);
+    return () => unregisterChartBridge();
+  }, [
+    setIndicators,
+    setExtendedTf,
+    setChartType,
+    setShowMA,
+    setShowVolume,
+    setShowSessions,
+    symbol,
+  ]);
+
+  // Apply indicator styles and parameters
+  const applyIndicatorStyles = useCallback(() => {
+    if (styleRetryRef.current) clearInterval(styleRetryRef.current);
+
+    const attempt = () => {
+      if (!overrideIndicatorRef.current) return;
+      latestIndicatorsRef.current.forEach((indicator) => {
+        const styles = indicator.styles?.lines
+          ? { lines: indicator.styles.lines }
+          : {};
+        const calcParams = indicator.calcParams;
+
+        // Always call overrideIndicator with both styles and calcParams
+        // The WebView will decide whether to recreate the indicator or just update styles
+        overrideIndicatorRef.current!(indicator.name, styles, calcParams);
+      });
+    };
+
+    attempt();
+    // Retry once after 200ms to ensure styles are applied
+    styleRetryRef.current = setTimeout(() => {
+      attempt();
+      styleRetryRef.current = null;
+    }, 200);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      applyIndicatorStyles();
+    });
+    return unsubscribe;
+  }, [navigation, applyIndicatorStyles]);
+
+  useEffect(() => {
+    applyIndicatorStyles();
+  }, [indicators, applyIndicatorStyles]);
 
   // Fallback: if no isDayUp provided, hydrate from cached quotes
   useEffect(() => {
@@ -292,7 +476,6 @@ export default function ChartFullScreen() {
         (initialAiMeta.notes ? ". " + initialAiMeta.notes.join(". ") : "");
 
       if (reasoningText) {
-        // Set the text immediately without streaming for existing analysis
         setStreamingText(reasoningText);
         setIsStreaming(false);
       }
@@ -300,25 +483,26 @@ export default function ChartFullScreen() {
   }, [initialAiMeta]);
 
   // Core analysis function
-  async function performAnalysis(isAutoAnalysis: boolean = false) {
+  const performAnalysis = useCallback(async () => {
     try {
       setAnalyzing(true);
-      // Fetch a compact, mode-specific candle window to avoid flooding AI with history
+
+      // Fetch candle data based on trade pace
       let d: any[] = [];
       let h1: any[] = [];
       let m15: any[] = [];
       let m5: any[] = [];
       let m1: any[] = [];
 
-      const pace = isAutoAnalysis ? tradePace : tradePace; // honor current selection
+      const pace = tradePace;
       try {
         if (pace === "scalp") {
           const [c1, c5, c15, c60, cd] = await Promise.all([
-            fetchCandles(symbol, { resolution: "1", limit: 120 }), // ~2 hours of 1m
-            fetchCandles(symbol, { resolution: "5", limit: 60 }), // ~5 hours of 5m
-            fetchCandles(symbol, { resolution: "15", limit: 32 }), // ~8 hours of 15m
-            fetchCandles(symbol, { resolution: "1H", limit: 24 }), // 1 day of 1h
-            fetchCandles(symbol, { resolution: "D", limit: 20 }), // ~1 month of daily
+            fetchCandles(symbol, { resolution: "1", limit: 120 }),
+            fetchCandles(symbol, { resolution: "5", limit: 60 }),
+            fetchCandles(symbol, { resolution: "15", limit: 32 }),
+            fetchCandles(symbol, { resolution: "1H", limit: 24 }),
+            fetchCandles(symbol, { resolution: "D", limit: 20 }),
           ]);
           m1 = c1;
           m5 = c5;
@@ -327,10 +511,10 @@ export default function ChartFullScreen() {
           d = cd;
         } else if (pace === "day") {
           const [c5, c15, c60, cd] = await Promise.all([
-            fetchCandles(symbol, { resolution: "5", limit: 78 }), // 1 trading day (5m)
-            fetchCandles(symbol, { resolution: "15", limit: 52 }), // ~2 trading days (15m)
-            fetchCandles(symbol, { resolution: "1H", limit: 48 }), // ~2 trading days (1h)
-            fetchCandles(symbol, { resolution: "D", limit: 45 }), // ~2 months (daily)
+            fetchCandles(symbol, { resolution: "5", limit: 78 }),
+            fetchCandles(symbol, { resolution: "15", limit: 52 }),
+            fetchCandles(symbol, { resolution: "1H", limit: 48 }),
+            fetchCandles(symbol, { resolution: "D", limit: 45 }),
           ]);
           m5 = c5;
           m15 = c15;
@@ -338,12 +522,11 @@ export default function ChartFullScreen() {
           d = cd;
         } else if (pace === "swing") {
           const [c60, cd] = await Promise.all([
-            fetchCandles(symbol, { resolution: "1H", limit: 200 }), // ~6-8 weeks hourly
-            fetchCandles(symbol, { resolution: "D", limit: 180 }), // ~9 months daily
+            fetchCandles(symbol, { resolution: "1H", limit: 200 }),
+            fetchCandles(symbol, { resolution: "D", limit: 180 }),
           ]);
           h1 = c60;
           d = cd;
-          // Provide small intraday context for entry refinement
           const [c15, c5] = await Promise.all([
             fetchCandles(symbol, { resolution: "15", limit: 32 }),
             fetchCandles(symbol, { resolution: "5", limit: 60 }),
@@ -351,7 +534,6 @@ export default function ChartFullScreen() {
           m15 = c15;
           m5 = c5;
         } else {
-          // default (auto): balanced small set
           const [c5, c15, c60, cd] = await Promise.all([
             fetchCandles(symbol, { resolution: "5", limit: 78 }),
             fetchCandles(symbol, { resolution: "15", limit: 40 }),
@@ -364,13 +546,11 @@ export default function ChartFullScreen() {
           d = cd;
         }
       } catch (err) {
-        // If candle fetching fails, proceed with minimal arrays
         console.warn("Candle fetch failed for AI analysis:", err);
       }
 
-      // Context fetches - comprehensive for auto-analysis, user-controlled for manual
-      const shouldFetchContext =
-        isAutoAnalysis || contextMode === "news_sentiment";
+      // Context fetches
+      const shouldFetchContext = contextMode === "news_sentiment";
       let newsBrief: any[] | undefined = undefined;
       let marketNewsBrief: any[] | undefined = undefined;
       let fedBrief: any[] | undefined = undefined;
@@ -378,7 +558,6 @@ export default function ChartFullScreen() {
         | { value: number; bucket: "low" | "moderate" | "high" }
         | undefined = undefined;
 
-      // Fetch symbol news
       if (shouldFetchContext) {
         try {
           const news = await fetchSymbolNews(symbol);
@@ -389,37 +568,6 @@ export default function ChartFullScreen() {
             publishedAt: n.publishedAt,
           }));
         } catch {}
-
-        // For auto-analysis, also fetch comprehensive macro context
-        if (isAutoAnalysis) {
-          // Fetch market news
-          try {
-            const marketNews = await fetchSymbolNews("SPY"); // Use SPY as market proxy
-            marketNewsBrief = (marketNews || []).slice(0, 3).map((n: any) => ({
-              title: n.title,
-              summary: (n.summary || "").slice(0, 120),
-              source: n.source,
-            }));
-          } catch {}
-
-          // Fetch FOMC events
-          try {
-            const events = await getUpcomingFedEvents();
-            fedBrief = (events || []).slice(0, 3).map((e: any) => ({
-              title: e.title,
-              date: e.date,
-              impact: e.impact,
-              type: e.type,
-            }));
-          } catch {}
-
-          // Fetch VIX snapshot
-          try {
-            const val = 0;
-            const bucket = val < 15 ? "low" : val <= 25 ? "moderate" : "high";
-            vixSnapshot = { value: val, bucket };
-          } catch {}
-        }
       }
 
       // Derive sentiment from news
@@ -462,10 +610,9 @@ export default function ChartFullScreen() {
         sentimentSummary = { label, score };
       }
 
-      // Enhanced context for comprehensive analysis
-      const analysisMode = isAutoAnalysis ? "auto" : mode;
-
+      const analysisMode = mode;
       const candleData: Record<string, any[]> = {};
+
       if (d && d.length)
         candleData["1d"] = d.map((c) => ({
           time: c.time,
@@ -512,10 +659,29 @@ export default function ChartFullScreen() {
           volume: c.volume,
         }));
 
+      // Optionally trim candle context based on lookback (AI context only)
+      function trimByLookback<T extends { time: number }>(arr: T[]): T[] {
+        if (!arr || !arr.length) return arr;
+        if (contextLookback?.mode !== "fixed" || !contextLookback.ms)
+          return arr;
+        const cutoff = Date.now() - contextLookback.ms;
+        // Keep only data newer than cutoff
+        const idx = arr.findIndex((c) => c.time >= cutoff);
+        return idx <= 0 ? arr : arr.slice(idx);
+      }
+
+      const trimmedCandleData = {
+        "1d": trimByLookback(d),
+        "1h": trimByLookback(h1),
+        "15m": trimByLookback(m15),
+        "5m": trimByLookback(m5),
+        "1m": trimByLookback(m1),
+      } as Record<string, any[]>;
+
       const output = await runAIStrategy({
         symbol,
         mode: analysisMode,
-        candleData,
+        candleData: trimmedCandleData,
         indicators: {},
         context: {
           userBias: "neutral",
@@ -529,15 +695,15 @@ export default function ChartFullScreen() {
               : "aggressive",
           preferredRiskReward: profile.preferredRiskReward || desiredRR,
           userPreferences: {
-            pace: isAutoAnalysis ? "auto" : tradePace,
-            desiredRR: isAutoAnalysis ? 2.0 : desiredRR, // Higher R:R for auto-analysis
+            pace: tradePace,
+            desiredRR: desiredRR,
           },
           includeFlags: {
-            macro: isAutoAnalysis,
+            macro: false,
             sentiment: shouldFetchContext,
-            vix: isAutoAnalysis,
-            fomc: isAutoAnalysis,
-            market: isAutoAnalysis,
+            vix: false,
+            fomc: false,
+            market: false,
             fundamentals: true,
           },
           news: newsBrief,
@@ -545,8 +711,11 @@ export default function ChartFullScreen() {
           fedEvents: fedBrief,
           sentimentSummary,
           vix: vixSnapshot,
-          fundamentals: { level: isAutoAnalysis ? "comprehensive" : "neutral" },
-          analysisType: isAutoAnalysis ? "comprehensive_auto" : "user_directed",
+          fundamentals: {
+            level: "neutral",
+          },
+          analysisType: "user_directed",
+          contextLookback,
         },
       });
 
@@ -564,46 +733,39 @@ export default function ChartFullScreen() {
         };
         setAiMeta(newAiMeta);
 
-        // Create streaming text from reasoning
         const reasoningText =
           (output.why || []).join(". ") +
           (output.tradePlanNotes
             ? ". " + output.tradePlanNotes.join(". ")
             : "");
-
         if (reasoningText) {
           simulateStreamingText(reasoningText);
         }
 
-        // Show reasoning box when new analysis is done
         setShowReasoning(true);
         setHasExistingReasoning(true);
 
-        // For manual analysis (not auto), move current cached signal to history first
-        if (!isAutoAnalysis) {
-          const currentCached = getCachedSignal(symbol);
-          if (currentCached) {
-            addAnalysisMessage({
-              symbol: currentCached.symbol,
-              strategy: currentCached.aiMeta?.strategyChosen,
-              side: currentCached.aiMeta?.side,
-              entry: currentCached.tradePlan?.entry,
-              lateEntry: currentCached.tradePlan?.lateEntry,
-              exit: currentCached.tradePlan?.exit,
-              lateExit: currentCached.tradePlan?.lateExit,
-              stop: currentCached.tradePlan?.stop,
-              targets: currentCached.aiMeta?.targets,
-              riskReward: currentCached.aiMeta?.riskReward,
-              confidence: currentCached.aiMeta?.confidence,
-              why: currentCached.aiMeta?.why,
-              tradePlan: currentCached.tradePlan,
-              aiMeta: currentCached.aiMeta,
-              analysisContext: currentCached.analysisContext,
-            });
-          }
+        const currentCached = getCachedSignal(symbol);
+        if (currentCached) {
+          addAnalysisMessage({
+            symbol: currentCached.symbol,
+            strategy: currentCached.aiMeta?.strategyChosen,
+            side: currentCached.aiMeta?.side,
+            entry: currentCached.tradePlan?.entry,
+            lateEntry: currentCached.tradePlan?.lateEntry,
+            exit: currentCached.tradePlan?.exit,
+            lateExit: currentCached.tradePlan?.lateExit,
+            stop: currentCached.tradePlan?.stop,
+            targets: currentCached.aiMeta?.targets,
+            riskReward: currentCached.aiMeta?.riskReward,
+            confidence: currentCached.aiMeta?.confidence,
+            why: currentCached.aiMeta?.why,
+            tradePlan: currentCached.tradePlan,
+            aiMeta: currentCached.aiMeta,
+            analysisContext: currentCached.analysisContext,
+          });
         }
 
-        // Cache the new signal (but don't add to history - it becomes the new "current")
         const cachedSignalData = {
           symbol,
           timestamp: Date.now(),
@@ -611,164 +773,129 @@ export default function ChartFullScreen() {
           aiMeta: newAiMeta,
           analysisContext: {
             mode: analysisMode,
-            tradePace: isAutoAnalysis ? "auto" : tradePace,
-            desiredRR: isAutoAnalysis ? 2.0 : desiredRR,
+            tradePace: tradePace,
+            desiredRR: desiredRR,
             contextMode,
-            isAutoAnalysis,
+            isAutoAnalysis: false,
+            contextLookback,
           },
           rawAnalysisOutput: output,
         };
         cacheSignal(cachedSignalData);
+      } else {
+        // Fallback: build a local strategy so Analyze always yields a plan
+        const pickSeries = () =>
+          (m5 && m5.length ? m5 : null) ||
+          (m15 && m15.length ? m15 : null) ||
+          (h1 && h1.length ? h1 : null) ||
+          (d && d.length ? d : null) ||
+          (m1 && m1.length ? m1 : []);
+
+        const series = pickSeries() as any[];
+        const closes = (series || [])
+          .map((c) => c.close)
+          .filter((n) => Number.isFinite(n));
+        let currentPrice = Number.isFinite(closes[closes.length - 1])
+          ? closes[closes.length - 1]
+          : Number.isFinite(lastCandle?.close || NaN)
+          ? (lastCandle as any).close
+          : NaN;
+
+        // If still missing, synthesize a small series around a nominal value
+        let recentCloses = closes.slice(-60);
+        if (!Number.isFinite(currentPrice)) {
+          currentPrice = 100; // nominal
+        }
+        if (recentCloses.length < 10) {
+          const base = Number.isFinite(currentPrice) ? currentPrice : 100;
+          recentCloses = Array.from(
+            { length: 30 },
+            (_, i) => base * (1 + Math.sin(i / 5) * 0.003)
+          );
+        }
+
+        const prev = recentCloses[recentCloses.length - 10] ?? recentCloses[0];
+        const momentumPct =
+          Number.isFinite(prev) && prev > 0
+            ? ((currentPrice - prev) / prev) * 100
+            : 0;
+
+        const riskTolerance =
+          profile.riskPerTradePct && profile.riskPerTradePct <= 1
+            ? "conservative"
+            : profile.riskPerTradePct && profile.riskPerTradePct <= 2
+            ? "moderate"
+            : "aggressive";
+
+        const ctx = {
+          currentPrice,
+          recentCloses,
+          momentumPct,
+          preferredRiskReward: profile.preferredRiskReward || desiredRR,
+          riskTolerance,
+        } as any;
+
+        const plan = (
+          tradeMode === "day" ? buildDayTradePlan : buildSwingTradePlan
+        )(ctx);
+
+        setCurrentTradePlan(plan);
+        const newAiMeta = {
+          strategyChosen:
+            tradeMode === "day" ? "day_trade_fallback" : "swing_trade_fallback",
+          side: plan.side,
+          confidence: 0.4,
+          why: [
+            "AI analysis unavailable. Generated local strategy using recent price action.",
+          ],
+          notes: [
+            "Adjust risk-reward in settings for different target distances.",
+          ],
+          targets: plan.targets || [],
+          riskReward: plan.riskReward,
+        } as any;
+        setAiMeta(newAiMeta);
+
+        const reasoningText = `${newAiMeta.why?.join(". ") || ""}`;
+        if (reasoningText) {
+          simulateStreamingText(reasoningText);
+        }
+
+        setHasExistingReasoning(true);
+
+        cacheSignal({
+          symbol,
+          timestamp: Date.now(),
+          tradePlan: plan,
+          aiMeta: newAiMeta,
+          analysisContext: {
+            mode: analysisMode,
+            tradePace: tradePace,
+            desiredRR: desiredRR,
+            contextMode,
+            isAutoAnalysis: false,
+            contextLookback,
+          } as any,
+          rawAnalysisOutput: null as any,
+        });
       }
     } catch (error) {
       console.warn("AI analysis failed:", error);
     } finally {
       setAnalyzing(false);
     }
-  }
-
-  // Auto-analysis on data load
-  useEffect(() => {
-    if (data.length > 0 && !hasAutoAnalyzed && !analyzing) {
-      setHasAutoAnalyzed(true);
-      // Delay slightly to ensure chart is rendered
-      setTimeout(() => {
-        performAnalysis(true);
-      }, 500);
-    }
-  }, [data, hasAutoAnalyzed, analyzing]);
-
-  // No candle fetching; chart is rendered by KLinePro
-
-  // Removed on-the-fly plan generation to avoid auto-analysis side effects
-
-  // Final fallback: derive direction from loaded data if still unknown
-  useEffect(() => {
-    if (typeof dayUp === "boolean") return;
-    if (!data || data.length < 2) return;
-    const first = data[0]?.close;
-    const last = data[data.length - 1]?.close;
-    if (typeof first === "number" && typeof last === "number") {
-      setDayUp(last >= first);
-    }
-  }, [data, dayUp]);
-
-  // Removed unused effectiveLevels; chart levels are derived from currentTradePlan
-
-  async function loadStockName() {
-    try {
-      const results = await searchStocksAutocomplete(symbol, 1);
-      if (results.length > 0) {
-        setStockName(results[0].name);
-      }
-    } catch (error) {
-      console.error("Failed to load stock name:", error);
-    }
-  }
-
-  // Handle timeframe change and save as default
-  async function handleTimeframeChange(tf: ExtendedTimeframe) {
-    setExtendedTf(tf);
-    setDefaultTimeframe(tf); // Save as user's preferred default
-
-    // Reset view state for new timeframe
-    // Immediately fetch data for the new timeframe using smart candle manager
-  }
-
-  function toggleIndicator(name: string) {
-    setIndicators((prev) => toggleIndicatorInList(prev as any, name) as any);
-  }
-
-  function updateIndicatorLine(
-    name: string,
-    lineIndex: number,
-    updates: Partial<{ color: string; size: number; style: string }>
-  ) {
-    setIndicators(
-      (prev) =>
-        updateIndicatorLineInList(
-          prev as any,
-          name,
-          lineIndex,
-          updates as any
-        ) as any
-    );
-  }
-
-  // Line style editor functions removed - now handled in IndicatorConfigScreen
-
-  function openIndicatorConfig(name: string) {
-    const ind = indicators.find((i) => i.name === name) || null;
-    if (!ind) return;
-
-    try {
-      const count = Array.isArray(ind?.calcParams)
-        ? (ind!.calcParams as any[]).length
-        : 1;
-      const paramValue = count > 0 ? Number(ind?.calcParams?.[0] ?? 9) : 9;
-
-      navigation.navigate("IndicatorConfigScreen" as any, {
-        indicatorName: name,
-        getCurrentIndicator: () =>
-          indicators.find((i) => i.name === name) || null,
-        newParamValue: paramValue,
-        onAddParam: addIndicatorParam,
-        onRemoveParam: removeIndicatorParam,
-        onUpdateIndicatorLine: updateIndicatorLine,
-      });
-    } catch (e) {
-      console.warn("Failed to open indicator config:", e);
-    }
-  }
-
-  // Removed closeIndicatorConfig - no longer needed with screen navigation
-
-  function addIndicatorParam(name: string, value: number) {
-    if (!Number.isFinite(value) || value <= 0) return;
-    setIndicators((prev) => {
-      const { list, newIndex } = addIndicatorParamInList(
-        prev as any,
-        name,
-        Math.floor(value)
-      );
-      // Note: configSelectedIndex no longer needed with screen navigation
-      // Note: No need to update indicatorToEdit since we're using screen navigation
-      // Force shallow copy to change array reference for WebView key
-      return list.slice() as any;
-    });
-  }
-
-  function removeIndicatorParam(name: string, value: number) {
-    setIndicators((prev) => {
-      const updated = removeIndicatorParamInList(
-        prev as any,
-        name,
-        value
-      ) as any;
-      // Note: No need to update indicatorToEdit since we're using screen navigation
-      // Force shallow copy to change array reference for WebView key
-      return updated.slice();
-    });
-  }
-
-  const openIndicatorsSheet = () => {
-    setShowIndicatorsSheet(true);
-  };
-  const closeIndicatorsSheet = () => {
-    setShowIndicatorsSheet(false);
-  };
-
-  function parseNumberList(input: string): number[] | undefined {
-    try {
-      const parts = input
-        .split(/[ ,]+/)
-        .map((t) => Number(t.trim()))
-        .filter((n) => Number.isFinite(n));
-      return parts.length ? parts : undefined;
-    } catch {
-      return undefined;
-    }
-  }
+  }, [
+    symbol,
+    tradePace,
+    contextMode,
+    selectedComplexity,
+    profile,
+    desiredRR,
+    mode,
+    getCachedSignal,
+    addAnalysisMessage,
+    cacheSignal,
+  ]);
 
   // Fetch last candle for OHLCV row when symbol or timeframe changes
   useEffect(() => {
@@ -790,10 +917,8 @@ export default function ChartFullScreen() {
     };
   }, [symbol, extendedTf]);
 
-  // formatting moved to utils; keep local wrappers if needed later
-
   // Simulate streaming text output
-  function simulateStreamingText(fullText: string) {
+  const simulateStreamingText = useCallback((fullText: string) => {
     setIsStreaming(true);
     setStreamingText("");
 
@@ -810,13 +935,202 @@ export default function ChartFullScreen() {
         setIsStreaming(false);
         clearInterval(interval);
       }
-    }, 80); // Adjust speed as needed
-  }
+    }, 80);
+  }, []);
 
-  // Manual analysis (called by user button press)
-  async function handleAnalyzePress() {
-    return performAnalysis(false);
-  }
+  // Bottom sheet handlers
+  const showUnifiedBottomSheetWithTab = useCallback(() => {
+    setShowUnifiedBottomSheet(true);
+  }, []);
+
+  const hideBottomSheet = useCallback(() => {
+    setShowUnifiedBottomSheet(false);
+  }, []);
+
+  const showComplexityBottomSheetWithTab = useCallback(() => {
+    setShowComplexityBottomSheet(true);
+  }, []);
+
+  const hideComplexityBottomSheet = useCallback(() => {
+    setShowComplexityBottomSheet(false);
+  }, []);
+
+  // Stock name loading
+  const loadStockName = useCallback(async () => {
+    try {
+      const results = await searchStocksAutocomplete(symbol, 1);
+      if (results.length > 0) {
+        setStockName(results[0].name);
+      }
+    } catch (error) {
+      console.error("Failed to load stock name:", error);
+    }
+  }, [symbol]);
+
+  // Handle timeframe change and save as default
+  const handleTimeframeChange = useCallback(
+    async (tf: ExtendedTimeframe) => {
+      setExtendedTf(tf);
+      setDefaultTimeframe(tf);
+    },
+    [setDefaultTimeframe]
+  );
+
+  // Indicator management
+  const toggleIndicator = useCallback(
+    (name: string) => {
+      setIndicators((prev) => {
+        const updated = toggleIndicatorInList(prev as any, name) as any;
+
+        if (updated.length > prev.length) {
+          const newIndicator = updated.find((ind: any) => ind.name === name);
+          if (newIndicator && overrideIndicatorRef.current) {
+            console.log(
+              `🎨 Applying default colors for ${name}:`,
+              newIndicator.styles?.lines
+            );
+            const styles = newIndicator.styles?.lines
+              ? { lines: newIndicator.styles.lines }
+              : {};
+            const calcParams = newIndicator.calcParams;
+            overrideIndicatorRef.current(name, styles, calcParams);
+          }
+        }
+
+        latestIndicatorsRef.current = updated;
+        return updated;
+      });
+      applyIndicatorStyles();
+    },
+    [applyIndicatorStyles]
+  );
+
+  const updateIndicatorLine = useCallback(
+    (
+      name: string,
+      lineIndex: number,
+      updates: Partial<{ color: string; size: number; style: string }>
+    ) => {
+      setIndicators((prev) => {
+        const updated = updateIndicatorLineInList(
+          prev as any,
+          name,
+          lineIndex,
+          updates as any
+        ) as any;
+
+        if (overrideIndicatorRef.current) {
+          const indicator = updated.find((i: any) => i.name === name);
+          if (indicator) {
+            const count = Array.isArray(indicator.calcParams)
+              ? indicator.calcParams.length
+              : 1;
+            const lines = Array.isArray((indicator.styles as any)?.lines)
+              ? ((indicator.styles as any).lines as any[]).slice()
+              : [];
+
+            const updatedLines = [];
+            for (let i = 0; i < count; i++) {
+              if (i === lineIndex) {
+                updatedLines.push({ ...lines[i], ...updates });
+              } else {
+                updatedLines.push(
+                  lines[i] || { color: "#3B82F6", size: 1, style: "solid" }
+                );
+              }
+            }
+
+            const styles = { lines: updatedLines };
+            const calcParams = indicator.calcParams;
+            overrideIndicatorRef.current(name, styles, calcParams);
+          }
+        }
+
+        latestIndicatorsRef.current = updated;
+        return updated;
+      });
+      applyIndicatorStyles();
+    },
+    [applyIndicatorStyles]
+  );
+
+  const openIndicatorConfig = useCallback(
+    (name: string) => {
+      const ind = indicators.find((i) => i.name === name) || null;
+      if (!ind) return;
+
+      try {
+        const count = Array.isArray(ind?.calcParams)
+          ? (ind!.calcParams as any[]).length
+          : 1;
+        const paramValue = count > 0 ? Number(ind?.calcParams?.[0] ?? 9) : 9;
+
+        navigation.navigate("IndicatorConfigScreen" as any, {
+          indicatorName: name,
+          getCurrentIndicator: () =>
+            indicators.find((i) => i.name === name) || null,
+          newParamValue: paramValue,
+          onAddParam: addIndicatorParam,
+          onRemoveParam: removeIndicatorParam,
+          onUpdateIndicatorLine: updateIndicatorLine,
+        });
+      } catch (e) {
+        console.warn("Failed to open indicator config:", e);
+      }
+    },
+    [indicators, navigation, updateIndicatorLine]
+  );
+
+  const addIndicatorParam = useCallback((name: string, value: number) => {
+    if (!Number.isFinite(value) || value <= 0) return;
+    setIndicators((prev) => {
+      const { list } = addIndicatorParamInList(
+        prev as any,
+        name,
+        Math.floor(value)
+      );
+      return list.slice() as any;
+    });
+  }, []);
+
+  const removeIndicatorParam = useCallback((name: string, value: number) => {
+    setIndicators((prev) => {
+      const updated = removeIndicatorParamInList(
+        prev as any,
+        name,
+        value
+      ) as any;
+      return updated.slice();
+    });
+  }, []);
+
+  const openIndicatorsSheet = useCallback(() => {
+    setShowIndicatorsSheet(true);
+  }, []);
+
+  const closeIndicatorsSheet = useCallback(() => {
+    setShowIndicatorsSheet(false);
+  }, []);
+
+  // Manual analysis handler
+  const handleAnalyzePress = useCallback(() => {
+    return performAnalysis();
+  }, [performAnalysis]);
+
+  // Decide icon for reasoning float based on AI call side
+  const decisionSide = (aiMeta?.side as any) || (currentTradePlan?.side as any);
+  const reasoningIconName =
+    decisionSide === "long"
+      ? "arrow-up"
+      : decisionSide === "short"
+      ? "arrow-down"
+      : "bulb";
+  const reasoningIconColor =
+    decisionSide === "long"
+      ? "#16A34A"
+      : decisionSide === "short"
+      ? "#EF4444"
+      : "#fff";
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -839,14 +1153,13 @@ export default function ChartFullScreen() {
         />
       )}
 
-      {/* Indicator Config now handled by IndicatorConfigScreen navigation */}
       {/* OHLCV Row */}
       <OHLCRow lastCandle={lastCandle} />
 
       {/* Chart */}
-      <View style={{ marginBottom: 8 }}>
-        {/* Controls moved to Strategy Complexity bottom sheet */}
+      <View style={{ marginBottom: 8, position: "relative" }}>
         <SimpleKLineChart
+          key={`chart-${symbol}`}
           symbol={symbol}
           timeframe={extendedTf as any}
           height={chartHeight}
@@ -856,10 +1169,61 @@ export default function ChartFullScreen() {
           }
           showVolume={showVolume}
           showMA={showMA}
+          showSessions={showSessions}
+          etOffsetMinutes={marketStatus.etOffsetMinutes ?? undefined}
+          serverOffsetMs={marketStatus.serverOffsetMs ?? 0}
           showTopInfo={false}
           showPriceAxisText={true}
           showTimeAxisText={true}
           indicators={indicators}
+          onOverrideIndicator={React.useCallback(
+            (overrideFn: any) => {
+              overrideIndicatorRef.current = overrideFn;
+              applyIndicatorStyles();
+            },
+            [applyIndicatorStyles]
+          )}
+          onChartBridge={React.useCallback((bridge: any) => {
+            chartBridgeRef.current = bridge;
+          }, [])}
+          onChartReady={() => {
+            try {
+              if (chartBridgeRef.current) {
+                chartBridgeRef.current.updateAlerts(alertLines);
+                chartBridgeRef.current.updateLevels(
+                  currentTradePlan
+                    ? {
+                        entry: currentTradePlan.entry,
+                        lateEntry: currentTradePlan.lateEntry,
+                        exit: currentTradePlan.exit,
+                        lateExit: currentTradePlan.lateExit,
+                        stop: currentTradePlan.stop,
+                        targets: (currentTradePlan.targets || []).slice(0, 3),
+                      }
+                    : undefined
+                );
+              }
+            } catch (_) {}
+          }}
+          onDataApplied={() => {
+            try {
+              if (chartBridgeRef.current) {
+                chartBridgeRef.current.updateAlerts(alertLines);
+                chartBridgeRef.current.updateLevels(
+                  currentTradePlan
+                    ? {
+                        entry: currentTradePlan.entry,
+                        lateEntry: currentTradePlan.lateEntry,
+                        exit: currentTradePlan.exit,
+                        lateExit: currentTradePlan.lateExit,
+                        stop: currentTradePlan.stop,
+                        targets: (currentTradePlan.targets || []).slice(0, 3),
+                      }
+                    : undefined
+                );
+              }
+            } catch (_) {}
+          }}
           levels={
             currentTradePlan
               ? {
@@ -875,10 +1239,83 @@ export default function ChartFullScreen() {
                 }
               : undefined
           }
+          onAlertClick={async (price) => {
+            // Persist to Supabase when authenticated, otherwise fall back to local
+            try {
+              if (user) {
+                const created = await alertsService.createAlert(user.id, {
+                  symbol,
+                  price,
+                  condition: "above",
+                  message: `Alert at $${price.toFixed(2)}`,
+                  isActive: true,
+                  repeat: "unlimited",
+                } as any);
+                try {
+                  upsertAlert(created);
+                } catch (_) {}
+              } else {
+                addAlert({
+                  symbol,
+                  price,
+                  condition: "above",
+                  message: `Alert at $${price.toFixed(2)}`,
+                  repeat: "unlimited",
+                });
+              }
+            } catch (e) {
+              // fallback local if server insert fails
+              addAlert({
+                symbol,
+                price,
+                condition: "above",
+                message: `Alert at $${price.toFixed(2)}`,
+                repeat: "unlimited",
+              });
+            }
+          }}
+          alerts={alertLines}
+          // selection is handled in WebView; no RN state needed
+          onAlertSelected={undefined as any}
+          onAlertMoved={async ({ id, price }) => {
+            if (!id || !(price > 0)) return;
+            updateAlert(id, { price, isActive: true, triggeredAt: undefined });
+            try {
+              if (user) {
+                const existing = alertsForSymbol.find((a) => a.id === id);
+                if (existing) {
+                  await alertsService.updateAlert(user.id, id, {
+                    symbol: existing.symbol,
+                    price,
+                    condition: existing.condition,
+                    message: existing.message,
+                    isActive: true,
+                    repeat: existing.repeat,
+                  } as any);
+                }
+              }
+            } catch (_) {}
+            setSelectedAlertId(null);
+            setProposedAlertPrice(null);
+          }}
         />
+        {/* Dragging is handled in-chart; removed separate overlay controls */}
+        {showReasonIcon ? (
+          <Pressable
+            onPress={() => setShowReasoningBottomSheet(true)}
+            style={styles.reasoningFloatInChart}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={reasoningIconName as any}
+              size={20}
+              color={reasoningIconColor}
+            />
+          </Pressable>
+        ) : null}
       </View>
 
-      {/* Timeframe Chips - below chart */}
+      {/* Timeframe Chips */}
       <TimeframeBar
         pinned={pinned as any}
         extendedTf={extendedTf as any}
@@ -902,6 +1339,10 @@ export default function ChartFullScreen() {
           }
           return success;
         }}
+        showSessions={showSessions}
+        onSetShowSessions={(enabled) => setShowSessions(enabled)}
+        showReasonIcon={showReasonIcon}
+        onSetShowReasonIcon={(enabled) => setShowReasonIcon(enabled)}
       />
 
       {/* Reasoning Bottom Sheet */}
@@ -912,82 +1353,44 @@ export default function ChartFullScreen() {
         streamingText={streamingText}
       />
 
-      {/* Bottom Navigation - Reasoning, Analyze (center), Strategy (right) */}
-      <View
-        style={{
-          borderTopWidth: 1,
-          borderTopColor: "#2a2a2a",
-          backgroundColor: "#0a0a0a",
-          paddingTop: 8,
-          paddingBottom: Math.max(12, insets.bottom),
-          paddingHorizontal: 12,
-        }}
-      >
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          {/* Reasoning */}
+      {/* Floating Reasoning Bulb moved inside chart */}
+
+      {/* Bottom Navigation: Chat, Analyze, Strategy */}
+      <View style={styles.bottomNav}>
+        <View style={styles.bottomNavContent}>
+          {/* Chat */}
           <Pressable
-            onPress={() => {
-              if (!aiMeta && !isStreaming && !streamingText) return;
-              setShowReasoningBottomSheet(true);
-            }}
-            disabled={!aiMeta && !isStreaming && !streamingText}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingVertical: 10,
-              paddingHorizontal: 12,
-              borderRadius: 12,
-              backgroundColor: "transparent",
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.08)",
-              opacity: !aiMeta && !isStreaming && !streamingText ? 0.6 : 1,
-              minWidth: 110,
-            }}
+            onPress={() => navigation.navigate("ChartChat" as any, { symbol })}
+            style={styles.bottomNavButton}
             hitSlop={8}
           >
             <Ionicons
-              name="bulb"
+              name="chatbubble-outline"
               size={16}
               color="rgba(255,255,255,0.9)"
               style={{ marginRight: 6 }}
             />
-            <Text style={{ color: "#fff", fontWeight: "600", fontSize: 12 }}>
-              Reasoning
-            </Text>
+            <Text style={styles.bottomNavButtonText}>Chat</Text>
           </Pressable>
 
-          {/* Analyze (center) */}
+          {/* Analyze */}
           <Pressable
             onPress={handleAnalyzePress}
             disabled={analyzing}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              paddingVertical: 12,
-              paddingHorizontal: 20,
-              borderRadius: 12,
-              backgroundColor: analyzing
-                ? "rgba(0,122,255,0.3)"
-                : "rgba(0,122,255,0.9)",
-              shadowColor: "#007AFF",
-              shadowOffset: { width: 0, height: 0 },
-              shadowOpacity: analyzing ? 0.4 : 0.8,
-              shadowRadius: analyzing ? 8 : 12,
-              minWidth: 140,
-            }}
+            style={[
+              styles.analyzeButton,
+              {
+                backgroundColor: analyzing
+                  ? "rgba(0,122,255,0.3)"
+                  : "rgba(0,122,255,0.9)",
+                shadowOpacity: analyzing ? 0.4 : 0.8,
+                shadowRadius: analyzing ? 8 : 12,
+              },
+            ]}
             hitSlop={10}
           >
             {analyzing ? (
-              <Text style={{ color: "#fff", fontWeight: "700" }}>
-                Analyzing…
-              </Text>
+              <Text style={styles.analyzeButtonText}>Analyzing…</Text>
             ) : (
               <>
                 <Ionicons
@@ -996,40 +1399,23 @@ export default function ChartFullScreen() {
                   color="#fff"
                   style={{ marginRight: 8 }}
                 />
-                <Text style={{ color: "#fff", fontWeight: "700" }}>
-                  Analyze
-                </Text>
+                <Text style={styles.analyzeButtonText}>Analyze</Text>
               </>
             )}
           </Pressable>
-          {/* Strategy Complexity */}
+
+          {/* Strategy */}
           <Pressable
             onPress={showComplexityBottomSheetWithTab}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingVertical: 10,
-              paddingHorizontal: 12,
-              borderRadius: 12,
-              backgroundColor: "transparent",
-              borderWidth: 1,
-              borderColor: "rgba(255,255,255,0.08)",
-              minWidth: 110,
-            }}
+            style={styles.bottomNavButton}
             hitSlop={8}
           >
             <Ionicons name="settings-outline" size={16} color="#fff" />
             <Text
-              style={{
-                color: "#fff",
-                fontWeight: "600",
-                fontSize: 12,
-                marginLeft: 6,
-              }}
+              style={[styles.bottomNavButtonText, { marginLeft: 6 }]}
               numberOfLines={1}
             >
-              {selectedComplexity.charAt(0).toUpperCase() +
-                selectedComplexity.slice(1)}
+              Strategy
             </Text>
           </Pressable>
         </View>
@@ -1055,6 +1441,9 @@ export default function ChartFullScreen() {
         setTradePace={setTradePace}
         contextMode={contextMode}
         setContextMode={setContextMode}
+        extendedTf={extendedTf as any}
+        contextLookback={contextLookback}
+        setContextLookback={setContextLookback}
       />
 
       {/* Indicators Bottom Sheet */}
@@ -1072,50 +1461,19 @@ export default function ChartFullScreen() {
         animationType="fade"
         onRequestClose={() => setShowCustomRrModal(false)}
       >
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
-        >
+        <View style={styles.modalOverlay}>
           <Pressable
             onPress={() => setShowCustomRrModal(false)}
-            style={{
-              position: "absolute",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-            }}
+            style={styles.modalBackdrop}
           />
-          <View
-            style={{
-              backgroundColor: "#1a1a1a",
-              borderRadius: 12,
-              margin: 20,
-              padding: 16,
-              width: "80%",
-              maxWidth: 360,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 8,
-              }}
-            >
-              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "700" }}>
-                Custom R:R
-              </Text>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Custom R:R</Text>
               <Pressable onPress={() => setShowCustomRrModal(false)}>
                 <Ionicons name="close" size={20} color="#888" />
               </Pressable>
             </View>
-            <Text style={{ color: "#9CA3AF", fontSize: 12, marginBottom: 8 }}>
+            <Text style={styles.modalDescription}>
               Enter desired risk-reward (e.g., 2.25 for 2.25:1):
             </Text>
             <TextInput
@@ -1127,36 +1485,14 @@ export default function ChartFullScreen() {
               keyboardType="decimal-pad"
               placeholder="2.0"
               placeholderTextColor="#666"
-              style={{
-                backgroundColor: "#2a2a2a",
-                borderRadius: 8,
-                padding: 12,
-                color: "#fff",
-                fontSize: 16,
-              }}
+              style={styles.modalInput}
             />
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "flex-end",
-                marginTop: 12,
-              }}
-            >
+            <View style={styles.modalActions}>
               <Pressable
                 onPress={() => setShowCustomRrModal(false)}
-                style={{
-                  paddingVertical: 10,
-                  paddingHorizontal: 14,
-                  backgroundColor: "#2a2a2a",
-                  borderRadius: 8,
-                  marginRight: 8,
-                }}
+                style={styles.modalCancelButton}
               >
-                <Text
-                  style={{ color: "#ccc", fontSize: 14, fontWeight: "600" }}
-                >
-                  Cancel
-                </Text>
+                <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
               <Pressable
                 onPress={() => {
@@ -1165,18 +1501,9 @@ export default function ChartFullScreen() {
                     setShowCustomRrModal(false);
                   }
                 }}
-                style={{
-                  paddingVertical: 10,
-                  paddingHorizontal: 14,
-                  backgroundColor: "#00D4AA",
-                  borderRadius: 8,
-                }}
+                style={styles.modalApplyButton}
               >
-                <Text
-                  style={{ color: "#000", fontSize: 14, fontWeight: "700" }}
-                >
-                  Apply
-                </Text>
+                <Text style={styles.modalApplyText}>Apply</Text>
               </Pressable>
             </View>
           </View>
@@ -1191,143 +1518,152 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0a0a0a",
   },
-  header: {
+  reasoningFloat: {
+    position: "absolute",
+    left: 16,
+    bottom: 80,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  reasoningFloatInChart: {
+    position: "absolute",
+    left: 8,
+    bottom: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+    elevation: 2,
+  },
+  bottomNav: {
+    borderTopWidth: 1,
+    borderTopColor: "#2a2a2a",
+    backgroundColor: "#0a0a0a",
+    paddingTop: 8,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
+  },
+  bottomNavContent: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: "#0a0a0a",
-    borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
   },
-  backButton: {
-    padding: 6,
-  },
-  headerCenter: {
-    flex: 1,
+  bottomNavButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  timeframeText: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#888",
-  },
-  timeframeBar: {
-    paddingHorizontal: 6,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#1f2937",
-    backgroundColor: "#0a0a0a",
-  },
-  rangeSwitcherContainer: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 24,
-    minHeight: 44,
-    justifyContent: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-  },
-  rangeSwitcherScroll: {
-    alignItems: "center",
-    justifyContent: "center",
-    flexGrow: 1,
-  },
-  tfChip: {
+    paddingVertical: 10,
     paddingHorizontal: 10,
-    paddingVertical: 6,
     borderRadius: 12,
     backgroundColor: "transparent",
-    marginHorizontal: 4,
-  },
-  tfChipActive: {
-    backgroundColor: "#00D4AA",
-  },
-  tfChipText: {
-    color: "#e5e5e5",
-    fontWeight: "600",
-    fontSize: 12,
-  },
-  tfChipTextActive: {
-    color: "#000",
-  },
-  tfMoreChip: {
-    backgroundColor: "#1f2937",
-  },
-  tfMoreText: {
-    color: "#fff",
-    fontSize: 14,
-    marginTop: -1,
-  },
-
-  timeframeSectionTitle: {
-    color: "#888",
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 12,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  timeframeGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  timeframeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 8,
-    backgroundColor: "#2a2a2a",
-    minWidth: 60,
-    alignItems: "center",
-  },
-  timeframeButtonActive: {
-    backgroundColor: "#00D4AA",
-  },
-  timeframeButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  timeframeButtonTextActive: {
-    color: "#000",
-  },
-  timeframeButtonPinned: {
-    borderColor: "#00D4AA",
-    borderWidth: 2,
-    backgroundColor: "#002921",
-  },
-  timeframeButtonTextPinned: {
-    color: "#00D4AA",
-  },
-  chartTypeRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  chartTypeButton: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    minWidth: 90,
     flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    marginHorizontal: 2,
+  },
+  bottomNavButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  analyzeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 12,
-    backgroundColor: "#2a2a2a",
+    shadowColor: "#007AFF",
+    shadowOffset: { width: 0, height: 0 },
+    minWidth: 120,
+    flex: 1.2,
+    marginHorizontal: 2,
+  },
+  analyzeButtonText: {
+    color: "#fff",
+    fontWeight: "700",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
     alignItems: "center",
   },
-  chartTypeButtonActive: {
-    backgroundColor: "#00D4AA",
+  modalBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
-  chartTypeButtonText: {
+  modalContent: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    margin: 20,
+    padding: 16,
+    width: "80%",
+    maxWidth: 360,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  modalTitle: {
     color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  modalDescription: {
+    color: "#9CA3AF",
     fontSize: 12,
+    marginBottom: 8,
+  },
+  modalInput: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 8,
+    padding: 12,
+    color: "#fff",
+    fontSize: 16,
+  },
+  modalActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    marginTop: 12,
+  },
+  modalCancelButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#2a2a2a",
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  modalCancelText: {
+    color: "#ccc",
+    fontSize: 14,
     fontWeight: "600",
   },
-  chartTypeButtonTextActive: {
+  modalApplyButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#00D4AA",
+    borderRadius: 8,
+  },
+  modalApplyText: {
     color: "#000",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

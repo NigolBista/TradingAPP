@@ -6,6 +6,7 @@ import RootNavigation from "./src/navigation";
 import { ThemeProvider } from "./src/providers/ThemeProvider";
 import { StripeProvider } from "./src/providers/StripeProvider";
 import { AuthProvider } from "./src/providers/AuthProvider";
+import { NotificationsProvider } from "./src/providers/NotificationsProvider";
 import { initializeApp } from "./src/services/appInitialization";
 
 export default function App() {
@@ -19,8 +20,10 @@ export default function App() {
       <ThemeProvider>
         <StripeProvider>
           <AuthProvider>
-            <StatusBar style="auto" />
-            <RootNavigation />
+            <NotificationsProvider>
+              <StatusBar style="auto" />
+              <RootNavigation />
+            </NotificationsProvider>
           </AuthProvider>
         </StripeProvider>
       </ThemeProvider>

@@ -19,6 +19,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
     plugins: [
       "expo-secure-store",
       "expo-web-browser",
+      "expo-font",
       [
         "@stripe/stripe-react-native",
         {
@@ -32,7 +33,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       [
         "expo-notifications",
         {
-          icon: "./assets/notification-icon.png",
+          icon: "./assets/icon.png",
           color: "#4F46E5",
         },
       ],
@@ -73,7 +74,7 @@ export default ({ config }: ConfigContext): ExpoConfig =>
       marketDataApiToken: process.env.MARKET_DATA_API_TOKEN,
       polygonApiKey: process.env.POLYGON_API_KEY,
       developerMode: String(process.env.DEVELOPER_MODE || "false") === "true",
-      realtimeProvider: process.env.REALTIME_PROVIDER || "polygon", // polygon | simulator
+      realtimeProvider: process.env.REALTIME_PROVIDER || "delayed",
       expoPublic: {
         sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
       },

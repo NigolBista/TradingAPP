@@ -4,6 +4,7 @@ import {
   DefaultTheme,
   DarkTheme,
 } from "@react-navigation/native";
+import { createNavigationContainerRef } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import {
@@ -34,6 +35,7 @@ import DecalpXScreen from "../screens/DecalpXScreen";
 import MarketOverviewPage from "../screens/MarketOverviewPage";
 import EarningsCalendarScreen from "../screens/EarningsCalendarScreen";
 import ChatScreen from "../screens/ChatScreen";
+import ChartChatScreen from "../screens/ChartChatScreen";
 import IndicatorConfigScreen from "../screens/IndicatorConfigScreen";
 import { useAuth } from "../providers/AuthProvider";
 import { useTheme } from "../providers/ThemeProvider";
@@ -143,7 +145,10 @@ export default function RootNavigation() {
   }
 
   return (
-    <NavigationContainer theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={scheme === "dark" ? DarkTheme : DefaultTheme}
+    >
       {user ? (
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           <RootStack.Screen name="Root" component={Tabs} />
@@ -190,6 +195,11 @@ export default function RootNavigation() {
             options={{ headerShown: false }}
           />
           <RootStack.Screen
+            name="ChartChat"
+            component={ChartChatScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
             name="IndicatorConfigScreen"
             component={IndicatorConfigScreen}
             options={{ headerShown: false }}
@@ -200,4 +210,12 @@ export default function RootNavigation() {
       )}
     </NavigationContainer>
   );
+}
+
+export const navigationRef = createNavigationContainerRef<any>();
+
+export function navigate(name: string, params?: any) {
+  if (navigationRef.isReady()) {
+    navigationRef.navigate(name as never, params as never);
+  }
 }

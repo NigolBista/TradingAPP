@@ -15,6 +15,10 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { IndicatorConfig } from "../components/charts/SimpleKLineChart";
 import LineStyleModal from "./ChartFullScreen/LineStyleModal";
+import {
+  BUILTIN_INDICATORS,
+  buildDefaultLines,
+} from "./ChartFullScreen/indicators";
 
 type RouteParams = {
   indicatorName: string;
@@ -27,6 +31,12 @@ type RouteParams = {
     lineIndex: number,
     updates: Partial<{ color: string; size: number; style: string }>
   ) => void;
+};
+
+// Helper function to get proper default colors for an indicator
+const getDefaultIndicatorColors = (indicatorName: string, count: number) => {
+  const meta = BUILTIN_INDICATORS.find((i) => i.name === indicatorName);
+  return buildDefaultLines(count, meta?.defaultColor);
 };
 
 export default function IndicatorConfigScreen() {
@@ -54,14 +64,17 @@ export default function IndicatorConfigScreen() {
   // Update indicator state when the screen regains focus (no polling to avoid freezes)
   useEffect(() => {
     const updateIndicator = () => {
-      const currentIndicator = getCurrentIndicator();
-      setIndicator(currentIndicator);
+      // Only update on initial focus, not when modal is open
+      if (!showLineStyleModal) {
+        const currentIndicator = getCurrentIndicator();
+        setIndicator(currentIndicator);
+      }
     };
     const unsubscribe = navigation.addListener("focus", updateIndicator);
     return () => {
       unsubscribe();
     };
-  }, [getCurrentIndicator, navigation]);
+  }, [getCurrentIndicator, navigation, showLineStyleModal]);
 
   const openLineStyleEditor = (index: number) => {
     setLineStyleEditIndex(index);
@@ -73,52 +86,51 @@ export default function IndicatorConfigScreen() {
   };
 
   const handleUpdateColor = (hex: string) => {
+    // Update parent state first
     onUpdateIndicatorLine(indicatorName, lineStyleEditIndex, { color: hex });
-    // Immediate local UI sync
+
+    // Update local state immediately for UI responsiveness
     setIndicator((prev) => {
       if (!prev) return prev;
       const lines = Array.isArray((prev.styles as any)?.lines)
         ? ((prev.styles as any).lines as any[]).slice()
         : [];
-      const current = lines[lineStyleEditIndex] || {
-        color: "#00D4AA",
-        size: 1,
-        style: "solid",
-      };
+      const defaultColors = getDefaultIndicatorColors(indicatorName, 1);
+      const current = lines[lineStyleEditIndex] || defaultColors[0];
       lines[lineStyleEditIndex] = { ...current, color: hex };
       return { ...prev, styles: { ...(prev.styles as any), lines } } as any;
     });
   };
 
   const handleUpdateThickness = (size: number) => {
+    // Update parent state first
     onUpdateIndicatorLine(indicatorName, lineStyleEditIndex, { size });
+
+    // Update local state immediately for UI responsiveness
     setIndicator((prev) => {
       if (!prev) return prev;
       const lines = Array.isArray((prev.styles as any)?.lines)
         ? ((prev.styles as any).lines as any[]).slice()
         : [];
-      const current = lines[lineStyleEditIndex] || {
-        color: "#00D4AA",
-        size: 1,
-        style: "solid",
-      };
+      const defaultColors = getDefaultIndicatorColors(indicatorName, 1);
+      const current = lines[lineStyleEditIndex] || defaultColors[0];
       lines[lineStyleEditIndex] = { ...current, size };
       return { ...prev, styles: { ...(prev.styles as any), lines } } as any;
     });
   };
 
   const handleUpdateStyle = (style: string) => {
+    // Update parent state first
     onUpdateIndicatorLine(indicatorName, lineStyleEditIndex, { style });
+
+    // Update local state for immediate UI feedback
     setIndicator((prev) => {
       if (!prev) return prev;
       const lines = Array.isArray((prev.styles as any)?.lines)
         ? ((prev.styles as any).lines as any[]).slice()
         : [];
-      const current = lines[lineStyleEditIndex] || {
-        color: "#00D4AA",
-        size: 1,
-        style: "solid",
-      };
+      const defaultColors = getDefaultIndicatorColors(indicatorName, 1);
+      const current = lines[lineStyleEditIndex] || defaultColors[0];
       lines[lineStyleEditIndex] = { ...current, style };
       return { ...prev, styles: { ...(prev.styles as any), lines } } as any;
     });
@@ -139,8 +151,10 @@ export default function IndicatorConfigScreen() {
       const lines = Array.isArray((prev.styles as any)?.lines)
         ? ((prev.styles as any).lines as any[]).slice()
         : [];
-      while (lines.length < count)
-        lines.push({ color: "#00D4AA", size: 1, style: "solid" });
+      while (lines.length < count) {
+        const defaultColors = getDefaultIndicatorColors(indicatorName, count);
+        lines.push(defaultColors[lines.length] || defaultColors[0]);
+      }
       return {
         ...prev,
         calcParams: params,
@@ -225,11 +239,12 @@ export default function IndicatorConfigScreen() {
             {Array.isArray(indicator.calcParams) ? (
               indicator.calcParams.map((period: any, idx: number) => {
                 const lines = (indicator.styles as any)?.lines || [];
-                const current = lines[idx] || {
-                  color: "#00D4AA",
-                  size: 1,
-                  style: "solid",
-                };
+                const defaultColors = getDefaultIndicatorColors(
+                  indicatorName,
+                  1
+                );
+                const current = lines[idx] || defaultColors[0];
+
                 const lineTitle = `${Number(period)}`;
                 const renderRightActions = () => (
                   <View style={{ flexDirection: "row", alignItems: "center" }}>
@@ -262,7 +277,7 @@ export default function IndicatorConfigScreen() {
                     ref={(r: any) => {
                       if (r) rowRefs.current[idx] = r;
                     }}
-                    key={`line-${idx}`}
+                    key={`line-${idx}-${current.style}-${current.color}-${current.size}`}
                     renderRightActions={renderRightActions}
                     rightThreshold={40}
                   >
@@ -312,15 +327,59 @@ export default function IndicatorConfigScreen() {
                             borderColor: "#333",
                           }}
                         />
-                        <View
-                          style={{
-                            width: 40,
-                            borderBottomWidth: current.size,
-                            borderBottomColor: current.color,
-                            borderStyle: current.style as any,
-                            marginRight: 8,
-                          }}
-                        />
+                        {current.style === "solid" ? (
+                          <View
+                            style={{
+                              width: 40,
+                              height: current.size,
+                              backgroundColor: current.color,
+                              borderRadius: current.size / 2,
+                              marginRight: 8,
+                            }}
+                          />
+                        ) : current.style === "dashed" ? (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              width: 40,
+                              marginRight: 8,
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            {Array.from({ length: 4 }, (_, i) => (
+                              <View
+                                key={i}
+                                style={{
+                                  width: 6,
+                                  height: current.size,
+                                  backgroundColor: current.color,
+                                  borderRadius: current.size / 2,
+                                }}
+                              />
+                            ))}
+                          </View>
+                        ) : (
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              width: 40,
+                              marginRight: 8,
+                              justifyContent: "space-around",
+                            }}
+                          >
+                            {Array.from({ length: 5 }, (_, i) => (
+                              <View
+                                key={i}
+                                style={{
+                                  width: current.size,
+                                  height: current.size,
+                                  backgroundColor: current.color,
+                                  borderRadius: current.size / 2,
+                                }}
+                              />
+                            ))}
+                          </View>
+                        )}
                         <Ionicons
                           name="chevron-forward"
                           size={18}
@@ -368,25 +427,85 @@ export default function IndicatorConfigScreen() {
                       borderRadius: 20,
                       backgroundColor:
                         (indicator.styles as any)?.lines?.[0]?.color ||
-                        "#00D4AA",
+                        getDefaultIndicatorColors(indicatorName, 1)[0].color,
                       marginRight: 12,
                       borderWidth: 1,
                       borderColor: "#333",
                     }}
                   />
-                  <View
-                    style={{
-                      width: 40,
-                      borderBottomWidth:
-                        (indicator.styles as any)?.lines?.[0]?.size || 1,
-                      borderBottomColor:
-                        (indicator.styles as any)?.lines?.[0]?.color ||
-                        "#00D4AA",
-                      borderStyle: (((indicator.styles as any)?.lines?.[0]
-                        ?.style as any) || "solid") as any,
-                      marginRight: 8,
-                    }}
-                  />
+                  {((indicator.styles as any)?.lines?.[0]?.style || "solid") ===
+                  "solid" ? (
+                    <View
+                      style={{
+                        width: 40,
+                        height:
+                          (indicator.styles as any)?.lines?.[0]?.size || 1,
+                        backgroundColor:
+                          (indicator.styles as any)?.lines?.[0]?.color ||
+                          getDefaultIndicatorColors(indicatorName, 1)[0].color,
+                        borderRadius:
+                          ((indicator.styles as any)?.lines?.[0]?.size || 1) /
+                          2,
+                        marginRight: 8,
+                      }}
+                    />
+                  ) : ((indicator.styles as any)?.lines?.[0]?.style ||
+                      "solid") === "dashed" ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        width: 40,
+                        marginRight: 8,
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      {Array.from({ length: 4 }, (_, i) => (
+                        <View
+                          key={i}
+                          style={{
+                            width: 6,
+                            height:
+                              (indicator.styles as any)?.lines?.[0]?.size || 1,
+                            backgroundColor:
+                              (indicator.styles as any)?.lines?.[0]?.color ||
+                              getDefaultIndicatorColors(indicatorName, 1)[0]
+                                .color,
+                            borderRadius:
+                              ((indicator.styles as any)?.lines?.[0]?.size ||
+                                1) / 2,
+                          }}
+                        />
+                      ))}
+                    </View>
+                  ) : (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        width: 40,
+                        marginRight: 8,
+                        justifyContent: "space-around",
+                      }}
+                    >
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <View
+                          key={i}
+                          style={{
+                            width:
+                              (indicator.styles as any)?.lines?.[0]?.size || 1,
+                            height:
+                              (indicator.styles as any)?.lines?.[0]?.size || 1,
+                            backgroundColor:
+                              (indicator.styles as any)?.lines?.[0]?.color ||
+                              getDefaultIndicatorColors(indicatorName, 1)[0]
+                                .color,
+                            borderRadius:
+                              ((indicator.styles as any)?.lines?.[0]?.size ||
+                                1) / 2,
+                          }}
+                        />
+                      ))}
+                    </View>
+                  )}
                   <Ionicons name="chevron-forward" size={18} color="#888" />
                 </View>
               </Pressable>
@@ -455,7 +574,7 @@ export default function IndicatorConfigScreen() {
                     style={{
                       paddingVertical: 10,
                       paddingHorizontal: 16,
-                      backgroundColor: "#00D4AA",
+                      backgroundColor: "#3B82F6",
                       borderRadius: 12,
                     }}
                   >
@@ -484,8 +603,10 @@ export default function IndicatorConfigScreen() {
           currentColor={
             Array.isArray((indicator?.styles as any)?.lines)
               ? ((indicator?.styles as any).lines as any[])[lineStyleEditIndex]
-                  ?.color || "#00D4AA"
-              : (indicator?.styles as any)?.lines?.[0]?.color || "#00D4AA"
+                  ?.color ||
+                getDefaultIndicatorColors(indicatorName, 1)[0].color
+              : (indicator?.styles as any)?.lines?.[0]?.color ||
+                getDefaultIndicatorColors(indicatorName, 1)[0].color
           }
           currentThickness={
             Array.isArray((indicator?.styles as any)?.lines)

@@ -229,12 +229,30 @@ export const BUILTIN_INDICATORS: Array<{
     defaultColor: "#93C5FD",
   },
   {
-    name: "AVP",
-    title: "Average Price",
+    name: "VWAP",
+    title: "Volume Weighted Average Price",
     description:
-      "Session average price line; similar in spirit to VWAP without volume weighting.",
+      "Volume weighted average price line; shows the average price weighted by volume.",
     compatOverlay: false,
     defaultColor: "#FDE68A",
+  },
+  {
+    name: "BIAS",
+    title: "Bias Ratio",
+    description:
+      "Measures the deviation of current price from its moving average; positive values indicate bullish bias.",
+    defaultParams: [6, 12, 24],
+    compatOverlay: false,
+    defaultColor: "#10B981",
+  },
+  {
+    name: "CCI",
+    title: "Commodity Channel Index",
+    description:
+      "Identifies cyclical trends and overbought/oversold conditions; values above 100 suggest overbought, below -100 oversold.",
+    defaultParams: [14],
+    compatOverlay: false,
+    defaultColor: "#8B5CF6",
   },
 ];
 
@@ -315,7 +333,7 @@ export function updateIndicatorLineInList(
       ? ((ind.styles as any).lines as IndicatorLineStyle[]).slice()
       : buildDefaultLines(count);
     const idx = Math.max(0, Math.min(lineIndex, count - 1));
-    const current = lines[idx] || { color: "#00D4AA", size: 1, style: "solid" };
+    const current = lines[idx] || buildDefaultLines(1)[0];
     lines[idx] = { ...current, ...updates } as IndicatorLineStyle;
     return {
       ...ind,
@@ -344,7 +362,7 @@ export function addIndicatorParamInList(
       ? ((ind.styles as any).lines as IndicatorLineStyle[]).slice()
       : buildDefaultLines(count);
     while (lines.length < count) {
-      lines.push({ color: "#00D4AA", size: 1, style: "solid" });
+      lines.push(buildDefaultLines(1)[0]);
     }
     return {
       ...ind,

@@ -3,7 +3,16 @@ import { View, Text, Pressable, StyleSheet, ScrollView } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 export type Timeframe = "1D" | "1W" | "1M" | "3M" | "1Y" | "ALL";
-export type ChartType = "line" | "candlestick" | "area" | "bar";
+export type ChartType =
+  | "line"
+  | "candlestick"
+  | "area"
+  | "bar"
+  | "candle_solid"
+  | "candle_stroke"
+  | "candle_up_stroke"
+  | "candle_down_stroke"
+  | "ohlc";
 
 interface ChartControlsProps {
   selectedTimeframe: Timeframe;

@@ -10,6 +10,8 @@ interface SwipeableStockItemProps {
   currentPrice: number;
   change: number;
   changePercent: number;
+  isAfterHours?: boolean;
+  afterHoursPercent?: number;
   isGlobalFavorite: boolean;
   onPress: () => void;
   onToggleFavorite: () => void;
@@ -22,13 +24,15 @@ export default function SwipeableStockItem({
   currentPrice,
   change,
   changePercent,
+  isAfterHours,
+  afterHoursPercent,
   isGlobalFavorite,
   onPress,
   onToggleFavorite,
   onRemove,
 }: SwipeableStockItemProps) {
   const { theme } = useTheme();
-  const swipeableRef = useRef<Swipeable>(null);
+  const swipeableRef = useRef<any>(null);
 
   const styles = createStyles(theme);
 
@@ -98,15 +102,36 @@ export default function SwipeableStockItem({
 
             <View style={styles.priceInfo}>
               <Text style={styles.stockPrice}>${currentPrice.toFixed(2)}</Text>
-              <Text
-                style={[
-                  styles.stockChange,
-                  change >= 0 ? styles.positiveChange : styles.negativeChange,
-                ]}
-              >
-                {change >= 0 ? "+" : ""}
-                {changePercent.toFixed(2)}%
-              </Text>
+              <View style={styles.changeRow}>
+                {!isAfterHours && (
+                  <Text
+                    style={[
+                      styles.stockChange,
+                      change >= 0
+                        ? styles.positiveChange
+                        : styles.negativeChange,
+                    ]}
+                  >
+                    {change >= 0 ? "+" : ""}
+                    {changePercent.toFixed(2)}%
+                  </Text>
+                )}
+                :
+                {isAfterHours && typeof afterHoursPercent === "number" && (
+                  <Text
+                    style={[
+                      styles.afterHoursText,
+                      afterHoursPercent >= 0
+                        ? styles.positiveChange
+                        : styles.negativeChange,
+                    ]}
+                  >
+                    {`After: ${
+                      afterHoursPercent >= 0 ? "+" : ""
+                    }${afterHoursPercent.toFixed(2)}%`}
+                  </Text>
+                )}
+              </View>
             </View>
           </View>
         </Pressable>
@@ -188,6 +213,14 @@ const createStyles = (theme: any) =>
       fontSize: 14,
       fontWeight: "500",
       marginTop: 2,
+    },
+    changeRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    afterHoursText: {
+      fontSize: 12,
+      marginLeft: 8,
     },
     positiveChange: {
       color: theme.colors.success,

@@ -503,7 +503,7 @@ Summary: <one-sentence>
         );
         try {
           const resp = await client.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-5-mini",
             messages: [
               {
                 role: "system",
@@ -512,8 +512,7 @@ Summary: <one-sentence>
               },
               { role: "user", content: prompt },
             ],
-            temperature: 0.2,
-            max_tokens: 220,
+            max_completion_tokens: 220,
           });
           return resp.choices[0]?.message?.content?.trim() || "";
         } catch (e) {
