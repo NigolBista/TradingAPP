@@ -624,14 +624,14 @@ export default function MarketOverview({
       // Get market performance sentiment (fetch major indices)
       let marketPerformanceScore = 0;
       try {
-        const { fetchYahooCandles } = await import(
-          "../../services/marketProviders"
+        const { fetchCandlesForTimeframe } = await import(
+          "../../../../shared/services/marketProviders"
         );
         const indices = ["SPY", "QQQ", "DIA"]; // Major ETFs representing market
         const performances = await Promise.all(
           indices.map(async (symbol) => {
             try {
-              const candles = await fetchYahooCandles(symbol, "5d", "1d");
+              const candles = await fetchCandlesForTimeframe(symbol, "1D");
               if (candles.length >= 2) {
                 const current = candles[candles.length - 1].close;
                 const previous = candles[candles.length - 2].close;

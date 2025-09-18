@@ -8,7 +8,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { fetchYahooCandles } from "../../../shared/services/marketProviders";
+import { fetchCandlesForTimeframe } from "../../../shared/services/marketProviders";
 
 type ETFInfo = {
   symbol: string;
@@ -58,7 +58,7 @@ export default function ETFStrip({
         const results = await Promise.all(
           etfs.map(async (etf) => {
             try {
-              const candles = await fetchYahooCandles(etf.symbol, "5d", "1d");
+              const candles = await fetchCandlesForTimeframe(etf.symbol, "1D");
               const n = candles.length;
               const prev = candles[n - 2]?.close ?? candles[n - 1]?.close ?? 0;
               const last = candles[n - 1]?.close ?? 0;

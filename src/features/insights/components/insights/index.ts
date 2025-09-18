@@ -1,5 +1,4 @@
 // Insights components
-export { default as DecalpXMini } from './DecalpXMini';
 export { default as ETFStrip } from './ETFStrip';
 export { default as IndexStrip } from './IndexStrip';
 export { default as MarketOverview } from './MarketOverview';

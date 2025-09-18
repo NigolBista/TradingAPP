@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { fetchYahooCandles } from "../../../shared/services/marketProviders";
+import { fetchCandlesForTimeframe } from "../../../shared/services/marketProviders";
 
 interface Position {
   symbol: string;
@@ -69,10 +69,9 @@ export default function TopGainersCard({ positions, onPositionPress }: Props) {
           positions.map(async (position) => {
             try {
               // Fetch 2 days of data to get previous close
-              const candles = await fetchYahooCandles(
+              const candles = await fetchCandlesForTimeframe(
                 position.symbol,
-                "2d",
-                "1d"
+                "1D"
               );
               if (candles.length >= 2) {
                 const prevClose = candles[candles.length - 2].close;

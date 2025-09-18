@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, ActivityIndicator } from "react-native";
-import { fetchYahooCandles } from "../../../shared/services/marketProviders";
+import { fetchCandlesForTimeframe } from "../../../shared/services/marketProviders";
 
 type IndexInfo = {
   symbol: string;
@@ -31,7 +31,7 @@ export default function IndexStrip({
         setLoading(true);
         const results = await Promise.all(
           tickers.map(async (t) => {
-            const candles = await fetchYahooCandles(t.symbol, "5d", "1d");
+            const candles = await fetchCandlesForTimeframe(t.symbol, "1D");
             const n = candles.length;
             const prev = candles[n - 2]?.close ?? candles[n - 1]?.close ?? 0;
             const last = candles[n - 1]?.close ?? 0;

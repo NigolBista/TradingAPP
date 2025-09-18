@@ -14,7 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAppDataStore, type PortfolioHistory } from "../../store/appDataStore";
 import { useNavigation } from "@react-navigation/native";
 import { useNavigationHelpers } from "../../navigation/hooks";
-import { MarketOverview, DecalpXMini, PerformanceCard, TopGainersCard } from "../../features/insights";
+import { MarketOverview, PerformanceCard, TopGainersCard } from "../../features/insights";
 import type { NewsItem } from "../services/newsProviders";
 // Removed useMarketOverviewStore to prevent loops - using centralized store instead
 import { AccountsList } from "../../features/portfolio";
