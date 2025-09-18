@@ -50,6 +50,7 @@ import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
 import AlertsList from "../components/common/AlertsList";
 import alertsService from "../services/alertsService";
+import useMarketStatus from "../hooks/useMarketStatus";
 import { useAuth } from "../providers/AuthProvider";
 
 type RootStackParamList = {
@@ -497,6 +498,7 @@ export default function StockDetailScreen() {
     null
   );
   const [regularClose, setRegularClose] = useState<number | null>(null);
+  const marketStatus = useMarketStatus();
 
   // Batch edge requests from WebView to avoid excessive API calls while panning
   // Removed edge batching state; no longer needed with simple lazy loading
@@ -1098,44 +1100,9 @@ export default function StockDetailScreen() {
       ? initialQuote.changePercent
       : null;
 
-  // Enhanced market session detection
-  type MarketSession = "pre-market" | "regular" | "after-hours" | "closed";
-
-  function getMarketSession(now: Date = new Date()): MarketSession {
-    try {
-      const parts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/New_York",
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        weekday: "short",
-      }).formatToParts(now);
-      const hour = Number(parts.find((p) => p.type === "hour")?.value || "0");
-      const minute = Number(
-        parts.find((p) => p.type === "minute")?.value || "0"
-      );
-      const weekday = parts.find((p) => p.type === "weekday")?.value || "";
-      const isWeekday = weekday && !["Sat", "Sun"].includes(weekday); // Mon-Fri
-      const minutes = hour * 60 + minute;
-
-      if (!isWeekday) return "closed";
-
-      // Pre-market: 4:00 AM - 9:30 AM ET
-      if (minutes >= 4 * 60 && minutes < 9 * 60 + 30) return "pre-market";
-      // Regular hours: 9:30 AM - 4:00 PM ET
-      if (minutes >= 9 * 60 + 30 && minutes < 16 * 60) return "regular";
-      // After-hours: 4:00 PM - 8:00 PM ET
-      if (minutes >= 16 * 60 && minutes < 20 * 60) return "after-hours";
-
-      return "closed";
-    } catch {
-      return "closed";
-    }
-  }
-
-  const currentSession = getMarketSession();
-  const showAfterHours = currentSession === "after-hours";
-  const showPreMarket = currentSession === "pre-market";
+  // Use Polygon-driven session from market status hook
+  const showAfterHours = marketStatus.isAfterHours;
+  const showPreMarket = marketStatus.isPreMarket;
 
   // After-hours delta vs regular session close
   const afterHoursDiff =
@@ -1275,6 +1242,7 @@ export default function StockDetailScreen() {
               chartType={
                 chartType === "candlestick" ? "candle" : (chartType as any)
               }
+              showSessions={true}
               showVolume={false}
               showMA={false}
               showTopInfo={false}
@@ -1284,6 +1252,8 @@ export default function StockDetailScreen() {
               showPriceAxisText={false}
               showTimeAxisText={true}
               showLastPriceLabel={false}
+              etOffsetMinutes={marketStatus.etOffsetMinutes ?? undefined}
+              serverOffsetMs={marketStatus.serverOffsetMs ?? 0}
               onChartReady={() => {
                 try {
                   if (chartBridgeRef.current) {

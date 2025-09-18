@@ -89,6 +89,8 @@ interface Props {
   onCrosshairClick?: (price: number) => void;
   onChartReady?: () => void;
   onDataApplied?: () => void;
+  etOffsetMinutes?: number; // Polygon server ET offset from UTC (e.g., -240 or -300)
+  serverOffsetMs?: number; // Polygon serverTimeMs - Date.now()
 }
 
 export interface IndicatorConfig {
@@ -131,6 +133,8 @@ export default function SimpleKLineChart({
   onCrosshairClick,
   onChartReady,
   onDataApplied,
+  etOffsetMinutes,
+  serverOffsetMs,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
@@ -653,6 +657,12 @@ export default function SimpleKLineChart({
         var THEME = ${JSON.stringify(theme)};
         var MOCK_REALTIME = ${JSON.stringify(mockRealtime)};
         var TOOLTIP_RULE = ${JSON.stringify(tooltipRule)};
+        var ET_OFFSET_MINUTES = ${JSON.stringify(
+          typeof etOffsetMinutes === "number" ? etOffsetMinutes : null
+        )};
+        var SERVER_OFFSET_MS = ${JSON.stringify(
+          typeof serverOffsetMs === "number" ? serverOffsetMs : 0
+        )};
 
         function mapPeriod(tf){
           try {
@@ -994,7 +1004,7 @@ export default function SimpleKLineChart({
                       try {
                         var callback = ctx && ctx.callback ? ctx.callback : function(){};
                         var p = mapPeriod(TF);
-                        var to = Date.now();
+                        var to = Date.now() + (Number(SERVER_OFFSET_MS) || 0);
                         var from = to - 500 * periodToMs(p);
                         if (!POLY_API_KEY) { post({ warn: 'Missing Polygon API key' }); callback([]); setTimeout(applySessionBackgrounds, 0); return; }
                         var url = 'https://api.polygon.io/v2/aggs/ticker/' + encodeURIComponent(SYMBOL) + '/range/' + p.span + '/' + p.type + '/' + from + '/' + to + '?adjusted=true&sort=asc&limit=50000&apiKey=' + encodeURIComponent(POLY_API_KEY);
@@ -1331,21 +1341,31 @@ export default function SimpleKLineChart({
                 var endTs = Number(last.timestamp || last.time || 0);
                 if (!startTs || !endTs) return;
                 var dayMs = 24*60*60*1000;
-                var baseDate = new Date(startTs);
-                baseDate.setHours(0,0,0,0);
                 var ids = [];
-                for (var day = baseDate.getTime(); day <= endTs; day += dayMs) {
-                  var preStart = day + 4*60*60*1000;
-                  var regStart = day + 9*60*60*1000 + 30*60*1000;
-                  var regEnd = day + 16*60*60*1000;
-                  var afterEnd = day + 20*60*60*1000;
-                  var nextDay = day + dayMs;
+
+                // Determine ET offset; fallback to device offset if not provided
+                var etOffsetMin = (typeof ET_OFFSET_MINUTES === 'number' && isFinite(ET_OFFSET_MINUTES)) ? ET_OFFSET_MINUTES : (new Date().getTimezoneOffset() * -1);
+                var etOffsetMs = etOffsetMin * 60 * 1000;
+
+                // Convert first/last into ET clock, compute ET midnight span, then walk days in ET
+                var firstEt = startTs + etOffsetMs;
+                var lastEt = endTs + etOffsetMs;
+                var firstEtMidnight = Math.floor(firstEt / dayMs) * dayMs;
+
+                for (var etDay = firstEtMidnight; etDay <= lastEt + dayMs; etDay += dayMs) {
+                  var preStartEt = etDay + 4*60*60*1000;         // 04:00 ET
+                  var regStartEt = etDay + 9*60*60*1000 + 30*60*1000; // 09:30 ET
+                  var regEndEt = etDay + 16*60*60*1000;          // 16:00 ET
+                  var afterEndEt = etDay + 20*60*60*1000;        // 20:00 ET
+                  var nextEtDay = etDay + dayMs;
+
+                  // Convert ET back to UTC for chart timestamps
                   var sessions = [
-                    { start: day, end: preStart, color: 'rgba(100,100,100,0.1)' },
-                    { start: preStart, end: regStart, color: 'rgba(151, 151, 151, 0.1)' },
-                    { start: regStart, end: regEnd, color: 'rgba(0, 0, 0, 0.1)' },
-                    { start: regEnd, end: afterEnd, color: 'rgba(45, 45, 45, 0.18)' },
-                    { start: afterEnd, end: nextDay, color: 'rgba(151, 151, 151, 0.1)' }
+                    { start: etDay - etOffsetMs, end: preStartEt - etOffsetMs, color: 'rgba(100,100,100,0.1)' },
+                    { start: preStartEt - etOffsetMs, end: regStartEt - etOffsetMs, color: 'rgba(151, 151, 151, 0.1)' },
+                    { start: regStartEt - etOffsetMs, end: regEndEt - etOffsetMs, color: 'rgba(0, 0, 0, 0.1)' },
+                    { start: regEndEt - etOffsetMs, end: afterEndEt - etOffsetMs, color: 'rgba(45, 45, 45, 0.18)' },
+                    { start: afterEndEt - etOffsetMs, end: nextEtDay - etOffsetMs, color: 'rgba(151, 151, 151, 0.1)' }
                   ];
                   sessions.forEach(function(s){
                     if (s.end <= startTs || s.start >= endTs) return;

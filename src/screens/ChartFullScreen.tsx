@@ -64,6 +64,7 @@ import {
 // removed unused timeframeSpacingMs
 import { buildDayTradePlan } from "../logic/dayTrade";
 import { buildSwingTradePlan } from "../logic/swingTrade";
+import useMarketStatus from "../hooks/useMarketStatus";
 
 // Types
 type AIMeta = {
@@ -206,6 +207,7 @@ export default function ChartFullScreen() {
   const [proposedAlertPrice, setProposedAlertPrice] = useState<number | null>(
     null
   );
+  const marketStatus = useMarketStatus();
 
   // Refs
   const [pinError, setPinError] = useState<string | null>(null);
@@ -1168,6 +1170,8 @@ export default function ChartFullScreen() {
           showVolume={showVolume}
           showMA={showMA}
           showSessions={showSessions}
+          etOffsetMinutes={marketStatus.etOffsetMinutes ?? undefined}
+          serverOffsetMs={marketStatus.serverOffsetMs ?? 0}
           showTopInfo={false}
           showPriceAxisText={true}
           showTimeAxisText={true}
