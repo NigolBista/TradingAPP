@@ -45,10 +45,12 @@ import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
 import { useStockDetails } from "../hooks/useStockDetails";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { type SimpleQuote } from "../services/quotes";
-import AlertsList from "../components/common/AlertsList";
 import alertsService from "../services/alertsService";
 import useMarketStatus from "../hooks/useMarketStatus";
 import { useAuth } from "../providers/AuthProvider";
+import AlertsList from "../components/common/AlertsList";
+import StockHeader from "../components/stock-details/StockHeader";
+import StockPriceSummary from "../components/stock-details/StockPriceSummary";
 
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
@@ -64,75 +66,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 48,
     paddingBottom: 6,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  backButton: {
-    padding: 8,
-    marginRight: 12,
-  },
-  stockInfo: {
-    flex: 1,
-  },
-  tickerSymbol: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#fff",
-    letterSpacing: 0.5,
-  },
-  stockName: {
-    fontSize: 13,
-    color: "#888",
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  headerIconButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: "#1a1a1a",
-  },
-  priceRow: {
-    alignItems: "flex-start",
-  },
-  mainPrice: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#fff",
-    marginBottom: 2,
-  },
-  todayChange: {
-    fontSize: 14,
-    fontWeight: "500",
-    marginBottom: 2,
-  },
-  afterHours: {
-    fontSize: 13,
-    color: "#888",
-  },
-  sessionIndicator: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 2,
-    fontWeight: "500",
-  },
-  iconButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: "#1a1a1a",
   },
   chartSection: {
     backgroundColor: "#0a0a0a",
@@ -1049,20 +982,12 @@ export default function StockDetailScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <View style={styles.headerRow}>
-            <View style={styles.headerLeft}>
-              <Pressable
-                onPress={() => navigation.goBack()}
-                style={styles.backButton}
-              >
-                <Ionicons name="arrow-back" size={24} color="#fff" />
-              </Pressable>
-              <View style={styles.stockInfo}>
-                <Text style={styles.tickerSymbol}>{symbol}</Text>
-                <Text style={styles.stockName}>Loading...</Text>
-              </View>
-            </View>
-          </View>
+          <StockHeader
+            symbol={symbol}
+            stockName={stockName || "Loading..."}
+            onBackPress={() => navigation.goBack()}
+            onAlertPress={onSetAlert}
+          />
         </View>
         <View
           style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
@@ -1077,68 +1002,23 @@ export default function StockDetailScreen() {
     <View style={styles.container}>
       {/* Robinhood-Style Header */}
       <View style={styles.header}>
-        <View style={styles.headerRow}>
-          {/* Back Button and Search Bar */}
-          <View style={styles.headerLeft}>
-            <Pressable
-              onPress={() => navigation.goBack()}
-              style={styles.backButton}
-            >
-              <Ionicons name="arrow-back" size={24} color="#fff" />
-            </Pressable>
-            <View style={styles.stockInfo}>
-              <Text style={styles.tickerSymbol}>{symbol}</Text>
-              <Text style={styles.stockName}>{stockName || "Loading..."}</Text>
-            </View>
-          </View>
+        <StockHeader
+          symbol={symbol}
+          stockName={stockName}
+          onBackPress={() => navigation.goBack()}
+          onAlertPress={onSetAlert}
+        />
 
-          {/* Action Buttons */}
-          <View style={styles.headerActions}>
-            <Pressable onPress={onSetAlert} style={styles.headerIconButton}>
-              <Ionicons name="notifications-outline" size={20} color="#fff" />
-            </Pressable>
-            <Pressable style={styles.headerIconButton}>
-              <Ionicons name="add-outline" size={20} color="#fff" />
-            </Pressable>
-          </View>
-        </View>
+        <StockPriceSummary
+          displayPrice={displayPrice}
+          todayChange={todayChange}
+          todayChangePercent={todayChangePercent}
+          showAfterHours={showAfterHours}
+          afterHoursDiff={afterHoursDiff}
+          afterHoursPct={afterHoursPct}
+          showPreMarket={showPreMarket}
+        />
 
-        {/* Price Information */}
-        <View style={styles.priceRow}>
-          <Text style={styles.mainPrice}>${displayPrice.toFixed(2)}</Text>
-          {todayChange !== null && todayChangePercent !== null && (
-            <Text
-              style={[
-                styles.todayChange,
-                { color: todayChange >= 0 ? "#00D4AA" : "#FF6B6B" },
-              ]}
-            >
-              {todayChange >= 0 ? "+" : ""}${todayChange.toFixed(2)} (
-              {todayChangePercent.toFixed(2)}%) Today
-            </Text>
-          )}
-          {showAfterHours &&
-          afterHoursDiff !== null &&
-          afterHoursPct !== null ? (
-            <Text
-              style={[
-                styles.afterHours,
-                { color: afterHoursDiff >= 0 ? "#00D4AA" : "#FF6B6B" },
-              ]}
-            >
-              {`After: ${currentPrice.toFixed(2)} ${
-                afterHoursDiff >= 0 ? "+" : ""
-              }${afterHoursDiff.toFixed(2)} ${
-                afterHoursPct >= 0 ? "+" : ""
-              }${afterHoursPct.toFixed(2)}%`}
-            </Text>
-          ) : null}
-          {showPreMarket && (
-            <Text style={[styles.afterHours, { color: "#3b82f6" }]}>
-              Pre-market
-            </Text>
-          )}
-        </View>
       </View>
 
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
