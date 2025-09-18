@@ -1,6 +1,6 @@
 import { StateCreator } from 'zustand';
-import { AppState, AuthState, StoreActions } from '../types';
-import { UserRepository, LoginCredentials } from '../../services/repositories';
+import { AppState, AuthState, StoreActions, LoginCredentials } from '../types';
+import { UserRepository } from '../../services/repositories';
 
 // Initial auth state
 const initialAuthState: AuthState = {
@@ -84,7 +84,10 @@ export const createAuthSlice: StateCreator<
         const profile = profileResponse.data;
 
         // Update API client with auth token
-        get().apiClient.setAuthToken(session.accessToken);
+        const store = get();
+        if (store.apiClient?.setAuthToken) {
+          store.apiClient.setAuthToken(session.accessToken);
+        }
 
         set((state) => ({
           auth: {
@@ -107,7 +110,10 @@ export const createAuthSlice: StateCreator<
         }));
 
         // Store session in secure storage
-        await get().secureStorage.setItem('auth_session', JSON.stringify(session));
+        const storage = get().secureStorage;
+        if (storage?.setItem) {
+          await storage.setItem('auth_session', JSON.stringify(session));
+        }
 
         // Connect WebSocket after successful login
         get().websocket.connect();
@@ -118,13 +124,14 @@ export const createAuthSlice: StateCreator<
           get().market.refreshMarketSummary(),
         ]);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         set((state) => ({
           auth: {
             ...state.auth,
             _meta: {
               lastUpdated: Date.now(),
               isLoading: false,
-              error: error.message,
+              error: errorMessage,
             },
           },
         }));
@@ -155,10 +162,15 @@ export const createAuthSlice: StateCreator<
       }));
 
       // Clear API client auth
-      get().apiClient.clearAuthToken();
+      const store = get();
+      if (store.apiClient?.clearAuthToken) {
+        store.apiClient.clearAuthToken();
+      }
 
       // Clear secure storage
-      await get().secureStorage.removeItem('auth_session');
+      if (store.secureStorage?.removeItem) {
+        await store.secureStorage.removeItem('auth_session');
+      }
 
       // Disconnect WebSocket
       get().websocket.disconnect();
@@ -199,13 +211,14 @@ export const createAuthSlice: StateCreator<
           },
         }));
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         set((state) => ({
           auth: {
             ...state.auth,
             _meta: {
               lastUpdated: Date.now(),
               isLoading: false,
-              error: error.message,
+              error: errorMessage,
             },
           },
         }));
@@ -227,7 +240,10 @@ export const createAuthSlice: StateCreator<
         const session = response.data;
 
         // Update API client with new token
-        get().apiClient.setAuthToken(session.accessToken);
+        const store = get();
+        if (store.apiClient?.setAuthToken) {
+          store.apiClient.setAuthToken(session.accessToken);
+        }
 
         set((state) => ({
           auth: {
@@ -242,7 +258,10 @@ export const createAuthSlice: StateCreator<
         }));
 
         // Store new session
-        await get().secureStorage.setItem('auth_session', JSON.stringify(session));
+        const storage = get().secureStorage;
+        if (storage?.setItem) {
+          await storage.setItem('auth_session', JSON.stringify(session));
+        }
       } catch (error) {
         // Refresh failed, logout user
         await get().auth.logout();
@@ -293,12 +312,11 @@ export const authSelectors = {
 };
 
 // Auth-related hooks helpers
-export const useAuthHelpers = () => {
-  const state = get();
-
+export const createAuthHelpers = (get: () => any, set: (fn: any) => void) => {
   return {
     // Check if token needs refresh
     needsTokenRefresh: () => {
+      const state = get();
       const session = state.auth.session;
       if (!session) return false;
 
@@ -309,7 +327,9 @@ export const useAuthHelpers = () => {
 
     // Auto-refresh token
     autoRefreshToken: async () => {
-      if (state.auth.isAuthenticated && useAuthHelpers().needsTokenRefresh()) {
+      const state = get();
+      const helpers = createAuthHelpers(get, set);
+      if (state.auth.isAuthenticated && helpers.needsTokenRefresh()) {
         try {
           await state.auth.refreshToken();
         } catch (error) {
@@ -321,19 +341,24 @@ export const useAuthHelpers = () => {
     // Restore session from storage
     restoreSession: async () => {
       try {
-        const sessionData = await state.secureStorage.getItem('auth_session');
+        const state = get();
+        const sessionData = await state.secureStorage?.getItem('auth_session');
         if (!sessionData) return false;
 
         const session = JSON.parse(sessionData);
 
         // Check if session is still valid
         if (Date.now() >= session.expiresAt) {
-          await state.secureStorage.removeItem('auth_session');
+          if (state.secureStorage?.removeItem) {
+            await state.secureStorage.removeItem('auth_session');
+          }
           return false;
         }
 
         // Set auth token and get user data
-        state.apiClient.setAuthToken(session.accessToken);
+        if (state.apiClient?.setAuthToken) {
+          state.apiClient.setAuthToken(session.accessToken);
+        }
 
         const userRepo = new UserRepository(state.apiClient);
         const [userResponse, profileResponse] = await Promise.all([
@@ -341,7 +366,7 @@ export const useAuthHelpers = () => {
           userRepo.getUserProfile(),
         ]);
 
-        set((prevState) => ({
+        set((prevState: any) => ({
           auth: {
             ...prevState.auth,
             user: userResponse.data,
@@ -364,7 +389,10 @@ export const useAuthHelpers = () => {
         return true;
       } catch (error) {
         console.error('Session restoration failed:', error);
-        await state.secureStorage.removeItem('auth_session');
+        const state = get();
+        if (state.secureStorage?.removeItem) {
+          await state.secureStorage.removeItem('auth_session');
+        }
         return false;
       }
     },

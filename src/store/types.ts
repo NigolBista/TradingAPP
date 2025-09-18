@@ -9,7 +9,7 @@ export interface BaseSlice {
   };
 }
 
-export interface SliceActions<T> {
+export interface SliceActions<T extends BaseSlice> {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;
@@ -172,6 +172,10 @@ export interface AppState {
   market: MarketState;
   ui: UIState;
   websocket: WebSocketState;
+
+  // Shared services (injected dependencies)
+  apiClient: any; // Will be typed properly when ApiClient is imported
+  secureStorage: any; // Will be typed properly when SecureStorage is imported
 }
 
 // Store actions interface
@@ -280,7 +284,7 @@ export type {
 export type {
   Order,
   OrderRequest,
-  TradingPosition,
+  Position as TradingPosition,
   TradingAlert,
   TradingStrategy,
   TradingSignal,
@@ -289,7 +293,7 @@ export type {
 
 export type {
   Account,
-  PortfolioPosition,
+  Position as PortfolioPosition,
   PortfolioSummary,
   PortfolioHistory,
   Transaction,
