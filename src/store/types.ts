@@ -221,57 +221,45 @@ export interface StoreActions {
   reset: () => void;
 
   // Auth actions
-  auth: {
-    login: (credentials: LoginCredentials) => Promise<void>;
-    logout: () => Promise<void>;
-    updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
-    refreshToken: () => Promise<void>;
-  };
+  login: (credentials: LoginCredentials) => Promise<void>;
+  logout: () => Promise<void>;
+  updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  refreshToken: () => Promise<void>;
 
   // Trading actions
-  trading: {
-    submitOrder: (order: OrderRequest) => Promise<string>;
-    cancelOrder: (orderId: string) => Promise<void>;
-    updatePosition: (accountId: string, symbol: string) => Promise<void>;
-    createAlert: (alert: Omit<TradingAlert, 'id'>) => Promise<void>;
-    subscribeToSymbol: (symbol: string) => void;
-    unsubscribeFromSymbol: (symbol: string) => void;
-  };
+  submitOrder: (order: OrderRequest) => Promise<string>;
+  cancelOrder: (orderId: string) => Promise<void>;
+  updatePosition: (accountId: string, symbol: string) => Promise<void>;
+  createAlert: (alert: Omit<TradingAlert, 'id'>) => Promise<void>;
+  subscribeToSymbol: (symbol: string) => void;
+  unsubscribeFromSymbol: (symbol: string) => void;
 
   // Portfolio actions
-  portfolio: {
-    refreshSummary: () => Promise<void>;
-    syncAccount: (accountId: string) => Promise<void>;
-    updatePortfolioHistory: (period: string) => Promise<void>;
-  };
+  refreshSummary: () => Promise<void>;
+  syncAccount: (accountId: string) => Promise<void>;
+  updatePortfolioHistory: (period: string) => Promise<void>;
 
   // Market actions
-  market: {
-    getQuote: (symbol: string) => Promise<Quote>;
-    getChart: (symbol: string, timeframe: string) => Promise<ChartData>;
-    searchSymbols: (query: string) => Promise<SearchResult[]>;
-    refreshMarketSummary: () => Promise<void>;
-    updateWatchlist: (watchlistId: string, updates: Partial<Watchlist>) => Promise<void>;
-  };
+  getQuote: (symbol: string) => Promise<Quote>;
+  getChart: (symbol: string, timeframe: string) => Promise<ChartData>;
+  searchSymbols: (query: string) => Promise<SearchResult[]>;
+  refreshMarketSummary: () => Promise<void>;
+  updateWatchlist: (watchlistId: string, updates: Partial<Watchlist>) => Promise<void>;
 
   // UI actions
-  ui: {
-    setTheme: (theme: 'light' | 'dark' | 'auto') => void;
-    openModal: (modalId: string, data?: any) => void;
-    closeModal: (modalId: string) => void;
-    addNotification: (notification: Omit<AppNotification, 'id' | 'timestamp'>) => void;
-    removeNotification: (notificationId: string) => void;
-    updateConnectionStatus: (service: 'api' | 'websocket', status: string) => void;
-  };
+  setTheme: (theme: 'light' | 'dark' | 'auto') => void;
+  openModal: (modalId: string, data?: any) => void;
+  closeModal: (modalId: string) => void;
+  addNotification: (notification: Omit<AppNotification, 'id' | 'timestamp'>) => void;
+  removeNotification: (notificationId: string) => void;
+  updateConnectionStatus: (service: 'api' | 'websocket', status: string) => void;
 
   // WebSocket actions
-  websocket: {
-    connect: () => void;
-    disconnect: () => void;
-    subscribe: (channel: string) => void;
-    unsubscribe: (channel: string) => void;
-    handleMessage: (message: RealTimeUpdate) => void;
-  };
+  connect: () => void;
+  disconnect: () => void;
+  subscribe: (channel: string) => void;
+  unsubscribe: (channel: string) => void;
+  handleMessage: (message: RealTimeUpdate) => void;
 }
 
 // Store configuration

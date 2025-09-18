@@ -27,14 +27,13 @@ export const createTradingSlice: StateCreator<
   AppState & StoreActions,
   [],
   [],
-  TradingState & { trading: StoreActions['trading'] }
+  TradingState & Pick<StoreActions, 'submitOrder' | 'cancelOrder' | 'updatePosition' | 'createAlert' | 'subscribeToSymbol' | 'unsubscribeFromSymbol'>
 > = (set, get) => ({
   ...initialTradingState,
 
-  trading: {
-    // Order management
-    submitOrder: async (order) => {
-      const tradingRepo = new TradingRepository(get().apiClient);
+  // Trading actions
+  submitOrder: async (order) => {
+    const tradingRepo = new TradingRepository(get().apiClient);
 
       set((state) => ({
         trading: {
@@ -182,7 +181,7 @@ export const createTradingSlice: StateCreator<
       }));
 
       // Tell WebSocket to subscribe to this symbol
-      get().websocket.subscribe(`quotes:${symbol}`);
+      get().subscribe(`quotes:${symbol}`);
     },
 
     unsubscribeFromSymbol: (symbol) => {
@@ -198,9 +197,8 @@ export const createTradingSlice: StateCreator<
       });
 
       // Tell WebSocket to unsubscribe
-      get().websocket.unsubscribe(`quotes:${symbol}`);
+      get().unsubscribe(`quotes:${symbol}`);
     },
-  },
 });
 
 // Trading-related selectors

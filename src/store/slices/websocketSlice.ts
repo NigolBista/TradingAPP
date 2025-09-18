@@ -15,14 +15,13 @@ export const createWebSocketSlice: StateCreator<
   AppState & StoreActions,
   [],
   [],
-  WebSocketState & { websocket: StoreActions['websocket'] }
+  WebSocketState & Pick<StoreActions, 'connect' | 'disconnect' | 'subscribe' | 'unsubscribe' | 'handleMessage'>
 > = (set, get) => ({
   ...initialWebSocketState,
 
-  websocket: {
-    // Connect to WebSocket
-    connect: () => {
-      const state = get();
+  // WebSocket actions
+  connect: () => {
+    const state = get();
 
       // Don't connect if already connected or connecting
       if (state.websocket.isConnected || state.websocket.isConnecting) {
@@ -57,7 +56,7 @@ export const createWebSocketSlice: StateCreator<
           }));
 
           // Update UI connection status
-          get().ui.updateConnectionStatus('websocket', 'connected');
+          get().updateConnectionStatus('websocket', 'connected');
 
           // Re-subscribe to existing subscriptions
           const currentSubscriptions = get().websocket.subscriptions;
@@ -76,13 +75,13 @@ export const createWebSocketSlice: StateCreator<
           },
         }));
 
-        get().ui.updateConnectionStatus('websocket', 'error');
+        get().updateConnectionStatus('websocket', 'error');
 
         // Retry connection with exponential backoff
         const retryDelay = Math.min(1000 * Math.pow(2, get().websocket.reconnectAttempts), 30000);
         setTimeout(() => {
           if (get().websocket.reconnectAttempts < 5) {
-            get().websocket.connect();
+            get().connect();
           }
         }, retryDelay);
       }
@@ -99,7 +98,7 @@ export const createWebSocketSlice: StateCreator<
         },
       }));
 
-      get().ui.updateConnectionStatus('websocket', 'disconnected');
+      get().updateConnectionStatus('websocket', 'disconnected');
     },
 
     // Subscribe to a channel
@@ -149,12 +148,13 @@ export const createWebSocketSlice: StateCreator<
           case 'quote':
             // Update trading real-time data
             if (message.symbol) {
+              const symbol = message.symbol;
               set((state) => ({
                 trading: {
                   ...state.trading,
                   realTimeData: {
                     ...state.trading.realTimeData,
-                    [message.symbol]: message.data,
+                    [symbol]: message.data,
                   },
                 },
               }));
@@ -165,7 +165,7 @@ export const createWebSocketSlice: StateCreator<
                   ...state.market,
                   quotes: {
                     ...state.market.quotes,
-                    [message.symbol]: message.data,
+                    [symbol]: message.data,
                   },
                 },
               }));
@@ -185,7 +185,7 @@ export const createWebSocketSlice: StateCreator<
             }));
 
             // Show notification for order updates
-            get().ui.addNotification({
+            get().addNotification({
               type: message.data.status === 'filled' ? 'success' : 'info',
               title: 'Order Update',
               message: `Order ${message.data.id} is ${message.data.status}`,
@@ -226,7 +226,7 @@ export const createWebSocketSlice: StateCreator<
                 },
               }));
 
-              get().ui.addNotification({
+              get().addNotification({
                 type: 'warning',
                 title: 'Alert Triggered',
                 message: message.data.message || `Alert for ${message.data.symbol}`,
@@ -238,6 +238,7 @@ export const createWebSocketSlice: StateCreator<
           case 'news':
             // Update news data
             if (message.symbol) {
+              const symbol = message.symbol;
               set((state) => ({
                 market: {
                   ...state.market,
@@ -245,9 +246,9 @@ export const createWebSocketSlice: StateCreator<
                     ...state.market.news,
                     bySymbol: {
                       ...state.market.news.bySymbol,
-                      [message.symbol]: [
+                      [symbol]: [
                         message.data,
-                        ...(state.market.news.bySymbol[message.symbol] || []),
+                        ...(state.market.news.bySymbol[symbol] || []),
                       ].slice(0, 50), // Keep only latest 50 news items
                     },
                   },
@@ -274,7 +275,6 @@ export const createWebSocketSlice: StateCreator<
         console.error('Error handling WebSocket message:', error);
       }
     },
-  },
 });
 
 // WebSocket-related selectors

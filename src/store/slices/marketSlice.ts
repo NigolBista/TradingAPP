@@ -30,14 +30,13 @@ export const createMarketSlice: StateCreator<
   AppState & StoreActions,
   [],
   [],
-  MarketState & { market: StoreActions['market'] }
+  MarketState & Pick<StoreActions, 'getQuote' | 'getChart' | 'searchSymbols' | 'refreshMarketSummary' | 'updateWatchlist'>
 > = (set, get) => ({
   ...initialMarketState,
 
-  market: {
-    // Get quote for a symbol
-    getQuote: async (symbol) => {
-      const marketRepo = new MarketDataRepository(get().apiClient);
+  // Market actions
+  getQuote: async (symbol) => {
+    const marketRepo = new MarketDataRepository(get().apiClient);
 
       try {
         const response = await marketRepo.getQuote(symbol);
@@ -230,7 +229,6 @@ export const createMarketSlice: StateCreator<
         throw error;
       }
     },
-  },
 });
 
 // Market-related selectors

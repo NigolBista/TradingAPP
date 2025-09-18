@@ -23,14 +23,13 @@ export const createUISlice: StateCreator<
   AppState & StoreActions,
   [],
   [],
-  UIState & { ui: StoreActions['ui'] }
+  UIState & Pick<StoreActions, 'setTheme' | 'openModal' | 'closeModal' | 'addNotification' | 'removeNotification' | 'updateConnectionStatus'>
 > = (set, get) => ({
   ...initialUIState,
 
-  ui: {
-    // Theme management
-    setTheme: (theme) => {
-      set((state) => ({
+  // UI actions
+  setTheme: (theme) => {
+    set((state) => ({
         ui: {
           ...state.ui,
           theme,
@@ -148,7 +147,6 @@ export const createUISlice: StateCreator<
         },
       }));
     },
-  },
 });
 
 // UI-related selectors

@@ -178,25 +178,55 @@ export const useAppStore = create<AppState & StoreActions>()(
         ...initialState,
 
         // Combine all slice actions
-        auth: createAuthSlice(set, get).auth,
-        trading: createTradingSlice(set, get).trading,
-        portfolio: createPortfolioSlice(set, get).portfolio,
-        market: createMarketSlice(set, get).market,
-        ui: createUISlice(set, get).ui,
-        websocket: createWebSocketSlice(set, get).websocket,
+        ...createAuthSlice(set, get),
+        ...createTradingSlice(set, get),
+        ...createPortfolioSlice(set, get),
+        ...createMarketSlice(set, get),
+        ...createUISlice(set, get),
+        ...createWebSocketSlice(set, get),
 
         // Global store actions
         hydrate: async () => {
           try {
+            set((state) => ({
+              ui: {
+                ...state.ui,
+                _meta: { ...state.ui._meta, isLoading: true, error: null },
+              },
+            }));
+
             // Initialize WebSocket if authenticated
             if (get().auth.isAuthenticated) {
-              get().websocket.connect();
+              get().connect();
             }
 
             // Load initial market data
-            await get().market.refreshMarketSummary();
+            await get().refreshMarketSummary();
+
+            set((state) => ({
+              ui: {
+                ...state.ui,
+                _meta: { ...state.ui._meta, isLoading: false, error: null },
+              },
+            }));
           } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Store hydration failed';
             console.error('Store hydration failed:', error);
+
+            set((state) => ({
+              ui: {
+                ...state.ui,
+                _meta: { ...state.ui._meta, isLoading: false, error: errorMessage },
+              },
+            }));
+
+            // Show error notification
+            get().addNotification({
+              type: 'error',
+              title: 'Initialization Failed',
+              message: 'Failed to load application data. Please refresh the page.',
+              autoClose: false,
+            });
           }
         },
 
@@ -227,13 +257,59 @@ export const useMarket = () => useAppStore((state) => state.market);
 export const useUI = () => useAppStore((state) => state.ui);
 export const useWebSocket = () => useAppStore((state) => state.websocket);
 
-// Action hooks
-export const useAuthActions = () => useAppStore((state) => state.auth);
-export const useTradingActions = () => useAppStore((state) => state.trading);
-export const usePortfolioActions = () => useAppStore((state) => state.portfolio);
-export const useMarketActions = () => useAppStore((state) => state.market);
-export const useUIActions = () => useAppStore((state) => state.ui);
-export const useWebSocketActions = () => useAppStore((state) => state.websocket);
+// Action hooks with better type safety
+export const useAuthActions = () => {
+  const login = useAppStore((state) => state.login);
+  const logout = useAppStore((state) => state.logout);
+  const updateProfile = useAppStore((state) => state.updateProfile);
+  const refreshToken = useAppStore((state) => state.refreshToken);
+  return { login, logout, updateProfile, refreshToken };
+};
+
+export const useTradingActions = () => {
+  const submitOrder = useAppStore((state) => state.submitOrder);
+  const cancelOrder = useAppStore((state) => state.cancelOrder);
+  const updatePosition = useAppStore((state) => state.updatePosition);
+  const createAlert = useAppStore((state) => state.createAlert);
+  const subscribeToSymbol = useAppStore((state) => state.subscribeToSymbol);
+  const unsubscribeFromSymbol = useAppStore((state) => state.unsubscribeFromSymbol);
+  return { submitOrder, cancelOrder, updatePosition, createAlert, subscribeToSymbol, unsubscribeFromSymbol };
+};
+
+export const usePortfolioActions = () => {
+  const refreshSummary = useAppStore((state) => state.refreshSummary);
+  const syncAccount = useAppStore((state) => state.syncAccount);
+  const updatePortfolioHistory = useAppStore((state) => state.updatePortfolioHistory);
+  return { refreshSummary, syncAccount, updatePortfolioHistory };
+};
+
+export const useMarketActions = () => {
+  const getQuote = useAppStore((state) => state.getQuote);
+  const getChart = useAppStore((state) => state.getChart);
+  const searchSymbols = useAppStore((state) => state.searchSymbols);
+  const refreshMarketSummary = useAppStore((state) => state.refreshMarketSummary);
+  const updateWatchlist = useAppStore((state) => state.updateWatchlist);
+  return { getQuote, getChart, searchSymbols, refreshMarketSummary, updateWatchlist };
+};
+
+export const useUIActions = () => {
+  const setTheme = useAppStore((state) => state.setTheme);
+  const openModal = useAppStore((state) => state.openModal);
+  const closeModal = useAppStore((state) => state.closeModal);
+  const addNotification = useAppStore((state) => state.addNotification);
+  const removeNotification = useAppStore((state) => state.removeNotification);
+  const updateConnectionStatus = useAppStore((state) => state.updateConnectionStatus);
+  return { setTheme, openModal, closeModal, addNotification, removeNotification, updateConnectionStatus };
+};
+
+export const useWebSocketActions = () => {
+  const connect = useAppStore((state) => state.connect);
+  const disconnect = useAppStore((state) => state.disconnect);
+  const subscribe = useAppStore((state) => state.subscribe);
+  const unsubscribe = useAppStore((state) => state.unsubscribe);
+  const handleMessage = useAppStore((state) => state.handleMessage);
+  return { connect, disconnect, subscribe, unsubscribe, handleMessage };
+};
 
 // Global actions
 export const useStoreActions = () => useAppStore((state) => ({

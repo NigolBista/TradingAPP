@@ -59,14 +59,13 @@ export const createAuthSlice: StateCreator<
   AppState & StoreActions,
   [],
   [],
-  AuthState & { auth: StoreActions['auth'] }
+  AuthState & Pick<StoreActions, 'login' | 'logout' | 'updateProfile' | 'refreshToken'>
 > = (set, get) => ({
   ...initialAuthState,
 
-  auth: {
-    // Login action
-    login: async (credentials: LoginCredentials) => {
-      const userRepo = new UserRepository(get().apiClient);
+  // Auth actions
+  login: async (credentials: LoginCredentials) => {
+    const userRepo = new UserRepository(get().apiClient);
 
       set((state) => ({
         auth: {
@@ -116,13 +115,18 @@ export const createAuthSlice: StateCreator<
         }
 
         // Connect WebSocket after successful login
-        get().websocket.connect();
+        get().connect();
 
-        // Hydrate other stores
-        await Promise.all([
-          get().portfolio.refreshSummary(),
-          get().market.refreshMarketSummary(),
-        ]);
+        // Hydrate other stores with error handling
+        try {
+          await Promise.allSettled([
+            get().refreshSummary(),
+            get().refreshMarketSummary(),
+          ]);
+        } catch (error) {
+          console.warn('Failed to load some initial data after login:', error);
+          // Don't fail login if this fails
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         set((state) => ({
@@ -173,7 +177,7 @@ export const createAuthSlice: StateCreator<
       }
 
       // Disconnect WebSocket
-      get().websocket.disconnect();
+      get().disconnect();
 
       // Clear other stores
       get().reset();
@@ -264,11 +268,10 @@ export const createAuthSlice: StateCreator<
         }
       } catch (error) {
         // Refresh failed, logout user
-        await get().auth.logout();
+        await get().logout();
         throw error;
       }
     },
-  },
 });
 
 // Auth-related selectors

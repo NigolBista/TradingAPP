@@ -22,14 +22,13 @@ export const createPortfolioSlice: StateCreator<
   AppState & StoreActions,
   [],
   [],
-  PortfolioState & { portfolio: StoreActions['portfolio'] }
+  PortfolioState & Pick<StoreActions, 'refreshSummary' | 'syncAccount' | 'updatePortfolioHistory'>
 > = (set, get) => ({
   ...initialPortfolioState,
 
-  portfolio: {
-    // Refresh portfolio summary
-    refreshSummary: async () => {
-      const portfolioRepo = new PortfolioRepository(get().apiClient);
+  // Portfolio actions
+  refreshSummary: async () => {
+    const portfolioRepo = new PortfolioRepository(get().apiClient);
 
       set((state) => ({
         portfolio: {
@@ -160,7 +159,6 @@ export const createPortfolioSlice: StateCreator<
         console.error(`Failed to update portfolio history for ${period}:`, error);
       }
     },
-  },
 });
 
 // Portfolio-related selectors
