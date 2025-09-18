@@ -49,6 +49,9 @@ import { useAlertStore } from "../store/alertStore";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
 import AlertsList from "../components/common/AlertsList";
+import alertsService from "../services/alertsService";
+import useMarketStatus from "../hooks/useMarketStatus";
+import { useAuth } from "../providers/AuthProvider";
 
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
@@ -63,7 +66,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a0a0a",
     paddingHorizontal: 16,
     paddingTop: 48,
-    paddingBottom: 16,
+    paddingBottom: 6,
   },
   headerRow: {
     flexDirection: "row",
@@ -112,7 +115,7 @@ const styles = StyleSheet.create({
     fontSize: 32,
     fontWeight: "700",
     color: "#fff",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   todayChange: {
     fontSize: 14,
@@ -412,6 +415,8 @@ export default function StockDetailScreen() {
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
   const { addAlert, checkAlerts, updateAlert } = useAlertStore();
+  const upsertAlert = useAlertStore((s) => s.upsertAlert);
+  const { user } = useAuth();
   const allAlerts = useAlertStore((s) => s.alerts);
   const alertsForSymbol = React.useMemo(
     () => allAlerts.filter((a) => a.symbol === symbol),
@@ -492,6 +497,8 @@ export default function StockDetailScreen() {
   const [proposedAlertPrice, setProposedAlertPrice] = useState<number | null>(
     null
   );
+  const [regularClose, setRegularClose] = useState<number | null>(null);
+  const marketStatus = useMarketStatus();
 
   // Batch edge requests from WebView to avoid excessive API calls while panning
   // Removed edge batching state; no longer needed with simple lazy loading
@@ -602,6 +609,27 @@ export default function StockDetailScreen() {
     loadStockName().catch((error) => {
       console.error("Stock name loading failed:", error);
     });
+  }, [symbol]);
+
+  // Load latest regular session daily close for after-hours calculations
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const d = await fetchCandles(symbol, { resolution: "D", limit: 1 });
+        if (!cancelled) {
+          const close = d && d.length ? d[d.length - 1].close : null;
+          setRegularClose(
+            typeof close === "number" && isFinite(close) ? close : null
+          );
+        }
+      } catch {
+        if (!cancelled) setRegularClose(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [symbol]);
 
   // If no initialQuote provided, try hydrate from cached quotes quickly
@@ -1072,44 +1100,25 @@ export default function StockDetailScreen() {
       ? initialQuote.changePercent
       : null;
 
-  // Enhanced market session detection
-  type MarketSession = "pre-market" | "regular" | "after-hours" | "closed";
+  // Use Polygon-driven session from market status hook
+  const showAfterHours = marketStatus.isAfterHours;
+  const showPreMarket = marketStatus.isPreMarket;
 
-  function getMarketSession(now: Date = new Date()): MarketSession {
-    try {
-      const parts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/New_York",
-        hour12: false,
-        hour: "2-digit",
-        minute: "2-digit",
-        weekday: "short",
-      }).formatToParts(now);
-      const hour = Number(parts.find((p) => p.type === "hour")?.value || "0");
-      const minute = Number(
-        parts.find((p) => p.type === "minute")?.value || "0"
-      );
-      const weekday = parts.find((p) => p.type === "weekday")?.value || "";
-      const isWeekday = weekday && !["Sat", "Sun"].includes(weekday); // Mon-Fri
-      const minutes = hour * 60 + minute;
+  // After-hours delta vs regular session close
+  const afterHoursDiff =
+    showAfterHours && typeof currentPrice === "number" && regularClose
+      ? currentPrice - regularClose
+      : null;
+  const afterHoursPct =
+    afterHoursDiff !== null && regularClose
+      ? (afterHoursDiff / regularClose) * 100
+      : null;
 
-      if (!isWeekday) return "closed";
-
-      // Pre-market: 4:00 AM - 9:30 AM ET
-      if (minutes >= 4 * 60 && minutes < 9 * 60 + 30) return "pre-market";
-      // Regular hours: 9:30 AM - 4:00 PM ET
-      if (minutes >= 9 * 60 + 30 && minutes < 16 * 60) return "regular";
-      // After-hours: 4:00 PM - 8:00 PM ET
-      if (minutes >= 16 * 60 && minutes < 20 * 60) return "after-hours";
-
-      return "closed";
-    } catch {
-      return "closed";
-    }
-  }
-
-  const currentSession = getMarketSession();
-  const showAfterHours = currentSession === "after-hours";
-  const showPreMarket = currentSession === "pre-market";
+  // Display price: show regular-session close as the title during after-hours
+  const displayPrice =
+    showAfterHours && typeof regularClose === "number" && isFinite(regularClose)
+      ? regularClose
+      : currentPrice;
 
   async function onSetAlert() {
     setShowAlertsModal(true);
@@ -1183,7 +1192,7 @@ export default function StockDetailScreen() {
 
         {/* Price Information */}
         <View style={styles.priceRow}>
-          <Text style={styles.mainPrice}>${currentPrice.toFixed(2)}</Text>
+          <Text style={styles.mainPrice}>${displayPrice.toFixed(2)}</Text>
           {todayChange !== null && todayChangePercent !== null && (
             <Text
               style={[
@@ -1195,29 +1204,25 @@ export default function StockDetailScreen() {
               {todayChangePercent.toFixed(2)}%) Today
             </Text>
           )}
-          {(showAfterHours || showPreMarket) && (
+          {showAfterHours &&
+          afterHoursDiff !== null &&
+          afterHoursPct !== null ? (
             <Text
               style={[
                 styles.afterHours,
-                {
-                  color:
-                    currentSession === "pre-market"
-                      ? "#3b82f6"
-                      : todayChange !== null && todayChange < 0
-                      ? "#16a34a"
-                      : "#dc2626",
-                },
+                { color: afterHoursDiff >= 0 ? "#00D4AA" : "#FF6B6B" },
               ]}
             >
-              {currentSession === "pre-market" ? "Pre-market" : "After hours"}
+              {`After: ${currentPrice.toFixed(2)} ${
+                afterHoursDiff >= 0 ? "+" : ""
+              }${afterHoursDiff.toFixed(2)} ${
+                afterHoursPct >= 0 ? "+" : ""
+              }${afterHoursPct.toFixed(2)}%`}
             </Text>
-          )}
-          {currentSession !== "closed" && (
-            <Text style={styles.sessionIndicator}>
-              Market:{" "}
-              {currentSession === "regular"
-                ? "Open"
-                : currentSession.replace("-", " ")}
+          ) : null}
+          {showPreMarket && (
+            <Text style={[styles.afterHours, { color: "#3b82f6" }]}>
+              Pre-market
             </Text>
           )}
         </View>
@@ -1237,6 +1242,7 @@ export default function StockDetailScreen() {
               chartType={
                 chartType === "candlestick" ? "candle" : (chartType as any)
               }
+              showSessions={true}
               showVolume={false}
               showMA={false}
               showTopInfo={false}
@@ -1246,6 +1252,8 @@ export default function StockDetailScreen() {
               showPriceAxisText={false}
               showTimeAxisText={true}
               showLastPriceLabel={false}
+              etOffsetMinutes={marketStatus.etOffsetMinutes ?? undefined}
+              serverOffsetMs={marketStatus.serverOffsetMs ?? 0}
               onChartReady={() => {
                 try {
                   if (chartBridgeRef.current) {
@@ -1260,16 +1268,42 @@ export default function StockDetailScreen() {
                   }
                 } catch (_) {}
               }}
-              onAlertClick={(price) => {
-                // Create a new alert with the clicked price
-                addAlert({
-                  symbol,
-                  price,
-                  condition: "above",
-                  message: `Alert at $${price.toFixed(2)}`,
-                });
-                // Show the alerts modal to display the new alert
-                setShowAlertsModal(true);
+              onAlertClick={async (price) => {
+                try {
+                  if (user) {
+                    const created = await alertsService.createAlert(user.id, {
+                      symbol,
+                      price,
+                      condition: "above",
+                      message: `Alert at $${price.toFixed(2)}`,
+                      isActive: true,
+                      repeat: "unlimited",
+                    } as any);
+                    try {
+                      upsertAlert(created);
+                    } catch (_) {}
+                  } else {
+                    // Fallback to local when not authenticated
+                    addAlert({
+                      symbol,
+                      price,
+                      condition: "above",
+                      message: `Alert at $${price.toFixed(2)}`,
+                      repeat: "unlimited",
+                    });
+                  }
+                } catch (e) {
+                  // Fallback local if server insert fails
+                  addAlert({
+                    symbol,
+                    price,
+                    condition: "above",
+                    message: `Alert at $${price.toFixed(2)}`,
+                    repeat: "unlimited",
+                  });
+                } finally {
+                  setShowAlertsModal(true);
+                }
               }}
               alerts={alertLines}
               onAlertSelected={({ id, price }) => {

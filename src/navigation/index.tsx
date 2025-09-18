@@ -4,6 +4,7 @@ import {
   DefaultTheme,
   DarkTheme,
 } from "@react-navigation/native";
+import { createNavigationContainerRef } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import {
@@ -144,7 +145,10 @@ export default function RootNavigation() {
   }
 
   return (
-    <NavigationContainer theme={scheme === "dark" ? DarkTheme : DefaultTheme}>
+    <NavigationContainer
+      ref={navigationRef}
+      theme={scheme === "dark" ? DarkTheme : DefaultTheme}
+    >
       {user ? (
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           <RootStack.Screen name="Root" component={Tabs} />
@@ -185,25 +189,33 @@ export default function RootNavigation() {
             component={EarningsCalendarScreen}
             options={{ headerShown: false }}
           />
-        <RootStack.Screen
-          name="Chat"
-          component={ChatScreen}
-          options={{ headerShown: false }}
-        />
-        <RootStack.Screen
-          name="ChartChat"
-          component={ChartChatScreen}
-          options={{ headerShown: false }}
-        />
-        <RootStack.Screen
-          name="IndicatorConfigScreen"
-          component={IndicatorConfigScreen}
-          options={{ headerShown: false }}
-        />
+          <RootStack.Screen
+            name="Chat"
+            component={ChatScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="ChartChat"
+            component={ChartChatScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
+            name="IndicatorConfigScreen"
+            component={IndicatorConfigScreen}
+            options={{ headerShown: false }}
+          />
         </RootStack.Navigator>
       ) : (
         <AuthRoutes />
       )}
     </NavigationContainer>
   );
+}
+
+export const navigationRef = createNavigationContainerRef<any>();
+
+export function navigate(name: string, params?: any) {
+  if (navigationRef.isReady()) {
+    navigationRef.navigate(name as never, params as never);
+  }
 }
