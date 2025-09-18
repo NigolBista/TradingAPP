@@ -494,6 +494,8 @@ export default function SimpleKLineChart({
                   if (window.__SIMPLE_KLINE__.applyAlerts && window.__SIMPLE_KLINE__.lastAlerts) {
                     window.__SIMPLE_KLINE__.applyAlerts(window.__SIMPLE_KLINE__.lastAlerts);
                   }
+                  // Reapply session backgrounds after timeframe change
+                  setTimeout(applySessionBackgrounds, 100);
                   post({ success: 'timeframe_updated', timeframe: data.timeframe });
                 } catch(e) {
                   post({ error: 'timeframe_update_failed', message: String(e && e.message || e) });
@@ -563,6 +565,8 @@ export default function SimpleKLineChart({
                 try {
                   // Update chart styles based on new options
                   applyChartType(window.__SIMPLE_KLINE__.chart, CHART_TYPE);
+                  // Reapply session backgrounds when showSessions option changes
+                  setTimeout(applySessionBackgrounds, 100);
                   post({ success: 'display_options_updated', options: options });
                 } catch(e) {
                   post({ error: 'display_options_update_failed', message: String(e && e.message || e) });
@@ -1155,18 +1159,49 @@ export default function SimpleKLineChart({
                 var startTs = Number(first.timestamp || first.time || 0);
                 var endTs = Number(last.timestamp || last.time || 0);
                 if (!startTs || !endTs) return;
+                
+                // Convert timestamps to Eastern Time for proper session calculation
+                // Polygon API returns timestamps in UTC, but market sessions are in ET
+                function toET(timestamp) {
+                  var date = new Date(timestamp);
+                  // Convert to ET (UTC-5 or UTC-4 depending on DST)
+                  // For simplicity, we'll use UTC-5 (EST) - this could be enhanced with DST detection
+                  return new Date(date.getTime() - 5 * 60 * 60 * 1000);
+                }
+                
                 var dayMs = 24*60*60*1000;
-                var baseDate = new Date(startTs);
+                var baseDate = toET(startTs);
                 baseDate.setHours(0,0,0,0);
                 var ids = [];
-                for (var day = baseDate.getTime(); day <= endTs; day += dayMs) {
-                  var preStart = day + 4*60*60*1000;
-                  var regStart = day + 9*60*60*1000 + 30*60*1000;
-                  var regEnd = day + 16*60*60*1000;
-                  var afterEnd = day + 20*60*60*1000;
-                  var nextDay = day + dayMs;
+                
+                // Calculate session times in ET, then convert back to UTC for display
+                for (var day = baseDate.getTime(); day <= toET(endTs).getTime(); day += dayMs) {
+                  var etDate = new Date(day);
+                  
+                  // Session times in ET
+                  var preStartET = new Date(etDate);
+                  preStartET.setHours(4, 0, 0, 0);
+                  
+                  var regStartET = new Date(etDate);
+                  regStartET.setHours(9, 30, 0, 0);
+                  
+                  var regEndET = new Date(etDate);
+                  regEndET.setHours(16, 0, 0, 0);
+                  
+                  var afterEndET = new Date(etDate);
+                  afterEndET.setHours(20, 0, 0, 0);
+                  
+                  var nextDayET = new Date(etDate.getTime() + dayMs);
+                  
+                  // Convert ET times back to UTC for chart display
+                  var preStart = preStartET.getTime() + 5 * 60 * 60 * 1000;
+                  var regStart = regStartET.getTime() + 5 * 60 * 60 * 1000;
+                  var regEnd = regEndET.getTime() + 5 * 60 * 60 * 1000;
+                  var afterEnd = afterEndET.getTime() + 5 * 60 * 60 * 1000;
+                  var nextDay = nextDayET.getTime() + 5 * 60 * 60 * 1000;
+                  
                   var sessions = [
-                    { start: day, end: preStart, color: 'rgba(100,100,100,0.1)' },
+                    { start: day + 5 * 60 * 60 * 1000, end: preStart, color: 'rgba(100,100,100,0.1)' },
                     { start: preStart, end: regStart, color: 'rgba(151, 151, 151, 0.1)' },
                     { start: regStart, end: regEnd, color: 'rgba(0, 0, 0, 0.1)' },
                     { start: regEnd, end: afterEnd, color: 'rgba(45, 45, 45, 0.18)' },
