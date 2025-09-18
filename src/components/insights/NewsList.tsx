@@ -134,7 +134,7 @@ const createStyles = (theme: any) =>
     },
   });
 
-const getSentimentStyle = (sentiment?: string, styles: any) => {
+const getSentimentStyle = (styles: any, sentiment?: string) => {
   switch (sentiment) {
     case "Positive":
       return styles.sentimentPositive;
@@ -194,7 +194,7 @@ export default function NewsList({ items, fullScreen = false }: Props) {
                   <View
                     style={[
                       styles.sentimentBadge,
-                      getSentimentStyle(n.sentiment, styles),
+                      getSentimentStyle(styles, n.sentiment),
                     ]}
                   >
                     <Text style={styles.sentimentText}>{n.sentiment}</Text>
