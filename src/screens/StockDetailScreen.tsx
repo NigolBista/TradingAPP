@@ -34,9 +34,6 @@ import {
 import {
   fetchNews as fetchSymbolNews,
   fetchStockNewsApi,
-  fetchSentimentStats,
-  type NewsItem,
-  type SentimentStats,
 } from "../services/newsProviders";
 // Removed viewportBars dependency; using simple lazy loading on visible range change
 import NewsList from "../components/insights/NewsList";
@@ -45,9 +42,9 @@ import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../store/chatStore";
 import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
-import { useAlertStore } from "../store/alertStore";
+import { useStockDetails } from "../hooks/useStockDetails";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
-import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
+import { type SimpleQuote } from "../services/quotes";
 import AlertsList from "../components/common/AlertsList";
 import alertsService from "../services/alertsService";
 import useMarketStatus from "../hooks/useMarketStatus";
@@ -391,13 +388,22 @@ export default function StockDetailScreen() {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState<MarketAnalysis | null>(null);
 
-  const [news, setNews] = useState<NewsItem[]>([]);
-
-  const [initialQuote, setInitialQuote] = useState<SimpleQuote | null>(
-    initialQuoteParam || null
-  );
-
-  const [newsLoading, setNewsLoading] = useState<boolean>(true);
+  const {
+    quote: initialQuote,
+    news,
+    newsLoading,
+    refreshNews,
+    sentimentStats,
+    sentimentLoading,
+    refreshSentiment,
+    sentimentCounts: symbolSentimentCounts,
+    alertLines,
+    alertsForSymbol,
+    addAlert,
+    updateAlert,
+    upsertAlert,
+    checkAlertsForPrice,
+  } = useStockDetails(symbol, { initialQuote: initialQuoteParam });
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [stockName, setStockName] = useState<string>("");
@@ -414,24 +420,7 @@ export default function StockDetailScreen() {
   const { messages, addAnalysisMessage, clearSymbolMessages } = useChatStore();
   const { cacheSignal, getCachedSignal, isSignalFresh, clearSignal } =
     useSignalCacheStore();
-  const { addAlert, checkAlerts, updateAlert } = useAlertStore();
-  const upsertAlert = useAlertStore((s) => s.upsertAlert);
   const { user } = useAuth();
-  const allAlerts = useAlertStore((s) => s.alerts);
-  const alertsForSymbol = React.useMemo(
-    () => allAlerts.filter((a) => a.symbol === symbol),
-    [allAlerts, symbol]
-  );
-  const alertLines = React.useMemo(
-    () =>
-      alertsForSymbol.map((alert) => ({
-        id: alert.id,
-        price: alert.price,
-        condition: alert.condition,
-        isActive: alert.isActive,
-      })),
-    [alertsForSymbol]
-  );
 
   // Debug logging for alert changes
   React.useEffect(() => {
@@ -488,10 +477,6 @@ export default function StockDetailScreen() {
     "timeframe" | "chartType"
   >("timeframe");
   const [bottomSheetAnim] = useState(new Animated.Value(0));
-  const [sentimentStats, setSentimentStats] = useState<SentimentStats | null>(
-    null
-  );
-  const [sentimentLoading, setSentimentLoading] = useState(false);
   const [showAlertsModal, setShowAlertsModal] = useState(false);
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [proposedAlertPrice, setProposedAlertPrice] = useState<number | null>(
@@ -504,30 +489,6 @@ export default function StockDetailScreen() {
   // Removed edge batching state; no longer needed with simple lazy loading
 
   // Real-time logic is now handled by AmChartsCandles component itself
-
-  const symbolSentimentCounts = useMemo(() => {
-    // Use aggregated sentiment stats if available, otherwise fall back to individual news counting
-    if (sentimentStats) {
-      return {
-        positive: sentimentStats.totalPositive,
-        negative: sentimentStats.totalNegative,
-        neutral: sentimentStats.totalNeutral,
-      };
-    }
-
-    // Fallback to counting individual news items
-    if (!news || news.length === 0) return null;
-    let positive = 0;
-    let negative = 0;
-    let neutral = 0;
-    for (const n of news) {
-      const s = (n.sentiment || "").toLowerCase();
-      if (s === "positive") positive++;
-      else if (s === "negative") negative++;
-      else neutral++;
-    }
-    return { positive, negative, neutral };
-  }, [sentimentStats, news]);
 
   // Filter signals for current symbol
   const symbolSignals = useMemo(() => {
@@ -603,7 +564,6 @@ export default function StockDetailScreen() {
   useEffect(() => {
     // Reset symbol-specific state when symbol changes
     setAnalysis(null);
-    setNews([]);
     setCachedSignal(null);
     load();
     loadStockName().catch((error) => {
@@ -632,22 +592,6 @@ export default function StockDetailScreen() {
     };
   }, [symbol]);
 
-  // If no initialQuote provided, try hydrate from cached quotes quickly
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (!initialQuote) {
-        try {
-          const q = await fetchSingleQuote(symbol);
-          if (q && mounted) setInitialQuote(q);
-        } catch {}
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [symbol]);
-
   // Update extendedTf when defaultTimeframe changes
   useEffect(() => {
     if (defaultTimeframe) {
@@ -669,19 +613,27 @@ export default function StockDetailScreen() {
     if (activeTab === "signals") {
       // Load news if not already loaded or loading (caching handles freshness)
       if (!newsLoading && news.length === 0) {
-        loadNewsInBackground().catch((error) => {
+        refreshNews().catch((error) => {
           console.error("News loading failed:", error);
         });
       }
 
       // Load sentiment stats if not already loaded or loading (caching handles freshness)
       if (!sentimentLoading && !sentimentStats) {
-        loadSentimentStats().catch((error) => {
+        refreshSentiment().catch((error) => {
           console.error("Sentiment stats loading failed:", error);
         });
       }
     }
-  }, [activeTab, newsLoading, news.length, sentimentLoading, sentimentStats]);
+  }, [
+    activeTab,
+    newsLoading,
+    news.length,
+    sentimentLoading,
+    sentimentStats,
+    refreshNews,
+    refreshSentiment,
+  ]);
 
   // Check for triggered alerts when price changes
   useEffect(() => {
@@ -689,7 +641,7 @@ export default function StockDetailScreen() {
     if (!(price > 0)) return;
     // Batch alert checks; avoid calling during renders triggered by alert updates
     const id = setTimeout(() => {
-      const triggeredAlerts = checkAlerts(symbol, price);
+      const triggeredAlerts = checkAlertsForPrice(price);
       if (triggeredAlerts && triggeredAlerts.length) {
         for (const alert of triggeredAlerts) {
           sendLocalNotification(
@@ -702,7 +654,7 @@ export default function StockDetailScreen() {
       }
     }, 0);
     return () => clearTimeout(id);
-  }, [initialQuote?.last, analysis?.currentPrice, symbol]);
+  }, [initialQuote?.last, analysis?.currentPrice, symbol, checkAlertsForPrice]);
 
   // Separate function for loading market overview data
   async function loadMarketOverview() {
@@ -742,8 +694,8 @@ export default function StockDetailScreen() {
   // Load all data including news and sentiment (for symbol changes)
   async function load() {
     await loadChartData();
-    loadNewsInBackground().catch(() => {});
-    loadSentimentStats().catch(() => {});
+    refreshNews().catch(() => {});
+    refreshSentiment().catch(() => {});
   }
 
   async function loadLineChartData() {
@@ -764,45 +716,6 @@ export default function StockDetailScreen() {
   }
 
   // Removed custom edge request logic; lazy loading handled in visible range handler
-
-  // Load sentiment stats in background
-  async function loadSentimentStats() {
-    setSentimentLoading(true);
-    try {
-      const stats = await fetchSentimentStats(symbol, "last30days");
-      setSentimentStats(stats);
-    } catch (error) {
-      setSentimentStats(null);
-    } finally {
-      setSentimentLoading(false);
-    }
-  }
-
-  // Separate function for background news loading
-  async function loadNewsInBackground() {
-    setNewsLoading(true);
-
-    try {
-      // Try Stock News API first for enhanced features (sentiment, images, etc.)
-      let items: NewsItem[] = [];
-
-      try {
-        items = await fetchStockNewsApi(symbol, 25);
-      } catch (stockNewsError) {
-        try {
-          items = await fetchSymbolNews(symbol);
-        } catch (fallbackError) {
-          items = [];
-        }
-      }
-
-      setNews(items);
-    } catch (error) {
-      setNews([]);
-    } finally {
-      setNewsLoading(false);
-    }
-  }
 
   // Header timeframe handler (Robinhood-style)
   async function applyHeaderTimeframe(tf: HeaderTimeframe) {
@@ -2090,7 +2003,7 @@ export default function StockDetailScreen() {
                     No recent news found for {symbol}
                   </Text>
                   <Pressable
-                    onPress={loadNewsInBackground}
+                    onPress={refreshNews}
                     style={{
                       backgroundColor: "#1a1a1a",
                       paddingHorizontal: 16,
