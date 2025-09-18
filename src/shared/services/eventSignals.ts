@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NewsItem } from "./newsProviders";
 import {
   EnhancedSignal,

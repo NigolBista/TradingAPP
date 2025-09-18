@@ -21,7 +21,7 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
-    backgroundImage: "linear-gradient(135deg, #764ba2 0%, #667eea 100%)",
+    backgroundColor: "#764ba2",
   },
   scrollContent: {
     flexGrow: 1,

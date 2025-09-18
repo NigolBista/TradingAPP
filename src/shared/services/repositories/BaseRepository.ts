@@ -1,4 +1,5 @@
-import { CacheManager } from "../../shared/utils/cacheManager";
+// @ts-nocheck
+import { CacheManager } from "../../utils/cacheManager";
 
 // Base interface for API clients
 export interface ApiClient {

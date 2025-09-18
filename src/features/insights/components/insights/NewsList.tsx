@@ -8,7 +8,7 @@ import {
   Image,
 } from "react-native";
 import type { NewsItem } from "../../../../shared/services/newsProviders";
-import { useTheme } from "../../../providers/ThemeProvider";
+import { useTheme } from "../../../../providers/ThemeProvider";
 
 interface Props {
   items: NewsItem[];
@@ -177,7 +177,7 @@ export default function NewsList({ items, fullScreen = false }: Props) {
                 <Image
                   source={{ uri: n.imageUrl }}
                   style={styles.newsImage}
-                  defaultSource={require("../../../assets/icon.png")}
+                  defaultSource={require("../../../../../assets/icon.png")}
                 />
               </View>
             )}

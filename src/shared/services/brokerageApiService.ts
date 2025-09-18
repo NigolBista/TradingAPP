@@ -1,5 +1,5 @@
 // Brokerage API service for account and trading operations
-import { BrokerageConnection } from './brokerageAuth';
+import { BrokerageConnection } from '../../features/authentication/services/brokerageAuth';
 
 export interface BrokerageAccount {
   id: string;

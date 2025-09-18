@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { BrokerageProvider, AuthResult } from "../../../shared/services/brokerageAuth";
+import { BrokerageProvider, AuthResult } from "../services/brokerageAuth";
 
 interface BrokerageAuthWebViewProps {
   provider: BrokerageProvider;

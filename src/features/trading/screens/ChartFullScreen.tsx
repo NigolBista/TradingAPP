@@ -53,7 +53,7 @@ import { useUserStore } from "../../../store/userStore";
 import { useAlertStore } from "../../../store/alertStore";
 import alertsService from "../../../shared/services/alertsService";
 import { useAuth } from "../../authentication";
-import { StrategyComplexity } from "../services/types";
+import { StrategyComplexity } from "../types";
 import { fetchSingleQuote, type SimpleQuote } from "../../../shared/services/quotes";
 // removed unused federalReserve import
 import {

@@ -1,5 +1,5 @@
 import { Agent, AgentContext, AgentResponse, AgentCapability } from './types';
-import { generateChartContextConfig, isValidColor, isValidTimeframe, isValidChartType } from '../logic/chartContextConfig';
+import { generateChartContextConfig, isValidColor, isValidTimeframe, isValidChartType } from '../features/trading/services/chartContextConfig';
 
 export class ChartContextAgent implements Agent {
   name = 'chart-context';
@@ -149,7 +149,7 @@ export class ChartContextAgent implements Agent {
   private async getIndicatorInfo(indicatorName: string): Promise<AgentResponse> {
     const contextConfig = generateChartContextConfig();
     const indicator = contextConfig.availableIndicators.find(
-      ind => ind.name.toLowerCase() === indicatorName.toLowerCase()
+      (ind: any) => ind.name.toLowerCase() === indicatorName.toLowerCase()
     );
 
     if (!indicator) {

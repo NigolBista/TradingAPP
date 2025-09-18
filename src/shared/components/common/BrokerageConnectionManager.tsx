@@ -14,9 +14,9 @@ import {
   brokerageAuthService,
   BrokerageProvider,
   AuthResult,
-} from "../../../../shared/services/brokerageAuth";
-import { brokerageApiService } from "../../../../shared/services/brokerageApiService";
-import BrokerageAuthWebView from "./BrokerageAuthWebView";
+} from "../../../features/authentication/services/brokerageAuth";
+import { brokerageApiService } from "../../services/brokerageApiService";
+import BrokerageAuthWebView from "../../../features/authentication/components/BrokerageAuthWebView";
 
 interface Props {
   onConnectionChange?: (providers: BrokerageProvider[]) => void;

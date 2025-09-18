@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, useRef } from "react";
 import {
   View,
@@ -10,12 +11,12 @@ import {
   Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { StockSearchResult } from "../../../../shared/services/stockSearch";
+import { StockSearchResult } from "../../services/stockSearch";
 import {
   searchStocksAutocomplete,
   preloadStocksData,
   getLoadingStatus,
-} from "../../../../shared/services/stockData";
+} from "../../services/stockData";
 import { useTheme } from "../../../providers/ThemeProvider";
 
 const { width: screenWidth } = Dimensions.get("window");

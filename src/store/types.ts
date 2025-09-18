@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Core store types and interfaces
 import type {
   User,

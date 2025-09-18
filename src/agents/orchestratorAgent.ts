@@ -13,8 +13,8 @@ import {
   getColorByName,
   isValidTimeframe,
   isValidChartType,
-} from "../../trading/services/chartContextConfig";
-import { validateToolStep } from "../../trading/services/actionSchemas";
+} from "../features/trading/services/chartContextConfig";
+import { validateToolStep } from "../logic/actionSchemas";
 
 const workflowStepSchema = z.object({
   agent: z.string(),

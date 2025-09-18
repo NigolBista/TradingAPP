@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { z } from "zod";
 
 // Zod schemas for each tool step

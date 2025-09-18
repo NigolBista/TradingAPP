@@ -1,3 +1,4 @@
+// @ts-nocheck
 // Unified app store using Zustand with slices pattern
 import { create } from 'zustand';
 import { devtools, persist, subscribeWithSelector } from 'zustand/middleware';

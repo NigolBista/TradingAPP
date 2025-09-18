@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { COLORS } from "../../shared/constants/colors";
+import { COLORS } from "../../constants/colors";
 import {
   create,
   open,
@@ -16,7 +16,7 @@ import {
   LinkSuccess,
   LinkExit,
 } from "react-native-plaid-link-sdk";
-import { plaidIntegrationService } from "../../../../shared/services/plaidIntegration";
+import { plaidIntegrationService } from "../../services/plaidIntegration";
 import { useTheme } from "../../../providers/ThemeProvider";
 
 interface Props {

@@ -1,4 +1,4 @@
-import { executeChartActions, ChartAction } from "./chartBridge";
+import { executeChartActions, ChartAction } from "../features/trading/services/chartBridge";
 
 /**
  * Dispatch chart actions originating from direct user interaction. By using

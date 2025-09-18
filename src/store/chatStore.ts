@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { TradePlanOverlay } from "../../trading/types";
+import { TradePlanOverlay } from "../features/trading/types";
 
 export type ChatMessage = {
   id: string;

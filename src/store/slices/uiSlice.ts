@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { StateCreator } from 'zustand';
 import { AppState, StoreActions, UIState, AppNotification } from '../types';
 

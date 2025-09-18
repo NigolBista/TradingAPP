@@ -1,4 +1,4 @@
-import { StrategyContext, TradePlanOverlay } from "./types";
+import { StrategyContext, TradePlanOverlay } from "../types";
 
 /**
  * Swing-trade logic: allow wider distances and more generous targets/stops.

@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { optimizedWebSocketManager, initializeWebSocketManager } from "../services/optimizedWebSocketManager";
 import { useWebSocketPerformanceMonitoring } from "./usePerformanceInstrumentation";

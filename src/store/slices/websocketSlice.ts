@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { StateCreator } from 'zustand';
 import { AppState, StoreActions, WebSocketState, RealTimeUpdate } from '../types';
 

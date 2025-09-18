@@ -3,7 +3,7 @@ import {
   StrategyComplexityConfig,
   TradePlanOverlay,
   StrategyContext,
-} from "./types";
+} from "../types";
 
 // Strategy complexity configurations
 export const STRATEGY_COMPLEXITY_CONFIGS: Record<

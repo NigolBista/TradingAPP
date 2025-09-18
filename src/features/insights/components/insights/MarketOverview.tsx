@@ -20,7 +20,7 @@ import type { NewsItem } from "../../../../shared/services/newsProviders";
 import NewsList from "./NewsList";
 import UpcomingEarningsCard from "./UpcomingEarningsCard";
 import { useAppDataStore } from "../../../../store/appDataStore";
-import { useTheme } from "../../../providers/ThemeProvider";
+import { useTheme } from "../../../../providers/ThemeProvider";
 
 interface Props {
   onNewsPress?: () => void;

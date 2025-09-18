@@ -1,6 +1,6 @@
 import Constants from "expo-constants";
 import OpenAI from "openai";
-import { TradePlanOverlay, TradeSide } from "./types";
+import { TradePlanOverlay, TradeSide } from "../types";
 import {
   STRATEGY_PROMPTS,
   StrategyKey,

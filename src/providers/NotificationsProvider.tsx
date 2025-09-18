@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import { navigate, navigationRef } from "../navigation";

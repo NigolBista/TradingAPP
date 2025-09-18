@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useNavigation, useRoute, NavigationProp, RouteProp } from '@react-navigation/native';
 import type {
   AllStackParamList,

@@ -20,9 +20,23 @@
       "Bash(npx expo-doctor:*)",
       "Bash(npx expo export:*)",
       "Bash(while IFS=':' read -r file line)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(npx expo run:*)",
+      "Bash(for file in src/features/insights/components/insights/{NewsList,PerformanceCard,RecentEarningsCard,UpcomingEarningsCard}.tsx)",
+      "Bash(do sed -i '' 's|from \"\"../../../providers/ThemeProvider\"\"|from \"\"../../../../providers/ThemeProvider\"\"|g' \"$file\")",
+      "Bash(for file in src/features/trading/services/{aiStrategyEngine,dayTrade,strategyComplexity,swingTrade}.ts)",
+      "Bash(do sed -i '' \"s|from ''./types''|from ''../types''|g\" \"$file\")",
+      "Bash(for dir in hooks utils services constants)",
+      "Bash(do if [ ! -f \"src/shared/$dir/index.ts\" ])",
+      "Bash(then echo \"Missing: src/shared/$dir/index.ts\")",
+      "Bash(fi)",
+      "Bash(for file in src/store/{chatStore,signalCacheStore}.ts)",
+      "Bash(do sed -i '' 's|from \"\"../../trading/types\"\"|from \"\"../features/trading/types\"\"|g' \"$file\")",
+      "Bash(for file in src/store/slices/{authSlice,marketSlice,portfolioSlice,tradingSlice}.ts)",
+      "Bash(do sed -i '' 's|from \"\"../shared/services/repositories|from \"\"../../shared/services/repositories|g' \"$file\")"
     ],
     "deny": [],
     "ask": []
-  }
+  },
+  "outputStyle": "Explanatory"
 }

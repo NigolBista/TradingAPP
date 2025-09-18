@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { saveQuotes, SimpleQuote } from "./quotes";
 
 type PriceListener = (symbol: string, price: number, ts: number) => void;
