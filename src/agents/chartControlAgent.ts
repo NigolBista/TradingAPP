@@ -1,6 +1,6 @@
 import { Agent, AgentContext, AgentResponse, ChartControlResponse, ChartAction } from './types';
-import { executeChartActions, screenshotChart } from '../logic/chartBridge';
-import { generateChartContextConfig } from '../logic/chartContextConfig';
+import { executeChartActions, screenshotChart } from '../features/trading/services/chartBridge';
+import { generateChartContextConfig } from '../features/trading/services/chartContextConfig';
 
 export class ChartControlAgent implements Agent {
   name = 'chart-control';

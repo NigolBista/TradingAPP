@@ -238,13 +238,11 @@ export class AnalysisAgent implements Agent {
         fundamentalAnalysis.analysis?.trend
       ),
       strength:
-        (technicalAnalysis.analysis?.strength ||
-          0 + fundamentalAnalysis.analysis?.strength ||
-          0) / 2,
+        ((technicalAnalysis.analysis?.strength || 0) +
+         (fundamentalAnalysis.analysis?.strength || 0)) / 2,
       confidence:
-        (technicalAnalysis.analysis?.confidence ||
-          0 + fundamentalAnalysis.analysis?.confidence ||
-          0) / 2,
+        ((technicalAnalysis.analysis?.confidence || 0) +
+         (fundamentalAnalysis.analysis?.confidence || 0)) / 2,
       signals: [
         ...(technicalAnalysis.analysis?.signals || []),
         ...(fundamentalAnalysis.analysis?.signals || []),

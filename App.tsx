@@ -5,9 +5,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import RootNavigation from "./src/navigation";
 import { ThemeProvider } from "./src/providers/ThemeProvider";
 import { StripeProvider } from "./src/providers/StripeProvider";
-import { AuthProvider } from "./src/providers/AuthProvider";
+import { AuthProvider } from "./src/features/authentication";
 import { NotificationsProvider } from "./src/providers/NotificationsProvider";
-import { initializeApp } from "./src/services/appInitialization";
+import { initializeApp } from "./src/shared/services/appInitialization";
 
 export default function App() {
   useEffect(() => {

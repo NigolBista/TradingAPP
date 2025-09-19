@@ -5,6 +5,8 @@
     "jsx": "react-jsx",
     "moduleResolution": "Bundler",
     "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
     "types": ["react", "react-native"]
   },
   "include": ["index.ts", "App.tsx", "src", "nativewind-env.d.ts"]

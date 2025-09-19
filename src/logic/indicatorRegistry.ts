@@ -1,5 +1,5 @@
 // Runtime indicator registry: defaults, aliases, validation helpers
-import { BUILTIN_INDICATORS } from "../screens/ChartFullScreen/indicators";
+import { BUILTIN_INDICATORS } from "../features/trading/screens/ChartFullScreen/indicators";
 
 export type IndicatorParamSpec = {
   type: "int" | "number" | "enum";

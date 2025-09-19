@@ -9,7 +9,7 @@ import { z } from "zod";
 import {
   generateChartContextConfig,
   getIndicatorByName,
-} from "../logic/chartContextConfig";
+} from "../features/trading/services/chartContextConfig";
 
 const planSchema = z.object({
   version: z.string().default("1.0"),
@@ -19,7 +19,7 @@ const planSchema = z.object({
     .array(
       z.object({
         tool: z.string(),
-        args: z.record(z.any()),
+        args: z.record(z.string(), z.any()),
       })
     )
     .default([]),

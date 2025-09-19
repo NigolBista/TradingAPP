@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { AIStrategyOutput } from "../logic/aiStrategyEngine";
+import { AIStrategyOutput } from "../features/trading/services/aiStrategyEngine";
 
 export type LLMChatMessage = {
   id: string;
