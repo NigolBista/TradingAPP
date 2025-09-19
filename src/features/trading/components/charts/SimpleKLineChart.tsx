@@ -501,6 +501,8 @@ export default function SimpleKLineChart({
                   if (window.__SIMPLE_KLINE__.applyAlerts && window.__SIMPLE_KLINE__.lastAlerts) {
                     window.__SIMPLE_KLINE__.applyAlerts(window.__SIMPLE_KLINE__.lastAlerts);
                   }
+                  // Reapply session backgrounds after timeframe change
+                  setTimeout(applySessionBackgrounds, 100);
                   post({ success: 'timeframe_updated', timeframe: data.timeframe });
                   // Re-subscribe live Polygon stream with the new timeframe if active
                   try { if (window.__SIMPLE_KLINE__ && typeof window.__SIMPLE_KLINE__.resubscribeLive === 'function') { window.__SIMPLE_KLINE__.resubscribeLive(); } } catch(_){}
@@ -572,6 +574,8 @@ export default function SimpleKLineChart({
                 try {
                   // Update chart styles based on new options
                   applyChartType(window.__SIMPLE_KLINE__.chart, CHART_TYPE);
+                  // Reapply session backgrounds when showSessions option changes
+                  setTimeout(applySessionBackgrounds, 100);
                   post({ success: 'display_options_updated', options: options });
                 } catch(e) {
                   post({ error: 'display_options_update_failed', message: String(e && e.message || e) });
@@ -1333,39 +1337,70 @@ export default function SimpleKLineChart({
               try {
                 clearSessionBackgrounds();
                 if (!SHOW_SESSIONS) return;
+                // Only apply on intraday timeframes
+                var p = mapPeriod(TF);
+                var typ = (p && p.type) || 'day';
+                if (typ !== 'minute' && typ !== 'hour') return;
+
                 var data = chart && typeof chart.getDataList === 'function' ? chart.getDataList() : [];
                 if (!data || !data.length) return;
                 var first = data[0];
-                var last = data[data.length-1];
+                var last = data[data.length - 1];
                 var startTs = Number(first.timestamp || first.time || 0);
                 var endTs = Number(last.timestamp || last.time || 0);
                 if (!startTs || !endTs) return;
-                var dayMs = 24*60*60*1000;
+
+                // Use dynamic ET offset if provided (minutes, e.g. -240/-300)
+                var OFFSET_MIN = (typeof ET_OFFSET_MINUTES === 'number' && isFinite(ET_OFFSET_MINUTES)) ? ET_OFFSET_MINUTES : -300;
+                var MIN = 60 * 1000;
+                var HR = 60 * MIN;
+                var DAY = 24 * HR;
+
+                // Determine bucket size based on timeframe
+                var stepMs = 0;
+                if (p && p.type === 'minute') stepMs = Math.max(1, Number(p.span || 1)) * MIN;
+                else if (p && p.type === 'hour') stepMs = Math.max(1, Number(p.span || 1)) * HR;
+                if (!stepMs || !isFinite(stepMs)) stepMs = MIN; // fallback 1m
+
+                function toEtEpoch(tsUtc){ return Number(tsUtc) + OFFSET_MIN * MIN; }
+                function toUtcEpoch(tsEt){ return Number(tsEt) - OFFSET_MIN * MIN; }
+                function etStartOfDay(tsUtc){ var etTs = toEtEpoch(tsUtc); return Math.floor(etTs / DAY) * DAY; }
+                function ceilAfter(tsEt, step, anchor){
+                  try {
+                    var base = (typeof anchor === 'number') ? anchor : (Math.floor(tsEt / DAY) * DAY);
+                    var off = (tsEt - base) % step;
+                    if (off === 0) return tsEt + step; // strictly greater than tsEt
+                    return tsEt + (step - off);
+                  } catch(_) { return tsEt; }
+                }
+
+                var startDayEt = etStartOfDay(startTs);
+                var endDayEt = etStartOfDay(endTs);
                 var ids = [];
 
-                // Determine ET offset; fallback to device offset if not provided
-                var etOffsetMin = (typeof ET_OFFSET_MINUTES === 'number' && isFinite(ET_OFFSET_MINUTES)) ? ET_OFFSET_MINUTES : (new Date().getTimezoneOffset() * -1);
-                var etOffsetMs = etOffsetMin * 60 * 1000;
+                for (var dayEt = startDayEt; dayEt <= endDayEt; dayEt += DAY) {
+                  var preStartEt = dayEt + 4 * HR;
+                  var regStartEt = dayEt + 9 * HR + 30 * MIN;
+                  var regEndEt = dayEt + 16 * HR;
+                  var afterEndEt = dayEt + 20 * HR;
+                  var nextDayEt = dayEt + DAY;
 
-                // Convert first/last into ET clock, compute ET midnight span, then walk days in ET
-                var firstEt = startTs + etOffsetMs;
-                var lastEt = endTs + etOffsetMs;
-                var firstEtMidnight = Math.floor(firstEt / dayMs) * dayMs;
+                  // Extend regular close and after-hours end to next bucket boundary
+                  var regEndEtExt = ceilAfter(regEndEt, stepMs, dayEt);
+                  var afterEndEtExt = ceilAfter(afterEndEt, stepMs, dayEt);
+                  if (afterEndEtExt > nextDayEt) afterEndEtExt = nextDayEt; // clamp to midnight to avoid overlap
 
-                for (var etDay = firstEtMidnight; etDay <= lastEt + dayMs; etDay += dayMs) {
-                  var preStartEt = etDay + 4*60*60*1000;         // 04:00 ET
-                  var regStartEt = etDay + 9*60*60*1000 + 30*60*1000; // 09:30 ET
-                  var regEndEt = etDay + 16*60*60*1000;          // 16:00 ET
-                  var afterEndEt = etDay + 20*60*60*1000;        // 20:00 ET
-                  var nextEtDay = etDay + dayMs;
-
-                  // Convert ET back to UTC for chart timestamps
                   var sessions = [
-                    { start: etDay - etOffsetMs, end: preStartEt - etOffsetMs, color: 'rgba(100,100,100,0.1)' },
-                    { start: preStartEt - etOffsetMs, end: regStartEt - etOffsetMs, color: 'rgba(151, 151, 151, 0.1)' },
-                    { start: regStartEt - etOffsetMs, end: regEndEt - etOffsetMs, color: 'rgba(0, 0, 0, 0.1)' },
-                    { start: regEndEt - etOffsetMs, end: afterEndEt - etOffsetMs, color: 'rgba(45, 45, 45, 0.18)' },
-                    { start: afterEndEt - etOffsetMs, end: nextEtDay - etOffsetMs, color: 'rgba(151, 151, 151, 0.1)' }
+                    // midnight -> 4:00 ET (night)
+                    { start: toUtcEpoch(dayEt),       end: toUtcEpoch(preStartEt),   color: 'rgba(100,100,100,0.1)' },
+                    // 4:00 -> 9:30 ET (premarket)
+                    { start: toUtcEpoch(preStartEt),  end: toUtcEpoch(regStartEt),   color: 'rgba(151, 151, 151, 0.1)' },
+                    // 9:30 -> extended close (day; keep transparent)
+                    { start: toUtcEpoch(regStartEt),  end: toUtcEpoch(regEndEtExt),  color: 'rgba(0, 0, 0, 0.0)' },
+                    // extended close -> extended after-hours end (after hours; darker)
+                    { start: toUtcEpoch(regEndEtExt), end: toUtcEpoch(afterEndEtExt), color: 'rgba(45, 45, 45, 0.18)' },
+                    // extended after-hours end -> midnight (night)
+                    { start: toUtcEpoch(afterEndEtExt), end: toUtcEpoch(nextDayEt),  color: 'rgba(100, 100, 100, 0.1)' }
                   ];
                   sessions.forEach(function(s){
                     if (s.end <= startTs || s.start >= endTs) return;
