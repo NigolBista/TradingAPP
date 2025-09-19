@@ -100,15 +100,13 @@ export default function RootNavigator() {
               name="Trading"
               component={TradingNavigator}
               options={{
-                presentation: 'modal',
-                animation: 'slide_from_bottom',
+                animation: 'slide_from_right',
               }}
             />
             <RootStack.Screen
               name="Portfolio"
               component={PortfolioNavigator}
               options={{
-                presentation: 'modal',
                 animation: 'slide_from_right',
               }}
             />
@@ -116,7 +114,6 @@ export default function RootNavigator() {
               name="Market"
               component={MarketNavigator}
               options={{
-                presentation: 'modal',
                 animation: 'slide_from_right',
               }}
             />

@@ -83,7 +83,6 @@ export function MarketNavigator() {
         options={({ route }) => ({
           title: route.params?.context === 'market' ? 'Market Chat' : 'AI Chat',
           headerShown: false,
-          presentation: 'modal',
         })}
       />
     </MarketStack.Navigator>

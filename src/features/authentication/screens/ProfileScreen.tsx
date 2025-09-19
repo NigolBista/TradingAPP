@@ -18,6 +18,7 @@ import { useTheme, type ThemeMode } from "../../../providers/ThemeProvider";
 import Card from "../../../shared/components/common/Card";
 import Button from "../../../shared/components/common/Button";
 import Input from "../../../shared/components/common/Input";
+import { useNavigationHelpers } from "../../../navigation/hooks";
 import {
   scheduleDailyBriefing,
   scheduleWeeklyDigest,
@@ -30,6 +31,7 @@ export default function ProfileScreen({ navigation }: any) {
   const profile = useUserStore((state) => state.profile);
   const setProfile = useUserStore((state) => state.setProfile);
   const { theme, themeMode, setThemeMode, isDark } = useTheme();
+  const { navigateToAccounts } = useNavigationHelpers();
   const styles = createStyles(theme);
 
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -258,7 +260,7 @@ export default function ProfileScreen({ navigation }: any) {
             </Pressable>
 
             <Pressable
-              onPress={() => navigation.navigate("BrokerageAccounts")}
+              onPress={() => navigateToAccounts()}
               style={styles.actionItem}
             >
               <View style={styles.actionLeft}>
@@ -317,7 +319,10 @@ export default function ProfileScreen({ navigation }: any) {
             </Pressable>
 
             <Pressable
-              onPress={() => navigation.navigate("StockNewsApiDemo")}
+              onPress={() => {
+                // TODO: StockNewsApiDemo screen not implemented in current navigation
+                console.log("Stock News API Demo - feature not available");
+              }}
               style={styles.actionItem}
             >
               <View style={styles.actionLeft}>

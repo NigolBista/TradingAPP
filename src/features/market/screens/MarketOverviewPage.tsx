@@ -13,10 +13,12 @@ import { useNavigation } from "@react-navigation/native";
 import { COLORS } from "../../../shared/constants/colors";
 import { MarketOverview, IndexStrip, ETFStrip, RecentEarningsCard, UpcomingEarningsCard } from "../../insights";
 import { useAppDataStore } from "../../../store/appDataStore";
+import { useNavigationHelpers } from "../../../navigation/hooks";
 // Remove marketOverviewStore to prevent loops
 
 export default function MarketOverviewPage() {
   const navigation = useNavigation();
+  const { navigateToStock } = useNavigationHelpers();
 
   // Use centralized store - no loading states needed!
   const {
@@ -123,7 +125,7 @@ export default function MarketOverviewPage() {
           <RecentEarningsCard
             onEarningsPress={(symbol) => {
               // Navigate to stock detail screen
-              (navigation as any).navigate("StockDetail", { symbol });
+              navigateToStock(symbol);
             }}
           />
         </View>

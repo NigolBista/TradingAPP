@@ -33,7 +33,6 @@ export function TradingNavigator() {
         options={({ route }) => ({
           title: `${route.params.symbol} Chart`,
           headerShown: false,
-          presentation: 'fullScreenModal',
         })}
       />
       <TradingStack.Screen
@@ -42,7 +41,6 @@ export function TradingNavigator() {
         options={{
           title: 'Chart Analysis',
           headerShown: false,
-          presentation: 'modal',
         }}
       />
       <TradingStack.Screen
@@ -51,7 +49,6 @@ export function TradingNavigator() {
         options={({ route }) => ({
           title: `${route.params.symbol} Indicators`,
           headerShown: false,
-          presentation: 'modal',
         })}
       />
     </TradingStack.Navigator>

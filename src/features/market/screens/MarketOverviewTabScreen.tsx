@@ -24,6 +24,7 @@ import {
 import { useUserStore } from "../../../store/userStore";
 import { useAppDataStore } from "../../../store/appDataStore";
 import { useTheme } from "../../../providers/ThemeProvider";
+import { useNavigationHelpers } from "../../../navigation/hooks";
 
 const createStyles = (theme: any) =>
   StyleSheet.create({
@@ -241,6 +242,7 @@ const STRATEGY_FILTERS = [
 
 export default function MarketOverviewTabScreen() {
   const navigation = useNavigation();
+  const { navigateToStock } = useNavigationHelpers();
   const { theme } = useTheme();
   const profile = useUserStore((s) => s.profile);
   const [activeTab, setActiveTab] = useState<TabType>("Market");
@@ -390,11 +392,7 @@ export default function MarketOverviewTabScreen() {
       <Pressable
         key={summary.symbol}
         style={styles.signalCard}
-        onPress={() =>
-          (navigation as any).navigate("StockDetail", {
-            symbol: summary.symbol,
-          })
-        }
+        onPress={() => navigateToStock(summary.symbol)}
       >
         <View style={styles.signalHeader}>
           <Text style={styles.signalSymbol}>{summary.symbol}</Text>

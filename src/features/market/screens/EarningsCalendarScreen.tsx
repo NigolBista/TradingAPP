@@ -15,6 +15,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useTheme } from "../../../providers/ThemeProvider";
 import { useUserStore } from "../../../store/userStore";
 import { useEarningsStore } from "../../../store/earningsStore";
+import { useNavigationHelpers } from "../../../navigation/hooks";
 import {
   fetchUpcomingEarnings,
   fetchRecentEarnings,
@@ -295,6 +296,7 @@ export default function EarningsCalendarScreen() {
   const { theme } = useTheme();
   const styles = createStyles(theme);
   const { profile } = useUserStore();
+  const { navigateToStock } = useNavigationHelpers();
 
   // Use earnings store
   const {
@@ -335,7 +337,7 @@ export default function EarningsCalendarScreen() {
   };
 
   const handleEarningsPress = (symbol: string) => {
-    (navigation as any).navigate("StockDetail", { symbol });
+    navigateToStock(symbol);
   };
 
   const filterEarnings = <T extends { symbol: string; companyName?: string }>(

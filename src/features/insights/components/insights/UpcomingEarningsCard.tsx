@@ -10,6 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../../providers/ThemeProvider";
 import { useNavigation, useFocusEffect } from "@react-navigation/native";
+import { navigate } from "../../../../navigation/RootNavigator";
 import { useUserStore } from "../../../../store/userStore";
 import { useEarningsStore } from "../../../../store/earningsStore";
 import { useCallback } from "react";
@@ -641,7 +642,10 @@ export default function UpcomingEarningsCard({
       <View style={styles.container}>
         <Pressable
           style={styles.sectionTitle}
-          onPress={() => (navigation as any).navigate("EarningsCalendar")}
+          onPress={() => {
+            // Navigate through the root navigator to the Market stack, then to EarningsCalendar
+            navigate("Market", { screen: "EarningsCalendar" } as any);
+          }}
         >
           <Text style={styles.title}>Earnings</Text>
           <Ionicons
@@ -663,7 +667,10 @@ export default function UpcomingEarningsCard({
       <View style={styles.container}>
         <Pressable
           style={styles.sectionTitle}
-          onPress={() => (navigation as any).navigate("EarningsCalendar")}
+          onPress={() => {
+            // Navigate through the root navigator to the Market stack, then to EarningsCalendar
+            navigate("Market", { screen: "EarningsCalendar" } as any);
+          }}
         >
           <Text style={styles.title}>Earnings</Text>
           <Ionicons
@@ -691,7 +698,10 @@ export default function UpcomingEarningsCard({
       <View style={styles.container}>
         <Pressable
           style={styles.sectionTitle}
-          onPress={() => (navigation as any).navigate("EarningsCalendar")}
+          onPress={() => {
+            // Navigate through the root navigator to the Market stack, then to EarningsCalendar
+            navigate("Market", { screen: "EarningsCalendar" } as any);
+          }}
         >
           <Text style={styles.title}>Earnings</Text>
           <Ionicons

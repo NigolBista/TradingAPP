@@ -70,6 +70,16 @@ async function fetchJson(url: string, headers: Record<string, string> = {}) {
   if (!res.ok) {
     const errorText = await res.text();
     console.log(`❌ Error response:`, errorText);
+
+    // Special handling for Market Data API 404 with no_data response
+    if (res.status === 404 && errorText.includes('"s":"no_data"')) {
+      try {
+        return JSON.parse(errorText);
+      } catch {
+        // If parsing fails, fall through to throw error
+      }
+    }
+
     throw new Error(`HTTP ${res.status}: ${res.statusText}`);
   }
   return res.json();
@@ -120,6 +130,11 @@ export async function fetchEarningsData(
     const json = await fetchJson(url, headers);
     console.log(`✅ Earnings API response status:`, json?.s);
     console.log(`📈 Full response:`, JSON.stringify(json, null, 2));
+
+    if (json?.s === "no_data") {
+      console.log(`📊 No earnings data available for ${symbol} in the specified date range`);
+      return [];
+    }
 
     if (json?.s !== "ok") {
       const errorMsg = json?.errmsg || "Unknown error";

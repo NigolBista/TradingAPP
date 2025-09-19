@@ -28,7 +28,7 @@ interface DashboardData {
 
 export default function DashboardScreen() {
   const navigation = useNavigation();
-  const { navigateToStock } = useNavigationHelpers();
+  const { navigateToStock, navigateToAccounts } = useNavigationHelpers();
   const { theme } = useTheme();
   // Use centralized store for market data too
   const { getSentimentSummary } = useAppDataStore();
@@ -381,10 +381,10 @@ export default function DashboardScreen() {
           <AccountsList
             accounts={filteredAccounts}
             onAccountPress={(account) => {
-              (navigation as any).navigate("BrokerageAccounts");
+              navigateToAccounts();
             }}
             onAddAccountPress={() => {
-              (navigation as any).navigate("BrokerageAccounts");
+              navigateToAccounts();
             }}
           />
         </View>
