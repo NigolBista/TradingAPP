@@ -35,7 +35,12 @@
       "Bash(for file in src/store/slices/{authSlice,marketSlice,portfolioSlice,tradingSlice}.ts)",
       "Bash(do sed -i '' 's|from \"\"../shared/services/repositories|from \"\"../../shared/services/repositories|g' \"$file\")",
       "Bash(git ls-tree:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(git push:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)",
+      "Bash(git checkout:*)",
+      "Bash(git pull:*)"
     ],
     "deny": [],
     "ask": []
