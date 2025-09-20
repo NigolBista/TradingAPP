@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import {
   View,
   Text,
@@ -6,8 +6,11 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { PriceAlert, useAlertStore } from "../../store/alertStore";
 import { useAuth } from "../../providers/AuthProvider";
 import alertsService from "../../services/alertsService";
@@ -30,11 +33,31 @@ export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingAlert, setEditingAlert] = useState<PriceAlert | null>(null);
+  const swipeableRefs = useRef<{ [key: string]: any }>({});
 
   const handleAddAlert = async (
     alertData: Omit<PriceAlert, "id" | "createdAt" | "isActive">
   ) => {
     if (!user) return;
+
+    // Check if alert with same price and condition already exists
+    const existingAlert = alerts.find(
+      (alert) =>
+        alert.price === alertData.price &&
+        alert.condition === alertData.condition
+    );
+
+    if (existingAlert) {
+      Alert.alert(
+        "Duplicate Alert",
+        `You already have a ${getConditionText(
+          alertData.condition
+        ).toLowerCase()} alert for $${alertData.price.toFixed(2)}`,
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     try {
       await alertsService.createAlert(user.id, {
         ...alertData,
@@ -55,6 +78,26 @@ export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
     alertData: Omit<PriceAlert, "id" | "createdAt" | "isActive">
   ) => {
     if (!user || !editingAlert) return;
+
+    // Check if alert with same price and condition already exists (excluding current alert)
+    const existingAlert = alerts.find(
+      (alert) =>
+        alert.id !== editingAlert.id &&
+        alert.price === alertData.price &&
+        alert.condition === alertData.condition
+    );
+
+    if (existingAlert) {
+      Alert.alert(
+        "Duplicate Alert",
+        `You already have a ${getConditionText(
+          alertData.condition
+        ).toLowerCase()} alert for $${alertData.price.toFixed(2)}`,
+        [{ text: "OK" }]
+      );
+      return;
+    }
+
     try {
       await alertsService.updateAlert(user.id, editingAlert.id, alertData);
     } catch (e) {
@@ -168,203 +211,117 @@ export default function AlertsList({ symbol, currentPrice }: AlertsListProps) {
     }
   };
 
+  const renderRightActions = (alert: PriceAlert) => (
+    <View style={styles.rightActionsContainer}>
+      <Pressable
+        style={styles.deleteAction}
+        onPress={() => handleDeleteAlert(alert)}
+      >
+        <Ionicons name="trash-outline" size={20} color="#fff" />
+      </Pressable>
+    </View>
+  );
+
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>Price Alerts</Text>
-        <Pressable
-          onPress={() => setShowAddModal(true)}
-          style={styles.addButton}
-        >
-          <Ionicons name="add" size={20} color="#000" />
-          <Text style={styles.addButtonText}>Add Alert</Text>
-        </Pressable>
-      </View>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <View style={styles.container}>
+        {/* Header */}
 
-      {/* Alerts List */}
-      {alerts.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="notifications-outline" size={48} color="#666" />
-          <Text style={styles.emptyTitle}>No Alerts Set</Text>
-          <Text style={styles.emptyDescription}>
-            Create price alerts to get notified when {symbol} reaches your
-            target levels
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.alertsList}>
-          {alerts.map((alert) => {
-            const isTriggered = isAlertTriggered(alert);
-            const conditionColor = getConditionColor(alert.condition);
+        {/* Alerts List */}
+        {alerts.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="notifications-outline" size={48} color="#666" />
+            <Text style={styles.emptyTitle}>No Alerts Set</Text>
+            <Text style={styles.emptyDescription}>
+              Create price alerts to get notified when {symbol} reaches your
+              target levels
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.alertsList}>
+            {alerts.map((alert) => {
+              const getSwipeableRef = (id: string) => {
+                if (!swipeableRefs.current[id]) {
+                  swipeableRefs.current[id] = React.createRef();
+                }
+                return swipeableRefs.current[id];
+              };
 
-            return (
-              <View
-                key={alert.id}
-                style={[
-                  styles.alertCard,
-                  !alert.isActive && styles.alertCardInactive,
-                  isTriggered && styles.alertCardTriggered,
-                ]}
-              >
-                {/* Alert Header */}
-                <View style={styles.alertHeader}>
-                  <View style={styles.alertInfo}>
-                    <View style={styles.priceContainer}>
-                      <Text style={styles.alertPrice}>
-                        ${alert.price.toFixed(2)}
-                      </Text>
-                      <View
-                        style={[
-                          styles.conditionBadge,
-                          { backgroundColor: `${conditionColor}20` },
-                        ]}
-                      >
-                        <Ionicons
-                          name={getConditionIcon(alert.condition) as any}
-                          size={12}
-                          color={conditionColor}
-                        />
-                        <Text
-                          style={[
-                            styles.conditionText,
-                            { color: conditionColor },
-                          ]}
-                        >
-                          {getConditionText(alert.condition)}
+              return (
+                <Swipeable
+                  key={alert.id}
+                  ref={getSwipeableRef(alert.id)}
+                  renderRightActions={() => renderRightActions(alert)}
+                  rightThreshold={40}
+                >
+                  <View style={styles.alertItem}>
+                    <View style={styles.alertContent}>
+                      <View style={styles.alertInfo}>
+                        <Text style={styles.alertType}>
+                          Price{" "}
+                          {getConditionText(alert.condition).toLowerCase()}
+                        </Text>
+                        <Text style={styles.alertPrice}>
+                          ${alert.price.toFixed(2)}
                         </Text>
                       </View>
+                      <View style={styles.alertActions}>
+                        <Pressable
+                          onPress={() => handleEditAlert(alert)}
+                          style={styles.editButton}
+                        >
+                          <Ionicons
+                            name="ellipsis-vertical"
+                            size={16}
+                            color="#888"
+                          />
+                        </Pressable>
+                        <Switch
+                          value={alert.isActive}
+                          onValueChange={() => handleToggleAlert(alert)}
+                          trackColor={{ false: "#767577", true: "#007AFF" }}
+                          thumbColor={alert.isActive ? "#fff" : "#f4f3f4"}
+                        />
+                      </View>
                     </View>
-                    {alert.message && (
-                      <Text style={styles.alertMessage}>{alert.message}</Text>
-                    )}
                   </View>
+                </Swipeable>
+              );
+            })}
+          </View>
+        )}
 
-                  <View style={styles.alertActions}>
-                    <Pressable
-                      onPress={() => handleToggleAlert(alert)}
-                      style={[
-                        styles.toggleButton,
-                        alert.isActive && styles.toggleButtonActive,
-                      ]}
-                    >
-                      <Ionicons
-                        name={alert.isActive ? "pause" : "play"}
-                        size={16}
-                        color={alert.isActive ? "#000" : "#666"}
-                      />
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => handleEditAlert(alert)}
-                      style={styles.actionButton}
-                    >
-                      <Ionicons name="create-outline" size={16} color="#888" />
-                    </Pressable>
-
-                    <Pressable
-                      onPress={() => handleDeleteAlert(alert)}
-                      style={styles.actionButton}
-                    >
-                      <Ionicons
-                        name="trash-outline"
-                        size={16}
-                        color="#EF4444"
-                      />
-                    </Pressable>
-                  </View>
-                </View>
-
-                {/* Alert Status */}
-                <View style={styles.alertStatus}>
-                  <View style={styles.statusRow}>
-                    <Text style={styles.statusLabel}>Status:</Text>
-                    <Text
-                      style={[
-                        styles.statusText,
-                        {
-                          color: isTriggered
-                            ? "#10B981"
-                            : alert.isActive
-                            ? "#00D4AA"
-                            : "#666",
-                        },
-                      ]}
-                    >
-                      {isTriggered
-                        ? "Triggered"
-                        : alert.isActive
-                        ? "Active"
-                        : "Inactive"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.statusRow}>
-                    <Text style={styles.statusLabel}>Created:</Text>
-                    <Text style={styles.statusText}>
-                      {new Date(alert.createdAt).toLocaleDateString()}
-                    </Text>
-                  </View>
-
-                  {alert.triggeredAt && (
-                    <View style={styles.statusRow}>
-                      <Text style={styles.statusLabel}>Triggered:</Text>
-                      <Text style={styles.statusText}>
-                        {new Date(alert.triggeredAt).toLocaleDateString()}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Current Price vs Alert Price */}
-                <View style={styles.priceComparison}>
-                  <Text style={styles.comparisonLabel}>
-                    Current: ${currentPrice.toFixed(2)}
-                  </Text>
-                  <View style={styles.priceDifference}>
-                    <Text
-                      style={[
-                        styles.differenceText,
-                        {
-                          color:
-                            currentPrice >= alert.price ? "#10B981" : "#EF4444",
-                        },
-                      ]}
-                    >
-                      {currentPrice >= alert.price ? "+" : ""}
-                      {(
-                        ((currentPrice - alert.price) / alert.price) *
-                        100
-                      ).toFixed(1)}
-                      %
-                    </Text>
-                  </View>
-                </View>
-              </View>
-            );
-          })}
+        {/* Add Alert Button */}
+        <View style={styles.addAlertContainer}>
+          <Pressable
+            onPress={() => setShowAddModal(true)}
+            style={styles.addAlertButton}
+          >
+            <Ionicons name="add" size={20} color="#007AFF" />
+            <Text style={styles.addAlertText}>Add Alert</Text>
+          </Pressable>
         </View>
-      )}
 
-      {/* Add Alert Modal */}
-      <AlertModal
-        visible={showAddModal}
-        onClose={() => setShowAddModal(false)}
-        symbol={symbol}
-        currentPrice={currentPrice}
-        onSave={handleAddAlert}
-      />
+        {/* Add Alert Modal */}
+        <AlertModal
+          visible={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          symbol={symbol}
+          currentPrice={currentPrice}
+          onSave={handleAddAlert}
+        />
 
-      {/* Edit Alert Modal */}
-      <AlertModal
-        visible={editingAlert !== null}
-        onClose={() => setEditingAlert(null)}
-        symbol={symbol}
-        currentPrice={currentPrice}
-        onSave={handleUpdateAlert}
-        editingAlert={editingAlert}
-      />
-    </View>
+        {/* Edit Alert Modal */}
+        <AlertModal
+          visible={editingAlert !== null}
+          onClose={() => setEditingAlert(null)}
+          symbol={symbol}
+          currentPrice={currentPrice}
+          onSave={handleUpdateAlert}
+          editingAlert={editingAlert}
+        />
+      </View>
+    </GestureHandlerRootView>
   );
 }
 
@@ -374,9 +331,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a0a0a",
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderBottomWidth: 1,
@@ -386,20 +340,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "700",
     color: "#fff",
-  },
-  addButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#00D4AA",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 6,
-  },
-  addButtonText: {
-    color: "#000",
-    fontSize: 14,
-    fontWeight: "600",
   },
   emptyState: {
     flex: 1,
@@ -421,113 +361,68 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   alertsList: {
-    padding: 16,
+    paddingHorizontal: 0,
   },
-  alertCard: {
+  alertItem: {
     backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#333",
+    marginBottom: 1,
   },
-  alertCardInactive: {
-    opacity: 0.6,
-  },
-  alertCardTriggered: {
-    borderColor: "#10B981",
-    backgroundColor: "#10B98110",
-  },
-  alertHeader: {
+  alertContent: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
   },
   alertInfo: {
     flex: 1,
   },
-  priceContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
+  alertType: {
+    fontSize: 16,
+    color: "#fff",
     marginBottom: 4,
   },
   alertPrice: {
-    fontSize: 20,
-    fontWeight: "700",
+    fontSize: 16,
     color: "#fff",
-  },
-  conditionBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  conditionText: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  alertMessage: {
-    fontSize: 14,
-    color: "#ccc",
-    marginTop: 4,
+    fontWeight: "500",
   },
   alertActions: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 12,
   },
-  toggleButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "#2a2a2a",
+  editButton: {
+    padding: 4,
   },
-  toggleButtonActive: {
-    backgroundColor: "#00D4AA",
-  },
-  actionButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: "#2a2a2a",
-  },
-  alertStatus: {
-    marginBottom: 12,
-  },
-  statusRow: {
+  rightActionsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 4,
-  },
-  statusLabel: {
-    fontSize: 12,
-    color: "#888",
-  },
-  statusText: {
-    fontSize: 12,
-    color: "#fff",
-    fontWeight: "500",
-  },
-  priceComparison: {
-    flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
-    paddingTop: 12,
+    height: "100%",
+  },
+  deleteAction: {
+    width: 80,
+    height: "100%",
+    backgroundColor: "#EF4444",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  addAlertContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     borderTopWidth: 1,
     borderTopColor: "#333",
   },
-  comparisonLabel: {
-    fontSize: 14,
-    color: "#ccc",
+  addAlertButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+  },
+  addAlertText: {
+    color: "#007AFF",
+    fontSize: 16,
     fontWeight: "500",
-  },
-  priceDifference: {
-    alignItems: "flex-end",
-  },
-  differenceText: {
-    fontSize: 14,
-    fontWeight: "600",
   },
 });
