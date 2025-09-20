@@ -118,7 +118,7 @@ export default function SimpleKLineChart({
   showTimeAxisText,
   showLastPriceLabel = true,
   showSessions = false,
-  mockRealtime = false,
+  mockRealtime = true,
   levels,
   customBars,
   customData,

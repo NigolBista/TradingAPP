@@ -233,7 +233,6 @@ export default function ChartFullScreen() {
   // Layout calculations
   const headerHeight = 52;
   const ohlcRowHeight = 24;
-  const indicatorBarHeight = showIndicatorsAccordion ? 88 : 28;
   const timeframeRowHeight = 48;
   const bottomNavHeight = 56;
   const chartHeight = Math.max(
@@ -243,10 +242,8 @@ export default function ChartFullScreen() {
       insets.bottom -
       headerHeight -
       ohlcRowHeight -
-      indicatorBarHeight -
       timeframeRowHeight -
-      bottomNavHeight -
-      8
+      bottomNavHeight
   );
 
   // Removed unused dimensions listener and bar spacing calculations
@@ -1144,22 +1141,13 @@ export default function ChartFullScreen() {
         }
       />
 
-      {showIndicatorsAccordion && (
-        <IndicatorsAccordion
-          indicators={indicators}
-          onOpenConfig={(name) => openIndicatorConfig(name)}
-          onToggleIndicator={(name) => toggleIndicator(name)}
-          onOpenAddSheet={openIndicatorsSheet}
-        />
-      )}
-
       {/* OHLCV Row */}
       <OHLCRow lastCandle={lastCandle} />
 
       {/* Chart */}
-      <View style={{ marginBottom: 8, position: "relative" }}>
+      <View style={{ position: "relative", flex: 1 }}>
         <SimpleKLineChart
-          key={`chart-${symbol}`}
+          key={`chart-${symbol}-${chartHeight}`}
           symbol={symbol}
           timeframe={extendedTf as any}
           height={chartHeight}
@@ -1299,6 +1287,24 @@ export default function ChartFullScreen() {
             setProposedAlertPrice(null);
           }}
         />
+        {/* Floating Indicators Accordion */}
+        {showIndicatorsAccordion && (
+          <View style={styles.floatingIndicatorsContainer}>
+            <Pressable
+              style={styles.floatingIndicatorsBackdrop}
+              onPress={() => setShowIndicatorsAccordion(false)}
+            />
+            <View style={styles.floatingIndicatorsContent}>
+              <IndicatorsAccordion
+                indicators={indicators}
+                onOpenConfig={(name) => openIndicatorConfig(name)}
+                onToggleIndicator={(name) => toggleIndicator(name)}
+                onOpenAddSheet={openIndicatorsSheet}
+              />
+            </View>
+          </View>
+        )}
+
         {/* Dragging is handled in-chart; removed separate overlay controls */}
         {showReasonIcon ? (
           <Pressable
@@ -1545,6 +1551,35 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     zIndex: 2,
     elevation: 2,
+  },
+  floatingIndicatorsContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 10,
+    elevation: 10,
+  },
+  floatingIndicatorsBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.3)",
+  },
+  floatingIndicatorsContent: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#0f0f0f",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   bottomNav: {
     borderTopWidth: 1,
