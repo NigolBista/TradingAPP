@@ -1905,8 +1905,10 @@ export default function SimpleKLineChart({
                 updateTimeframe(timeframe);
                 updateChartType(chartType);
                 updateTheme(theme);
-                updateIndicators(indicators);
+                // Apply global display options before creating indicators to avoid style resets
                 updateDisplayOptions({ showSessions });
+                // Now add indicators so their custom styles persist
+                updateIndicators(indicators);
                 if (alerts) updateAlerts(alerts);
                 if (levels) updateLevels(levels);
               } catch (_) {}
