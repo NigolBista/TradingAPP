@@ -98,3 +98,19 @@ export async function executeChartActions(
 export async function screenshotChart(): Promise<string> {
   return captureChartScreenshot();
 }
+
+/**
+ * Execute actions sequentially (in order), awaiting each action.
+ * Useful for narrated, user-visible flows.
+ */
+export async function executeChartActionsSequentially(
+  actions: ChartAction[]
+): Promise<void> {
+  for (const action of actions) {
+    try {
+      await executeChartAction(action);
+    } catch (e) {
+      console.warn("Chart action failed", e);
+    }
+  }
+}

@@ -7,6 +7,7 @@ import { AlertAgent } from "./alertAgent";
 import { CritiqueAgent } from "./critiqueAgent";
 import { OrchestratorAgent } from "./orchestratorAgent";
 import { RouterAgent } from "./routerAgent";
+import { ChartSequenceAgent } from "./sequenceAgent";
 
 class AgentRegistryImpl implements AgentRegistry {
   private agents: Map<string, Agent> = new Map();
@@ -58,6 +59,7 @@ export const agentRegistry = new AgentRegistryImpl();
 [
   new ChartContextAgent(),
   new ChartControlAgent(),
+  new ChartSequenceAgent(),
   new AnalysisAgent(),
   new TradingAgent(),
   new AlertAgent(),

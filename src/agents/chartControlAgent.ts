@@ -1,107 +1,130 @@
-import { Agent, AgentContext, AgentResponse, ChartControlResponse, ChartAction } from './types';
-import { executeChartActions, screenshotChart } from '../logic/chartBridge';
-import { generateChartContextConfig } from '../logic/chartContextConfig';
+import {
+  Agent,
+  AgentContext,
+  AgentResponse,
+  ChartControlResponse,
+  ChartAction,
+} from "./types";
+import { executeChartActions, screenshotChart } from "../logic/chartBridge";
+import { generateChartContextConfig } from "../logic/chartContextConfig";
+import { normalizeIndicatorOptions } from "../logic/indicatorDefaults";
 
 export class ChartControlAgent implements Agent {
-  name = 'chart-control';
-  description = 'Controls chart manipulation, indicators, and visual elements';
-  
+  name = "chart-control";
+  description = "Controls chart manipulation, indicators, and visual elements";
+
   capabilities = [
     {
-      name: 'setup-chart',
-      description: 'Setup chart with basic configuration',
+      name: "setup-chart",
+      description: "Setup chart with basic configuration",
       parameters: {
-        symbol: { type: 'string' },
-        timeframe: { type: 'string' },
-        chartType: { type: 'string', optional: true }
+        symbol: { type: "string" },
+        timeframe: { type: "string" },
+        chartType: { type: "string", optional: true },
       },
     },
     {
-      name: 'add-indicator',
-      description: 'Add technical indicator to chart',
+      name: "add-indicator",
+      description: "Add technical indicator to chart",
       parameters: {
-        indicator: { type: 'string' },
-        options: { type: 'object', optional: true }
+        indicator: { type: "string" },
+        options: { type: "object", optional: true },
       },
     },
     {
-      name: 'remove-indicator',
-      description: 'Remove indicator from chart',
+      name: "remove-indicator",
+      description: "Remove indicator from chart",
       parameters: {
-        indicator: { type: 'string' }
+        indicator: { type: "string" },
       },
     },
     {
-      name: 'change-timeframe',
-      description: 'Change chart timeframe',
+      name: "change-timeframe",
+      description: "Change chart timeframe",
       parameters: {
-        timeframe: { type: 'string' }
+        timeframe: { type: "string" },
       },
     },
     {
-      name: 'change-chart-type',
-      description: 'Change chart display type',
+      name: "change-chart-type",
+      description: "Change chart display type",
       parameters: {
-        chartType: { type: 'string' }
+        chartType: { type: "string" },
       },
     },
     {
-      name: 'navigate-chart',
-      description: 'Pan or zoom chart view',
+      name: "navigate-chart",
+      description: "Pan or zoom chart view",
       parameters: {
-        direction: { type: 'string', enum: ['left', 'right', 'zoom-in', 'zoom-out'] }
+        direction: {
+          type: "string",
+          enum: ["left", "right", "zoom-in", "zoom-out"],
+        },
       },
     },
     {
-      name: 'toggle-display-option',
-      description: 'Toggle chart display options',
+      name: "toggle-display-option",
+      description: "Toggle chart display options",
       parameters: {
-        option: { type: 'string' },
-        enabled: { type: 'boolean' }
+        option: { type: "string" },
+        enabled: { type: "boolean" },
       },
     },
     {
-      name: 'capture-screenshot',
-      description: 'Capture chart screenshot',
+      name: "capture-screenshot",
+      description: "Capture chart screenshot",
       parameters: {},
     },
     {
-      name: 'get-chart-state',
-      description: 'Get current chart state and configuration',
+      name: "get-chart-state",
+      description: "Get current chart state and configuration",
       parameters: {},
-    }
+    },
   ];
 
-  async execute(context: AgentContext, action: string, params?: any): Promise<AgentResponse> {
+  async execute(
+    context: AgentContext,
+    action: string,
+    params?: any
+  ): Promise<AgentResponse> {
     try {
       switch (action) {
-        case 'setup-chart':
-          return this.setupChart(context, params?.symbol, params?.timeframe, params?.chartType);
-        
-        case 'add-indicator':
+        case "setup-chart":
+          return this.setupChart(
+            context,
+            params?.symbol,
+            params?.timeframe,
+            params?.chartType
+          );
+
+        case "add-indicator":
           return this.addIndicator(context, params?.indicator, params?.options);
-        
-        case 'remove-indicator':
+
+        case "remove-indicator":
           return this.removeIndicator(context, params?.indicator);
-        
-        case 'change-timeframe':
+
+        case "change-timeframe":
           return this.changeTimeframe(context, params?.timeframe);
-        
-        case 'change-chart-type':
+
+        case "change-chart-type":
           return this.changeChartType(context, params?.chartType);
-        
-        case 'navigate-chart':
+
+        case "navigate-chart":
           return this.navigateChart(context, params?.direction);
-        
-        case 'toggle-display-option':
-          return this.toggleDisplayOption(context, params?.option, params?.enabled);
-        
-        case 'capture-screenshot':
+
+        case "toggle-display-option":
+          return this.toggleDisplayOption(
+            context,
+            params?.option,
+            params?.enabled
+          );
+
+        case "capture-screenshot":
           return this.captureScreenshot(context);
-        
-        case 'get-chart-state':
+
+        case "get-chart-state":
           return this.getChartState(context);
-        
+
         default:
           return {
             success: false,
@@ -117,25 +140,23 @@ export class ChartControlAgent implements Agent {
   }
 
   canHandle(action: string): boolean {
-    return this.capabilities.some(cap => cap.name === action);
+    return this.capabilities.some((cap) => cap.name === action);
   }
 
   getRequiredContext(): string[] {
-    return ['symbol'];
+    return ["symbol"];
   }
 
   private async setupChart(
-    context: AgentContext, 
-    symbol: string, 
-    timeframe: string, 
+    context: AgentContext,
+    symbol: string,
+    timeframe: string,
     chartType?: string
   ): Promise<ChartControlResponse> {
-    const actions: ChartAction[] = [
-      { type: 'setTimeframe', timeframe },
-    ];
+    const actions: ChartAction[] = [{ type: "setTimeframe", timeframe }];
 
     if (chartType) {
-      actions.push({ type: 'setChartType', chartType } as ChartAction);
+      actions.push({ type: "setChartType", chartType } as ChartAction);
     }
 
     await executeChartActions(actions);
@@ -149,14 +170,14 @@ export class ChartControlAgent implements Agent {
   }
 
   private async addIndicator(
-    context: AgentContext, 
-    indicator: string, 
+    context: AgentContext,
+    indicator: string,
     options?: any
   ): Promise<ChartControlResponse> {
     const action: ChartAction = {
-      type: 'addIndicator',
+      type: "addIndicator",
       indicator,
-      options: options || {}
+      options: normalizeIndicatorOptions(indicator, options),
     };
 
     await executeChartActions([action]);
@@ -170,7 +191,7 @@ export class ChartControlAgent implements Agent {
   }
 
   private async removeIndicator(
-    context: AgentContext, 
+    context: AgentContext,
     indicator: string
   ): Promise<ChartControlResponse> {
     // Note: This would need to be implemented in the chart bridge
@@ -184,12 +205,12 @@ export class ChartControlAgent implements Agent {
   }
 
   private async changeTimeframe(
-    context: AgentContext, 
+    context: AgentContext,
     timeframe: string
   ): Promise<ChartControlResponse> {
     const action: ChartAction = {
-      type: 'setTimeframe',
-      timeframe
+      type: "setTimeframe",
+      timeframe,
     };
 
     await executeChartActions([action]);
@@ -203,12 +224,12 @@ export class ChartControlAgent implements Agent {
   }
 
   private async changeChartType(
-    context: AgentContext, 
+    context: AgentContext,
     chartType: string
   ): Promise<ChartControlResponse> {
     const action: ChartAction = {
-      type: 'setChartType',
-      chartType
+      type: "setChartType",
+      chartType,
     } as ChartAction;
 
     await executeChartActions([action]);
@@ -222,18 +243,18 @@ export class ChartControlAgent implements Agent {
   }
 
   private async navigateChart(
-    context: AgentContext, 
+    context: AgentContext,
     direction: string
   ): Promise<ChartControlResponse> {
     let action: ChartAction;
 
     switch (direction) {
-      case 'left':
-      case 'right':
-        action = { type: 'navigate', direction: direction as 'left' | 'right' };
+      case "left":
+      case "right":
+        action = { type: "navigate", direction: direction as "left" | "right" };
         break;
-      case 'zoom-in':
-      case 'zoom-out':
+      case "zoom-in":
+      case "zoom-out":
         // These would need to be implemented in the chart bridge
         return {
           success: true,
@@ -259,14 +280,14 @@ export class ChartControlAgent implements Agent {
   }
 
   private async toggleDisplayOption(
-    context: AgentContext, 
-    option: string, 
+    context: AgentContext,
+    option: string,
     enabled: boolean
   ): Promise<ChartControlResponse> {
     const action: ChartAction = {
-      type: 'toggleDisplayOption',
+      type: "toggleDisplayOption",
       option,
-      enabled
+      enabled,
     } as ChartAction;
 
     await executeChartActions([action]);
@@ -274,18 +295,20 @@ export class ChartControlAgent implements Agent {
     return {
       success: true,
       data: { option, enabled },
-      message: `Display option ${option} ${enabled ? 'enabled' : 'disabled'}`,
+      message: `Display option ${option} ${enabled ? "enabled" : "disabled"}`,
       chartActions: [action],
     };
   }
 
-  private async captureScreenshot(context: AgentContext): Promise<ChartControlResponse> {
+  private async captureScreenshot(
+    context: AgentContext
+  ): Promise<ChartControlResponse> {
     try {
       const screenshot = await screenshotChart();
       return {
         success: true,
         data: { screenshot },
-        message: 'Screenshot captured successfully',
+        message: "Screenshot captured successfully",
         screenshot,
       };
     } catch (error) {
@@ -296,9 +319,11 @@ export class ChartControlAgent implements Agent {
     }
   }
 
-  private async getChartState(context: AgentContext): Promise<ChartControlResponse> {
+  private async getChartState(
+    context: AgentContext
+  ): Promise<ChartControlResponse> {
     const contextConfig = generateChartContextConfig();
-    
+
     return {
       success: true,
       data: {
@@ -308,7 +333,7 @@ export class ChartControlAgent implements Agent {
         indicators: context.indicators || [],
         availableOptions: contextConfig,
       },
-      message: 'Chart state retrieved successfully',
+      message: "Chart state retrieved successfully",
     };
   }
 }

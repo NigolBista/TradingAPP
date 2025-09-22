@@ -12,6 +12,7 @@ import {
 } from "./aiStrategyEngine";
 import { StrategyKey } from "./strategies";
 import { generateChartContextConfig } from "./chartContextConfig";
+import { normalizeIndicatorOptions } from "./indicatorDefaults";
 
 export interface LLMChartRunOptions {
   symbol: string;
@@ -138,7 +139,7 @@ Available Configuration: ${JSON.stringify(contextConfig, null, 2)}`,
         return {
           type: "addIndicator",
           indicator: args.indicator,
-          options: args.options,
+          options: normalizeIndicatorOptions(args.indicator, args.options),
         };
       case "navigate":
         return { type: "navigate", direction: args.direction };

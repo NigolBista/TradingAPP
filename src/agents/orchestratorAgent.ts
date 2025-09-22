@@ -524,34 +524,28 @@ export class OrchestratorAgent implements Agent {
     timeframe: string,
     indicators: { indicator: string; options?: any }[] = []
   ): Promise<AgentResponse> {
-    const workflow = [
-      // Get chart context
+    const sequenceAgent = agentRegistry.getAgent("chart-sequence");
+    if (!sequenceAgent) {
+      return { success: false, error: "chart-sequence agent not available" };
+    }
+    const steps = [
       {
-        agent: "chart-context",
-        action: "get-chart-context",
-        params: {},
+        kind: "timeframe",
+        timeframe,
+        message: `Setting timeframe to ${timeframe}`,
       },
-      // Setup chart
-      {
-        agent: "chart-control",
-        action: "setup-chart",
-        params: { symbol, timeframe },
-      },
-      // Add indicators
-      ...indicators.map((def) => ({
-        agent: "chart-control",
-        action: "add-indicator",
-        params: { indicator: def.indicator, options: def.options },
+      ...indicators.map((i) => ({
+        kind: "indicator",
+        indicator: i.indicator,
+        options: i.options,
+        message: `Adding ${i.indicator}`,
       })),
-      // Perform analysis
-      {
-        agent: "analysis",
-        action: "analyze-chart",
-        params: { symbol, indicators: indicators.map((i) => i.indicator) },
-      },
+      { kind: "screenshot", message: "Capturing chart" },
     ];
-
-    return this.executeWorkflow(context, workflow, false);
+    return sequenceAgent.execute(context, "run-sequence", {
+      steps,
+      narrate: true,
+    });
   }
 
   private async determineEntryExit(

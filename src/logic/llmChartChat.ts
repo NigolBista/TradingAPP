@@ -16,6 +16,7 @@ import {
   getColorByName,
   isValidColor,
 } from "./chartContextConfig";
+import { normalizeIndicatorOptions } from "./indicatorDefaults";
 
 function normalizeColor(color: string): string {
   if (!color) return color;
@@ -70,6 +71,21 @@ export async function sendChartChatMessage(
     return { reply: "", analysis: null };
   }
 
+  // Fast-path: if the user clearly declined ("no", "no thanks", etc.),
+  // acknowledge and end without further model calls or screenshots.
+  const userText = (opts.message || "").trim();
+  const isClearDecline =
+    /^(no( thanks)?|nope|nah|not now|that's all|that is all|i'm good|im good|nothing else|cancel|stop)[.!\s]*$/i.test(
+      userText
+    );
+  if (isClearDecline) {
+    return {
+      reply:
+        "All set. I won't run analysis or make further changes. Ask anytime.",
+      analysis: null,
+    };
+  }
+
   const client = new OpenAI({ apiKey: openaiApiKey });
   const strategyRunner = opts.strategyRunner ?? runAIStrategy;
 
@@ -86,6 +102,9 @@ IMPORTANT BEHAVIOR:
 - Only use the run_analysis tool when the user explicitly asks for analysis, insights, or trading recommendations.
 - For chart modifications, use tools like add_indicator, set_timeframe, set_chart_type, etc.
 - Always respond with tool calls when users request chart changes - don't just explain what you would do.
+- Keep replies short and final. Do NOT ask follow-up questions like "Would you like to add indicators or run an analysis?" End with a concise confirmation.
+- If the user declines or says "no", acknowledge politely and DO NOT suggest anything else or ask again.
+- When styling indicators, default line thickness is 1 (thinnest). If multiple lines are added without colors, assign distinct colors.
 
 EXAMPLES:
 - User: "Add EMA indicator" → Call add_indicator tool with indicator: "EMA"
@@ -154,18 +173,10 @@ Please use the appropriate tool calls to perform any requested chart modificatio
       case "set_timeframe":
         return { type: "setTimeframe", timeframe: args.timeframe };
       case "add_indicator":
-        if (args.options?.styles?.lines) {
-          args.options.styles.lines = args.options.styles.lines.map(
-            (l: any) => ({
-              ...l,
-              color: normalizeColor(l.color),
-            })
-          );
-        }
         return {
           type: "addIndicator",
           indicator: args.indicator,
-          options: args.options,
+          options: normalizeIndicatorOptions(args.indicator, args.options),
         };
       case "navigate":
         return { type: "navigate", direction: args.direction };
@@ -196,11 +207,7 @@ Please use the appropriate tool calls to perform any requested chart modificatio
   }
 
   let screenshot: string | undefined;
-  if (
-    opts.sendData === "screenshot" ||
-    opts.sendData === "both" ||
-    !opts.sendData
-  ) {
+  if (opts.sendData === "screenshot" || opts.sendData === "both") {
     screenshot = await screenshotChart();
   }
 
@@ -219,42 +226,7 @@ Please use the appropriate tool calls to perform any requested chart modificatio
     });
   }
 
-  // Add assistant message with tool calls if there were any actions
-  const assistantMessage = {
-    role: "assistant" as const,
-    content: res.choices?.[0]?.message?.content || "",
-    tool_calls: toolCalls,
-  };
-
-  const followMessages = baseMessages.concat([assistantMessage]);
-
-  // Add tool response messages for each tool call
-  if (toolCalls.length > 0) {
-    // Add responses for chart control tool calls
-    toolCalls.forEach((toolCall: any) => {
-      followMessages.push({
-        role: "tool" as const,
-        tool_call_id: toolCall.id,
-        name: toolCall.function?.name || "chart_action",
-        content: JSON.stringify({
-          success: true,
-          action: toolCall.function?.name,
-        }),
-      } as any);
-    });
-
-    // Provide analysis and screenshot context to the model
-    followMessages.push({
-      role: "user" as const,
-      content: JSON.stringify({ analysis, screenshot: !!screenshot }),
-    });
-  }
-
-  const final = await client.chat.completions.create({
-    model: "gpt-5-mini",
-    messages: followMessages as any,
-  } as any);
-
-  const reply = final.choices?.[0]?.message?.content || "";
+  // Use the initial reply content directly to avoid an extra round-trip.
+  const reply = res.choices?.[0]?.message?.content || "";
   return { reply, analysis, screenshot };
 }

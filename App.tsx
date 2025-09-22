@@ -7,6 +7,7 @@ import { ThemeProvider } from "./src/providers/ThemeProvider";
 import { StripeProvider } from "./src/providers/StripeProvider";
 import { AuthProvider } from "./src/providers/AuthProvider";
 import { NotificationsProvider } from "./src/providers/NotificationsProvider";
+import { OverlayProvider } from "./src/providers/OverlayProvider";
 import { initializeApp } from "./src/services/appInitialization";
 
 export default function App() {
@@ -21,8 +22,10 @@ export default function App() {
         <StripeProvider>
           <AuthProvider>
             <NotificationsProvider>
-              <StatusBar style="auto" />
-              <RootNavigation />
+              <OverlayProvider>
+                <StatusBar style="auto" />
+                <RootNavigation />
+              </OverlayProvider>
             </NotificationsProvider>
           </AuthProvider>
         </StripeProvider>
