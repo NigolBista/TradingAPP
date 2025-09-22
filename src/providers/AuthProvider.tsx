@@ -20,6 +20,10 @@ import alertsService, {
 } from "../services/alertsService";
 import { useAlertStore } from "../store/alertStore";
 import barsService from "../services/barsService";
+import {
+  fetchUserWatchlist,
+  syncUserWatchlist,
+} from "../services/watchlistService";
 
 export type AuthUser = { id: string; email?: string; user_metadata?: any };
 
@@ -43,6 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const setProfile = useUserStore((s) => s.setProfile);
+  const profile = useUserStore((s) => s.profile);
   const resetProfile = useUserStore((s) => s.reset);
   const setAlerts = useAlertStore((s) => s.setAlerts);
   const upsertAlert = useAlertStore((s) => s.upsertAlert);
@@ -54,6 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     null
   );
   const barUnsubsRef = useRef<Record<string, () => void>>({});
+  const watchlistSaveRef = useRef<NodeJS.Timeout | null>(null);
+  const skipWatchlistSaveRef = useRef<boolean>(true);
 
   useEffect(() => {
     // Ask permissions early
@@ -127,6 +134,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!isMounted) return;
         setAlerts(serverAlerts);
 
+        // hydrate watchlists
+        try {
+          const canPersist = !!(u.id && /^[0-9a-fA-F-]{36}$/.test(u.id));
+          if (canPersist) {
+            const rows = await fetchUserWatchlist(u.id);
+            if (isMounted && Array.isArray(rows)) {
+              const current = useUserStore.getState().profile;
+              const items = rows.map((r) => ({
+                symbol: r.symbol,
+                isFavorite: !!r.isFavorite,
+                addedAt: r.addedAt ? new Date(r.addedAt) : new Date(),
+              }));
+              setProfile({
+                watchlists: [
+                  {
+                    id: "default",
+                    name: "My Watchlist",
+                    description: "Default watchlist",
+                    color: current.watchlists[0]?.color || "#00D4AA",
+                    items,
+                    createdAt: current.watchlists[0]?.createdAt || new Date(),
+                    isDefault: true,
+                  },
+                ],
+                activeWatchlistId: "default",
+                favorites: items
+                  .filter((i) => i.isFavorite)
+                  .map((i) => i.symbol),
+              });
+            }
+          }
+        } catch {
+        } finally {
+          skipWatchlistSaveRef.current = false;
+        }
+
         // start realtime
         const stop = alertsService.startRealtime(u.id, {
           onTradeSignal: async (sig: TradeSignalRow) => {
@@ -197,12 +240,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCleanupRealtime(null);
       }
       setAlerts([]);
+      skipWatchlistSaveRef.current = true;
+      try {
+        if (watchlistSaveRef.current) clearTimeout(watchlistSaveRef.current);
+      } catch {}
     }
 
     return () => {
       isMounted = false;
     };
   }, [user?.id]);
+
+  // Debounced save of single watchlist to Supabase
+  useEffect(() => {
+    const canPersist = !!(user?.id && /^[0-9a-fA-F-]{36}$/.test(user.id));
+    if (!canPersist || skipWatchlistSaveRef.current) return;
+    try {
+      if (watchlistSaveRef.current) clearTimeout(watchlistSaveRef.current);
+    } catch {}
+    watchlistSaveRef.current = setTimeout(() => {
+      const active = profile.watchlists.find(
+        (w) => w.id === profile.activeWatchlistId
+      );
+      const items = (active?.items || []).map((it) => ({
+        symbol: it.symbol,
+        isFavorite: profile.favorites.includes(it.symbol),
+      }));
+      syncUserWatchlist(user!.id, items).catch(() => {});
+    }, 600);
+    return () => {
+      try {
+        if (watchlistSaveRef.current) clearTimeout(watchlistSaveRef.current);
+      } catch {}
+    };
+  }, [
+    user?.id,
+    profile.watchlists,
+    profile.activeWatchlistId,
+    profile.favorites,
+  ]);
 
   // Subscribe to realtime bars for symbols with active alerts and update local lastPrice
   useEffect(() => {

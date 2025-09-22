@@ -53,6 +53,10 @@ export interface ChatRunOptions {
   sendData?: "screenshot" | "chart" | "both";
   /** Optional custom strategy engine */
   strategyRunner?: (input: AIStrategyInput) => Promise<AIStrategyOutput | null>;
+  /** If true, skip narration and delays for faster execution (default: true) */
+  fast?: boolean;
+  /** Explicitly allow analysis even if heuristics don't detect it */
+  allowAnalysis?: boolean;
 }
 
 export interface ChatRunResult {
@@ -91,9 +95,16 @@ export async function sendChartChatMessage(
 
   const client = new OpenAI({ apiKey: openaiApiKey });
   const strategyRunner = opts.strategyRunner ?? runAIStrategy;
+  const fast = opts.fast !== false; // default fast = true
 
   // Get comprehensive context configuration
   const contextConfig = generateChartContextConfig();
+
+  // Determine if user explicitly asked for analysis
+  const analysisRegex =
+    /\b(analy(s|z)e|analysis|insight|signal|entry|exit|trade plan|recommend|opinion|what do you think|setup for (trade|entry|exit))\b/i;
+  const wantsAnalysis = analysisRegex.test(userText);
+  const allowAnalysis = opts.allowAnalysis || wantsAnalysis;
 
   const baseMessages = [
     {
@@ -152,10 +163,13 @@ Please use the appropriate tool calls to perform any requested chart modificatio
     },
   ];
 
-  const tools = contextConfig.availableTools.map((tool) => ({
-    type: "function",
-    function: tool,
-  }));
+  const tools = contextConfig.availableTools
+    // Hide run_analysis tool unless explicitly requested to avoid extra LLM calls
+    .filter((tool) => tool.name !== "run_analysis" || allowAnalysis)
+    .map((tool) => ({
+      type: "function",
+      function: tool,
+    }));
 
   const res = await client.chat.completions.create({
     model: "gpt-5-mini",
@@ -278,26 +292,30 @@ Please use the appropriate tool calls to perform any requested chart modificatio
   }
 
   if (steps.length) {
-    try {
-      // Hide chat so user can watch the sequence on the chart
-      requestOpenChat();
-    } catch {}
+    // Optional: only open overlay UI if not in fast mode
+    if (!fast) {
+      try {
+        requestOpenChat();
+      } catch {}
+    }
 
-    // Wait for chart bridge to be ready after navigation
-    async function waitForChartReady(timeoutMs = 3000) {
+    // Wait briefly for chart bridge to be ready
+    async function waitForChartReady(timeoutMs = 1000) {
       const start = Date.now();
       while (!getChartBridge()) {
         if (Date.now() - start > timeoutMs) break;
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 50));
       }
     }
-    await waitForChartReady(2000);
+    await waitForChartReady(fast ? 300 : 1000);
 
     await runChartSequence(steps, {
-      narrate: true,
+      narrate: fast ? false : true,
       cancellable: false,
-      perStepDelayMs: (i, step) =>
-        step.kind === "timeframe" ? 900 : step.kind === "delay" ? 600 : 300,
+      perStepDelayMs: fast
+        ? 0
+        : (i, step) =>
+            step.kind === "timeframe" ? 900 : step.kind === "delay" ? 600 : 300,
     });
   }
 

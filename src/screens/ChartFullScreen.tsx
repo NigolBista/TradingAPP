@@ -65,6 +65,10 @@ import {
 import { buildDayTradePlan } from "../logic/dayTrade";
 import { buildSwingTradePlan } from "../logic/swingTrade";
 import useMarketStatus from "../hooks/useMarketStatus";
+import {
+  getUserChartSettings,
+  upsertUserChartSettings,
+} from "../services/chartSettingsService";
 
 // Types
 type AIMeta = {
@@ -230,6 +234,9 @@ export default function ChartFullScreen() {
     updateLevels: (levels: any) => void;
   } | null>(null);
 
+  const saveDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const skipSaveRef = useRef<boolean>(true);
+
   // Layout calculations
   const headerHeight = 52;
   const ohlcRowHeight = 24;
@@ -264,6 +271,99 @@ export default function ChartFullScreen() {
     loadStockName();
     hydrate();
   }, [symbol]);
+
+  // Hydrate user chart settings from Supabase (per-symbol with global fallback)
+  useEffect(() => {
+    let isMounted = true;
+    async function hydrateServerSettings() {
+      try {
+        const canPersist = !!(user?.id && /^[0-9a-fA-F-]{36}$/.test(user.id));
+        if (!canPersist) {
+          skipSaveRef.current = false;
+          return;
+        }
+        const row = await getUserChartSettings(user!.id, symbol);
+        const settings = row ?? (await getUserChartSettings(user!.id));
+        if (!isMounted || !settings) {
+          skipSaveRef.current = false;
+          return;
+        }
+
+        if (settings.timeframe) {
+          setExtendedTf(settings.timeframe as ExtendedTimeframe);
+          try {
+            chartBridgeRef.current?.updateTimeframe(
+              settings.timeframe as string
+            );
+          } catch {}
+        }
+        if (settings.chart_type) {
+          setChartType(settings.chart_type as any);
+          try {
+            chartBridgeRef.current?.updateChartType(
+              settings.chart_type as string
+            );
+          } catch {}
+        }
+        if (typeof settings.show_volume === "boolean")
+          setShowVolume(settings.show_volume);
+        if (typeof settings.show_ma === "boolean") setShowMA(settings.show_ma);
+        if (typeof settings.show_sessions === "boolean")
+          setShowSessions(settings.show_sessions);
+        if (settings.indicators && Array.isArray(settings.indicators)) {
+          setIndicators(settings.indicators as any);
+          try {
+            chartBridgeRef.current?.updateIndicators(
+              settings.indicators as any
+            );
+          } catch {}
+        }
+      } catch (_) {
+        // ignore hydration errors
+      } finally {
+        skipSaveRef.current = false;
+      }
+    }
+    hydrateServerSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id, symbol]);
+
+  // Debounced save of chart settings to Supabase
+  useEffect(() => {
+    const canPersist = !!(user?.id && /^[0-9a-fA-F-]{36}$/.test(user.id));
+    if (!canPersist || skipSaveRef.current) return;
+    try {
+      if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    } catch {}
+    saveDebounceRef.current = setTimeout(() => {
+      upsertUserChartSettings({
+        user_id: user!.id,
+        symbol,
+        timeframe: extendedTf as any,
+        chart_type: chartType as any,
+        show_volume: !!showVolume,
+        show_ma: !!showMA,
+        show_sessions: !!showSessions,
+        indicators: indicators as any,
+      }).catch(() => {});
+    }, 600);
+    return () => {
+      try {
+        if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+      } catch {}
+    };
+  }, [
+    user?.id,
+    symbol,
+    extendedTf,
+    chartType,
+    showVolume,
+    showMA,
+    showSessions,
+    indicators,
+  ]);
 
   // Register a chart bridge so external agents can manipulate the chart state
   useEffect(() => {

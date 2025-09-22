@@ -153,44 +153,82 @@ export function searchStocksAutocomplete(
   query: string,
   limit: number = 15
 ): Promise<StockSearchResult[]> {
-  return new Promise((resolve) => {
-    if (!query || query.trim().length === 0) {
+  return new Promise(async (resolve) => {
+    const q = (query || "").trim();
+    if (q.length === 0) {
       resolve(getPopularStocks().slice(0, limit));
       return;
     }
 
-    // If data isn't loaded yet, return empty results for now
+    // Try Polygon reference tickers first if key present
+    try {
+      const { default: Constants } = await import("expo-constants");
+      const apiKey = (Constants.expoConfig?.extra as any)?.polygonApiKey as
+        | string
+        | undefined;
+      if (apiKey) {
+        const url = `https://api.polygon.io/v3/reference/tickers?market=stocks&active=true&search=${encodeURIComponent(
+          q
+        )}&limit=${Math.max(
+          1,
+          Math.min(50, limit)
+        )}&apiKey=${encodeURIComponent(apiKey)}`;
+        const resp = await fetch(url);
+        if (resp.ok) {
+          const json = await resp.json();
+          const rows: any[] = json?.results || [];
+          const mapped: StockSearchResult[] = rows.map((r: any) => ({
+            symbol: r.ticker,
+            name: r.name || r.ticker,
+            type: (r.type || "stock").toLowerCase(),
+            exchange: r.primary_exchange || r.exchange || undefined,
+          }));
+          const norm = q.toUpperCase();
+          const sorted = mapped
+            .filter((m) => typeof m.symbol === "string")
+            .sort((a, b) => {
+              const ae = a.symbol.toUpperCase() === norm ? 1 : 0;
+              const be = b.symbol.toUpperCase() === norm ? 1 : 0;
+              if (ae !== be) return be - ae;
+              const as = a.symbol.toUpperCase().startsWith(norm) ? 1 : 0;
+              const bs = b.symbol.toUpperCase().startsWith(norm) ? 1 : 0;
+              if (as !== bs) return bs - as;
+              return a.symbol.length - b.symbol.length;
+            })
+            .slice(0, limit);
+          resolve(sorted);
+          return;
+        }
+      }
+    } catch {}
+
+    // Fallback to local index
     if (!stocksCache || !searchIndex || !symbolIndex) {
       resolve([]);
       return;
     }
 
-    const normalizedQuery = query.toUpperCase().trim();
+    const normalizedQuery = q.toUpperCase();
     const results: StockSearchResult[] = [];
     const seen = new Set<string>();
 
-    // 1. Exact symbol match (highest priority)
     const exactMatch = symbolIndex.get(normalizedQuery);
     if (exactMatch) {
       results.push(convertToSearchResult(exactMatch));
       seen.add(exactMatch.Symbol);
     }
 
-    // 2. Symbol prefix matches using optimized index
     for (
       let prefixLength = normalizedQuery.length;
       prefixLength >= 1;
       prefixLength--
     ) {
       if (results.length >= limit) break;
-
       const prefix = normalizedQuery.substring(0, prefixLength);
       const candidateStocks = searchIndex.get(prefix) || [];
-
       candidateStocks.forEach((stock) => {
         if (results.length >= limit) return;
         if (seen.has(stock.Symbol)) return;
-
         if (stock.Symbol.toUpperCase().startsWith(normalizedQuery)) {
           results.push(convertToSearchResult(stock));
           seen.add(stock.Symbol);
@@ -198,15 +236,12 @@ export function searchStocksAutocomplete(
       });
     }
 
-    // 3. Company name matches using word prefixes
     if (results.length < limit && normalizedQuery.length >= 2) {
       const namePrefix = normalizedQuery.substring(0, 2);
       const nameMatches = searchIndex.get(namePrefix) || [];
-
       nameMatches.forEach((stock) => {
         if (results.length >= limit) return;
         if (seen.has(stock.Symbol)) return;
-
         if (stock.Name.toUpperCase().includes(normalizedQuery)) {
           results.push(convertToSearchResult(stock));
           seen.add(stock.Symbol);
@@ -214,23 +249,17 @@ export function searchStocksAutocomplete(
       });
     }
 
-    // Sort results by relevance (exact matches first, then by symbol length)
     results.sort((a, b) => {
       const aIsExact = a.symbol.toUpperCase() === normalizedQuery;
       const bIsExact = b.symbol.toUpperCase() === normalizedQuery;
-
       if (aIsExact && !bIsExact) return -1;
       if (!aIsExact && bIsExact) return 1;
-
       const aStartsWith = a.symbol.toUpperCase().startsWith(normalizedQuery);
       const bStartsWith = b.symbol.toUpperCase().startsWith(normalizedQuery);
-
       if (aStartsWith && !bStartsWith) return -1;
       if (!aStartsWith && bStartsWith) return 1;
-
       return a.symbol.length - b.symbol.length;
     });
-
     resolve(results.slice(0, limit));
   });
 }
