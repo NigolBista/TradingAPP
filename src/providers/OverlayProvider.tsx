@@ -1,11 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
-import {
-  onOverlayMessage,
-  offOverlayMessage,
-  requestCancelOverlayFlow,
-  requestContinueOverlayFlow,
-} from "../services/overlayBus";
+import { onOverlayMessage, offOverlayMessage } from "../services/overlayBus";
 
 const OverlayContext = createContext({});
 export const useOverlay = () => useContext(OverlayContext);
@@ -32,23 +27,7 @@ export const OverlayProvider: React.FC<{ children: React.ReactNode }> = ({
         <View style={styles.overlay} pointerEvents="box-none">
           <View style={styles.toast}>
             <Text style={styles.text}>{message}</Text>
-            <TouchableOpacity
-              onPress={requestCancelOverlayFlow}
-              style={styles.button}
-            >
-              <Text style={styles.buttonText}>Stop</Text>
-            </TouchableOpacity>
-            {waiting ? (
-              <TouchableOpacity
-                onPress={requestContinueOverlayFlow}
-                style={[
-                  styles.button,
-                  { backgroundColor: "#10B981", marginLeft: 6 },
-                ]}
-              >
-                <Text style={styles.buttonText}>Continue</Text>
-              </TouchableOpacity>
-            ) : null}
+            {/* Buttons removed: show reasoning only */}
           </View>
         </View>
       ) : null}
@@ -63,11 +42,14 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
     bottom: 0,
-    justifyContent: "flex-start",
-    alignItems: "center",
+    // Position near the reasoning icon area (bottom-left, above timeframe)
+    justifyContent: "flex-end",
+    alignItems: "flex-start",
+    paddingLeft: 8,
+    paddingBottom: 64,
   },
   toast: {
-    marginTop: 12,
+    marginBottom: 12,
     backgroundColor: "rgba(0,0,0,0.6)",
     paddingHorizontal: 12,
     paddingVertical: 8,

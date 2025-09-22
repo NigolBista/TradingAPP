@@ -857,6 +857,29 @@ export default function SimpleKLineChart({
             }
 
             var chart = window.klinecharts.init('k-line-chart');
+            // Register custom VWAP indicator if available API present
+            try {
+              if (window.klinecharts && typeof window.klinecharts.registerIndicator === 'function' && !window.__VWAP_REGISTERED__) {
+                window.klinecharts.registerIndicator({
+                  name: 'VWAP', shortName: 'VWAP', series: 'price',
+                  calc: function (kLines) {
+                    var result = []; var cumPV = 0; var cumVol = 0; var lastDay = null;
+                    for (var i = 0; i < kLines.length; i++) {
+                      var k = kLines[i] || {}; var ts = Number(k.timestamp || k.time || k.t || 0);
+                      var d = new Date(ts); var dayKey = d.getUTCFullYear() + '-' + d.getUTCMonth() + '-' + d.getUTCDate();
+                      if (lastDay !== dayKey) { cumPV = 0; cumVol = 0; lastDay = dayKey; }
+                      var high = Number(k.high || k.h || 0), low = Number(k.low || k.l || 0), close = Number(k.close || k.c || 0), vol = Number(k.volume || k.v || 0);
+                      var typical = (high + low + close) / 3; cumPV += typical * vol; cumVol += vol;
+                      var vwap = cumVol > 0 ? (cumPV / cumVol) : (i > 0 ? result[i-1].values[0] : close);
+                      result.push({ values: [vwap] });
+                    }
+                    return result;
+                  },
+                  figures: [ { key: 'vwap', title: 'VWAP', type: 'line' } ], precision: 2,
+                });
+                window.__VWAP_REGISTERED__ = true;
+              }
+            } catch(_) {}
             if (SHOW_MA) { try { chart.createIndicator && chart.createIndicator('MA', false, { id: 'candle_pane' }); } catch(_){} }
             if (SHOW_VOL) { try { chart.createIndicator && chart.createIndicator('VOL'); } catch(_){} }
             applyChartType(chart, CHART_TYPE);
@@ -1448,10 +1471,12 @@ export default function SimpleKLineChart({
               try {
                 if (!cfg || !cfg.name) return;
                 var nm = String(cfg.name).toUpperCase();
-                var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA'];
+                    var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA','VWAP'];
                 var wantsOverlay = !!cfg.overlay || overlayCompat.indexOf(nm) >= 0;
                 var options = {};
                 if (wantsOverlay) { options.id = 'candle_pane'; }
+                // Condense sub-indicator panes: reduce auto heights and trim margins
+                if (!wantsOverlay) { options.height = 72; }
                 if (cfg.styles && cfg.styles.lines) {
                   var processedStyles = { lines: [] };
                   cfg.styles.lines.forEach(function(line){
@@ -1514,7 +1539,29 @@ export default function SimpleKLineChart({
             window.__SIMPLE_KLINE__.chart = chart; // Add chart reference for bridge operations
             window.__SIMPLE_KLINE__.setChartType = function(t){ try { applyChartType(chart, t); } catch(e) {} };
             window.__SIMPLE_KLINE__.setLevels = function(lvls){ try { applyLevels(lvls); } catch(_){} };
-            window.__SIMPLE_KLINE__.setIndicators = function(list){ try { clearAllIndicators(); if (Array.isArray(list)) { list.forEach(function(ic){ createIndicatorSafe(ic); }); } } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); } };
+            window.__SIMPLE_KLINE__.setIndicators = function(list){
+              try {
+                clearAllIndicators();
+                if (!Array.isArray(list)) return;
+                var overlayCompat = ['BBI','BOLL','EMA','MA','SAR','SMA','VWAP'];
+                var overlayDone = false; var subCount = 0; var seenSubs = {};
+                list.forEach(function(ic){
+                  var nm = String(ic && ic.name || '').toUpperCase();
+                  var wantsOverlay = !!(ic && ic.overlay) || overlayCompat.indexOf(nm) >= 0;
+                  if (wantsOverlay) {
+                    if (overlayDone) { return; }
+                    overlayDone = true;
+                    createIndicatorSafe(Object.assign({}, ic, { overlay: true }));
+                  } else {
+                    if (subCount >= 3) { return; }
+                    if (seenSubs[nm]) { return; }
+                    seenSubs[nm] = true;
+                    subCount++;
+                    createIndicatorSafe(Object.assign({}, ic, { overlay: false }));
+                  }
+                });
+              } catch(e) { post({ warn: 'setIndicators failed', message: String(e && e.message || e) }); }
+            };
             window.__SIMPLE_KLINE__.overrideIndicator = overrideIndicator;
             window.__SIMPLE_KLINE__.levelOverlayIds = window.__SIMPLE_KLINE__.levelOverlayIds || [];
             window.__SIMPLE_KLINE__.sessionOverlayIds = window.__SIMPLE_KLINE__.sessionOverlayIds || [];

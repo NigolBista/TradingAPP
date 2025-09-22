@@ -70,6 +70,21 @@ export const LINE_THICKNESS_OPTIONS = [
   { value: 4, label: "Extra Thick", description: "4px line thickness" },
 ] as const;
 
+// Tooltip label visibility rules
+export const TOOLTIP_RULES = [
+  {
+    value: "always",
+    label: "Always Show",
+    description: "Always visible labels",
+  },
+  {
+    value: "follow_cross",
+    label: "Follow Crosshair",
+    description: "Show labels when crosshair is active",
+  },
+  { value: "none", label: "Hidden", description: "Hide labels altogether" },
+] as const;
+
 // Available color palette from LineStyleModal
 export const COLOR_PALETTE = [
   // Row 1: Dark to medium grays and blues
@@ -266,6 +281,7 @@ export function generateChartContextConfig() {
     colorPalette: COLOR_PALETTE,
     chartDisplayOptions: CHART_DISPLAY_OPTIONS,
     navigationOptions: NAVIGATION_OPTIONS,
+    tooltipRules: TOOLTIP_RULES,
 
     // Trading configuration options
     tradingStrategies: TRADING_STRATEGIES,
@@ -306,6 +322,22 @@ export function generateChartContextConfig() {
             },
           },
           required: ["timeframe"],
+        },
+      },
+      {
+        name: "set_tooltip_rule",
+        description:
+          "Set tooltip label display rule for main and sub indicators",
+        parameters: {
+          type: "object",
+          properties: {
+            rule: {
+              type: "string",
+              enum: TOOLTIP_RULES.map((r) => r.value),
+              description: "Tooltip/label visibility rule",
+            },
+          },
+          required: ["rule"],
         },
       },
       {
@@ -357,6 +389,21 @@ export function generateChartContextConfig() {
                   description: "Indicator calculation parameters",
                 },
               },
+            },
+          },
+          required: ["indicator"],
+        },
+      },
+      {
+        name: "remove_indicator",
+        description: "Remove a technical indicator from the chart",
+        parameters: {
+          type: "object",
+          properties: {
+            indicator: {
+              type: "string",
+              enum: BUILTIN_INDICATORS.map((ind) => ind.name),
+              description: "The indicator to remove",
             },
           },
           required: ["indicator"],

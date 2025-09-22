@@ -9,7 +9,7 @@ export type ChartAction =
   | { type: "checkNews" }
   | { type: "runAnalysis"; strategy?: string }
   | { type: "setChartType"; chartType: string }
-  | { type: "toggleDisplayOption"; option: string; enabled: boolean }
+  | { type: "toggleDisplayOption"; option: string; enabled: any }
   | {
       type: "setIndicatorStack";
       stack: Array<{ indicator: string; options?: Record<string, any> }>;

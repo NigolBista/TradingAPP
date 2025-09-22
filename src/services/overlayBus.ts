@@ -9,6 +9,7 @@ let state: OverlayState = { message: null, waiting: false };
 const messageListeners: Array<(s: OverlayState) => void> = [];
 const cancelListeners: Listener[] = [];
 const continueListeners: Listener[] = [];
+const openChatListeners: Listener[] = [];
 
 function notify() {
   messageListeners.forEach((l) => l({ ...state }));
@@ -66,4 +67,17 @@ export function onOverlayContinue(listener: Listener) {
 export function offOverlayContinue(listener: Listener) {
   const idx = continueListeners.indexOf(listener);
   if (idx >= 0) continueListeners.splice(idx, 1);
+}
+
+export function requestOpenChat() {
+  openChatListeners.forEach((l) => l());
+}
+
+export function onOverlayOpenChat(listener: Listener) {
+  openChatListeners.push(listener);
+}
+
+export function offOverlayOpenChat(listener: Listener) {
+  const idx = openChatListeners.indexOf(listener);
+  if (idx >= 0) openChatListeners.splice(idx, 1);
 }

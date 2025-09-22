@@ -49,7 +49,7 @@ export async function executeUserRequest(
     const result = await runChartSequence(steps, {
       profile: intent.profile || "day_trade",
       narrate: true,
-      cancellable: true,
+      cancellable: false,
     });
     let analysis: any | undefined;
     if (intent.needsStrategy) {
@@ -62,7 +62,7 @@ export async function executeUserRequest(
       });
     }
     return {
-      reply: result.cancelled ? "Stopped." : "Done.",
+      reply: "Done.",
       screenshots: result.screenshots,
       analysis,
     };

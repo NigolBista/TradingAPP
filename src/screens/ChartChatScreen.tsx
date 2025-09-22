@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -17,6 +17,7 @@ import { useTheme } from "../providers/ThemeProvider";
 import { useLLMChatStore } from "../store/llmChatStore";
 import { sendChartChatMessage } from "../logic/llmChartChat";
 import * as Clipboard from "expo-clipboard";
+import { onOverlayOpenChat, offOverlayOpenChat } from "../services/overlayBus";
 
 export default function ChartChatScreen() {
   const navigation = useNavigation<any>();
@@ -111,6 +112,17 @@ export default function ChartChatScreen() {
     deleteMessage(symbol, id);
     if (activeMessageId === id) setActiveMessageId(null);
   };
+
+  // Auto-hide chat while sequences/narration runs; re-open on "Return to Chat"
+  useEffect(() => {
+    const openHandler = () => {
+      try {
+        (navigation as any).goBack?.();
+      } catch {}
+    };
+    onOverlayOpenChat(openHandler);
+    return () => offOverlayOpenChat(openHandler);
+  }, [navigation]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.background }}>

@@ -296,7 +296,7 @@ export default function ChartFullScreen() {
                 }));
               }
 
-              const cfg: IndicatorConfig = {
+              let cfg: IndicatorConfig = {
                 ...base,
                 ...options,
                 calcParams,
@@ -305,6 +305,58 @@ export default function ChartFullScreen() {
 
               // Update local state for consistency but don't trigger re-render
               setIndicators((prev) => {
+                // Enforce: Only 1 main overlay indicator at a time
+                if (cfg.overlay) {
+                  const existingIndex = prev.findIndex(
+                    (i) =>
+                      i.name.toLowerCase() === action.indicator.toLowerCase()
+                  );
+                  const overlayIndex = prev.findIndex((i) => !!i.overlay);
+                  if (overlayIndex >= 0) {
+                    const copy = prev.slice();
+                    // Replace existing overlay (either same indicator or another overlay)
+                    copy[overlayIndex] = cfg;
+                    chartBridgeRef.current?.updateIndicators(copy);
+                    updateChartState({
+                      indicators: copy.map((i) => ({
+                        indicator: i.name,
+                        options: { calcParams: i.calcParams, styles: i.styles },
+                      })),
+                    });
+                    return copy;
+                  }
+                  // No overlay yet -> add new overlay
+                  const next = [...prev, cfg];
+                  chartBridgeRef.current?.updateIndicators(next);
+                  updateChartState({
+                    indicators: next.map((i) => ({
+                      indicator: i.name,
+                      options: { calcParams: i.calcParams, styles: i.styles },
+                    })),
+                  });
+                  return next;
+                }
+
+                // Enforce max 3 sub-indicators (non-overlay)
+                const isSub = !cfg.overlay;
+                const subCount = prev.filter((i) => !i.overlay).length;
+                if (isSub && subCount >= 3) {
+                  // Replace the oldest sub-indicator (first non-overlay) to keep cap
+                  const replaceIndex = prev.findIndex((i) => !i.overlay);
+                  if (replaceIndex >= 0) {
+                    const copy = prev.slice();
+                    copy[replaceIndex] = cfg;
+                    chartBridgeRef.current?.updateIndicators(copy);
+                    updateChartState({
+                      indicators: copy.map((i) => ({
+                        indicator: i.name,
+                        options: { calcParams: i.calcParams, styles: i.styles },
+                      })),
+                    });
+                    return copy;
+                  }
+                }
+
                 const existingIndex = prev.findIndex(
                   (i) => i.name.toLowerCase() === action.indicator.toLowerCase()
                 );
@@ -373,6 +425,28 @@ export default function ChartFullScreen() {
               if (action.option === "sessions") {
                 options.showSessions = action.enabled;
                 setShowSessions(action.enabled);
+              }
+              if (action.option === "showGrid") {
+                options.showGrid = !!action.enabled;
+              }
+              if (action.option === "tooltipRule") {
+                options.tooltipRule = String(action.enabled);
+              }
+              if (action.option === "removeIndicator") {
+                const toRemove = String(action.enabled).toUpperCase();
+                setIndicators((prev) => {
+                  const next = prev.filter(
+                    (i) => i.name.toUpperCase() !== toRemove
+                  );
+                  chartBridgeRef.current?.updateIndicators(next);
+                  updateChartState({
+                    indicators: next.map((i) => ({
+                      indicator: i.name,
+                      options: { calcParams: i.calcParams, styles: i.styles },
+                    })),
+                  });
+                  return next;
+                });
               }
               chartBridgeRef.current.updateDisplayOptions(options);
             } else {

@@ -4,6 +4,7 @@ import {
   executeChartActions,
   screenshotChart,
   ChartAction,
+  getChartBridge,
 } from "./chartBridge";
 import {
   runAIStrategy,
@@ -17,6 +18,8 @@ import {
   isValidColor,
 } from "./chartContextConfig";
 import { normalizeIndicatorOptions } from "./indicatorDefaults";
+import { runChartSequence, type SequenceStep } from "./chartSequenceEngine";
+import { requestOpenChat } from "../services/overlayBus";
 
 function normalizeColor(color: string): string {
   if (!color) return color;
@@ -172,12 +175,24 @@ Please use the appropriate tool calls to perform any requested chart modificatio
     switch (tc.function?.name) {
       case "set_timeframe":
         return { type: "setTimeframe", timeframe: args.timeframe };
+      case "set_tooltip_rule":
+        return {
+          type: "toggleDisplayOption",
+          option: "tooltipRule",
+          enabled: args.rule,
+        } as any;
       case "add_indicator":
         return {
           type: "addIndicator",
           indicator: args.indicator,
           options: normalizeIndicatorOptions(args.indicator, args.options),
         };
+      case "remove_indicator":
+        return {
+          type: "toggleDisplayOption",
+          option: "removeIndicator",
+          enabled: args.indicator,
+        } as any;
       case "navigate":
         return { type: "navigate", direction: args.direction };
       case "check_news":
@@ -199,11 +214,91 @@ Please use the appropriate tool calls to perform any requested chart modificatio
 
   console.log("Generated actions:", actions);
 
-  if (actions.length) {
-    console.log("Executing chart actions:", actions);
-    await executeChartActions(actions);
-  } else {
-    console.log("No actions to execute");
+  // Translate actions into sequence steps for narrated playback when there are multiple steps
+  const steps: SequenceStep[] = [];
+  for (const a of actions) {
+    switch (a.type) {
+      case "setTimeframe": {
+        const tf = (a as any).timeframe;
+        // Pre-step narration
+        steps.push({
+          kind: "timeframe",
+          timeframe: tf,
+          message: `Checking ${tf}`,
+        } as any);
+        // Brief confirmation after switch
+        steps.push({ kind: "delay", ms: 700, message: `Now on ${tf}` } as any);
+        break;
+      }
+      case "setChartType":
+        steps.push({
+          kind: "chartType",
+          chartType: (a as any).chartType,
+          message: `Chart → ${(a as any).chartType}`,
+        } as any);
+        break;
+      case "navigate":
+        steps.push({
+          kind: "navigate",
+          direction: (a as any).direction,
+          message: `Navigate ${(a as any).direction}`,
+        } as any);
+        break;
+      case "addIndicator":
+        steps.push({
+          kind: "indicator",
+          indicator: (a as any).indicator,
+          options: (a as any).options,
+          message: `Add ${(a as any).indicator}`,
+        } as any);
+        break;
+      case "toggleDisplayOption": {
+        const opt = (a as any).option;
+        const en = (a as any).enabled;
+        steps.push({
+          kind: "toggleOption",
+          option: opt,
+          enabled: en,
+          message:
+            opt === "showGrid"
+              ? en
+                ? "Show grid"
+                : "Hide grid"
+              : opt === "tooltipRule"
+              ? `Labels: ${String(en)}`
+              : opt === "removeIndicator"
+              ? `Remove ${String(en)}`
+              : undefined,
+        } as any);
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  if (steps.length) {
+    try {
+      // Hide chat so user can watch the sequence on the chart
+      requestOpenChat();
+    } catch {}
+
+    // Wait for chart bridge to be ready after navigation
+    async function waitForChartReady(timeoutMs = 3000) {
+      const start = Date.now();
+      while (!getChartBridge()) {
+        if (Date.now() - start > timeoutMs) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    }
+    await waitForChartReady(2000);
+
+    await runChartSequence(steps, {
+      narrate: true,
+      cancellable: false,
+      perStepDelayMs: (i, step) =>
+        step.kind === "timeframe" ? 900 : step.kind === "delay" ? 600 : 300,
+    });
   }
 
   let screenshot: string | undefined;
@@ -226,7 +321,56 @@ Please use the appropriate tool calls to perform any requested chart modificatio
     });
   }
 
-  // Use the initial reply content directly to avoid an extra round-trip.
-  const reply = res.choices?.[0]?.message?.content || "";
+  // Build a concise fallback summary if the LLM returned no text
+  function summarizeAction(a: ChartAction): string | null {
+    switch (a.type) {
+      case "setTimeframe":
+        return `Timeframe set to ${a.timeframe}`;
+      case "setChartType":
+        return `Chart type set to ${a.chartType}`;
+      case "navigate":
+        return `Panned ${a.direction}`;
+      case "addIndicator": {
+        const params = Array.isArray((a.options as any)?.calcParams)
+          ? (a.options as any).calcParams.join(",")
+          : undefined;
+        return `Added ${a.indicator}${params ? `(${params})` : ""}`;
+      }
+      case "toggleDisplayOption": {
+        const opt = (a as any).option;
+        const en = (a as any).enabled;
+        if (opt === "showGrid") return en ? "Grid shown" : "Grid hidden";
+        if (opt === "ma") return en ? "MA shown" : "MA hidden";
+        if (opt === "volume") return en ? "Volume shown" : "Volume hidden";
+        if (opt === "sessions")
+          return en ? "Sessions shown" : "Sessions hidden";
+        if (opt === "tooltipRule") {
+          const rule = String(en);
+          if (rule === "always") return "Labels always shown";
+          if (rule === "follow_cross") return "Labels follow crosshair";
+          if (rule === "none") return "Labels hidden";
+          return `Labels: ${rule}`;
+        }
+        if (opt === "removeIndicator") return `Removed ${String(en)}`;
+        return null;
+      }
+      case "checkNews":
+        return "Checked latest news";
+      case "runAnalysis":
+        return "Analysis requested";
+      default:
+        return null;
+    }
+  }
+
+  const parts = actions
+    .map((a) => summarizeAction(a))
+    .filter((s): s is string => !!s);
+  if (hasAnalysisRequest) parts.push("Analysis completed");
+  const summary = parts.join(". ") + (parts.length ? "." : "");
+
+  // Use the initial reply content if present; otherwise fall back to our summary
+  const llmText = (res.choices?.[0]?.message?.content || "").trim();
+  const reply = llmText || summary || "Done.";
   return { reply, analysis, screenshot };
 }

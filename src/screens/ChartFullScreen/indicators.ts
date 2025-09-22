@@ -233,7 +233,7 @@ export const BUILTIN_INDICATORS: Array<{
     title: "Volume Weighted Average Price",
     description:
       "Volume weighted average price line; shows the average price weighted by volume.",
-    compatOverlay: false,
+    compatOverlay: true,
     defaultColor: "#FDE68A",
   },
   {
