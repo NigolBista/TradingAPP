@@ -12,6 +12,9 @@ interface SwipeableStockItemProps {
   changePercent: number;
   isAfterHours?: boolean;
   afterHoursPercent?: number;
+  afterHoursDelta?: number;
+  showAhChange?: boolean;
+  onTogglePriceMode?: () => void;
   isGlobalFavorite: boolean;
   onPress: () => void;
   onToggleFavorite: () => void;
@@ -26,6 +29,9 @@ export default function SwipeableStockItem({
   changePercent,
   isAfterHours,
   afterHoursPercent,
+  afterHoursDelta,
+  showAhChange,
+  onTogglePriceMode,
   isGlobalFavorite,
   onPress,
   onToggleFavorite,
@@ -35,6 +41,14 @@ export default function SwipeableStockItem({
   const swipeableRef = useRef<any>(null);
 
   const styles = createStyles(theme);
+
+  const ahPct = isAfterHours
+    ? typeof afterHoursDelta === "number" &&
+      typeof currentPrice === "number" &&
+      currentPrice > 0
+      ? (afterHoursDelta / currentPrice) * 100
+      : afterHoursPercent
+    : undefined;
 
   const handleFavoritePress = () => {
     onToggleFavorite();
@@ -100,10 +114,17 @@ export default function SwipeableStockItem({
               )}
             </View>
 
-            <View style={styles.priceInfo}>
+            <Pressable
+              style={styles.priceInfo}
+              onPress={(e: any) => {
+                // Toggle between daily % and AH delta/% during after-hours
+                e?.stopPropagation?.();
+                if (isAfterHours) onTogglePriceMode?.();
+              }}
+            >
               <Text style={styles.stockPrice}>${currentPrice.toFixed(2)}</Text>
               <View style={styles.changeRow}>
-                {!isAfterHours && (
+                {(!isAfterHours || (isAfterHours && !showAhChange)) && (
                   <Text
                     style={[
                       styles.stockChange,
@@ -116,23 +137,28 @@ export default function SwipeableStockItem({
                     {changePercent.toFixed(2)}%
                   </Text>
                 )}
-                :
-                {isAfterHours && typeof afterHoursPercent === "number" && (
+                {isAfterHours && showAhChange && typeof ahPct === "number" && (
                   <Text
                     style={[
                       styles.afterHoursText,
-                      afterHoursPercent >= 0
+                      (ahPct ?? 0) >= 0
                         ? styles.positiveChange
                         : styles.negativeChange,
                     ]}
                   >
                     {`After: ${
-                      afterHoursPercent >= 0 ? "+" : ""
-                    }${afterHoursPercent.toFixed(2)}%`}
+                      afterHoursDelta !== undefined
+                        ? `${afterHoursDelta >= 0 ? "+" : ""}$${Math.abs(
+                            afterHoursDelta
+                          ).toFixed(2)} `
+                        : ""
+                    }(${(ahPct ?? 0) >= 0 ? "+" : ""}${(ahPct ?? 0).toFixed(
+                      2
+                    )}%)`}
                   </Text>
                 )}
               </View>
-            </View>
+            </Pressable>
           </View>
         </Pressable>
       </Swipeable>

@@ -33,8 +33,6 @@ const chartTypes: { type: ChartType; label: string; icon: string }[] = [
   { type: "line", label: "Line Chart", icon: "trending-up" },
   { type: "area", label: "Area Chart", icon: "analytics" },
   { type: "candlestick", label: "Candlestick", icon: "bar-chart" },
-  { type: "bar", label: "Bar (OHLC)", icon: "stats-chart" },
-  { type: "candle_solid", label: "Solid Candle", icon: "bar-chart" },
   { type: "candle_stroke", label: "Hollow Candle", icon: "bar-chart" },
   { type: "candle_up_stroke", label: "Up Candle", icon: "bar-chart" },
   { type: "candle_down_stroke", label: "Down Candle", icon: "bar-chart" },

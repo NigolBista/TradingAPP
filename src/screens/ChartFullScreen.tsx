@@ -149,6 +149,12 @@ export default function ChartFullScreen() {
   const [showMA, setShowMA] = useState<boolean>(false);
   const [showVolume, setShowVolume] = useState<boolean>(false);
   const [showSessions, setShowSessions] = useState<boolean>(true);
+  const [areaStyle, setAreaStyle] = useState<any | undefined>(undefined);
+  const [priceColors, setPriceColors] = useState<{
+    up: string;
+    down: string;
+    noChange?: string;
+  }>({ up: "#10B981", down: "#EF4444" });
   // Use accordion expansion to influence layout height; no separate expanded state
 
   // Indicators state
@@ -282,8 +288,7 @@ export default function ChartFullScreen() {
           skipSaveRef.current = false;
           return;
         }
-        const row = await getUserChartSettings(user!.id, symbol);
-        const settings = row ?? (await getUserChartSettings(user!.id));
+        const settings = await getUserChartSettings(user!.id);
         if (!isMounted || !settings) {
           skipSaveRef.current = false;
           return;
@@ -340,7 +345,6 @@ export default function ChartFullScreen() {
     saveDebounceRef.current = setTimeout(() => {
       upsertUserChartSettings({
         user_id: user!.id,
-        symbol,
         timeframe: extendedTf as any,
         chart_type: chartType as any,
         show_volume: !!showVolume,
@@ -1143,6 +1147,9 @@ export default function ChartFullScreen() {
     async (tf: ExtendedTimeframe) => {
       setExtendedTf(tf);
       setDefaultTimeframe(tf);
+      try {
+        chartBridgeRef.current?.updateTimeframe(tf as any);
+      } catch (_) {}
     },
     [setDefaultTimeframe]
   );
@@ -1338,6 +1345,8 @@ export default function ChartFullScreen() {
           showPriceAxisText={true}
           showTimeAxisText={true}
           indicators={indicators}
+          areaStyle={areaStyle}
+          priceColors={priceColors}
           onOverrideIndicator={React.useCallback(
             (overrideFn: any) => {
               overrideIndicatorRef.current = overrideFn;
@@ -1364,6 +1373,12 @@ export default function ChartFullScreen() {
                       }
                     : undefined
                 );
+                // push display options including areaStyle and priceColors
+                chartBridgeRef.current.updateDisplayOptions({
+                  showSessions,
+                  areaStyle,
+                  priceColors,
+                });
               }
             } catch (_) {}
           }}
@@ -1383,6 +1398,11 @@ export default function ChartFullScreen() {
                       }
                     : undefined
                 );
+                chartBridgeRef.current.updateDisplayOptions({
+                  showSessions,
+                  areaStyle,
+                  priceColors,
+                });
               }
             } catch (_) {}
           }}
@@ -1508,9 +1528,15 @@ export default function ChartFullScreen() {
         visible={showUnifiedBottomSheet}
         onClose={hideBottomSheet}
         chartType={chartType}
-        onSelectChartType={setChartType}
+        onSelectChartType={(t) => {
+          setChartType(t);
+          try {
+            chartBridgeRef.current?.updateChartType(t as any);
+          } catch (_) {}
+        }}
         extendedTf={extendedTf as any}
         pinned={pinned as any}
+        onSelectTimeframe={(tf) => handleTimeframeChange(tf as any)}
         onTogglePin={async (tf) => {
           const success = await toggle(tf);
           if (!success) {
@@ -1523,6 +1549,13 @@ export default function ChartFullScreen() {
         onSetShowSessions={(enabled) => setShowSessions(enabled)}
         showReasonIcon={showReasonIcon}
         onSetShowReasonIcon={(enabled) => setShowReasonIcon(enabled)}
+        priceColors={priceColors}
+        onSetPriceColors={(c) => {
+          setPriceColors(c);
+          try {
+            chartBridgeRef.current?.updateDisplayOptions({ priceColors: c });
+          } catch (_) {}
+        }}
       />
 
       {/* Reasoning Bottom Sheet */}

@@ -91,6 +91,15 @@ interface Props {
   onDataApplied?: () => void;
   etOffsetMinutes?: number; // Polygon server ET offset from UTC (e.g., -240 or -300)
   serverOffsetMs?: number; // Polygon serverTimeMs - Date.now()
+  areaStyle?: {
+    lineSize?: number;
+    lineColor?: string;
+    smooth?: boolean;
+    value?: "close" | "open" | "high" | "low";
+    // Accept gradient array or single color or 'transparent'
+    backgroundColor?: any;
+  };
+  priceColors?: { up: string; down: string; noChange?: string };
 }
 
 export interface IndicatorConfig {
@@ -135,6 +144,8 @@ export default function SimpleKLineChart({
   onDataApplied,
   etOffsetMinutes,
   serverOffsetMs,
+  areaStyle,
+  priceColors,
 }: Props) {
   const webRef = useRef<WebView>(null);
   const isReadyRef = useRef<boolean>(false);
@@ -569,6 +580,8 @@ export default function SimpleKLineChart({
               if (typeof options.showGrid === 'boolean') SHOW_GRID = options.showGrid;
               if (typeof options.showSessions === 'boolean') SHOW_SESSIONS = options.showSessions;
               if (typeof options.tooltipRule === 'string') TOOLTIP_RULE = options.tooltipRule;
+              if (options.areaStyle && typeof options.areaStyle === 'object') AREA_STYLE = options.areaStyle;
+              if (options.priceColors && typeof options.priceColors === 'object') PRICE_COLORS = options.priceColors;
               
               if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) {
                 try {
@@ -661,6 +674,8 @@ export default function SimpleKLineChart({
         var THEME = ${JSON.stringify(theme)};
         var MOCK_REALTIME = ${JSON.stringify(mockRealtime)};
         var TOOLTIP_RULE = ${JSON.stringify(tooltipRule)};
+        var AREA_STYLE = ${JSON.stringify(areaStyle || null)};
+        var PRICE_COLORS = ${JSON.stringify(priceColors || null)};
         var ET_OFFSET_MINUTES = ${JSON.stringify(
           typeof etOffsetMinutes === "number" ? etOffsetMinutes : null
         )};
@@ -705,6 +720,25 @@ export default function SimpleKLineChart({
               candle: {
                 type: type,
                 tooltip: { showRule: (TOOLTIP_RULE || 'follow_cross') },
+                // Apply user-selected up/down colors if provided
+                ...(function(){
+                  try {
+                    if (PRICE_COLORS && typeof PRICE_COLORS === 'object') {
+                      return {
+                        upColor: PRICE_COLORS.up || '#10B981',
+                        downColor: PRICE_COLORS.down || '#EF4444',
+                        noChangeColor: PRICE_COLORS.noChange || (THEME === 'dark' ? '#C7CDD7' : '#666666'),
+                        // Also try alternative property names
+                        colors: {
+                          up: PRICE_COLORS.up || '#10B981',
+                          down: PRICE_COLORS.down || '#EF4444',
+                          noChange: PRICE_COLORS.noChange || (THEME === 'dark' ? '#C7CDD7' : '#666666')
+                        }
+                      };
+                    }
+                  } catch(_) {}
+                  return {};
+                })(),
                 priceMark: {
                   last: {
                     show: SHOW_LAST_PRICE_LABEL,
@@ -778,6 +812,49 @@ export default function SimpleKLineChart({
                 theme === "dark" ? "#0a0a0a" : "#ffffff"
               )} }
             };
+            
+            // Apply price colors at multiple levels to ensure compatibility
+            try {
+              if (PRICE_COLORS && typeof PRICE_COLORS === 'object') {
+                var upColor = PRICE_COLORS.up || '#10B981';
+                var downColor = PRICE_COLORS.down || '#EF4444';
+                var noChangeColor = PRICE_COLORS.noChange || (THEME === 'dark' ? '#C7CDD7' : '#666666');
+                
+                // Apply at root candle level
+                opts.candle.upColor = upColor;
+                opts.candle.downColor = downColor;
+                opts.candle.noChangeColor = noChangeColor;
+                
+                // Apply at style level
+                if (!opts.candle.style) opts.candle.style = {};
+                opts.candle.style.upColor = upColor;
+                opts.candle.style.downColor = downColor;
+                opts.candle.style.noChangeColor = noChangeColor;
+              }
+            } catch(_) {}
+            
+            // Configure area style defaults and user overrides
+            try {
+              if (type === 'area') {
+                var baseArea = { lineSize: 1, smooth: false, value: 'close', lineColor: '#2196F3' };
+                var userArea = (AREA_STYLE && typeof AREA_STYLE === 'object') ? AREA_STYLE : null;
+                var mergedArea = Object.assign({}, baseArea, userArea || {});
+                // If user selected up/down colors, prefer 'up' as the line color when not explicitly set
+                if (!mergedArea.lineColor && PRICE_COLORS && PRICE_COLORS.up) {
+                  mergedArea.lineColor = PRICE_COLORS.up;
+                }
+                // For 'line' mapped to 'area', ensure fill is transparent
+                if (t === 'line') { mergedArea.backgroundColor = 'transparent'; }
+                // If actual 'area' and user didn't specify a background, apply a subtle default gradient
+                if (t === 'area' && mergedArea.backgroundColor == null) {
+                  mergedArea.backgroundColor = [
+                    { offset: 0, color: 'rgba(33, 150, 243, 0.01)' },
+                    { offset: 1, color: 'rgba(33, 150, 243, 0.2)' }
+                  ];
+                }
+                opts.candle.area = mergedArea;
+              }
+            } catch(_) {}
             if (!SHOW_TOP_INFO) { opts.candle.tooltip = { showRule: 'none' }; }
             // Apply indicator tooltip rule to all panes if API exists
             try {
@@ -785,6 +862,7 @@ export default function SimpleKLineChart({
               opts.indicator = opts.indicator || {};
               opts.indicator.tooltip = { showRule: rule };
             } catch(_) {}
+            // Apply style changes
             if (typeof chart.setStyles === 'function') chart.setStyles(opts);
             else if (typeof chart.setStyleOptions === 'function') chart.setStyleOptions(opts);
           } catch (e) { post({ warn: 'applyChartType failed', message: String(e && e.message || e) }); }

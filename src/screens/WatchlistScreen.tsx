@@ -266,6 +266,7 @@ export default function WatchlistScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [stockData, setStockData] = useState<StockData[]>([]);
+  const [showAhChange, setShowAhChange] = useState(false);
   // Removed chart-related states since we now navigate to StockDetailScreen
 
   // Modal states
@@ -368,87 +369,7 @@ export default function WatchlistScreen() {
     }, [computeSymbols, updateFromRealtime])
   );
 
-  // Ensure UI ticks every second with websocket (defensive in case callbacks stall)
-  useEffect(() => {
-    if (!isPolygonApiAvailable()) return;
-    const id = setInterval(() => {
-      updateFromRealtime();
-    }, 1000);
-    return () => clearInterval(id);
-  }, [updateFromRealtime]);
-
-  // Poll cached quotes only when websocket is unavailable; otherwise rely on 1s websocket updates
-  useEffect(() => {
-    const polygonOn = isPolygonApiAvailable();
-    if (polygonOn) return; // Websocket active; no polling
-
-    let isMounted = true;
-    quotesSignatureRef.current = null; // reset when dependencies change
-
-    const symbols = computeSymbols();
-    const tick = async () => {
-      if (!isMounted) return;
-      if (!symbols || symbols.length === 0) return;
-
-      try {
-        const cached = await safeFetchBulkQuotes(symbols);
-        if (!isMounted) return;
-
-        const signature = symbols
-          .map((s) => {
-            const q = cached[s];
-            return `${s}:${q?.last ?? 0}:${q?.change ?? 0}:${
-              q?.changePercent ?? 0
-            }`;
-          })
-          .join("|");
-
-        if (signature === quotesSignatureRef.current) return;
-        quotesSignatureRef.current = signature;
-
-        const existingNameMap = new Map<string, string>();
-        for (const sd of stockDataRef.current) {
-          existingNameMap.set(sd.symbol, sd.companyName || sd.symbol);
-        }
-
-        const updated: StockData[] = symbols.map((symbol) => {
-          const q = cached[symbol] as SimpleQuote | undefined;
-          const price = q?.last ?? 0;
-          const change = q?.change ?? 0;
-          const pct = q?.changePercent ?? 0;
-          return {
-            symbol,
-            analysis: {} as any,
-            alerts: [],
-            score: 0,
-            currentPrice: price,
-            change,
-            changePercent: pct,
-            companyName:
-              companyNamesRef.current[symbol] ||
-              existingNameMap.get(symbol) ||
-              symbol,
-          };
-        });
-        updated.sort((a, b) => b.changePercent - a.changePercent);
-        setStockData(updated);
-      } catch {}
-    };
-
-    // Initial tick and interval (5s fallback)
-    tick();
-    const id = setInterval(tick, 5000);
-    return () => {
-      isMounted = false;
-      clearInterval(id);
-    };
-  }, [
-    computeSymbols,
-    viewMode,
-    selectedWatchlistId,
-    profile.favorites,
-    profile.watchlists,
-  ]);
+  // Realtime-only mode: no UI ticking or polling fallback
 
   useEffect(() => {
     // Reset selected stocks when modal opens
@@ -510,7 +431,22 @@ export default function WatchlistScreen() {
       Object.assign(companyNamesRef.current, nameMap);
 
       // Fetch fresh quotes from Polygon
-      const cached = await safeFetchBulkQuotes(symbols);
+      const afterHours = marketStatus.isAfterHours;
+      let cached: Record<string, SimpleQuote> = {};
+      let polygon: Record<string, SimpleQuote> | null = null;
+
+      if (afterHours && isPolygonApiAvailable()) {
+        // Fetch both quote stream and Polygon daily snapshots in parallel for instant day close
+        const [qCached, polygonSnap] = await Promise.all([
+          safeFetchBulkQuotes(symbols),
+          fetchPolygonBulkQuotes(symbols),
+        ]);
+        cached = qCached;
+        polygon = polygonSnap;
+      } else {
+        cached = await safeFetchBulkQuotes(symbols);
+      }
+
       const hasAnyCached = Object.keys(cached).length > 0;
       if (hasAnyCached) {
         const immediate: StockData[] = symbols.map((symbol) => {
@@ -518,12 +454,29 @@ export default function WatchlistScreen() {
           const price = q?.last ?? 0;
           const change = q?.change ?? 0;
           const pct = q?.changePercent ?? 0;
-          // seed close price as price - change if plausible
-          if (typeof price === "number" && typeof change === "number") {
-            const close = price - change;
-            if (isFinite(close) && close > 0)
-              closePriceRef.current[symbol] = close;
+
+          if (afterHours) {
+            // Prefer Polygon snapshot day close during AH
+            const snap = polygon ? polygon[symbol] : undefined;
+            const dayClose =
+              snap && typeof snap.last === "number" && snap.last > 0
+                ? snap.last
+                : undefined;
+            if (typeof dayClose === "number") {
+              closePriceRef.current[symbol] = dayClose;
+              afterHoursPctRef.current[symbol] =
+                ((price - dayClose) / dayClose) * 100;
+            }
+          } else {
+            // During regular hours, compute previous close from intraday quote
+            if (typeof price === "number" && typeof change === "number") {
+              const prevClose = price - change;
+              if (isFinite(prevClose) && prevClose > 0) {
+                closePriceRef.current[symbol] = prevClose;
+              }
+            }
           }
+
           return {
             symbol,
             analysis: {} as any,
@@ -544,14 +497,15 @@ export default function WatchlistScreen() {
       // Background fetch fresh quotes (bulk)
       const fresh = await safeFetchBulkQuotes(symbols);
       // If after-hours and Polygon is available, fetch day close snapshot to freeze display price
-      const afterHours = marketStatus.isAfterHours;
-      if (afterHours && isPolygonApiAvailable()) {
+      const afterHoursBg = marketStatus.isAfterHours;
+      if (afterHoursBg && isPolygonApiAvailable()) {
         try {
           const polygon = await fetchPolygonBulkQuotes(symbols);
           for (const s of symbols) {
             const snap = polygon[s];
+            // In our Polygon adapter, last == day.close when available
             if (snap && typeof snap.last === "number" && snap.last > 0) {
-              closePriceRef.current[s] = snap.last;
+              closePriceRef.current[s] = snap.last; // regular session close
             }
           }
         } catch {}
@@ -561,11 +515,24 @@ export default function WatchlistScreen() {
         const price = q?.last ?? 0;
         const change = q?.change ?? 0;
         const pct = q?.changePercent ?? 0;
-        // update close price again from fresh data
-        if (typeof price === "number" && typeof change === "number") {
-          const close = price - change;
-          if (isFinite(close) && close > 0)
-            closePriceRef.current[symbol] = close;
+        // During regular hours, keep previous close from quote; after-hours, keep Polygon day close
+        if (!afterHoursBg) {
+          if (typeof price === "number" && typeof change === "number") {
+            const prevClose = price - change;
+            if (isFinite(prevClose) && prevClose > 0)
+              closePriceRef.current[symbol] = prevClose;
+          }
+        }
+        // Pre-compute after-hours percent once we have a reliable regular close
+        if (afterHoursBg) {
+          const close = closePriceRef.current[symbol];
+          if (
+            typeof close === "number" &&
+            close > 0 &&
+            typeof price === "number"
+          ) {
+            afterHoursPctRef.current[symbol] = ((price - close) / close) * 100;
+          }
         }
         return {
           symbol,
@@ -919,9 +886,16 @@ export default function WatchlistScreen() {
                 ? afterHoursPctRef.current[stock.symbol]
                 : undefined;
               const isGlobalFav = isGlobalFavorite(stock.symbol);
+              const dayClose = closePriceRef.current[stock.symbol];
               const displayPrice = isAfterHours
-                ? closePriceRef.current[stock.symbol] ?? stock.currentPrice
+                ? typeof dayClose === "number"
+                  ? dayClose
+                  : stock.currentPrice
                 : stock.currentPrice;
+              const afterHoursDelta =
+                isAfterHours && typeof dayClose === "number"
+                  ? stock.currentPrice - dayClose
+                  : undefined;
 
               return (
                 <SwipeableStockItem
@@ -933,6 +907,9 @@ export default function WatchlistScreen() {
                   changePercent={stock.changePercent}
                   isAfterHours={isAfterHours}
                   afterHoursPercent={afterHoursPercent}
+                  afterHoursDelta={afterHoursDelta}
+                  showAhChange={showAhChange}
+                  onTogglePriceMode={() => setShowAhChange((s) => !s)}
                   isGlobalFavorite={isGlobalFav}
                   onPress={() => handleStockPress(stock)}
                   onToggleFavorite={() => toggleGlobalFavorite(stock.symbol)}

@@ -2265,16 +2265,6 @@ export default function StockDetailScreen() {
                           icon: "bar-chart",
                         },
                         {
-                          type: "bar" as ChartType,
-                          label: "Bar (OHLC)",
-                          icon: "stats-chart",
-                        },
-                        {
-                          type: "candle_solid" as ChartType,
-                          label: "Solid Candle",
-                          icon: "bar-chart",
-                        },
-                        {
                           type: "candle_stroke" as ChartType,
                           label: "Hollow Candle",
                           icon: "bar-chart",
@@ -2372,16 +2362,6 @@ export default function StockDetailScreen() {
                           {
                             type: "candlestick" as ChartType,
                             label: "Candles",
-                            icon: "bar-chart",
-                          },
-                          {
-                            type: "bar" as ChartType,
-                            label: "Bar (OHLC)",
-                            icon: "stats-chart",
-                          },
-                          {
-                            type: "candle_solid" as ChartType,
-                            label: "Solid",
                             icon: "bar-chart",
                           },
                           {

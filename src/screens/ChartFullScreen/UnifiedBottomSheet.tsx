@@ -21,11 +21,18 @@ type Props = {
   onSelectChartType: (t: ChartType) => void;
   extendedTf: ExtendedTimeframe;
   pinned: ExtendedTimeframe[];
+  onSelectTimeframe: (tf: ExtendedTimeframe) => void;
   onTogglePin: (tf: ExtendedTimeframe) => Promise<boolean> | boolean;
   showSessions: boolean;
   onSetShowSessions: (enabled: boolean) => void;
   showReasonIcon: boolean;
   onSetShowReasonIcon: (enabled: boolean) => void;
+  priceColors?: { up: string; down: string; noChange?: string };
+  onSetPriceColors?: (c: {
+    up: string;
+    down: string;
+    noChange?: string;
+  }) => void;
 };
 
 export default function UnifiedBottomSheet({
@@ -35,11 +42,14 @@ export default function UnifiedBottomSheet({
   onSelectChartType,
   extendedTf,
   pinned,
+  onSelectTimeframe,
   onTogglePin,
   showSessions,
   onSetShowSessions,
   showReasonIcon,
   onSetShowReasonIcon,
+  priceColors,
+  onSetPriceColors,
 }: Props) {
   const anim = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -52,7 +62,7 @@ export default function UnifiedBottomSheet({
     }
   }, [visible]);
 
-  const minutes: ExtendedTimeframe[] = [
+  const allTfs: ExtendedTimeframe[] = [
     "1m",
     "2m",
     "3m",
@@ -60,9 +70,9 @@ export default function UnifiedBottomSheet({
     "10m",
     "15m",
     "30m",
-  ] as any;
-  const hours: ExtendedTimeframe[] = ["1h", "2h", "4h"] as any;
-  const days: ExtendedTimeframe[] = [
+    "1h",
+    "2h",
+    "4h",
     "1D",
     "1W",
     "1M",
@@ -104,7 +114,7 @@ export default function UnifiedBottomSheet({
               style={{ maxHeight: 600 }}
               showsVerticalScrollIndicator={false}
             >
-              <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
+              <View style={{ paddingHorizontal: 20, marginBottom: 16 }}>
                 <Text style={styles.sectionTitle}>Chart Type</Text>
                 <ScrollView
                   horizontal
@@ -125,16 +135,6 @@ export default function UnifiedBottomSheet({
                     {
                       type: "candlestick" as ChartType,
                       label: "Candles",
-                      icon: "bar-chart",
-                    },
-                    {
-                      type: "bar" as ChartType,
-                      label: "Bar (OHLC)",
-                      icon: "stats-chart",
-                    },
-                    {
-                      type: "candle_solid" as ChartType,
-                      label: "Solid",
                       icon: "bar-chart",
                     },
                     {
@@ -189,6 +189,41 @@ export default function UnifiedBottomSheet({
                 </ScrollView>
               </View>
 
+              {/* Timeframes - Single horizontal row with scroll */}
+              <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
+                <Text style={styles.sectionTitle}>Timeframes</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    {allTfs.map((tf) => {
+                      const isSelected = extendedTf === tf;
+                      const isPinned = pinned.includes(tf);
+                      return (
+                        <Pressable
+                          key={tf}
+                          onPress={() => onSelectTimeframe(tf)}
+                          onLongPress={() => onTogglePin(tf)}
+                          style={[
+                            styles.timeframeButton,
+                            isSelected && styles.timeframeButtonActive,
+                            isPinned && styles.timeframeButtonPinned,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.timeframeButtonText,
+                              isSelected && styles.timeframeButtonTextActive,
+                              isPinned && styles.timeframeButtonTextPinned,
+                            ]}
+                          >
+                            {tf}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </ScrollView>
+              </View>
+
               {/* Trading Session + Reasoning side-by-side */}
               <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
                 <View style={styles.dualRow}>
@@ -220,27 +255,86 @@ export default function UnifiedBottomSheet({
               </View>
 
               <View style={{ paddingHorizontal: 20 }}>
-                <TimeframeSection
-                  title="Minutes"
-                  tfs={minutes}
-                  extendedTf={extendedTf}
-                  pinned={pinned}
-                  onTogglePin={onTogglePin}
-                />
-                <TimeframeSection
-                  title="Hours"
-                  tfs={hours}
-                  extendedTf={extendedTf}
-                  pinned={pinned}
-                  onTogglePin={onTogglePin}
-                />
-                <TimeframeSection
-                  title="Days"
-                  tfs={days}
-                  extendedTf={extendedTf}
-                  pinned={pinned}
-                  onTogglePin={onTogglePin}
-                />
+                {/* Up/Down Colors */}
+                <View style={{ marginTop: 16 }}>
+                  <Text style={styles.sectionTitle}>Ups/Downs Color</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      {[
+                        {
+                          up: "#10B981",
+                          down: "#EF4444",
+                          upLabel: "Green Up",
+                          downLabel: "Red Down",
+                        },
+                        {
+                          up: "#EF4444",
+                          down: "#10B981",
+                          upLabel: "Red Up",
+                          downLabel: "Green Down",
+                        },
+                        {
+                          up: "#10B981",
+                          down: "#F59E0B",
+                          upLabel: "Green Up",
+                          downLabel: "Yellow Down",
+                        },
+                        {
+                          up: "#4B5563",
+                          down: "#9CA3AF",
+                          upLabel: "Grey Up",
+                          downLabel: "Grey Down",
+                        },
+                      ].map((scheme, idx) => (
+                        <Pressable
+                          key={idx}
+                          onPress={() =>
+                            onSetPriceColors &&
+                            onSetPriceColors({
+                              up: scheme.up,
+                              down: scheme.down,
+                              noChange: priceColors?.noChange || "#9CA3AF",
+                            })
+                          }
+                          style={[
+                            styles.colorSchemeCard,
+                            priceColors &&
+                              priceColors.up === scheme.up &&
+                              priceColors.down === scheme.down &&
+                              styles.colorSchemeCardActive,
+                          ]}
+                        >
+                          <View style={styles.cardContent}>
+                            <View style={styles.colorInfo}>
+                              <Text style={styles.colorText}>
+                                {scheme.upLabel}
+                              </Text>
+                              <Ionicons
+                                name="trending-up"
+                                size={20}
+                                color={scheme.up}
+                                style={styles.trendIcon}
+                              />
+                            </View>
+                            {scheme.downLabel ? (
+                              <View style={styles.colorInfo}>
+                                <Text style={styles.colorText}>
+                                  {scheme.downLabel}
+                                </Text>
+                                <Ionicons
+                                  name="trending-down"
+                                  size={20}
+                                  color={scheme.down}
+                                  style={styles.trendIcon}
+                                />
+                              </View>
+                            ) : null}
+                          </View>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </ScrollView>
+                </View>
               </View>
             </ScrollView>
           </Pressable>
@@ -250,52 +344,7 @@ export default function UnifiedBottomSheet({
   );
 }
 
-function TimeframeSection({
-  title,
-  tfs,
-  extendedTf,
-  pinned,
-  onTogglePin,
-}: {
-  title: string;
-  tfs: ExtendedTimeframe[];
-  extendedTf: ExtendedTimeframe;
-  pinned: ExtendedTimeframe[];
-  onTogglePin: (tf: ExtendedTimeframe) => Promise<boolean> | boolean;
-}) {
-  return (
-    <View style={{ marginBottom: 24 }}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.timeframeGrid}>
-        {tfs.map((tf) => {
-          const isSelected = extendedTf === tf;
-          const isPinned = pinned.includes(tf);
-          return (
-            <Pressable
-              key={tf}
-              onPress={() => onTogglePin(tf)}
-              style={[
-                styles.timeframeButton,
-                isSelected && styles.timeframeButtonActive,
-                isPinned && styles.timeframeButtonPinned,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.timeframeButtonText,
-                  isSelected && styles.timeframeButtonTextActive,
-                  isPinned && styles.timeframeButtonTextPinned,
-                ]}
-              >
-                {tf}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
+// Removed old grouped timeframe sections in favor of single horizontal list
 
 const styles = StyleSheet.create({
   scrim: {
@@ -379,4 +428,32 @@ const styles = StyleSheet.create({
     backgroundColor: "#2a2a2a",
   },
   switchLabel: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  colorSchemeCard: {
+    minWidth: 140,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderRadius: 12,
+    backgroundColor: "#2a2a2a",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  colorSchemeCardActive: {
+    borderColor: "#007AFF",
+  },
+  cardContent: {
+    gap: 8,
+  },
+  colorInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  colorText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  trendIcon: {
+    marginLeft: 8,
+  },
 });

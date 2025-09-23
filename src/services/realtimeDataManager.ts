@@ -66,7 +66,19 @@ class RealtimeDataManager {
             }/${Math.ceil(symbols.length / chunkSize)}:`,
             chunk
           );
-          await safeFetchBulkQuotes(chunk);
+          const quotes = await safeFetchBulkQuotes(chunk);
+
+          // Update lastPrices so UI can reflect polling results even without websocket
+          if (quotes && typeof quotes === "object") {
+            for (const sym of chunk) {
+              const q = quotes[sym];
+              const last = q?.last;
+              if (typeof last === "number" && isFinite(last) && last > 0) {
+                this.lastPrices[sym] = last;
+                this.priceDirty = true;
+              }
+            }
+          }
 
           // Rate limiting: wait between chunks to avoid overwhelming API
           if (i + chunkSize < symbols.length) {
@@ -111,6 +123,7 @@ class RealtimeDataManager {
       clearInterval(this.watchlistInterval);
       this.watchlistInterval = null;
     }
+    // no polling when using realtime only
 
     if (this.polygonEnabled && watchlist.length > 0) {
       console.log("📡 Subscribing to Polygon websocket for watchlist symbols");
@@ -155,17 +168,6 @@ class RealtimeDataManager {
             }
           });
 
-          // Kick an immediate cache refresh so UI hydrates quickly
-          this.loadWatchlistQuotes(this.currentWatchlist)
-            .then(() => {
-              this.refreshCallbacks.forEach((cb) => {
-                try {
-                  cb();
-                } catch {}
-              });
-            })
-            .catch(() => {});
-
           // Throttle UI updates to once per second; only emit if we got at least one price
           this.watchlistInterval = setInterval(() => {
             if (!this.priceDirty) return;
@@ -182,48 +184,13 @@ class RealtimeDataManager {
           this.watchlistRealtimeActive = true;
         })
         .catch(() => {
-          console.warn(
-            "⚠️ Falling back to polling because websocket subscription failed"
-          );
+          // Realtime-only mode: if websocket fails, do not poll
           this.watchlistRealtimeActive = false;
-          // Start 5s polling fallback
-          if (this.watchlistInterval) {
-            clearInterval(this.watchlistInterval);
-            this.watchlistInterval = null;
-          }
-          this.watchlistInterval = setInterval(async () => {
-            try {
-              await this.loadWatchlistQuotes(this.currentWatchlist);
-              this.refreshCallbacks.forEach((cb) => {
-                try {
-                  cb();
-                } catch (error) {
-                  console.error("❌ Refresh callback error:", error);
-                }
-              });
-            } catch (error) {
-              console.error("❌ Watchlist refresh failed:", error);
-            }
-          }, 5000);
         });
       return;
     }
 
-    console.log("🔄 Polygon not configured; falling back to 5s polling");
-    this.watchlistInterval = setInterval(async () => {
-      try {
-        await this.loadWatchlistQuotes(this.currentWatchlist);
-        this.refreshCallbacks.forEach((cb) => {
-          try {
-            cb();
-          } catch (error) {
-            console.error("❌ Refresh callback error:", error);
-          }
-        });
-      } catch (error) {
-        console.error("❌ Watchlist refresh failed:", error);
-      }
-    }, 5000);
+    // Realtime-only mode: polygon not configured -> no updates
   }
 
   // Stop watchlist refresh

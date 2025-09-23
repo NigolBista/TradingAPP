@@ -251,7 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user?.id]);
 
-  // Debounced save of single watchlist to Supabase
+  // Debounced save of all watchlists and global favorites to Supabase
   useEffect(() => {
     const canPersist = !!(user?.id && /^[0-9a-fA-F-]{36}$/.test(user.id));
     if (!canPersist || skipWatchlistSaveRef.current) return;
@@ -259,12 +259,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (watchlistSaveRef.current) clearTimeout(watchlistSaveRef.current);
     } catch {}
     watchlistSaveRef.current = setTimeout(() => {
-      const active = profile.watchlists.find(
-        (w) => w.id === profile.activeWatchlistId
-      );
-      const items = (active?.items || []).map((it) => ({
-        symbol: it.symbol,
-        isFavorite: profile.favorites.includes(it.symbol),
+      // Persist the union of all symbols from all watchlists and global favorites
+      const symbolSet = new Set<string>();
+      try {
+        for (const w of profile.watchlists) {
+          for (const it of w.items) symbolSet.add(it.symbol);
+        }
+        for (const sym of profile.favorites) symbolSet.add(sym);
+      } catch {}
+
+      const items = Array.from(symbolSet).map((symbol) => ({
+        symbol,
+        isFavorite: profile.favorites.includes(symbol),
       }));
       syncUserWatchlist(user!.id, items).catch(() => {});
     }, 600);
@@ -273,12 +279,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (watchlistSaveRef.current) clearTimeout(watchlistSaveRef.current);
       } catch {}
     };
-  }, [
-    user?.id,
-    profile.watchlists,
-    profile.activeWatchlistId,
-    profile.favorites,
-  ]);
+  }, [user?.id, profile.watchlists, profile.favorites]);
 
   // Subscribe to realtime bars for symbols with active alerts and update local lastPrice
   useEffect(() => {

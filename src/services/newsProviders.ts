@@ -188,8 +188,10 @@ async function fetchSentimentStats(
     throw new Error("STOCK_NEWS_API_KEY missing for StockNewsAPI provider");
   }
 
+  // Normalize known index/ETF symbols to underlying index proxies supported by API
+  const norm = normalizeSymbolForSentiment(symbol);
   const endpoint = `https://stocknewsapi.com/api/v1/stat?tickers=${encodeURIComponent(
-    symbol
+    norm
   )}&date=${dateRange}&token=${apiKey}`;
 
   console.log("📊 Fetching fresh sentiment stats for", symbol);
@@ -198,7 +200,12 @@ async function fetchSentimentStats(
     try {
       const json = await fetchJson(endpoint);
 
-      const symbolData = json?.total?.[symbol];
+      let symbolData = json?.total?.[norm];
+      // Fallback: Some APIs return uppercase keys only
+      if (!symbolData) symbolData = json?.total?.[norm.toUpperCase()];
+
+      // Final fallback: try raw symbol key if normalized mapping missed
+      if (!symbolData) symbolData = json?.total?.[symbol];
       if (!symbolData) {
         throw new Error(`No sentiment data found for ${symbol}`);
       }
@@ -206,7 +213,8 @@ async function fetchSentimentStats(
       const dailyData: Record<string, any> = {};
       if (json.data) {
         Object.entries(json.data).forEach(([date, dateData]: [string, any]) => {
-          const symbolDayData = dateData[symbol];
+          const symbolDayData =
+            dateData[norm] || dateData[norm.toUpperCase()] || dateData[symbol];
           if (symbolDayData) {
             dailyData[date] = {
               positive: symbolDayData.Positive || 0,
@@ -244,6 +252,36 @@ async function fetchSentimentStats(
   sentimentInflight.set(cacheKey, promise);
 
   return promise;
+}
+
+// Map common index/ETF tickers to sentiment-supported proxies
+function normalizeSymbolForSentiment(input: string): string {
+  const s = (input || "").trim().toUpperCase();
+  // Known mappings: prefer cash index proxies often used in news feeds
+  const map: Record<string, string> = {
+    // Index ETFs to underlying index
+    SPY: "SPX", // S&P 500 index
+    IVV: "SPX",
+    VOO: "SPX",
+    ES: "SPX",
+    SPX: "SPX",
+
+    QQQ: "NDX", // Nasdaq 100 index
+    TQQQ: "NDX",
+    SQQQ: "NDX",
+    NDX: "NDX",
+
+    DIA: "DJI", // Dow Jones Industrial Average
+    DJIA: "DJI",
+    DJI: "DJI",
+
+    IWM: "RUT", // Russell 2000 index
+    RUT: "RUT",
+
+    // Crypto index ETFs map to underlying symbols (best effort)
+    BITO: "BTC",
+  };
+  return map[s] || s;
 }
 
 // Basic news fetching for single or multiple tickers with caching
