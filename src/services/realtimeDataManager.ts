@@ -1,14 +1,10 @@
 import { type SimpleQuote } from "./quotes";
 import { safeFetchBulkQuotes, safeFetchSingleQuote } from "./quoteFetcher";
 import { polygonRealtime } from "./polygonRealtime";
+import { apiEngine } from "./apiEngine";
 import Constants from "expo-constants";
 
 type RefreshCallback = () => void;
-type StockDataCache = {
-  quotes: Record<string, SimpleQuote>;
-  charts: Record<string, any[]>;
-};
-
 class RealtimeDataManager {
   private watchlistInterval: NodeJS.Timeout | null = null;
   private stockDetailInterval: NodeJS.Timeout | null = null;
@@ -21,27 +17,101 @@ class RealtimeDataManager {
   private lastPrices: Record<string, number> = {};
   private priceDirty: boolean = false;
   private watchlistRealtimeActive: boolean = false;
+  private fallbackInterval: NodeJS.Timeout | null = null;
+  private fallbackActive = false;
+  private fallbackInFlight = false;
+  private fallbackSymbols: string[] = [];
+  private fallbackChunkSize = 40;
+
+  private normalizeSymbols(symbols: string[]): string[] {
+    if (!Array.isArray(symbols)) return [];
+    return Array.from(
+      new Set(
+        symbols
+          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+          .map((s) => s.trim().toUpperCase())
+      )
+    );
+  }
+
+  private async fetchQuotesBurst(
+    symbols: string[],
+    priority: "critical" | "high" | "normal" | "low" = "high"
+  ): Promise<Record<string, SimpleQuote>> {
+    const normalized = this.normalizeSymbols(symbols);
+    if (normalized.length === 0) return {};
+
+    const MAX_PER_REQUEST = 50;
+    const chunkSize =
+      normalized.length <= MAX_PER_REQUEST
+        ? normalized.length
+        : Math.min(this.fallbackChunkSize, MAX_PER_REQUEST);
+
+    const tasks: Promise<Record<string, SimpleQuote>>[] = [];
+
+    for (let i = 0; i < normalized.length; i += chunkSize) {
+      const chunk = normalized.slice(i, i + chunkSize);
+      if (chunk.length === 0) continue;
+      const key = `watchlist-burst:${chunk[0]}:${chunk.length}:${i}`;
+      tasks.push(
+        apiEngine
+          .request(key, () => safeFetchBulkQuotes(chunk), {
+            priority,
+            cache: false,
+            dedupe: false,
+          })
+          .catch((error) => {
+            console.warn("⚠️ Bulk quote fetch failed", chunk, error);
+            return {};
+          })
+      );
+    }
+
+    const results = await Promise.all(tasks);
+    return results.reduce(
+      (acc, cur) => Object.assign(acc, cur),
+      {} as Record<string, SimpleQuote>
+    );
+  }
+
+  private configureFallbackChunks(symbols: string[]): void {
+    const normalized = this.normalizeSymbols(symbols);
+    this.fallbackSymbols = normalized;
+
+    if (normalized.length > 150) {
+      this.fallbackChunkSize = 60;
+    } else if (normalized.length > 80) {
+      this.fallbackChunkSize = 50;
+    } else if (normalized.length > 40) {
+      this.fallbackChunkSize = 40;
+    } else if (normalized.length > 0) {
+      this.fallbackChunkSize = Math.max(10, normalized.length);
+    } else {
+      this.fallbackChunkSize = 40;
+    }
+  }
 
   // Pre-cache all watchlist data on app initialization
   async preloadWatchlistData(watchlist: string[]): Promise<void> {
+    const normalizedWatchlist = this.normalizeSymbols(watchlist);
     console.log(
       "🚀 Pre-loading watchlist data for",
-      watchlist.length,
+      normalizedWatchlist.length,
       "stocks"
     );
-    this.currentWatchlist = watchlist;
+    this.currentWatchlist = normalizedWatchlist;
     this.polygonEnabled = Boolean(
       (Constants.expoConfig?.extra as any)?.polygonApiKey
     );
 
     try {
       // Load quotes for all watchlist stocks
-      await this.loadWatchlistQuotes(watchlist);
+      await this.loadWatchlistQuotes(normalizedWatchlist);
 
       // Live subscribe if polygon is configured - handled by chart components now
 
       // Load chart data for all watchlist stocks (parallel)
-      await this.loadWatchlistCharts(watchlist);
+      await this.loadWatchlistCharts(normalizedWatchlist);
 
       console.log("✅ Watchlist data pre-loaded successfully");
     } catch (error) {
@@ -52,49 +122,29 @@ class RealtimeDataManager {
   // Load quotes for all watchlist stocks with rate limiting
   private async loadWatchlistQuotes(symbols: string[]): Promise<void> {
     try {
-      console.log("📊 Loading quotes for", symbols.length, "stocks");
+      const normalized = this.normalizeSymbols(symbols);
+      if (normalized.length === 0) return;
 
-      // Direct fetch from Polygon (no caching)
-      const chunkSize = 50; // Polygon allows up to 50 symbols per request
-      for (let i = 0; i < symbols.length; i += chunkSize) {
-        const chunk = symbols.slice(i, i + chunkSize);
+      console.log("📊 Loading quotes for", normalized.length, "stocks");
 
-        try {
-          console.log(
-            `📡 Fetching quotes chunk ${
-              Math.floor(i / chunkSize) + 1
-            }/${Math.ceil(symbols.length / chunkSize)}:`,
-            chunk
-          );
-          const quotes = await safeFetchBulkQuotes(chunk);
-
-          // Update lastPrices so UI can reflect polling results even without websocket
-          if (quotes && typeof quotes === "object") {
-            for (const sym of chunk) {
-              const q = quotes[sym];
-              const last = q?.last;
-              if (typeof last === "number" && isFinite(last) && last > 0) {
-                this.lastPrices[sym] = last;
-                this.priceDirty = true;
-              }
-            }
-          }
-
-          // Rate limiting: wait between chunks to avoid overwhelming API
-          if (i + chunkSize < symbols.length) {
-            await new Promise((resolve) => setTimeout(resolve, 100)); // 100ms delay
-          }
-        } catch (error) {
-          // console.error(
-          //   "❌ Watchlist quotes fetch failed for chunk:",
-          //   chunk,
-          //   error
-          // );
-          // Continue with other chunks even if one fails
+      const quotes = await this.fetchQuotesBurst(normalized, "high");
+      let updated = 0;
+      normalized.forEach((sym) => {
+        const price = quotes?.[sym]?.last;
+        if (typeof price === "number" && isFinite(price) && price > 0) {
+          this.lastPrices[sym] = price;
+          updated += 1;
         }
+      });
+
+      if (updated > 0) {
+        this.priceDirty = true;
       }
 
-      console.log("✅ Watchlist quotes loading completed");
+      console.log("✅ Watchlist quotes loading completed", {
+        updated,
+        requested: normalized.length,
+      });
     } catch (error) {
       console.error("❌ Failed to load watchlist quotes:", error);
     }
@@ -107,45 +157,64 @@ class RealtimeDataManager {
 
   // Start watchlist refresh - prefers Polygon websocket if available
   startWatchlistRefresh(watchlist: string[], callback?: RefreshCallback): void {
+    const normalized = this.normalizeSymbols(watchlist);
     this.polygonEnabled = Boolean(
       (Constants.expoConfig?.extra as any)?.polygonApiKey
     );
 
-    this.currentWatchlist = watchlist;
+    this.currentWatchlist = normalized;
     this.watchlistRealtimeActive = false;
+    this.configureFallbackChunks(normalized);
 
-    if (callback) {
-      this.refreshCallbacks.push(callback);
+    this.refreshCallbacks = callback ? [callback] : [];
+
+    if (normalized.length > 0) {
+      this.fetchQuotesBurst(normalized, "high")
+        .then((quotes) => {
+          let updated = false;
+          normalized.forEach((symbol) => {
+            const price = quotes?.[symbol]?.last;
+            if (typeof price === "number" && isFinite(price) && price > 0) {
+              this.lastPrices[symbol] = price;
+              updated = true;
+            }
+          });
+          if (updated) {
+            this.priceDirty = true;
+            this.emitRefresh(true);
+          }
+        })
+        .catch((error) => {
+          console.warn("⚠️ Initial watchlist snapshot failed", error);
+        });
+    } else {
+      this.lastPrices = {};
     }
 
-    // Always clear polling interval when (re)starting
     if (this.watchlistInterval) {
       clearInterval(this.watchlistInterval);
       this.watchlistInterval = null;
     }
-    // no polling when using realtime only
+    this.stopFallbackPolling();
 
-    if (this.polygonEnabled && watchlist.length > 0) {
+    if (this.polygonEnabled && normalized.length > 0) {
       console.log("📡 Subscribing to Polygon websocket for watchlist symbols");
 
-      // Reset previous websocket subscriptions
       try {
         polygonRealtime.clearAll();
       } catch {}
 
-      // Subscribe to trades and second aggregates for timely last prices
       Promise.all([
-        polygonRealtime.subscribeTrades(watchlist).catch((e) => {
+        polygonRealtime.subscribeTrades(normalized).catch((e) => {
           console.warn("⚠️ Failed to subscribe trades", e);
           throw e;
         }),
-        polygonRealtime.subscribeAggSec(watchlist).catch((e) => {
+        polygonRealtime.subscribeAggSec(normalized).catch((e) => {
           console.warn("⚠️ Failed to subscribe second aggs", e);
           throw e;
         }),
       ])
         .then(() => {
-          // Remove existing onPrice listener if any
           if (this.onPriceUnsubscribe) {
             try {
               this.onPriceUnsubscribe();
@@ -154,13 +223,9 @@ class RealtimeDataManager {
           }
 
           const watchlistSet = new Set(this.currentWatchlist);
-          this.lastPrices = {};
-          this.priceDirty = false;
 
-          // Listen for live prices and notify UI for symbols in the current watchlist
           this.onPriceUnsubscribe = polygonRealtime.onPrice((symbol, price) => {
             if (!watchlistSet.has(symbol)) return;
-            // Only update if price changed meaningfully to avoid unnecessary re-renders
             const prev = this.lastPrices[symbol];
             if (prev === undefined || Math.abs(prev - price) >= 0.0001) {
               this.lastPrices[symbol] = price;
@@ -168,29 +233,21 @@ class RealtimeDataManager {
             }
           });
 
-          // Throttle UI updates to once per second; only emit if we got at least one price
           this.watchlistInterval = setInterval(() => {
-            if (!this.priceDirty) return;
-            this.priceDirty = false;
-            this.refreshCallbacks.forEach((cb) => {
-              try {
-                cb();
-              } catch (error) {
-                console.error("❌ Refresh callback error:", error);
-              }
-            });
+            this.emitRefresh();
           }, 1000);
 
           this.watchlistRealtimeActive = true;
         })
-        .catch(() => {
-          // Realtime-only mode: if websocket fails, do not poll
+        .catch((error) => {
+          console.warn("⚠️ Polygon websocket unavailable, falling back", error);
           this.watchlistRealtimeActive = false;
+          this.startFallbackPolling(normalized);
         });
       return;
     }
 
-    // Realtime-only mode: polygon not configured -> no updates
+    this.startFallbackPolling(normalized);
   }
 
   // Stop watchlist refresh
@@ -200,6 +257,7 @@ class RealtimeDataManager {
       clearInterval(this.watchlistInterval);
       this.watchlistInterval = null;
     }
+    this.stopFallbackPolling();
     if (this.onPriceUnsubscribe) {
       try {
         this.onPriceUnsubscribe();
@@ -215,6 +273,79 @@ class RealtimeDataManager {
     this.watchlistRealtimeActive = false;
     this.refreshCallbacks = [];
     // Realtime subscriptions now handled by chart components
+  }
+
+  private startFallbackPolling(symbols: string[]): void {
+    const normalized = this.normalizeSymbols(symbols);
+    this.stopFallbackPolling();
+    if (normalized.length === 0) return;
+
+    this.configureFallbackChunks(normalized);
+    this.fallbackActive = true;
+    this.fallbackInFlight = false;
+
+    const execute = (force: boolean) => {
+      void this.pollWatchlistQuotes(force);
+    };
+
+    execute(true);
+    this.fallbackInterval = setInterval(() => execute(false), 1000);
+  }
+
+  private stopFallbackPolling(): void {
+    this.fallbackActive = false;
+    this.fallbackInFlight = false;
+    if (this.fallbackInterval) {
+      clearInterval(this.fallbackInterval);
+      this.fallbackInterval = null;
+    }
+  }
+
+  private async pollWatchlistQuotes(force = false): Promise<void> {
+    if (!this.fallbackActive || this.fallbackInFlight) {
+      return;
+    }
+
+    const symbols = this.fallbackSymbols;
+    if (!symbols || symbols.length === 0) return;
+
+    this.fallbackInFlight = true;
+    try {
+      const quotes = await this.fetchQuotesBurst(symbols, "high");
+      let updated = false;
+      symbols.forEach((symbol) => {
+        const q = quotes?.[symbol];
+        const price = typeof q?.last === "number" ? q.last : undefined;
+        if (typeof price === "number" && isFinite(price) && price > 0) {
+          const prev = this.lastPrices[symbol];
+          if (prev === undefined || Math.abs(prev - price) >= 0.0001) {
+            this.lastPrices[symbol] = price;
+            updated = true;
+          }
+        }
+      });
+
+      if (updated || force) {
+        this.priceDirty = true;
+        this.emitRefresh(true);
+      }
+    } catch (error) {
+      console.warn("⚠️ Watchlist polling failed", error);
+    } finally {
+      this.fallbackInFlight = false;
+    }
+  }
+
+  private emitRefresh(force = false): void {
+    if (!force && !this.priceDirty) return;
+    this.priceDirty = false;
+    this.refreshCallbacks.forEach((cb) => {
+      try {
+        cb();
+      } catch (error) {
+        console.error("❌ Refresh callback error:", error);
+      }
+    });
   }
 
   // Expose last known prices for current watchlist (shallow copy)

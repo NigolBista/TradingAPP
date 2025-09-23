@@ -5,12 +5,9 @@ import {
   refreshGlobalCache,
   getAllCachedData,
   getCachedNews,
-  getCachedTrendingStocks,
-  getCachedMarketEvents,
-  isCacheValid,
 } from "./marketDataCache";
-import { fetchGeneralMarketNews } from "./newsProviders";
 import type { NewsItem, TrendingStock, MarketEvent } from "./newsProviders";
+import type { FedEvent, EconomicIndicator } from "./federalReserve";
 
 // Export the global cache functions for backward compatibility
 export const refreshMarketDataCache = refreshGlobalCache;
@@ -96,22 +93,21 @@ export async function generateMarketOverview(
     timeframe = "1D",
   } = options;
 
-  try {
-    // Get market data from global cache or fetch fresh data
-    const marketData = await getGlobalMarketData(
-      newsCount,
-      includeTrending,
-      includeEvents
-    );
-    const {
-      news: marketNews,
-      trendingStocks,
-      marketEvents,
-      fedEvents,
-      economicIndicators,
-    } = marketData;
+  const marketData = await getGlobalMarketData(
+    newsCount,
+    includeTrending,
+    includeEvents
+  );
 
-    // Generate AI summary
+  const {
+    news: marketNews,
+    trendingStocks,
+    marketEvents,
+    fedEvents,
+    economicIndicators,
+  } = marketData;
+
+  try {
     const aiSummary = await generateAIMarketSummary(
       marketNews,
       trendingStocks,
@@ -122,7 +118,6 @@ export async function generateMarketOverview(
       timeframe
     );
 
-    // Extract key highlights from AI response
     const {
       summary,
       keyHighlights,
@@ -134,13 +129,13 @@ export async function generateMarketOverview(
     return {
       summary,
       keyHighlights,
-      topStories: marketNews.slice(0, 10), // Top 10 stories for display
+      topStories: marketNews.slice(0, 10),
       trendingStocks,
       upcomingEvents: marketEvents,
       fedEvents: fedEvents
         .filter((fe) => fe.impact === "high" || fe.impact === "medium")
-        .slice(0, 5), // High and medium impact Fed events
-      economicIndicators: economicIndicators.slice(0, 5), // Top 5 economic indicators
+        .slice(0, 5),
+      economicIndicators: economicIndicators.slice(0, 5),
       lastUpdated: new Date().toISOString(),
       ...(marketSentiment && { marketSentiment }),
       ...(dayAheadInsights && { dayAheadInsights }),
@@ -154,30 +149,241 @@ export async function generateMarketOverview(
     };
   } catch (error) {
     console.error("❌ Market Overview Error:", error);
-
-    // Fallback to basic news without AI analysis
-    try {
-      const basicNews = await fetchGeneralMarketNews(10);
-      return {
-        summary:
-          "Market overview temporarily unavailable. Please check individual news stories for the latest updates.",
-        keyHighlights: [
-          "AI analysis temporarily unavailable",
-          "Check individual news stories for updates",
-          "Market data refreshes every 2 minutes",
-        ],
-        topStories: basicNews,
-        trendingStocks: [],
-        upcomingEvents: [],
-        fedEvents: [],
-        economicIndicators: [],
-        lastUpdated: new Date().toISOString(),
-      };
-    } catch (fallbackError) {
-      console.error("❌ Fallback Market Overview Error:", fallbackError);
-      throw new Error("Unable to fetch market overview data");
-    }
+    return buildFallbackOverview(
+      marketNews,
+      trendingStocks,
+      marketEvents,
+      fedEvents,
+      economicIndicators,
+      timeframe
+    );
   }
+}
+
+function buildFallbackOverview(
+  marketNews: NewsItem[],
+  trendingStocks: TrendingStock[],
+  marketEvents: MarketEvent[],
+  fedEvents: FedEvent[],
+  economicIndicators: EconomicIndicator[],
+  timeframe: "1D" | "1W" | "1M"
+): MarketOverview {
+  const summary = buildHeuristicSummary(
+    marketNews,
+    fedEvents,
+    economicIndicators,
+    timeframe
+  );
+  const keyHighlights = buildHeuristicHighlights(
+    marketNews,
+    marketEvents,
+    fedEvents,
+    trendingStocks
+  );
+  const sentiment = computeFallbackSentiment(trendingStocks, economicIndicators);
+  const dayAhead = buildFallbackDayAhead(
+    marketEvents,
+    fedEvents,
+    trendingStocks,
+    economicIndicators
+  );
+
+  const base: MarketOverview = {
+    summary,
+    keyHighlights:
+      keyHighlights.length > 0
+        ? keyHighlights
+        : [
+            "Monitor top market headlines",
+            "Track upcoming macro events",
+            "Review trending tickers",
+          ],
+    topStories: marketNews.slice(0, 10),
+    trendingStocks,
+    upcomingEvents: marketEvents,
+    fedEvents: fedEvents.slice(0, 5),
+    economicIndicators: economicIndicators.slice(0, 5),
+    lastUpdated: new Date().toISOString(),
+  };
+
+  if (sentiment) {
+    base.marketSentiment = sentiment;
+  }
+
+  if (
+    dayAhead.keyEvents.length > 0 ||
+    dayAhead.watchList.length > 0 ||
+    dayAhead.riskFactors.length > 0 ||
+    dayAhead.opportunities.length > 0
+  ) {
+    base.dayAheadInsights = dayAhead;
+  }
+
+  return base;
+}
+
+function buildHeuristicSummary(
+  news: NewsItem[],
+  fedEvents: FedEvent[],
+  economicIndicators: EconomicIndicator[],
+  timeframe: "1D" | "1W" | "1M"
+): string {
+  const parts: string[] = [];
+  const timeframeLabel =
+    timeframe === "1D" ? "today" : timeframe === "1W" ? "this week" : "this month";
+
+  if (news.length > 0 && news[0]?.title) {
+    parts.push(`Top story ${timeframeLabel}: ${news[0].title}`);
+  }
+
+  if (fedEvents.length > 0) {
+    parts.push(
+      `Fed focus: ${fedEvents[0].title} (${formatMonthDay(fedEvents[0].date)})`
+    );
+  }
+
+  if (economicIndicators.length > 0) {
+    parts.push(formatIndicatorLine(economicIndicators[0]));
+  }
+
+  if (parts.length === 0) {
+    return "Monitoring key market catalysts while additional data loads.";
+  }
+
+  return `${parts.join(". ")}.`;
+}
+
+function buildHeuristicHighlights(
+  news: NewsItem[],
+  marketEvents: MarketEvent[],
+  fedEvents: FedEvent[],
+  trendingStocks: TrendingStock[]
+): string[] {
+  const highlights: string[] = [];
+
+  news
+    .slice(0, 3)
+    .filter((item) => item?.title)
+    .forEach((item) => highlights.push(`Headline: ${item.title}`));
+
+  fedEvents.slice(0, 2).forEach((event) =>
+    highlights.push(`Fed: ${event.title} on ${formatMonthDay(event.date)}`)
+  );
+
+  marketEvents.slice(0, 2).forEach((event) =>
+    highlights.push(`Event: ${event.title} (${event.impact.toLowerCase()})`)
+  );
+
+  if (trendingStocks.length > 0) {
+    const leaders = trendingStocks
+      .slice(0, 3)
+      .map((stock) => `${stock.ticker} (${stock.sentiment.toLowerCase()})`)
+      .join(", ");
+    highlights.push(`Trending: ${leaders}`);
+  }
+
+  return highlights.slice(0, 6);
+}
+
+function computeFallbackSentiment(
+  trendingStocks: TrendingStock[],
+  economicIndicators: EconomicIndicator[]
+): MarketOverview["marketSentiment"] | undefined {
+  if (!trendingStocks || trendingStocks.length === 0) return undefined;
+
+  let score = 0;
+  trendingStocks.forEach((stock) => {
+    if (stock.sentiment === "Positive") score += 1;
+    else if (stock.sentiment === "Negative") score -= 1;
+  });
+
+  const normalized = score / trendingStocks.length;
+  let overall: "bullish" | "bearish" | "neutral" = "neutral";
+  if (normalized > 0.2) overall = "bullish";
+  else if (normalized < -0.2) overall = "bearish";
+
+  const confidence = Math.min(
+    95,
+    Math.max(35, Math.abs(normalized) * 100 + (economicIndicators.length > 0 ? 10 : 0))
+  );
+
+  const factors: string[] = [];
+
+  if (trendingStocks.length > 0) {
+    const leaders = trendingStocks
+      .slice(0, 3)
+      .map((stock) => `${stock.ticker} ${stock.sentiment.toLowerCase()}`)
+      .join(", ");
+    factors.push(`Leaders: ${leaders}`);
+  }
+
+  if (economicIndicators.length > 0) {
+    factors.push(formatIndicatorLine(economicIndicators[0]));
+  }
+
+  return {
+    overall,
+    confidence,
+    factors,
+  };
+}
+
+function buildFallbackDayAhead(
+  marketEvents: MarketEvent[],
+  fedEvents: FedEvent[],
+  trendingStocks: TrendingStock[],
+  economicIndicators: EconomicIndicator[]
+): Required<NonNullable<MarketOverview["dayAheadInsights"]>> {
+  const keyEvents = [
+    ...fedEvents
+      .slice(0, 3)
+      .map((event) => `${formatMonthDay(event.date)}: ${event.title}`),
+    ...marketEvents
+      .slice(0, 3)
+      .map((event) => `${formatMonthDay(event.date)}: ${event.title}`),
+  ].slice(0, 4);
+
+  const watchList = trendingStocks
+    .slice(0, 4)
+    .map((stock) => `${stock.ticker}: ${stock.sentiment}`);
+
+  const riskFactors = economicIndicators
+    .slice(0, 3)
+    .map((indicator) => formatIndicatorLine(indicator));
+
+  const opportunities = trendingStocks
+    .filter((stock) => stock.sentiment === "Positive")
+    .slice(0, 3)
+    .map(
+      (stock) =>
+        `${stock.ticker}: momentum building (${stock.mentions} mentions)`
+    );
+
+  return {
+    keyEvents,
+    watchList,
+    riskFactors,
+    opportunities,
+  };
+}
+
+function formatMonthDay(dateIso?: string): string {
+  if (!dateIso) return "";
+  const date = new Date(dateIso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatIndicatorLine(indicator: EconomicIndicator): string {
+  const change =
+    indicator.changePercent !== undefined
+      ? ` (${indicator.changePercent > 0 ? "+" : ""}${indicator.changePercent.toFixed(
+          1
+        )}%)`
+      : indicator.change !== undefined
+      ? ` (${indicator.change > 0 ? "+" : ""}${indicator.change})`
+      : "";
+  return `${indicator.title}: ${indicator.value}${indicator.unit || ""}${change}`;
 }
 
 /**

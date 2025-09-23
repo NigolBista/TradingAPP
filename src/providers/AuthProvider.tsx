@@ -14,6 +14,7 @@ import {
 import { useUserStore } from "../store/userStore";
 import { supabase } from "../lib/supabase";
 import type { User } from "@supabase/supabase-js";
+import { apiEngine } from "../services/apiEngine";
 import alertsService, {
   type AlertRow,
   type TradeSignalRow,
@@ -138,7 +139,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const canPersist = !!(u.id && /^[0-9a-fA-F-]{36}$/.test(u.id));
           if (canPersist) {
-            const rows = await fetchUserWatchlist(u.id);
+            const rows = await apiEngine.request(
+              `watchlist-sync:${u.id}`,
+              () => fetchUserWatchlist(u.id),
+              {
+                priority: "high",
+                ttlMs: 60 * 1000,
+              }
+            );
             if (isMounted && Array.isArray(rows)) {
               const current = useUserStore.getState().profile;
               const items = rows.map((r) => ({
@@ -356,12 +364,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("Please enter a valid email address");
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.toLowerCase().trim(),
-      password,
-    });
+    setLoading(true);
 
-    if (error) throw error;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase().trim(),
+        password,
+      });
+
+      if (error) throw error;
+
+      const sessionUser = data.user || data.session?.user;
+      if (sessionUser) {
+        const authUser: AuthUser = {
+          id: sessionUser.id,
+          email: sessionUser.email || undefined,
+          user_metadata: sessionUser.user_metadata,
+        };
+        setUser(authUser);
+        setProfile({
+          email: sessionUser.email,
+          subscriptionTier: "Free",
+          skillLevel: sessionUser.user_metadata?.skill_level || "Beginner",
+          traderType:
+            sessionUser.user_metadata?.trader_type || "Long-term holder",
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function register(email: string, password: string, fullName?: string) {

@@ -97,6 +97,11 @@ function getFredApiKey(): string {
   return fredApiKey;
 }
 
+function hasFredApiKey(): boolean {
+  const { fredApiKey } = (Constants.expoConfig?.extra || {}) as any;
+  return typeof fredApiKey === "string" && fredApiKey.trim().length > 0;
+}
+
 /**
  * Make a request to the FRED API
  */
@@ -379,6 +384,14 @@ export async function getFederalReserveData(): Promise<{
   indicators: EconomicIndicator[];
   releases: FedRelease[];
 }> {
+  if (!hasFredApiKey()) {
+    return {
+      events: buildFallbackFedEvents(),
+      indicators: buildFallbackIndicators(),
+      releases: buildFallbackReleases(),
+    };
+  }
+
   try {
     console.log("🏛️ Fetching Federal Reserve data...");
 
@@ -405,4 +418,94 @@ export async function getFederalReserveData(): Promise<{
       releases: [],
     };
   }
+}
+
+function buildFallbackFedEvents(): FedEvent[] {
+  const base = Date.now();
+  const addDays = (days: number) => new Date(base + days * 24 * 60 * 60 * 1000).toISOString();
+  return [
+    {
+      id: "fallback_fomc",
+      title: "FOMC Policy Decision",
+      description:
+        "The Federal Open Market Committee releases its policy statement and updated rate guidance.",
+      date: addDays(5),
+      type: "meeting",
+      impact: "high",
+      category: "monetary_policy",
+    },
+    {
+      id: "fallback_beige",
+      title: "Beige Book Economic Survey",
+      description:
+        "Summary of anecdotal information on current economic conditions across Federal Reserve districts.",
+      date: addDays(12),
+      type: "release",
+      impact: "high",
+      category: "monetary_policy",
+    },
+    {
+      id: "fallback_chair",
+      title: "Fed Chair Speech on Outlook",
+      description:
+        "Federal Reserve Chair discusses inflation progress and balance sheet strategy at a public forum.",
+      date: addDays(20),
+      type: "announcement",
+      impact: "medium",
+      category: "monetary_policy",
+    },
+  ];
+}
+
+function buildFallbackIndicators(): EconomicIndicator[] {
+  const today = new Date().toISOString();
+  return [
+    {
+      seriesId: "FEDFUNDS",
+      title: "Federal Funds Rate",
+      value: 5.33,
+      date: today,
+      unit: "%",
+      change: 0.25,
+      changePercent: 4.93,
+    },
+    {
+      seriesId: "CPIAUCSL",
+      title: "CPI All Items",
+      value: 307.1,
+      date: today,
+      unit: "Index",
+      change: 1.8,
+      changePercent: 0.59,
+    },
+    {
+      seriesId: "UNRATE",
+      title: "Unemployment Rate",
+      value: 3.8,
+      date: today,
+      unit: "%",
+      change: 0.1,
+      changePercent: 2.7,
+    },
+  ];
+}
+
+function buildFallbackReleases(): FedRelease[] {
+  const addDays = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  return [
+    {
+      id: 101,
+      name: "Monetary Policy Report",
+      releaseDate: addDays(3),
+      link: "https://www.federalreserve.gov/monetarypolicy.htm",
+      pressRelease: true,
+    },
+    {
+      id: 102,
+      name: "Financial Stability Report",
+      releaseDate: addDays(15),
+      link: "https://www.federalreserve.gov/publications/financial-stability-report.htm",
+      pressRelease: false,
+    },
+  ];
 }

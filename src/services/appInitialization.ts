@@ -4,6 +4,7 @@ import { useEarningsStore } from "../store/earningsStore";
 import { realtimeDataManager } from "./realtimeDataManager";
 import { useUserStore } from "../store/userStore";
 import { getGlobalMarketData } from "./marketDataCache";
+import { apiEngine } from "./apiEngine";
 
 /**
  * App initialization service
@@ -30,16 +31,41 @@ export async function initializeApp(): Promise<void> {
       console.log("🚀 Initializing app...");
 
       // Start preloading stocks data in the background
-      const stocksPromise = preloadStocksData();
+      const stocksPromise = apiEngine.request(
+        "preload-stocks-index",
+        () => preloadStocksData(),
+        {
+          priority: "high",
+          ttlMs: 10 * 60 * 1000,
+        }
+      );
 
-      // Initialize the centralized app data store
-      const storePromise = initializeAppDataStore();
+      const storePromise = apiEngine.request(
+        "initialize-app-store",
+        () => initializeAppDataStore(),
+        {
+          priority: "high",
+          ttlMs: 10 * 60 * 1000,
+        }
+      );
 
-      // Hydrate earnings data at app launch
-      const earningsPromise = useEarningsStore.getState().hydrateEarningsData();
+      const earningsPromise = apiEngine.request(
+        "hydrate-earnings-data",
+        () => useEarningsStore.getState().hydrateEarningsData(),
+        {
+          priority: "normal",
+          ttlMs: 5 * 60 * 1000,
+        }
+      );
 
-      // Warm global market cache (news, events, Fed data)
-      const marketDataPromise = getGlobalMarketData();
+      const marketDataPromise = apiEngine.request(
+        "warm-global-market-cache",
+        () => getGlobalMarketData(),
+        {
+          priority: "high",
+          ttlMs: 2 * 60 * 1000,
+        }
+      );
 
       // Wait for core initialization to complete first
       await Promise.all([

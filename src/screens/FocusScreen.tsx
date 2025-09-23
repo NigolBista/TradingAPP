@@ -23,6 +23,7 @@ import type {
 import type { FedEvent, EconomicIndicator } from "../services/federalReserve";
 import { useUserStore } from "../store/userStore";
 import { fetchNewsWithDateFilter } from "../services/newsProviders";
+import { apiEngine } from "../services/apiEngine";
 
 type TimeframeKey = "today" | "week" | "month";
 
@@ -38,6 +39,15 @@ interface WatchlistInsight {
   sentiment: "Positive" | "Negative" | "Neutral";
   newsCount: number;
   latestHeadline?: string;
+}
+
+interface WatchlistDigestEntry {
+  id: string;
+  symbol: string;
+  headline: string;
+  sentiment?: string;
+  publishedAt?: string;
+  source?: string;
 }
 
 const styles = StyleSheet.create({
@@ -225,6 +235,33 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
   },
+  digestCard: {
+    backgroundColor: "#0F1629",
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#1F2937",
+    marginBottom: 10,
+  },
+  digestLine: {
+    marginBottom: 8,
+  },
+  digestSymbol: {
+    color: "#93C5FD",
+    fontWeight: "700",
+    fontSize: 13,
+  },
+  digestHeadline: {
+    color: "#E5E7EB",
+    fontSize: 13,
+    marginTop: 2,
+    lineHeight: 18,
+  },
+  digestMeta: {
+    color: "#9CA3AF",
+    fontSize: 11,
+    marginTop: 2,
+  },
   eventCard: {
     backgroundColor: "#0F1629",
     borderRadius: 10,
@@ -374,8 +411,182 @@ function bucketize(
   };
 }
 
+function computeWatchlistInsights(newsItems: NewsItem[]): WatchlistInsight[] {
+  const groups = new Map<string, NewsItem[]>();
+
+  newsItems.forEach((item) => {
+    const symbol =
+      (item.symbol || item.tickers?.[0] || "")?.toUpperCase()?.trim();
+    if (!symbol) return;
+    const existing = groups.get(symbol) ?? [];
+    existing.push(item);
+    groups.set(symbol, existing);
+  });
+
+  const insights: WatchlistInsight[] = [];
+  groups.forEach((items, symbol) => {
+    const sorted = items
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.publishedAt || 0).getTime() -
+          new Date(a.publishedAt || 0).getTime()
+      );
+    let score = 0;
+    sorted.forEach((item) => {
+      if (item.sentiment === "Positive") score += 1;
+      else if (item.sentiment === "Negative") score -= 1;
+    });
+    const sentiment: WatchlistInsight["sentiment"] =
+      score > 0 ? "Positive" : score < 0 ? "Negative" : "Neutral";
+    insights.push({
+      symbol,
+      sentiment,
+      newsCount: sorted.length,
+      latestHeadline: sorted[0]?.title,
+    });
+  });
+
+  return insights.sort((a, b) => {
+    if (b.newsCount !== a.newsCount) return b.newsCount - a.newsCount;
+    return a.symbol.localeCompare(b.symbol);
+  });
+}
+
+function buildWatchlistPromptLines(insights: WatchlistInsight[]): string {
+  if (!insights || insights.length === 0) return "- (none)";
+  return insights
+    .slice(0, 4)
+    .map((insight) => {
+      const headline = insight.latestHeadline
+        ? insight.latestHeadline.replace(/\s+/g, " ").trim()
+        : `${insight.newsCount} update${insight.newsCount === 1 ? "" : "s"}`;
+      return `- ${insight.symbol}: ${headline} [${insight.sentiment}]`;
+    })
+    .join("\n");
+}
+
+function truncateHeadline(text?: string, maxLength: number = 90): string {
+  if (!text) return "";
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function formatShortDate(dateIso?: string): string {
+  if (!dateIso) return "";
+  const date = new Date(dateIso);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatRelativeTime(dateIso?: string): string {
+  if (!dateIso) return "";
+  const date = new Date(dateIso);
+  const diff = Date.now() - date.getTime();
+  if (Number.isNaN(diff) || diff < 0) return "";
+  const minutes = Math.round(diff / 60000);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+function buildWatchlistDigest(newsItems: NewsItem[]): WatchlistDigestEntry[] {
+  const sorted = newsItems
+    .filter((item) => item?.title)
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.publishedAt || 0).getTime() -
+        new Date(a.publishedAt || 0).getTime()
+    );
+
+  const seen = new Set<string>();
+  const digest: WatchlistDigestEntry[] = [];
+
+  for (const item of sorted) {
+    const symbol = (item.symbol || item.tickers?.[0] || "")
+      ?.toUpperCase()
+      ?.trim();
+    if (!symbol || seen.has(symbol)) continue;
+    seen.add(symbol);
+    digest.push({
+      id: item.id || `${symbol}-${item.publishedAt || digest.length}`,
+      symbol,
+      headline: truncateHeadline(item.title, 110),
+      sentiment: item.sentiment,
+      publishedAt: item.publishedAt,
+      source: item.source,
+    });
+    if (digest.length >= 6) break;
+  }
+
+  return digest;
+}
+
+function buildFallbackSummary(
+  label: string,
+  newsItems: NewsItem[],
+  fedItems: FedEvent[],
+  marketItems: MarketEvent[],
+  watchlistItems: WatchlistInsight[]
+): string {
+  const timeframe = label.toLowerCase();
+  const headlineSource =
+    newsItems[0]?.title ||
+    watchlistItems[0]?.latestHeadline ||
+    marketItems[0]?.title ||
+    fedItems[0]?.title ||
+    "Monitor key catalysts";
+
+  const summary = truncateHeadline(headlineSource, 120);
+  const bullets: string[] = [];
+
+  watchlistItems.slice(0, 2).forEach((item) => {
+    const focusHeadline = truncateHeadline(
+      item.latestHeadline || `${item.newsCount} new update${item.newsCount === 1 ? "" : "s"}`,
+      80
+    );
+    bullets.push(
+      `- Watch ${item.symbol}: ${focusHeadline} [${item.sentiment}]`
+    );
+  });
+
+  if (fedItems.length > 0) {
+    bullets.push(
+      `- Prep for ${fedItems[0].title} (${formatShortDate(fedItems[0].date)})`
+    );
+  }
+
+  if (marketItems.length > 0) {
+    bullets.push(`- Note ${truncateHeadline(marketItems[0].title, 70)}`);
+  }
+
+  if (newsItems.length > 1) {
+    bullets.push(`- Read: ${truncateHeadline(newsItems[1].title, 70)}`);
+  }
+
+  const defaults = [
+    "- Recheck positions vs. plan",
+    "- Review sector leadership",
+    "- Update risk levels",
+    "- Track economic calendar",
+  ];
+
+  for (const line of defaults) {
+    if (bullets.length >= 4) break;
+    if (!bullets.includes(line)) bullets.push(line);
+  }
+
+  return `Summary: ${summary}\n${bullets.slice(0, 4).join("\n")}`;
+}
+
 export default function FocusScreen() {
   const { theme } = useTheme();
+  const { favorites, watchlists } = useUserStore((state) => ({
+    favorites: state.profile.favorites,
+    watchlists: state.profile.watchlists,
+  }));
   const [news, setNews] = useState<NewsItem[]>([]);
   const [fedEvents, setFedEvents] = useState<FedEvent[]>([]);
   const [marketEvents, setMarketEvents] = useState<MarketEvent[]>([]);
@@ -383,6 +594,8 @@ export default function FocusScreen() {
   const [economicIndicators, setEconomicIndicators] = useState<
     EconomicIndicator[]
   >([]);
+  const [watchlistNews, setWatchlistNews] = useState<NewsItem[]>([]);
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [summaries, setSummaries] = useState<Record<TimeframeKey, string>>({
     today: "",
@@ -391,8 +604,105 @@ export default function FocusScreen() {
   });
   const [summarizing, setSummarizing] = useState(false);
 
+  const watchlistSymbols = useMemo(() => {
+    if (favorites && favorites.length > 0) {
+      return Array.from(
+        new Set(
+          favorites
+            .filter((s): s is string => typeof s === "string" && s.length > 0)
+            .map((s) => s.toUpperCase())
+        )
+      ).slice(0, 8);
+    }
+    const fallback = watchlists?.find((w) => w.items && w.items.length > 0);
+    if (fallback) {
+      return Array.from(
+        new Set(
+          fallback.items
+            .map((item) => item.symbol)
+            .filter((s): s is string => typeof s === "string" && s.length > 0)
+            .map((s) => s.toUpperCase())
+        )
+      ).slice(0, 8);
+    }
+    return ["AAPL", "MSFT", "GOOGL"];
+  }, [favorites, watchlists]);
+
+  const hasWatchlistTargets = watchlistSymbols.length > 0;
+
+  const loadWatchlistNews = useCallback(async (force: boolean = false) => {
+    if (!hasWatchlistTargets) {
+      setWatchlistNews([]);
+      return;
+    }
+
+    setWatchlistLoading(true);
+    try {
+      const tasks = watchlistSymbols.map((symbol) =>
+        apiEngine
+          .request(
+            `focus-watchlist-news:${symbol}`,
+            () => fetchNewsWithDateFilter(symbol, 24 * 30),
+            {
+              priority: "high",
+              ttlMs: 15 * 60 * 1000,
+              cache: !force,
+              dedupe: !force,
+            }
+          )
+          .then((items) =>
+            items.map((item, idx) => ({
+              ...item,
+              id: item.id || `${symbol}-${idx}`,
+              symbol: (item.symbol || symbol).toUpperCase(),
+              tickers:
+                item.tickers && item.tickers.length > 0
+                  ? item.tickers.map((t: string) => t.toUpperCase())
+                  : [symbol],
+            }))
+          )
+          .catch(() => [])
+      );
+
+      const results = await Promise.all(tasks);
+      const merged = results.flat();
+      const dedup = new Map<string, NewsItem>();
+      for (const item of merged) {
+        if (!item.symbol) continue;
+        const normalized: NewsItem = {
+          ...item,
+          symbol: item.symbol.toUpperCase(),
+          tickers:
+            item.tickers && item.tickers.length > 0
+              ? item.tickers.map((t) => t.toUpperCase())
+              : [item.symbol.toUpperCase()],
+        };
+        if (!dedup.has(normalized.id)) {
+          dedup.set(normalized.id, normalized);
+        }
+      }
+      const sorted = Array.from(dedup.values()).sort(
+        (a, b) =>
+          new Date(b.publishedAt || 0).getTime() -
+          new Date(a.publishedAt || 0).getTime()
+      );
+      setWatchlistNews(sorted);
+    } catch (error) {
+      console.warn("⚠️ Failed to load watchlist news", error);
+    } finally {
+      setWatchlistLoading(false);
+    }
+  }, [hasWatchlistTargets, watchlistSymbols]);
+
   const load = useCallback(async () => {
-    const data = await getGlobalMarketData(40, true, true);
+    const data = await apiEngine.request(
+      "focus-global-market",
+      () => getGlobalMarketData(40, true, true),
+      {
+        priority: "high",
+        ttlMs: 90 * 1000,
+      }
+    );
     setNews(data.news || []);
     setFedEvents((data as any).fedEvents || []);
     setMarketEvents((data as any).marketEvents || []);
@@ -404,9 +714,22 @@ export default function FocusScreen() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    loadWatchlistNews();
+  }, [loadWatchlistNews]);
+
   const buckets = useMemo(
-    () => bucketize(news, fedEvents, marketEvents, []),
-    [news, fedEvents, marketEvents]
+    () => bucketize(news, fedEvents, marketEvents, watchlistNews),
+    [news, fedEvents, marketEvents, watchlistNews]
+  );
+
+  const watchlistInsights = useMemo(
+    () => ({
+      today: computeWatchlistInsights(buckets.watchlistNews.today),
+      week: computeWatchlistInsights(buckets.watchlistNews.week),
+      month: computeWatchlistInsights(buckets.watchlistNews.month),
+    }),
+    [buckets]
   );
 
   // Generate concise AI summaries per section
@@ -421,13 +744,14 @@ export default function FocusScreen() {
         fedItems: FedEvent[],
         marketItems: MarketEvent[],
         trendingItems: TrendingStock[],
-        economicItems: EconomicIndicator[]
+        economicItems: EconomicIndicator[],
+        watchlistItems: WatchlistInsight[]
       ) => {
         const headlines = newsItems
           .slice(0, 5)
           .map((n) => `- ${n.title}${n.sentiment ? ` [${n.sentiment}]` : ""}`)
           .join("\n");
-        const fedEvents = fedItems
+        const fedEventsText = fedItems
           .slice(0, 3)
           .map((e) => `- ${e.title} (${new Date(e.date).toLocaleDateString()})`)
           .join("\n");
@@ -449,35 +773,15 @@ export default function FocusScreen() {
           .map(
             (i) =>
               `- ${i.title}: ${i.value}${i.unit}${
-                i.changePercent
-                  ? ` (${
-                      i.changePercent > 0 ? "+" : ""
-                    }${i.changePercent.toFixed(1)}%)`
+                i.changePercent !== undefined
+                  ? ` (${i.changePercent > 0 ? "+" : ""}${i.changePercent.toFixed(1)}%)`
                   : ""
               }`
           )
           .join("\n");
+        const watchlistFocus = buildWatchlistPromptLines(watchlistItems);
 
-        return `You are an expert market assistant. Write a very concise, plain-language focus for ${label}.
-
-Rules:
-- Max 1 short sentence summary (<= 35 words)
-- Then up to 4 short bullets starting with a verb (no more than 8 words each)
-- Avoid jargon; be direct and actionable; no emojis
-
-Context:
-Headlines:\n${headlines || "- (no major headlines)"}
-Fed/FOMC:\n${fedEvents || "- (none)"}
-Market Events:\n${marketEventsText || "- (none)"}
-Trending:\n${trending || "- (none)"}
-Economic Data:\n${indicators || "- (none)"}
-
-Output format:
-Summary: <one-sentence>
-- <bullet 1>
-- <bullet 2>
-- <bullet 3>
-- <bullet 4>`;
+        return `You are an expert market assistant. Write a very concise, plain-language focus for ${label}.\n\nRules:\n- Max 1 short sentence summary (<= 35 words)\n- Then up to 4 short bullets starting with a verb (no more than 8 words each)\n- Avoid jargon; be direct and actionable; no emojis\n\nContext:\nHeadlines:\n${headlines || "- (no major headlines)"}\nFed/FOMC:\n${fedEventsText || "- (none)"}\nMarket Events:\n${marketEventsText || "- (none)"}\nTrending:\n${trending || "- (none)"}\nEconomic Data:\n${indicators || "- (none)"}\nWatchlist Focus:\n${watchlistFocus}\n\nOutput format:\nSummary: <one-sentence>\n- <bullet 1>\n- <bullet 2>\n- <bullet 3>\n- <bullet 4>`;
       };
 
       async function summarizeLabel(
@@ -486,11 +790,17 @@ Summary: <one-sentence>
         fedItems: FedEvent[],
         marketItems: MarketEvent[],
         trendingItems: TrendingStock[],
-        economicItems: EconomicIndicator[]
+        economicItems: EconomicIndicator[],
+        watchlistItems: WatchlistInsight[]
       ): Promise<string> {
         if (!client) {
-          const fallback = `Summary: ${newsItems.length} headlines, ${fedItems.length} Fed events, ${marketItems.length} market events to watch.\n- Scan top stories\n- Note upcoming policy events\n- Monitor trending stocks\n- Track economic data`;
-          return fallback;
+          return buildFallbackSummary(
+            label,
+            newsItems,
+            fedItems,
+            marketItems,
+            watchlistItems
+          );
         }
 
         const prompt = buildPrompt(
@@ -499,8 +809,10 @@ Summary: <one-sentence>
           fedItems,
           marketItems,
           trendingItems,
-          economicItems
+          economicItems,
+          watchlistItems
         );
+
         try {
           const resp = await client.chat.completions.create({
             model: "gpt-5-mini",
@@ -516,7 +828,13 @@ Summary: <one-sentence>
           });
           return resp.choices[0]?.message?.content?.trim() || "";
         } catch (e) {
-          return `Summary: ${newsItems.length} headlines, ${fedItems.length} Fed events, ${marketItems.length} market events to watch.\n- Scan top stories\n- Note upcoming policy events\n- Monitor trending stocks\n- Track economic data`;
+          return buildFallbackSummary(
+            label,
+            newsItems,
+            fedItems,
+            marketItems,
+            watchlistItems
+          );
         }
       }
 
@@ -529,7 +847,8 @@ Summary: <one-sentence>
             buckets.fedEvents.today,
             buckets.marketEvents.today,
             trendingStocks,
-            economicIndicators
+            economicIndicators,
+            watchlistInsights.today
           ),
           summarizeLabel(
             "this week",
@@ -537,7 +856,8 @@ Summary: <one-sentence>
             buckets.fedEvents.week,
             buckets.marketEvents.week,
             trendingStocks,
-            economicIndicators
+            economicIndicators,
+            watchlistInsights.week
           ),
           summarizeLabel(
             "this month",
@@ -545,7 +865,8 @@ Summary: <one-sentence>
             buckets.fedEvents.month,
             buckets.marketEvents.month,
             trendingStocks,
-            economicIndicators
+            economicIndicators,
+            watchlistInsights.month
           ),
         ]);
         setSummaries({ today, week, month });
@@ -562,6 +883,10 @@ Summary: <one-sentence>
       buckets.fedEvents.today.length +
         buckets.fedEvents.week.length +
         buckets.fedEvents.month.length >
+        0 ||
+      watchlistInsights.today.length +
+        watchlistInsights.week.length +
+        watchlistInsights.month.length >
         0;
 
     if (hasData) {
@@ -569,12 +894,19 @@ Summary: <one-sentence>
     } else {
       setSummaries({ today: "", week: "", month: "" });
     }
-  }, [buckets, trendingStocks, economicIndicators]);
+  }, [buckets, trendingStocks, economicIndicators, watchlistInsights]);
 
   const onRefresh = useCallback(async () => {
     try {
       setRefreshing(true);
-      const data = await refreshGlobalCache(40, true, true);
+      apiEngine.invalidate("focus-global-market");
+      watchlistSymbols.forEach((symbol) =>
+        apiEngine.invalidate(`focus-watchlist-news:${symbol}`)
+      );
+      const refreshPromise = refreshGlobalCache(40, true, true);
+      const watchlistPromise = loadWatchlistNews(true);
+      const data = await refreshPromise;
+      await watchlistPromise;
       setNews(data.news || []);
       setFedEvents((data as any).fedEvents || []);
       setMarketEvents((data as any).marketEvents || []);
@@ -583,8 +915,7 @@ Summary: <one-sentence>
     } finally {
       setRefreshing(false);
     }
-  }, []);
-
+  }, [loadWatchlistNews, watchlistSymbols]);
   function formatEventLine(e: FedEvent): string {
     const d = new Date(e.date);
     const weekday = d.toLocaleDateString(undefined, { weekday: "short" });
@@ -611,6 +942,114 @@ Summary: <one-sentence>
           ))
         ) : (
           <Text style={styles.eventLineText}>- None</Text>
+        )}
+      </View>
+    );
+  }
+
+  function renderWatchlistDigest(timeframe: TimeframeKey) {
+    if (!hasWatchlistTargets) return null;
+    const digest = buildWatchlistDigest(buckets.watchlistNews[timeframe]);
+
+    if (watchlistLoading && digest.length === 0) {
+      return (
+        <View style={styles.digestCard}>
+          <View style={styles.watchlistHeader}>
+            <Ionicons name="newspaper-outline" size={16} color={theme.colors.primary} />
+            <Text style={styles.watchlistHeaderText}>Favorite headlines</Text>
+          </View>
+          <Text style={styles.watchlistNews}>Gathering favorite ticker headlines…</Text>
+        </View>
+      );
+    }
+
+    if (digest.length === 0) {
+      return null;
+    }
+
+    return (
+      <View style={styles.digestCard}>
+        <View style={styles.watchlistHeader}>
+          <Ionicons name="newspaper-outline" size={16} color={theme.colors.primary} />
+          <Text style={styles.watchlistHeaderText}>Favorite headlines</Text>
+        </View>
+        {digest.slice(0, 4).map((entry) => {
+          const metaParts = [
+            entry.sentiment,
+            entry.source,
+            formatRelativeTime(entry.publishedAt) || formatShortDate(entry.publishedAt),
+          ].filter(Boolean);
+          return (
+            <View key={`${timeframe}-${entry.id}`} style={styles.digestLine}>
+              <Text style={styles.digestSymbol}>{entry.symbol}</Text>
+              <Text style={styles.digestHeadline}>{entry.headline}</Text>
+              {metaParts.length > 0 ? (
+                <Text style={styles.digestMeta}>{metaParts.join(" • ")}</Text>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+    );
+  }
+
+  function renderWatchlistSection(timeframe: TimeframeKey) {
+    if (!hasWatchlistTargets) return null;
+    const insights = watchlistInsights[timeframe];
+    const headingMap: Record<TimeframeKey, string> = {
+      today: "Favorites to watch today",
+      week: "Focus this week",
+      month: "Focus this month",
+    };
+
+    return (
+      <View style={styles.watchlistCard}>
+        <View style={styles.watchlistHeader}>
+          <Ionicons name="newspaper" size={16} color={theme.colors.primary} />
+          <Text style={styles.watchlistHeaderText}>{headingMap[timeframe]}</Text>
+        </View>
+        {watchlistLoading && insights.length === 0 ? (
+          <Text style={styles.watchlistNews}>Loading watchlist headlines...</Text>
+        ) : insights.length > 0 ? (
+          <View style={styles.watchlistGrid}>
+            {insights.slice(0, 4).map((insight) => (
+              <View
+                key={`${timeframe}-${insight.symbol}`}
+                style={styles.watchlistItem}
+              >
+                <Text style={styles.watchlistSymbol}>{insight.symbol}</Text>
+                {insight.latestHeadline ? (
+                  <Text style={styles.watchlistNews}>
+                    {truncateHeadline(insight.latestHeadline)}
+                  </Text>
+                ) : (
+                  <Text style={styles.watchlistNews}>
+                    {insight.newsCount} headline
+                    {insight.newsCount === 1 ? "" : "s"}
+                  </Text>
+                )}
+                <Text
+                  style={[
+                    styles.watchlistSentiment,
+                    insight.sentiment === "Positive"
+                      ? styles.metricPositive
+                      : insight.sentiment === "Negative"
+                      ? styles.metricNegative
+                      : { color: "#9CA3AF" },
+                  ]}
+                >
+                  {insight.sentiment} • {insight.newsCount} story
+                  {insight.newsCount === 1 ? "" : "ies"}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.emptyText}>
+            {favorites && favorites.length > 0
+              ? "No fresh headlines for your favorites."
+              : "Pick favorites to unlock personalized focus."}
+          </Text>
         )}
       </View>
     );
@@ -730,7 +1169,9 @@ Summary: <one-sentence>
               <Text style={styles.summaryText}>{summaries.today}</Text>
             </View>
           ) : null}
+          {renderWatchlistDigest("today")}
           {renderFedEventsText(buckets.fedEvents.today)}
+          {renderWatchlistSection("today")}
         </View>
 
         <View style={styles.section}>
@@ -751,7 +1192,9 @@ Summary: <one-sentence>
               <Text style={styles.summaryText}>{summaries.week}</Text>
             </View>
           ) : null}
+          {renderWatchlistDigest("week")}
           {renderFedEventsText(buckets.fedEvents.week)}
+          {renderWatchlistSection("week")}
         </View>
 
         <View style={styles.section}>
@@ -776,7 +1219,9 @@ Summary: <one-sentence>
               <Text style={styles.summaryText}>{summaries.month}</Text>
             </View>
           ) : null}
+          {renderWatchlistDigest("month")}
           {renderFedEventsText(buckets.fedEvents.month)}
+          {renderWatchlistSection("month")}
         </View>
       </ScrollView>
     </SafeAreaView>

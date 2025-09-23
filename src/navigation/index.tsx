@@ -50,6 +50,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.2)",
+  },
 });
 
 function Tabs() {
@@ -121,7 +127,10 @@ export default function RootNavigation() {
   const { user, loading } = useAuth();
   const { theme } = useTheme();
 
-  if (loading) {
+  const showBlockingLoader = loading && !user;
+  const showInlineLoader = loading && !!user;
+
+  if (showBlockingLoader) {
     function LoadingScreen() {
       return (
         <View
@@ -208,6 +217,11 @@ export default function RootNavigation() {
       ) : (
         <AuthRoutes />
       )}
+      {showInlineLoader ? (
+        <View pointerEvents="none" style={styles.loadingOverlay}>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+        </View>
+      ) : null}
     </NavigationContainer>
   );
 }
