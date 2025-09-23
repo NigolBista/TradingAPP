@@ -148,7 +148,7 @@ export default function ChartFullScreen() {
   );
   const [showMA, setShowMA] = useState<boolean>(false);
   const [showVolume, setShowVolume] = useState<boolean>(false);
-  const [showSessions, setShowSessions] = useState<boolean>(true);
+  const [showSessions] = useState<boolean>(true); // Always enabled
   const [areaStyle, setAreaStyle] = useState<any | undefined>(undefined);
   const [priceColors, setPriceColors] = useState<{
     up: string;
@@ -212,7 +212,7 @@ export default function ChartFullScreen() {
     useState<StrategyComplexity>(profile.strategyComplexity || "advanced");
   const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
     useState<boolean>(false);
-  const [showReasonIcon, setShowReasonIcon] = useState<boolean>(true);
+  const [showReasonIcon] = useState<boolean>(true); // Always enabled
   const [selectedAlertId, setSelectedAlertId] = useState<string | null>(null);
   const [proposedAlertPrice, setProposedAlertPrice] = useState<number | null>(
     null
@@ -313,8 +313,7 @@ export default function ChartFullScreen() {
         if (typeof settings.show_volume === "boolean")
           setShowVolume(settings.show_volume);
         if (typeof settings.show_ma === "boolean") setShowMA(settings.show_ma);
-        if (typeof settings.show_sessions === "boolean")
-          setShowSessions(settings.show_sessions);
+        // showSessions is always enabled - no need to set from settings
         if (settings.indicators && Array.isArray(settings.indicators)) {
           setIndicators(settings.indicators as any);
           try {
@@ -528,7 +527,7 @@ export default function ChartFullScreen() {
               }
               if (action.option === "sessions") {
                 options.showSessions = action.enabled;
-                setShowSessions(action.enabled);
+                // showSessions is always enabled - no state update needed
               }
               if (action.option === "showGrid") {
                 options.showGrid = !!action.enabled;
@@ -573,7 +572,6 @@ export default function ChartFullScreen() {
     setChartType,
     setShowMA,
     setShowVolume,
-    setShowSessions,
     symbol,
   ]);
 
@@ -1545,10 +1543,6 @@ export default function ChartFullScreen() {
           }
           return success;
         }}
-        showSessions={showSessions}
-        onSetShowSessions={(enabled) => setShowSessions(enabled)}
-        showReasonIcon={showReasonIcon}
-        onSetShowReasonIcon={(enabled) => setShowReasonIcon(enabled)}
         priceColors={priceColors}
         onSetPriceColors={(c) => {
           setPriceColors(c);

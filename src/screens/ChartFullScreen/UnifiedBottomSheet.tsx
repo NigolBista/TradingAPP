@@ -23,10 +23,6 @@ type Props = {
   pinned: ExtendedTimeframe[];
   onSelectTimeframe: (tf: ExtendedTimeframe) => void;
   onTogglePin: (tf: ExtendedTimeframe) => Promise<boolean> | boolean;
-  showSessions: boolean;
-  onSetShowSessions: (enabled: boolean) => void;
-  showReasonIcon: boolean;
-  onSetShowReasonIcon: (enabled: boolean) => void;
   priceColors?: { up: string; down: string; noChange?: string };
   onSetPriceColors?: (c: {
     up: string;
@@ -44,10 +40,6 @@ export default function UnifiedBottomSheet({
   pinned,
   onSelectTimeframe,
   onTogglePin,
-  showSessions,
-  onSetShowSessions,
-  showReasonIcon,
-  onSetShowReasonIcon,
   priceColors,
   onSetPriceColors,
 }: Props) {
@@ -224,36 +216,6 @@ export default function UnifiedBottomSheet({
                 </ScrollView>
               </View>
 
-              {/* Trading Session + Reasoning side-by-side */}
-              <View style={{ paddingHorizontal: 20, marginBottom: 24 }}>
-                <View style={styles.dualRow}>
-                  <View style={styles.dualCol}>
-                    <Text style={styles.sectionTitle}>After Hours</Text>
-                    <View style={styles.switchRow}>
-                      <Text style={styles.switchLabel}>Extended</Text>
-                      <Switch
-                        value={showSessions}
-                        onValueChange={onSetShowSessions}
-                        trackColor={{ false: "#2a2a2a", true: "#00D4AA" }}
-                        thumbColor={showSessions ? "#000" : "#888"}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.dualCol}>
-                    <Text style={styles.sectionTitle}>Reasoning</Text>
-                    <View style={styles.switchRow}>
-                      <Text style={styles.switchLabel}>Overlay</Text>
-                      <Switch
-                        value={showReasonIcon}
-                        onValueChange={onSetShowReasonIcon}
-                        trackColor={{ false: "#2a2a2a", true: "#00D4AA" }}
-                        thumbColor={showReasonIcon ? "#000" : "#888"}
-                      />
-                    </View>
-                  </View>
-                </View>
-              </View>
-
               <View style={{ paddingHorizontal: 20 }}>
                 {/* Up/Down Colors */}
                 <View style={{ marginTop: 16 }}>
@@ -311,7 +273,7 @@ export default function UnifiedBottomSheet({
                               </Text>
                               <Ionicons
                                 name="trending-up"
-                                size={20}
+                                size={16}
                                 color={scheme.up}
                                 style={styles.trendIcon}
                               />
@@ -323,7 +285,7 @@ export default function UnifiedBottomSheet({
                                 </Text>
                                 <Ionicons
                                   name="trending-down"
-                                  size={20}
+                                  size={16}
                                   color={scheme.down}
                                   style={styles.trendIcon}
                                 />
@@ -429,11 +391,12 @@ const styles = StyleSheet.create({
   },
   switchLabel: { color: "#fff", fontSize: 12, fontWeight: "700" },
   colorSchemeCard: {
-    minWidth: 140,
-    paddingHorizontal: 16,
     paddingVertical: 16,
+    paddingHorizontal: 12,
     borderRadius: 12,
     backgroundColor: "#2a2a2a",
+    alignItems: "center",
+    minWidth: 110,
     borderWidth: 2,
     borderColor: "transparent",
   },
@@ -449,7 +412,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   colorText: {
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: "600",
     color: "#fff",
   },
