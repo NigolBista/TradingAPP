@@ -1491,26 +1491,29 @@ export default function SimpleKLineChart({
                   var afterEndEtExt = ceilAfter(afterEndEt, stepMs, dayEt);
                   if (afterEndEtExt > nextDayEt) afterEndEtExt = nextDayEt; // clamp to midnight to avoid overlap
 
-                  var sessions = [
-                    // midnight -> 4:00 ET (night)
-                    { start: toUtcEpoch(dayEt),       end: toUtcEpoch(preStartEt),   color: 'rgba(100,100,100,0.1)' },
+                var sessions = [
+                    // midnight -> 4:00 ET (overnight)
+                    { start: toUtcEpoch(dayEt),       end: toUtcEpoch(preStartEt),   color: 'rgba(64, 64, 64, 0.16)' },
                     // 4:00 -> 9:30 ET (premarket)
-                    { start: toUtcEpoch(preStartEt),  end: toUtcEpoch(regStartEt),   color: 'rgba(151, 151, 151, 0.1)' },
-                    // 9:30 -> extended close (day; keep transparent)
+                    { start: toUtcEpoch(preStartEt),  end: toUtcEpoch(regStartEt),   color: 'rgba(32, 32, 32, 0.22)' },
+                    // 9:30 -> extended close (regular session)
                     { start: toUtcEpoch(regStartEt),  end: toUtcEpoch(regEndEtExt),  color: 'rgba(0, 0, 0, 0.0)' },
-                    // extended close -> extended after-hours end (after hours; darker)
-                    { start: toUtcEpoch(regEndEtExt), end: toUtcEpoch(afterEndEtExt), color: 'rgba(45, 45, 45, 0.18)' },
-                    // extended after-hours end -> midnight (night)
-                    { start: toUtcEpoch(afterEndEtExt), end: toUtcEpoch(nextDayEt),  color: 'rgba(100, 100, 100, 0.1)' }
+                    // extended close -> extended after-hours end (after hours)
+                    { start: toUtcEpoch(regEndEtExt), end: toUtcEpoch(afterEndEtExt), color: 'rgba(32, 32, 32, 0.22)' },
+                    // extended after-hours end -> midnight (overnight)
+                    { start: toUtcEpoch(afterEndEtExt), end: toUtcEpoch(nextDayEt),  color: 'rgba(64, 64, 64, 0.16)' }
                   ];
                   sessions.forEach(function(s){
                     if (s.end <= startTs || s.start >= endTs) return;
+                    var clampedStart = Math.max(s.start, startTs);
+                    var clampedEnd = Math.min(s.end, endTs);
+                    if (clampedEnd <= clampedStart) return;
                     try {
                       var id = chart.createOverlay({
                         name: 'sessionBg',
                         lock: true,
                         mode: 'decoration',
-                        points: [ { timestamp: s.start, value: 0 }, { timestamp: s.end, value: 0 } ],
+                        points: [ { timestamp: clampedStart, value: 0 }, { timestamp: clampedEnd, value: 0 } ],
                         extendData: { color: s.color }
                       });
                       ids.push(id);

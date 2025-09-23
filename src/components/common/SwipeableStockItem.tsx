@@ -3,6 +3,8 @@ import { View, Text, Pressable, StyleSheet } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../providers/ThemeProvider";
+import type { MarketSessionPhase } from "../../lib/marketSessions";
+import { isExtendedSession } from "../../lib/marketSessions";
 
 interface SwipeableStockItemProps {
   symbol: string;
@@ -10,7 +12,7 @@ interface SwipeableStockItemProps {
   currentPrice: number;
   change: number;
   changePercent: number;
-  isAfterHours?: boolean;
+  sessionPhase?: MarketSessionPhase;
   afterHoursPercent?: number;
   afterHoursDelta?: number;
   showAhChange?: boolean;
@@ -27,7 +29,7 @@ export default function SwipeableStockItem({
   currentPrice,
   change,
   changePercent,
-  isAfterHours,
+  sessionPhase,
   afterHoursPercent,
   afterHoursDelta,
   showAhChange,
@@ -42,7 +44,11 @@ export default function SwipeableStockItem({
 
   const styles = createStyles(theme);
 
-  const ahPct = isAfterHours
+  const extendedPhase = sessionPhase ?? "regular";
+  const isExtended = isExtendedSession(extendedPhase);
+  const extendedLabel = extendedPhase === "pre-market" ? "Pre" : "After";
+
+  const ahPct = isExtended
     ? typeof afterHoursDelta === "number" &&
       typeof currentPrice === "number" &&
       currentPrice > 0
@@ -117,14 +123,14 @@ export default function SwipeableStockItem({
             <Pressable
               style={styles.priceInfo}
               onPress={(e: any) => {
-                // Toggle between daily % and AH delta/% during after-hours
+                // Toggle between daily % and extended-hours delta/%
                 e?.stopPropagation?.();
-                if (isAfterHours) onTogglePriceMode?.();
+                if (isExtended) onTogglePriceMode?.();
               }}
             >
               <Text style={styles.stockPrice}>${currentPrice.toFixed(2)}</Text>
               <View style={styles.changeRow}>
-                {(!isAfterHours || (isAfterHours && !showAhChange)) && (
+                {(!isExtended || (isExtended && !showAhChange)) && (
                   <Text
                     style={[
                       styles.stockChange,
@@ -137,7 +143,7 @@ export default function SwipeableStockItem({
                     {changePercent.toFixed(2)}%
                   </Text>
                 )}
-                {isAfterHours && showAhChange && typeof ahPct === "number" && (
+                {isExtended && showAhChange && typeof ahPct === "number" && (
                   <Text
                     style={[
                       styles.afterHoursText,
@@ -146,7 +152,7 @@ export default function SwipeableStockItem({
                         : styles.negativeChange,
                     ]}
                   >
-                    {`After: ${
+                    {`${extendedLabel}: ${
                       afterHoursDelta !== undefined
                         ? `${afterHoursDelta >= 0 ? "+" : ""}$${Math.abs(
                             afterHoursDelta

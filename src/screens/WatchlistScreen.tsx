@@ -44,6 +44,11 @@ import {
   fetchPolygonBulkQuotes,
 } from "../services/polygonQuotes";
 import useMarketStatus from "../hooks/useMarketStatus";
+import {
+  deriveSessionPhase,
+  isExtendedSession,
+  type MarketSessionPhase,
+} from "../lib/marketSessions";
 
 const { width: screenWidth } = Dimensions.get("window");
 
@@ -262,6 +267,16 @@ export default function WatchlistScreen() {
 
   const styles = createStyles(theme);
   const marketStatus = useMarketStatus();
+  const sessionPhase: MarketSessionPhase = React.useMemo(
+    () => deriveSessionPhase(marketStatus),
+    [
+      marketStatus.sessionLabel,
+      marketStatus.serverTimeMs,
+      marketStatus.etOffsetMinutes,
+      marketStatus.serverOffsetMs,
+    ]
+  );
+  const isExtendedHours = isExtendedSession(sessionPhase);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -342,7 +357,19 @@ export default function WatchlistScreen() {
 
   useEffect(() => {
     loadDisplayData();
-  }, [viewMode, selectedWatchlistId, profile.favorites, profile.watchlists]);
+  }, [
+    viewMode,
+    selectedWatchlistId,
+    profile.favorites,
+    profile.watchlists,
+    sessionPhase,
+  ]);
+
+  useEffect(() => {
+    if (!isExtendedHours && showAhChange) {
+      setShowAhChange(false);
+    }
+  }, [isExtendedHours, showAhChange]);
 
   // Start/stop real-time refresh when screen is focused/unfocused
   useFocusEffect(
@@ -431,11 +458,14 @@ export default function WatchlistScreen() {
       Object.assign(companyNamesRef.current, nameMap);
 
       // Fetch fresh quotes from Polygon
-      const afterHours = marketStatus.isAfterHours;
+      const extendedSessionActive = isExtendedHours;
+      if (!extendedSessionActive) {
+        afterHoursPctRef.current = {};
+      }
       let cached: Record<string, SimpleQuote> = {};
       let polygon: Record<string, SimpleQuote> | null = null;
 
-      if (afterHours && isPolygonApiAvailable()) {
+      if (extendedSessionActive && isPolygonApiAvailable()) {
         // Fetch both quote stream and Polygon daily snapshots in parallel for instant day close
         const [qCached, polygonSnap] = await Promise.all([
           safeFetchBulkQuotes(symbols),
@@ -455,7 +485,7 @@ export default function WatchlistScreen() {
           const change = q?.change ?? 0;
           const pct = q?.changePercent ?? 0;
 
-          if (afterHours) {
+          if (extendedSessionActive) {
             // Prefer Polygon snapshot day close during AH
             const snap = polygon ? polygon[symbol] : undefined;
             const dayClose =
@@ -496,9 +526,9 @@ export default function WatchlistScreen() {
 
       // Background fetch fresh quotes (bulk)
       const fresh = await safeFetchBulkQuotes(symbols);
-      // If after-hours and Polygon is available, fetch day close snapshot to freeze display price
-      const afterHoursBg = marketStatus.isAfterHours;
-      if (afterHoursBg && isPolygonApiAvailable()) {
+      // If after-hours or pre-market and Polygon is available, fetch day close snapshot to freeze display price
+      const extendedSessionForBackground = isExtendedHours;
+      if (extendedSessionForBackground && isPolygonApiAvailable()) {
         try {
           const polygon = await fetchPolygonBulkQuotes(symbols);
           for (const s of symbols) {
@@ -516,7 +546,7 @@ export default function WatchlistScreen() {
         const change = q?.change ?? 0;
         const pct = q?.changePercent ?? 0;
         // During regular hours, keep previous close from quote; after-hours, keep Polygon day close
-        if (!afterHoursBg) {
+        if (!extendedSessionForBackground) {
           if (typeof price === "number" && typeof change === "number") {
             const prevClose = price - change;
             if (isFinite(prevClose) && prevClose > 0)
@@ -524,7 +554,7 @@ export default function WatchlistScreen() {
           }
         }
         // Pre-compute after-hours percent once we have a reliable regular close
-        if (afterHoursBg) {
+        if (extendedSessionForBackground) {
           const close = closePriceRef.current[symbol];
           if (
             typeof close === "number" &&
@@ -881,19 +911,19 @@ export default function WatchlistScreen() {
             </View>
           ) : (
             stockData.map((stock) => {
-              const isAfterHours = marketStatus.isAfterHours;
-              const afterHoursPercent = isAfterHours
+              const isExtended = isExtendedHours;
+              const afterHoursPercent = isExtended
                 ? afterHoursPctRef.current[stock.symbol]
                 : undefined;
               const isGlobalFav = isGlobalFavorite(stock.symbol);
               const dayClose = closePriceRef.current[stock.symbol];
-              const displayPrice = isAfterHours
+              const displayPrice = isExtended
                 ? typeof dayClose === "number"
                   ? dayClose
                   : stock.currentPrice
                 : stock.currentPrice;
               const afterHoursDelta =
-                isAfterHours && typeof dayClose === "number"
+                isExtended && typeof dayClose === "number"
                   ? stock.currentPrice - dayClose
                   : undefined;
 
@@ -905,7 +935,7 @@ export default function WatchlistScreen() {
                   currentPrice={displayPrice}
                   change={stock.change}
                   changePercent={stock.changePercent}
-                  isAfterHours={isAfterHours}
+                  sessionPhase={sessionPhase}
                   afterHoursPercent={afterHoursPercent}
                   afterHoursDelta={afterHoursDelta}
                   showAhChange={showAhChange}

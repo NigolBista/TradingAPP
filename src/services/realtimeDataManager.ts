@@ -21,6 +21,7 @@ class RealtimeDataManager {
   private lastPrices: Record<string, number> = {};
   private priceDirty: boolean = false;
   private watchlistRealtimeActive: boolean = false;
+  private watchlistPollingInFlight: boolean = false;
 
   // Pre-cache all watchlist data on app initialization
   async preloadWatchlistData(watchlist: string[]): Promise<void> {
@@ -190,7 +191,52 @@ class RealtimeDataManager {
       return;
     }
 
-    // Realtime-only mode: polygon not configured -> no updates
+    this.lastPrices = {};
+    this.priceDirty = false;
+
+    if (watchlist.length > 0) {
+      this.watchlistPollingInFlight = false;
+      this.watchlistInterval = setInterval(async () => {
+        if (this.watchlistPollingInFlight) return;
+        this.watchlistPollingInFlight = true;
+        try {
+          const symbolsSnapshot = [...this.currentWatchlist];
+          if (symbolsSnapshot.length === 0) {
+            this.watchlistPollingInFlight = false;
+            return;
+          }
+          const quotes = await safeFetchBulkQuotes(symbolsSnapshot);
+          let changed = false;
+          for (const sym of symbolsSnapshot) {
+            const quote = quotes[sym];
+            const last = quote?.last;
+            if (typeof last === "number" && isFinite(last) && last > 0) {
+              const prev = this.lastPrices[sym];
+              if (prev === undefined || Math.abs(prev - last) >= 0.0001) {
+                this.lastPrices[sym] = last;
+                changed = true;
+              }
+            }
+          }
+          if (changed) {
+            this.refreshCallbacks.forEach((cb) => {
+              try {
+                cb();
+              } catch (error) {
+                console.error("❌ Refresh callback error:", error);
+              }
+            });
+          }
+        } catch (error) {
+          console.warn("⚠️ Watchlist polling failed", error);
+        } finally {
+          this.priceDirty = false;
+          this.watchlistPollingInFlight = false;
+        }
+      }, 1000);
+    }
+
+    // Realtime-only mode: polygon not configured -> fallback polling handles updates
   }
 
   // Stop watchlist refresh
@@ -200,6 +246,7 @@ class RealtimeDataManager {
       clearInterval(this.watchlistInterval);
       this.watchlistInterval = null;
     }
+    this.watchlistPollingInFlight = false;
     if (this.onPriceUnsubscribe) {
       try {
         this.onPriceUnsubscribe();
