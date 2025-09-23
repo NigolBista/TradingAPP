@@ -588,7 +588,7 @@ export default function SimpleKLineChart({
                   // Update chart styles based on new options
                   applyChartType(window.__SIMPLE_KLINE__.chart, CHART_TYPE);
                   // Reapply session backgrounds when showSessions option changes
-                  setTimeout(applySessionBackgrounds, 100);
+                  try { if (typeof applySessionBackgrounds === 'function') setTimeout(applySessionBackgrounds, 100); } catch(_) {}
                   post({ success: 'display_options_updated', options: options });
                 } catch(e) {
                   post({ error: 'display_options_update_failed', message: String(e && e.message || e) });
