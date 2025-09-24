@@ -41,6 +41,21 @@ export interface UserProfile {
   strategyComplexity?: "simple" | "partial" | "advanced";
   preferredRiskReward?: number;
   autoApplyComplexity?: boolean; // Auto-apply complexity to all analyses
+
+  // Signal provider & strategy groups
+  isSignalProvider?: boolean;
+  strategyGroups?: StrategyGroup[];
+  selectedStrategyGroupId?: string;
+}
+
+export interface StrategyGroup {
+  id: string;
+  name: string;
+  description?: string;
+  isInviteOnly?: boolean;
+  inviteCode?: string; // pseudo invite code for local-only flow
+  ownerUserId?: string;
+  memberUserIds?: string[];
 }
 
 interface UserState {
@@ -55,6 +70,14 @@ interface UserState {
   isGlobalFavorite: (symbol: string) => boolean;
   setActiveWatchlist: (id: string) => void;
   getActiveWatchlist: () => Watchlist | undefined;
+  // Strategy groups
+  createStrategyGroup: (
+    name: string,
+    options?: { description?: string; inviteOnly?: boolean }
+  ) => string;
+  selectStrategyGroup: (groupId: string) => void;
+  joinStrategyGroupByCode: (inviteCode: string) => StrategyGroup | null;
+  listStrategyGroups: () => StrategyGroup[];
   reset: () => void;
 }
 
@@ -86,6 +109,8 @@ const defaultProfile: UserProfile = {
   riskPerTradePct: 1,
   signalConfidenceThreshold: 70,
   notificationsEnabled: true,
+  isSignalProvider: false,
+  strategyGroups: [],
 };
 
 export const useUserStore = create<UserState>()(
@@ -227,6 +252,55 @@ export const useUserStore = create<UserState>()(
         return profile.watchlists.find(
           (w) => w.id === profile.activeWatchlistId
         );
+      },
+
+      // Strategy groups local CRUD (client-only for now)
+      createStrategyGroup: (
+        name: string,
+        options?: { description?: string; inviteOnly?: boolean }
+      ) => {
+        const id = `group_${Date.now()}`;
+        const inviteCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+        const group: StrategyGroup = {
+          id,
+          name,
+          description: options?.description,
+          isInviteOnly: !!options?.inviteOnly,
+          inviteCode,
+        };
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            strategyGroups: [...(s.profile.strategyGroups || []), group],
+            selectedStrategyGroupId: id,
+          },
+        }));
+        return id;
+      },
+
+      selectStrategyGroup: (groupId: string) => {
+        set((s) => ({
+          profile: { ...s.profile, selectedStrategyGroupId: groupId },
+        }));
+      },
+
+      joinStrategyGroupByCode: (inviteCode: string) => {
+        const { profile } = get();
+        const groups = profile.strategyGroups || [];
+        const match = groups.find(
+          (g) => (g.inviteCode || "").toUpperCase() === inviteCode.toUpperCase()
+        );
+        if (!match) return null;
+        // Already local; just select it
+        set((s) => ({
+          profile: { ...s.profile, selectedStrategyGroupId: match.id },
+        }));
+        return match;
+      },
+
+      listStrategyGroups: () => {
+        const { profile } = get();
+        return profile.strategyGroups || [];
       },
 
       reset: () => set({ profile: defaultProfile }),

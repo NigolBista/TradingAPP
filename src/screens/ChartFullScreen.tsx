@@ -54,6 +54,7 @@ import { useAlertStore } from "../store/alertStore";
 import alertsService from "../services/alertsService";
 import { useAuth } from "../providers/AuthProvider";
 import { StrategyComplexity } from "../logic/types";
+import { sendSignal } from "../services/signalService";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 // removed unused federalReserve import
 import {
@@ -163,6 +164,18 @@ export default function ChartFullScreen() {
   const styleRetryRef = useRef<NodeJS.Timeout | null>(null);
   const [showIndicatorsSheet, setShowIndicatorsSheet] = useState(false);
   const [showIndicatorsAccordion, setShowIndicatorsAccordion] = useState(false);
+  // Compose mode state for crosshair actions
+  const [composeMode, setComposeMode] = useState<boolean>(false);
+  const [composeButtons, setComposeButtons] = useState<
+    Array<{ id: string; label: string }>
+  >([]);
+  const [composeDraft, setComposeDraft] = useState<{
+    entry?: number;
+    lateEntry?: number;
+    exit?: number;
+    lateExit?: number;
+    targets: number[];
+  }>({ targets: [] });
 
   // Analysis state
   const [lastCandle, setLastCandle] = useState<Candle | null>(null);
@@ -209,7 +222,7 @@ export default function ChartFullScreen() {
   const [showComplexityBottomSheet, setShowComplexityBottomSheet] =
     useState<boolean>(false);
   const [selectedComplexity, setSelectedComplexity] =
-    useState<StrategyComplexity>(profile.strategyComplexity || "advanced");
+    useState<StrategyComplexity>("advanced");
   const [showReasoningBottomSheet, setShowReasoningBottomSheet] =
     useState<boolean>(false);
   const [showReasonIcon] = useState<boolean>(true); // Always enabled
@@ -239,6 +252,123 @@ export default function ChartFullScreen() {
     updateAlerts: (alerts: any[]) => void;
     updateLevels: (levels: any) => void;
   } | null>(null);
+
+  // Compose buttons per complexity
+  const computeComposeButtons = useCallback(
+    (complexity: StrategyComplexity): Array<{ id: string; label: string }> => {
+      if (complexity === "simple") {
+        return [
+          { id: "entry", label: "Entry" },
+          { id: "exit", label: "Exit" },
+          { id: "tp", label: "TP" },
+          { id: "send", label: "Send" },
+        ];
+      }
+      if (complexity === "partial") {
+        return [
+          { id: "entry", label: "Entry" },
+          { id: "exit", label: "Exit" },
+          { id: "tp1", label: "TP1" },
+          { id: "tp2", label: "TP2" },
+          { id: "send", label: "Send" },
+        ];
+      }
+      return [
+        { id: "entry", label: "Entry" },
+        { id: "lateEntry", label: "Late" },
+        { id: "exit", label: "Exit" },
+        { id: "lateExit", label: "L.Exit" },
+        { id: "tp1", label: "TP1" },
+        { id: "tp2", label: "TP2" },
+        { id: "tp3", label: "TP3" },
+        { id: "send", label: "Send" },
+      ];
+    },
+    []
+  );
+
+  // Sync selectedComplexity with profile changes
+  useEffect(() => {
+    if (
+      profile.strategyComplexity &&
+      profile.strategyComplexity !== selectedComplexity
+    ) {
+      setSelectedComplexity(profile.strategyComplexity);
+    }
+  }, [profile.strategyComplexity, selectedComplexity]);
+
+  useEffect(() => {
+    // Refresh compose buttons when complexity changes
+    setComposeButtons(computeComposeButtons(selectedComplexity));
+  }, [selectedComplexity, computeComposeButtons]);
+
+  const resetCompose = useCallback(() => {
+    setComposeMode(false);
+    setComposeDraft({ targets: [] });
+    setComposeButtons(computeComposeButtons(selectedComplexity));
+  }, [selectedComplexity, computeComposeButtons]);
+
+  const handleSendSignal = useCallback(() => {
+    try {
+      const groupId = profile.selectedStrategyGroupId;
+      if (!profile.isSignalProvider || !groupId) {
+        // silently ignore or show a toast later
+        resetCompose();
+        return;
+      }
+      const payload = {
+        symbol,
+        groupId,
+        timeframe: extendedTf,
+        plan: {
+          entry: composeDraft.entry,
+          lateEntry: composeDraft.lateEntry,
+          exit: composeDraft.exit,
+          lateExit: composeDraft.lateExit,
+          targets: (composeDraft.targets || []).slice(0, 3),
+        },
+        createdAt: Date.now(),
+      };
+      // TODO: replace with real backend call. For now, fire local notification via Alerts
+      try {
+        // Reuse chat message store to log
+        addAnalysisMessage({
+          symbol,
+          strategy: "manual_signal",
+          side: (aiMeta?.side as any) || (currentTradePlan?.side as any),
+          entry: payload.plan.entry,
+          exit: payload.plan.exit,
+          targets: payload.plan.targets,
+          why: [`Manual signal for group ${groupId}`, `TF: ${extendedTf}`],
+          timestamp: Date.now(),
+        } as any);
+        // send via service (stub)
+        sendSignal({
+          symbol,
+          groupId,
+          timeframe: String(extendedTf),
+          entry: payload.plan.entry,
+          lateEntry: payload.plan.lateEntry,
+          exit: payload.plan.exit,
+          lateExit: payload.plan.lateExit,
+          targets: payload.plan.targets,
+          createdAt: payload.createdAt,
+        }).catch(() => {});
+      } catch (_) {}
+      resetCompose();
+    } catch (_) {
+      resetCompose();
+    }
+  }, [
+    profile,
+    symbol,
+    extendedTf,
+    composeDraft,
+    addAnalysisMessage,
+    aiMeta?.side,
+    currentTradePlan,
+    resetCompose,
+  ]);
 
   const saveDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const skipSaveRef = useRef<boolean>(true);
@@ -1128,6 +1258,35 @@ export default function ChartFullScreen() {
     setShowComplexityBottomSheet(false);
   }, []);
 
+  const handleTogglePin = useCallback(
+    async (tf: ExtendedTimeframe) => {
+      const success = await toggle(tf);
+      if (!success) {
+        setPinError("You can pin up to 10 timeframes");
+        setTimeout(() => setPinError(null), 2000);
+      }
+      return success;
+    },
+    [toggle]
+  );
+
+  const handleSetPriceColors = useCallback(
+    (c: { up: string; down: string; noChange?: string }) => {
+      setPriceColors(c);
+      try {
+        chartBridgeRef.current?.updateDisplayOptions({ priceColors: c });
+      } catch (_) {}
+    },
+    []
+  );
+
+  const handleSelectChartType = useCallback((t: ChartType) => {
+    setChartType(t);
+    try {
+      chartBridgeRef.current?.updateChartType(t as any);
+    } catch (_) {}
+  }, []);
+
   // Stock name loading
   const loadStockName = useCallback(async () => {
     try {
@@ -1319,10 +1478,8 @@ export default function ChartFullScreen() {
           setShowIndicatorsAccordion((v) => !v)
         }
       />
-
       {/* OHLCV Row */}
       <OHLCRow lastCandle={lastCandle} />
-
       {/* Chart */}
       <View style={{ position: "relative", flex: 1 }}>
         <SimpleKLineChart
@@ -1345,6 +1502,51 @@ export default function ChartFullScreen() {
           indicators={indicators}
           areaStyle={areaStyle}
           priceColors={priceColors}
+          composeMode={composeMode}
+          composeButtons={composeButtons}
+          onComposeAction={({ action, price }) => {
+            if (!composeMode) return;
+            if (!(price > 0)) return;
+            setComposeDraft((prev) => {
+              const next = {
+                ...prev,
+                targets: [...(prev.targets || [])],
+              } as any;
+              if (action === "entry") next.entry = price;
+              else if (action === "lateEntry") next.lateEntry = price;
+              else if (action === "exit") next.exit = price;
+              else if (action === "lateExit") next.lateExit = price;
+              else if (action === "tp") {
+                next.targets.push(price);
+              } else if (action === "tp1") {
+                next.targets[0] = price;
+              } else if (action === "tp2") {
+                next.targets[1] = price;
+              } else if (action === "tp3") {
+                next.targets[2] = price;
+              } else if (action === "send") {
+                // Trigger send flow
+                try {
+                  handleSendSignal();
+                } catch (_) {}
+              }
+              // Live-preview levels while composing
+              try {
+                chartBridgeRef.current?.updateLevels({
+                  entry: next.entry,
+                  lateEntry: next.lateEntry,
+                  exit: next.exit,
+                  lateExit: next.lateExit,
+                  targets: (next.targets || []).slice(0, 3),
+                } as any);
+              } catch (_) {}
+              return next;
+            });
+          }}
+          onCrosshairClick={() => {
+            setComposeMode(true);
+            setComposeButtons(computeComposeButtons(selectedComplexity));
+          }}
           onOverrideIndicator={React.useCallback(
             (overrideFn: any) => {
               overrideIndicatorRef.current = overrideFn;
@@ -1377,6 +1579,8 @@ export default function ChartFullScreen() {
                   areaStyle,
                   priceColors,
                 });
+                // ensure compose buttons sync when ready
+                // no-op here; SimpleKLineChart will push compose state via effect
               }
             } catch (_) {}
           }}
@@ -1499,29 +1703,54 @@ export default function ChartFullScreen() {
 
         {/* Dragging is handled in-chart; removed separate overlay controls */}
         {showReasonIcon ? (
-          <Pressable
-            onPress={() => setShowReasoningBottomSheet(true)}
-            style={styles.reasoningFloatInChart}
-            hitSlop={8}
-          >
-            <Ionicons
-              name={reasoningIconName as any}
-              size={20}
-              color={reasoningIconColor}
-            />
-          </Pressable>
+          composeMode ? (
+            <>
+              {/* Send button on bottom-left (replaces reasoning) */}
+              <Pressable
+                onPress={handleSendSignal}
+                style={styles.reasoningFloatInChart}
+                hitSlop={8}
+              >
+                <Ionicons name="send" size={18} color="#00D4AA" />
+              </Pressable>
+              {/* Cancel button at lower-right */}
+              <Pressable
+                onPress={resetCompose}
+                style={[
+                  styles.reasoningFloatInChart,
+                  { right: 8, left: undefined },
+                ]}
+                hitSlop={8}
+              >
+                <Ionicons name="close-circle" size={20} color="#EF4444" />
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              onPress={() => setShowReasoningBottomSheet(true)}
+              style={styles.reasoningFloatInChart}
+              hitSlop={8}
+            >
+              <Ionicons
+                name={reasoningIconName as any}
+                size={20}
+                color={reasoningIconColor}
+              />
+            </Pressable>
+          )
         ) : null}
       </View>
-
       {/* Timeframe Chips */}
       <TimeframeBar
         pinned={pinned as any}
         extendedTf={extendedTf as any}
         onChangeTimeframe={(tf) => handleTimeframeChange(tf as any)}
-        onOpenMore={showUnifiedBottomSheetWithTab}
+        onOpenMore={() => {
+          // Default behavior: open unified sheet
+          showUnifiedBottomSheetWithTab();
+        }}
       />
-
-      {/* Unified Bottom Sheet */}
+      Unified Bottom Sheet
       <UnifiedBottomSheet
         visible={showUnifiedBottomSheet}
         onClose={hideBottomSheet}
@@ -1551,7 +1780,6 @@ export default function ChartFullScreen() {
           } catch (_) {}
         }}
       />
-
       {/* Reasoning Bottom Sheet */}
       <ReasoningBottomSheet
         visible={showReasoningBottomSheet}
@@ -1559,9 +1787,7 @@ export default function ChartFullScreen() {
         isStreaming={isStreaming}
         streamingText={streamingText}
       />
-
       {/* Floating Reasoning Bulb moved inside chart */}
-
       {/* Bottom Navigation: Chat, Analyze, Strategy */}
       <View style={styles.bottomNav}>
         <View style={styles.bottomNavContent}>
@@ -1627,7 +1853,6 @@ export default function ChartFullScreen() {
           </Pressable>
         </View>
       </View>
-
       {/* Strategy Complexity Bottom Sheet */}
       <ComplexityBottomSheet
         visible={showComplexityBottomSheet}
@@ -1648,11 +1873,7 @@ export default function ChartFullScreen() {
         setTradePace={setTradePace}
         contextMode={contextMode}
         setContextMode={setContextMode}
-        extendedTf={extendedTf as any}
-        contextLookback={contextLookback}
-        setContextLookback={setContextLookback}
       />
-
       {/* Indicators Bottom Sheet */}
       <IndicatorsSheet
         visible={showIndicatorsSheet}
@@ -1660,7 +1881,6 @@ export default function ChartFullScreen() {
         indicators={indicators}
         onToggleIndicator={toggleIndicator}
       />
-
       {/* Custom R:R Modal */}
       <Modal
         visible={showCustomRrModal}

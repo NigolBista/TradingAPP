@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { StrategyComplexity } from "../../logic/types";
-import { ExtendedTimeframe } from "../../services/marketProviders";
+import { useUserStore, type StrategyGroup } from "../../store/userStore";
 import { STRATEGY_COMPLEXITY_CONFIGS } from "../../logic/strategyComplexity";
 
 type Props = {
@@ -28,9 +28,6 @@ type Props = {
   setTradePace: (p: "auto" | "day" | "scalp" | "swing") => void;
   contextMode: "price_action" | "news_sentiment";
   setContextMode: (m: "price_action" | "news_sentiment") => void;
-  extendedTf: ExtendedTimeframe;
-  contextLookback: { mode: "auto" | "fixed"; ms?: number };
-  setContextLookback: (v: { mode: "auto" | "fixed"; ms?: number }) => void;
 };
 
 export default function ComplexityBottomSheet({
@@ -47,11 +44,15 @@ export default function ComplexityBottomSheet({
   setTradePace,
   contextMode,
   setContextMode,
-  extendedTf,
-  contextLookback,
-  setContextLookback,
 }: Props) {
+  const storeProfile = useUserStore((s) => s.profile);
+  const selectStrategyGroup = useUserStore((s) => s.selectStrategyGroup);
   const anim = useRef(new Animated.Value(0)).current;
+  const groups = (storeProfile?.strategyGroups || []) as StrategyGroup[];
+  const canShowGroups =
+    (groups && groups.length > 0) ||
+    !!storeProfile?.selectedStrategyGroupId ||
+    !!storeProfile?.isSignalProvider;
   useEffect(() => {
     if (visible) {
       Animated.timing(anim, {
@@ -61,103 +62,6 @@ export default function ComplexityBottomSheet({
       }).start();
     }
   }, [visible]);
-
-  // Build discrete lookback ticks dynamically based on timeframe
-  function buildLookbackTicks(
-    tf: ExtendedTimeframe,
-    mode: "day" | "swing"
-  ): { label: string; ms?: number }[] {
-    const m = 60_000;
-    const h = 60 * m;
-    const d = 24 * h;
-    const isMinute = ["1m", "2m", "3m", "5m", "10m", "15m", "30m"].includes(
-      tf as any
-    );
-    const isHour = ["1h", "2h", "4h"].includes(tf as any);
-
-    if (isMinute) {
-      if (mode === "swing") {
-        return [
-          { label: "Auto" },
-          { label: "1h", ms: 1 * h },
-          { label: "2h", ms: 2 * h },
-          { label: "4h", ms: 4 * h },
-          { label: "1D", ms: 1 * d },
-          { label: "3D", ms: 3 * d },
-          { label: "1W", ms: 7 * d },
-          { label: "2W", ms: 14 * d },
-        ];
-      }
-      return [
-        { label: "Auto" },
-        { label: "15m", ms: 15 * m },
-        { label: "30m", ms: 30 * m },
-        { label: "1h", ms: 1 * h },
-        { label: "2h", ms: 2 * h },
-        { label: "4h", ms: 4 * h },
-        { label: "1D", ms: 1 * d },
-      ];
-    }
-    if (isHour) {
-      if (mode === "swing") {
-        return [
-          { label: "Auto" },
-          { label: "1D", ms: 1 * d },
-          { label: "3D", ms: 3 * d },
-          { label: "1W", ms: 7 * d },
-          { label: "2W", ms: 14 * d },
-          { label: "1M", ms: 30 * d },
-          { label: "3M", ms: 90 * d },
-        ];
-      }
-      return [
-        { label: "Auto" },
-        { label: "4h", ms: 4 * h },
-        { label: "8h", ms: 8 * h },
-        { label: "1D", ms: 1 * d },
-        { label: "3D", ms: 3 * d },
-        { label: "1W", ms: 7 * d },
-      ];
-    }
-    // Day or higher
-    if (mode === "swing") {
-      return [
-        { label: "Auto" },
-        { label: "1W", ms: 7 * d },
-        { label: "2W", ms: 14 * d },
-        { label: "1M", ms: 30 * d },
-        { label: "3M", ms: 90 * d },
-        { label: "6M", ms: 180 * d },
-        { label: "1Y", ms: 365 * d },
-      ];
-    }
-    return [
-      { label: "Auto" },
-      { label: "3D", ms: 3 * d },
-      { label: "1W", ms: 7 * d },
-      { label: "2W", ms: 14 * d },
-      { label: "1M", ms: 30 * d },
-      { label: "3M", ms: 90 * d },
-      { label: "6M", ms: 180 * d },
-      { label: "1Y", ms: 365 * d },
-    ];
-  }
-
-  const ticks = buildLookbackTicks(extendedTf, tradeMode);
-  const selectedIndex = (() => {
-    if (contextLookback?.mode !== "fixed") return 0;
-    const idx = ticks.findIndex((t) => t.ms === contextLookback.ms);
-    return idx >= 0 ? idx : 0;
-  })();
-
-  function handleSelectIndex(idx: number) {
-    if (idx <= 0) {
-      setContextLookback({ mode: "auto" });
-    } else {
-      const t = ticks[idx];
-      setContextLookback({ mode: "fixed", ms: t.ms });
-    }
-  }
 
   return (
     <Modal
@@ -213,81 +117,59 @@ export default function ComplexityBottomSheet({
               style={{ paddingHorizontal: 20 }}
               showsVerticalScrollIndicator={false}
             >
-              {/* AI Context Lookback Slider */}
-              <View style={{ marginBottom: 16 }}>
-                <Text
-                  style={{
-                    color: "#9CA3AF",
-                    fontSize: 11,
-                    fontWeight: "700",
-                    marginBottom: 8,
-                  }}
-                >
-                  AI Context Window
-                </Text>
-                <Text style={{ color: "#fff", fontSize: 12, marginBottom: 12 }}>
-                  {selectedIndex === 0
-                    ? "Auto"
-                    : `Last ${ticks[selectedIndex].label}`}
-                </Text>
-                <View
-                  style={{
-                    height: 40,
-                    justifyContent: "center",
-                    paddingHorizontal: 4,
-                  }}
-                >
-                  <View
+              {/* Signal Group Selection (show if user has any group context) */}
+              {canShowGroups ? (
+                <View style={{ marginBottom: 16 }}>
+                  <Text
                     style={{
-                      height: 2,
-                      backgroundColor: "#333",
-                      position: "absolute",
-                      left: 16,
-                      right: 16,
-                    }}
-                  />
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
+                      color: "#9CA3AF",
+                      fontSize: 11,
+                      fontWeight: "700",
+                      marginBottom: 8,
                     }}
                   >
-                    {ticks.map((t, i) => (
-                      <Pressable
-                        key={i}
-                        onPress={() => handleSelectIndex(i)}
-                        hitSlop={8}
-                        style={{ alignItems: "center" }}
-                      >
-                        <View
-                          style={{
-                            width: i === selectedIndex ? 14 : 10,
-                            height: i === selectedIndex ? 14 : 10,
-                            borderRadius: 7,
-                            backgroundColor:
-                              i === selectedIndex ? "#00D4AA" : "#666",
-                            borderWidth: i === selectedIndex ? 2 : 1,
-                            borderColor:
-                              i === selectedIndex ? "#00D4AA" : "#444",
-                          }}
-                        />
-                        {i === 0 ? (
-                          <Text
+                    Signal Group
+                  </Text>
+                  {groups && groups.length > 0 ? (
+                    <View
+                      style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                    >
+                      {groups.map((g) => {
+                        const active =
+                          storeProfile.selectedStrategyGroupId === g.id;
+                        return (
+                          <Pressable
+                            key={g.id}
+                            onPress={() => selectStrategyGroup(g.id)}
                             style={{
-                              color: "#888",
-                              fontSize: 10,
-                              marginTop: 4,
+                              paddingHorizontal: 10,
+                              paddingVertical: 8,
+                              borderRadius: 10,
+                              backgroundColor: active ? "#00D4AA" : "#111827",
+                              borderWidth: 1,
+                              borderColor: active ? "#00D4AA" : "#333",
                             }}
                           >
-                            Auto
-                          </Text>
-                        ) : null}
-                      </Pressable>
-                    ))}
-                  </View>
+                            <Text
+                              style={{
+                                color: active ? "#000" : "#ccc",
+                                fontWeight: "700",
+                                fontSize: 12,
+                              }}
+                            >
+                              {g.name}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={{ color: "#888" }}>
+                      No strategy groups. Create one from the Strategy tab.
+                    </Text>
+                  )}
                 </View>
-              </View>
+              ) : null}
 
               <View style={{ marginBottom: 16 }}>
                 <View

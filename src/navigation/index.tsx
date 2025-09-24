@@ -37,6 +37,7 @@ import EarningsCalendarScreen from "../screens/EarningsCalendarScreen";
 import ChatScreen from "../screens/ChatScreen";
 import ChartChatScreen from "../screens/ChartChatScreen";
 import IndicatorConfigScreen from "../screens/IndicatorConfigScreen";
+import StrategySettingsScreen from "../screens/StrategySettingsScreen";
 import { useAuth } from "../providers/AuthProvider";
 import { useTheme } from "../providers/ThemeProvider";
 
@@ -204,6 +205,11 @@ export default function RootNavigation() {
             component={IndicatorConfigScreen}
             options={{ headerShown: false }}
           />
+          <RootStack.Screen
+            name="StrategySettings"
+            component={StrategySettingsScreen}
+            options={{ headerShown: true, title: "Strategy Settings" }}
+          />
         </RootStack.Navigator>
       ) : (
         <AuthRoutes />
@@ -216,6 +222,6 @@ export const navigationRef = createNavigationContainerRef<any>();
 
 export function navigate(name: string, params?: any) {
   if (navigationRef.isReady()) {
-    navigationRef.navigate(name as never, params as never);
+    (navigationRef as any).navigate(name, params);
   }
 }

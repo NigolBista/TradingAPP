@@ -56,6 +56,9 @@ export default function ProfileScreen({ navigation }: any) {
   const [dailyBriefTime, setDailyBriefTime] = useState("8:00");
   const [weeklyDigest, setWeeklyDigest] = useState(true);
   const [educationalTips, setEducationalTips] = useState(true);
+  const [isSignalProvider, setIsSignalProvider] = useState<boolean>(
+    !!profile?.isSignalProvider
+  );
 
   // Edit profile state
   const [editEmail, setEditEmail] = useState(profile?.email || "");
@@ -247,6 +250,37 @@ export default function ProfileScreen({ navigation }: any) {
                   <Text style={styles.actionTitle}>Preferences</Text>
                   <Text style={styles.actionSubtitle}>
                     Notifications and app settings
+                  </Text>
+                </View>
+              </View>
+              <Ionicons
+                name="chevron-forward"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
+            </Pressable>
+
+            <Pressable
+              onPress={() => navigation.navigate("StrategySettings")}
+              style={styles.actionItem}
+            >
+              <View style={styles.actionLeft}>
+                <View
+                  style={[
+                    styles.actionIcon,
+                    { backgroundColor: theme.colors.surface },
+                  ]}
+                >
+                  <Ionicons
+                    name="people"
+                    size={20}
+                    color={theme.colors.primary}
+                  />
+                </View>
+                <View>
+                  <Text style={styles.actionTitle}>Strategy Groups</Text>
+                  <Text style={styles.actionSubtitle}>
+                    Create and manage your groups
                   </Text>
                 </View>
               </View>
@@ -716,6 +750,28 @@ export default function ProfileScreen({ navigation }: any) {
                         setProfile({ signalConfidenceThreshold: n });
                     }}
                   />
+                </View>
+
+                {/* Signal Provider */}
+                <View style={styles.settingsCard}>
+                  <Text style={styles.groupLabel}>Signals</Text>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingLeft}>
+                      <Text style={styles.settingTitle}>
+                        Enable Signal Provider
+                      </Text>
+                      <Text style={styles.settingSubtitle}>
+                        Allow creating strategy groups and sending signals
+                      </Text>
+                    </View>
+                    <Switch
+                      value={isSignalProvider}
+                      onValueChange={(v) => {
+                        setIsSignalProvider(v);
+                        setProfile({ isSignalProvider: v });
+                      }}
+                    />
+                  </View>
                 </View>
               </View>
             </ScrollView>
