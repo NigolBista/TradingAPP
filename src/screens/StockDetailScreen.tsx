@@ -52,6 +52,8 @@ import AlertsList from "../components/common/AlertsList";
 import alertsService from "../services/alertsService";
 import useMarketStatus from "../hooks/useMarketStatus";
 import { useAuth } from "../providers/AuthProvider";
+import { useComposeDraftStore } from "../store/composeDraftStore";
+import useTradeDraftSync from "../hooks/useTradeDraftSync";
 
 type RootStackParamList = {
   StockDetail: { symbol: string; initialQuote?: SimpleQuote };
@@ -1035,11 +1037,6 @@ export default function StockDetailScreen() {
             symbol: cachedSignal.symbol,
             strategy: cachedSignal.aiMeta?.strategyChosen,
             side: cachedSignal.aiMeta?.side,
-            entry: cachedSignal.tradePlan?.entry,
-            lateEntry: cachedSignal.tradePlan?.lateEntry,
-            exit: cachedSignal.tradePlan?.exit,
-            lateExit: cachedSignal.tradePlan?.lateExit,
-            stop: cachedSignal.tradePlan?.stop,
             targets: cachedSignal.aiMeta?.targets,
             riskReward: cachedSignal.aiMeta?.riskReward,
             confidence: cachedSignal.aiMeta?.confidence,
@@ -1058,7 +1055,7 @@ export default function StockDetailScreen() {
           confidence: output.confidence,
           why: output.why || [],
           notes: output.tradePlanNotes || [],
-          targets: output.targets || [],
+          targets: output.tps || [],
           riskReward: output.riskReward,
         };
         const analysisContext = {
@@ -1131,6 +1128,38 @@ export default function StockDetailScreen() {
     }
     setNoteText("");
   }
+
+  const drafts = useComposeDraftStore((s) => s.drafts);
+  const clearDraftPlan = useComposeDraftStore((s) => s.clearDraftPlan);
+
+  useTradeDraftSync({ symbol, userId: user?.id, readOnly: true });
+
+
+
+
+  // Re-apply levels when timeframe changes (like alerts do)
+  useEffect(() => {
+    try {
+      if (!chartBridgeRef.current) return;
+      const draft = drafts[symbol];
+      const cached = getCachedSignal(symbol);
+      const plan = draft || (cached && cached.tradePlan);
+      if (plan) {
+        // Small delay to ensure chart has updated timeframe first
+        setTimeout(() => {
+          try {
+            if (chartBridgeRef.current) {
+              chartBridgeRef.current.updateLevels({
+                entries: plan.entries,
+                exits: plan.exits,
+                tps: plan.tps,
+              });
+            }
+          } catch (_) {}
+        }, 150);
+      }
+    } catch (_) {}
+  }, [extendedTf, drafts, symbol, getCachedSignal]);
 
   if (loading) {
     return (
@@ -1258,6 +1287,17 @@ export default function StockDetailScreen() {
                 try {
                   if (chartBridgeRef.current) {
                     chartBridgeRef.current.updateAlerts(alertLines);
+                    // Re-apply last levels if returning to this screen and WebView was recreated
+                    try {
+                      const cached = getCachedSignal(symbol);
+                      if (cached && cached.tradePlan) {
+                        chartBridgeRef.current.updateLevels({
+                          entries: cached.tradePlan.entries,
+                          exits: cached.tradePlan.exits,
+                          tps: cached.tradePlan.tps,
+                        });
+                      }
+                    } catch (_) {}
                   }
                 } catch (_) {}
               }}
@@ -1265,6 +1305,17 @@ export default function StockDetailScreen() {
                 try {
                   if (chartBridgeRef.current) {
                     chartBridgeRef.current.updateAlerts(alertLines);
+                    // Ensure levels are also present after data application
+                    try {
+                      const cached = getCachedSignal(symbol);
+                      if (cached && cached.tradePlan) {
+                        chartBridgeRef.current.updateLevels({
+                          entries: cached.tradePlan.entries,
+                          exits: cached.tradePlan.exits,
+                          tps: cached.tradePlan.tps,
+                        });
+                      }
+                    } catch (_) {}
                   }
                 } catch (_) {}
               }}
@@ -1518,7 +1569,16 @@ export default function StockDetailScreen() {
                   {/* Clear Button - show when we have any signals */}
                   {(cachedSignal || symbolSignals.length > 0) && (
                     <Pressable
-                      onPress={clearAllSignals}
+                      onPress={() => {
+                        clearAllSignals();
+                        try {
+                          clearDraftPlan(symbol);
+                        } catch (_) {}
+                        try {
+                          if (chartBridgeRef.current)
+                            chartBridgeRef.current.updateLevels({});
+                        } catch (_) {}
+                      }}
                       disabled={signalLoading}
                       style={{
                         paddingHorizontal: 10,
@@ -1566,6 +1626,114 @@ export default function StockDetailScreen() {
                       </Text>
                     )}
                   </Pressable>
+                </View>
+              </View>
+            )}
+
+            {/* Draft Strategy Card */}
+            {drafts[symbol] && (
+              <View
+                style={{
+                  backgroundColor: "#1F2937",
+                  marginBottom: 12,
+                  borderRadius: 12,
+                  padding: 16,
+                  borderWidth: 1,
+                  borderColor: "rgba(255, 165, 0, 0.3)", // Orange border for draft
+                }}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <View
+                      style={{
+                        paddingHorizontal: 8,
+                        paddingVertical: 4,
+                        borderRadius: 12,
+                        backgroundColor: "rgba(255, 165, 0, 0.2)",
+                        borderWidth: 1,
+                        borderColor: "rgba(255, 165, 0, 0.3)",
+                        marginRight: 8,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#FFA500",
+                          fontSize: 11,
+                          fontWeight: "600",
+                        }}
+                      >
+                        DRAFT
+                      </Text>
+                    </View>
+                    <Text
+                      style={{
+                        color: "#E5E7EB",
+                        fontWeight: "600",
+                        fontSize: 14,
+                      }}
+                    >
+                      Strategy Draft
+                    </Text>
+                  </View>
+                  <Pressable
+                    onPress={() => {
+                      clearDraftPlan(symbol);
+                      try {
+                        if (chartBridgeRef.current)
+                          chartBridgeRef.current.updateLevels({});
+                      } catch (_) {}
+                    }}
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 4,
+                      borderRadius: 6,
+                      backgroundColor: "#EF4444",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#fff",
+                        fontSize: 10,
+                        fontWeight: "600",
+                      }}
+                    >
+                      Remove
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {/* Entry/Exit/TP Info */}
+                <View style={{ marginBottom: 8 }}>
+                  <Text style={{ color: "#D1D5DB", fontSize: 12 }}>
+                    {drafts[symbol].entries &&
+                      drafts[symbol].entries!.length > 0 &&
+                      `Entries: ${drafts[symbol]
+                        .entries!.map((e) => `$${e.toFixed(2)}`)
+                        .join(", ")}  `}
+                    {drafts[symbol].exits &&
+                      drafts[symbol].exits!.length > 0 &&
+                      `Exits: ${drafts[symbol]
+                        .exits!.map((e) => `$${e.toFixed(2)}`)
+                        .join(", ")}  `}
+                    {drafts[symbol].tps &&
+                      drafts[symbol].tps!.length > 0 &&
+                      `Targets: ${drafts[symbol]
+                        .tps!.map((t) => `$${t.toFixed(2)}`)
+                        .join(", ")}`}
+                  </Text>
+                </View>
+
+                <View style={{ marginTop: 8, alignItems: "flex-end" }}>
+                  <Text style={{ color: "#6B7280", fontSize: 10 }}>
+                    Tap fullscreen to continue editing
+                  </Text>
                 </View>
               </View>
             )}
@@ -1647,14 +1815,18 @@ export default function StockDetailScreen() {
                   </Text>
                 </View>
 
-                {/* Entry/Exit/Stop Info */}
+                {/* Entry/Exit Info */}
                 {cachedSignal.tradePlan && (
                   <View style={{ marginBottom: 8 }}>
                     <Text style={{ color: "#D1D5DB", fontSize: 12 }}>
-                      {cachedSignal.tradePlan.entry &&
-                        `Entry: $${cachedSignal.tradePlan.entry.toFixed(2)}  `}
-                      {cachedSignal.tradePlan.stop &&
-                        `Stop: $${cachedSignal.tradePlan.stop.toFixed(2)}  `}
+                      {cachedSignal.tradePlan.entries?.[0] &&
+                        `Entry: $${cachedSignal.tradePlan.entries[0].toFixed(
+                          2
+                        )}  `}
+                      {cachedSignal.tradePlan.exits?.[0] &&
+                        `Exit: $${cachedSignal.tradePlan.exits[0].toFixed(
+                          2
+                        )}  `}
                       {cachedSignal.aiMeta?.targets &&
                         cachedSignal.aiMeta.targets.length > 0 &&
                         `Target: $${cachedSignal.aiMeta.targets[0].toFixed(2)}`}
@@ -1826,7 +1998,7 @@ export default function StockDetailScreen() {
                     </Text>
                   </View>
 
-                  {/* Entry/Exit/Stop Info */}
+                  {/* Entry/Exit Info */}
                   {(signal.entry ||
                     signal.stop ||
                     (signal.targets && signal.targets.length > 0)) && (

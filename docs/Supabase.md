@@ -64,6 +64,30 @@ This file is the single source of truth for our backend schema so the LLM can re
 - Unique: `(user_id, symbol)`.
 - RLS: users can CRUD their rows.
 
+9. `user_trade_drafts`
+
+- Purpose: Persist per-user draft trade plans keyed by symbol.
+- Key fields: `user_id`, `symbol`, `entries numeric[]`, `exits numeric[]`, `tps numeric[]`, `updated_at`.
+- Unique: `(user_id, symbol)` enforced via upsert conflict target.
+- RLS: users can CRUD their own drafts.
+
+10. `user_strategy_preferences`
+
+- Purpose: Persist each user's strategy configuration and group selection.
+- Key fields: `user_id uuid PK/FK`, `selected_strategy_group_id uuid`,
+  `trade_mode trade_strategy_mode`, `trade_pace trade_strategy_pace`,
+  `context_mode trade_context_mode`, `strategy_complexity strategy_complexity_level`,
+  `auto_apply_complexity boolean`, `news_sentiment_enabled boolean`,
+  `created_at timestamptz`, `updated_at timestamptz`.
+- RLS: users can CRUD exactly one row tied to their user id.
+
+### Types (new)
+
+- `trade_strategy_mode`: `day` | `swing`
+- `trade_strategy_pace`: `auto` | `day` | `scalp` | `swing`
+- `trade_context_mode`: `price_action` | `news_sentiment`
+- `strategy_complexity_level`: `simple` | `partial` | `advanced`
+
 ### Flows
 
 - Login hydration:
@@ -119,6 +143,23 @@ begin
   new.updated_at = now();
   return new;
 end; $$;
+
+-- Strategy preference enums
+do $$ begin
+  create type public.trade_strategy_mode as enum ('day','swing');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.trade_strategy_pace as enum ('auto','day','scalp','swing');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.trade_context_mode as enum ('price_action','news_sentiment');
+exception when duplicate_object then null; end $$;
+
+do $$ begin
+  create type public.strategy_complexity_level as enum ('simple','partial','advanced');
+exception when duplicate_object then null; end $$;
 
 -- alerts
 create table if not exists public.alerts (
@@ -306,6 +347,35 @@ drop policy if exists "uwl_update_own" on public.user_watchlist;
 create policy "uwl_update_own" on public.user_watchlist for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 drop policy if exists "uwl_delete_own" on public.user_watchlist;
 create policy "uwl_delete_own" on public.user_watchlist for delete using (auth.uid() = user_id);
+
+-- user_strategy_preferences (1 row per user)
+create table if not exists public.user_strategy_preferences (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  selected_strategy_group_id uuid,
+  trade_mode public.trade_strategy_mode default 'day',
+  trade_pace public.trade_strategy_pace default 'auto',
+  context_mode public.trade_context_mode default 'price_action',
+  strategy_complexity public.strategy_complexity_level default 'simple',
+  auto_apply_complexity boolean default false,
+  news_sentiment_enabled boolean default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists set_user_strategy_preferences_updated_at on public.user_strategy_preferences;
+create trigger set_user_strategy_preferences_updated_at
+before update on public.user_strategy_preferences
+for each row execute function public.set_updated_at();
+
+alter table public.user_strategy_preferences enable row level security;
+drop policy if exists "usp_read_own" on public.user_strategy_preferences;
+create policy "usp_read_own" on public.user_strategy_preferences for select using (auth.uid() = user_id);
+drop policy if exists "usp_insert_own" on public.user_strategy_preferences;
+create policy "usp_insert_own" on public.user_strategy_preferences for insert with check (auth.uid() = user_id);
+drop policy if exists "usp_update_own" on public.user_strategy_preferences;
+create policy "usp_update_own" on public.user_strategy_preferences for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "usp_delete_own" on public.user_strategy_preferences;
+create policy "usp_delete_own" on public.user_strategy_preferences for delete using (auth.uid() = user_id);
 ```
 
 ### Edge functions
@@ -323,7 +393,15 @@ create policy "uwl_delete_own" on public.user_watchlist for delete using (auth.u
   - `startRealtime(userId, handlers)` → subscribes to `trade_signals`, `alert_events`, and `alerts` changes
 
 - `src/services/barsService.ts`
+
   - `subscribeAlertEvents(onInsert)` → realtime stream of `alert_events`
+
+- `src/services/draftPlanService.ts`
+  - `fetchUserDraftPlan(userId, symbol)`
+  - `upsertUserDraftPlan({ userId, symbol, draft })`
+  - `deleteUserDraftPlan(userId, symbol)`
+  - `mapRemoteDraftPlan(row)` helper to convert to store payloads
+  - Intended for use with `useTradeDraftSync`
 
 ### Migration: convert from global-per-user to named layouts
 

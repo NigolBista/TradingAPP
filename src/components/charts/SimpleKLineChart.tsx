@@ -41,12 +41,7 @@ interface Props {
   levels?: {
     entries?: number[];
     exits?: number[];
-    takeProfits?: number[];
-    entry?: number;
-    lateEntry?: number;
-    exit?: number;
-    lateExit?: number;
-    stop?: number;
+    tps?: number[];
     targets?: number[];
   };
   customBars?: Array<{
@@ -475,6 +470,22 @@ export default function SimpleKLineChart({
         -webkit-tap-highlight-color: transparent;
       }
 
+      /* Compose action buttons (Entry/Exit/TP/Send) are text chips, not Material Icons */
+      .custom-button[data-action] {
+        width: auto;
+        min-width: 36px;
+        height: 28px;
+        padding: 0 10px;
+        border-radius: 14px;
+        /* Use normal text fonts so labels like "TP" render correctly */
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Ubuntu, Cantarell, "Noto Sans", Arial, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.2px;
+        background: ${JSON.stringify(theme === "dark" ? "#1F2937" : "#E6E9EE")};
+        color: ${JSON.stringify(theme === "dark" ? "#E5E7EB" : "#111827")};
+      }
+
       /* Make the alert button circular and match the alert line color */
       #btn-alert {
         background: #F59E0B;
@@ -542,15 +553,32 @@ export default function SimpleKLineChart({
                 try {
                   var period = mapPeriod(data.timeframe);
                   window.__SIMPLE_KLINE__.chart.setPeriod(period);
-                  // Reapply alerts after timeframe change
-                  if (window.__SIMPLE_KLINE__.applyAlerts && window.__SIMPLE_KLINE__.lastAlerts) {
-                    window.__SIMPLE_KLINE__.applyAlerts(window.__SIMPLE_KLINE__.lastAlerts);
+                  // Reapply both alerts and levels after timeframe change with multiple attempts
+                  function reapplyOverlays() {
+                    try {
+                      if (window.__SIMPLE_KLINE__.applyAlerts && window.__SIMPLE_KLINE__.lastAlerts) {
+                        window.__SIMPLE_KLINE__.applyAlerts(window.__SIMPLE_KLINE__.lastAlerts);
+                      }
+                      if (window.__SIMPLE_KLINE__.applyLevels && window.__SIMPLE_KLINE__.lastLevels) {
+                        window.__SIMPLE_KLINE__.applyLevels(window.__SIMPLE_KLINE__.lastLevels);
+                      }
+                    } catch(e) {
+                      console.warn('Overlay reapplication failed:', e);
+                    }
                   }
+                  
+                  // Immediate reapplication
+                  reapplyOverlays();
+                  
+                  // Multiple delayed reapplications to ensure persistence
+                  setTimeout(reapplyOverlays, 100);
+                  setTimeout(reapplyOverlays, 300);
+                  setTimeout(reapplyOverlays, 500);
                   // Reapply session backgrounds after timeframe change
                   setTimeout(applySessionBackgrounds, 100);
                   post({ success: 'timeframe_updated', timeframe: data.timeframe });
                   // Re-subscribe live Polygon stream with the new timeframe if active
-                  try { if (window.__SIMPLE_KLINE__ && typeof window.__SIMPLE_KLINE__.resubscribeLive === 'function') { window.__SIMPLE_KLINE__.resubscribeLive(); } } catch(_){}
+                  try { if (window.__SIMPLE_KLINE__ && typeof window.__SIMPLE_KLINE__.resubscribeLive === 'function') { window.__SIMPLE_KLINE__.resubscribeLive(); } } catch(_){ }
                 } catch(e) {
                   post({ error: 'timeframe_update_failed', message: String(e && e.message || e) });
                 }
@@ -973,35 +1001,6 @@ export default function SimpleKLineChart({
             if (!window.klinecharts || !window.klinecharts.init) { return false; }
 
             // Overlays
-            if (window.klinecharts.registerOverlay && !window.__LABELED_LINE_REGISTERED__) {
-              window.klinecharts.registerOverlay({
-                name: 'labeledHorizontalLine',
-                totalStep: 1,
-                createPointFigures: function({ coordinates, overlay }) {
-                  var point = coordinates[0];
-                  if (!point) return [];
-                  var extendData = overlay.extendData || {};
-                  var label = extendData.label || '';
-                  var price = extendData.price || 0;
-                  var color = extendData.color || '#10B981';
-                  var showArrows = !!extendData.dragHintArrows;
-                  var figs = [
-                    { type: 'line', attrs: { coordinates: [ { x: 0, y: point.y }, { x: 9999, y: point.y } ] }, styles: { color: color, size: 1, style: 'dashed', dashedValue: [10, 6] } }
-                  ];
-                  if (showArrows) {
-                    figs.push(
-                      { type: 'text', attrs: { x: 6, y: point.y - 2, text: '\u25B2', baseline: 'bottom', align: 'left' }, styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' } },
-                      { type: 'text', attrs: { x: 6, y: point.y + 2, text: '\u25BC', baseline: 'top', align: 'left' }, styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' } }
-                    );
-                  } else {
-                    // Alert icon centered on the line with circular background matching the line color
-                    figs.push({ type: 'text', attrs: { x: 8, y: point.y, text: '\uE7F4', baseline: 'middle', align: 'left' }, styles: { color: '#FFFFFF', family: 'Material Icons', size: 12, backgroundColor: color, borderColor: color, borderSize: 1, borderRadius: 999, paddingLeft: 3, paddingRight: 3, paddingTop: 3, paddingBottom: 3 } });
-                  }
-                  return figs;
-                }
-              });
-              window.__LABELED_LINE_REGISTERED__ = true;
-            }
 
             if (window.klinecharts.registerOverlay && !window.__SESSION_BG_REGISTERED__) {
               window.klinecharts.registerOverlay({
@@ -1117,77 +1116,77 @@ export default function SimpleKLineChart({
             } else {
               if (typeof chart.setDataLoader === 'function') {
                 if (MOCK_REALTIME) {
-                  // Mock realtime via generator
-                  var mockBars = genData(Date.now(), 800);
-                  if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                  window.__SIMPLE_KLINE__.mockBars = mockBars.slice();
-                  window.__SIMPLE_KLINE__.mockTimer = null;
-                  chart.setDataLoader({
-                    getBars: function(ctx){
-                      try {
-                        var callback = ctx && ctx.callback ? ctx.callback : function(){};
-                        callback(window.__SIMPLE_KLINE__.mockBars || []);
-                        try { post({ type: 'dataApplied' }); } catch(_){ }
-                        setTimeout(applySessionBackgrounds, 0);
-                      } catch (e) { post({ error: 'mock_getBars_failed', message: String(e && e.message || e) }); }
-                    },
-                    subscribeBar: function(params){
-                      try {
-                        var step = periodToMs(mapPeriod(TF));
-                        if (window.__SIMPLE_KLINE__.mockTimer) { try { clearInterval(window.__SIMPLE_KLINE__.mockTimer); } catch(_){} }
-                        function deliver(bar){
-                          try {
-                            if (params && typeof params.callback === 'function') { params.callback(bar); return; }
-                            if (params && typeof params.onData === 'function') { params.onData(bar); return; }
-                            if (params && typeof params.emit === 'function') { params.emit(bar); return; }
-                          } catch(_) {}
-                        }
-                        window.__SIMPLE_KLINE__.mockTimer = setInterval(function(){
-                          try {
-                            var list = window.__SIMPLE_KLINE__.mockBars || [];
-                            if (!Array.isArray(list) || list.length === 0) return;
-                            var last = list[list.length - 1];
-                            var now = Date.now();
-                            var needNew = (now - Number(last.timestamp || 0)) >= step;
-                            if (needNew) {
-                              // create new bar based on last close
-                              var basePrice = Number(last.close || last.open || 5000);
-                              var prices = [];
-                              for (var j = 0; j < 4; j++) { prices.push(basePrice + Math.random() * 60 - 30); }
-                              prices.sort(function(a,b){ return a - b; });
-                              var open = Number(prices[Math.round(Math.random() * 3)].toFixed(2));
-                              var high = Number(prices[3].toFixed(2));
-                              var low = Number(prices[0].toFixed(2));
-                              var close = Number(prices[Math.round(Math.random() * 3)].toFixed(2));
-                              var volume = Math.round(Math.random() * 100) + 10;
-                              var turnover = (open + high + low + close) / 4 * volume;
-                              var nb = { timestamp: Math.floor(now / step) * step, open: open, high: high, low: low, close: close, volume: volume, turnover: turnover };
-                              list.push(nb);
-                              deliver(nb);
-                            } else {
-                              // update last bar
-                              var delta = (Math.random() * 20 - 10);
-                              last.close = Number((last.close + delta).toFixed(2));
-                              last.high = Math.max(last.high, last.close);
-                              last.low = Math.min(last.low, last.close);
-                              last.volume = Number((last.volume + Math.round(Math.random() * 10)).toFixed(0));
-                              last.turnover = Number(((last.open + last.high + last.low + last.close) / 4 * last.volume).toFixed(2));
-                              deliver(Object.assign({}, last));
-                            }
-                          } catch(_){ }
-                        }, 600);
-                      } catch(e) { post({ error: 'mock_subscribe_failed', message: String(e && e.message || e) }); }
-                    },
-                    unsubscribeBar: function(params){
-                      try { if (window.__SIMPLE_KLINE__.mockTimer) { clearInterval(window.__SIMPLE_KLINE__.mockTimer); window.__SIMPLE_KLINE__.mockTimer = null; } } catch(_){ }
-                    },
-                    // backward compatibility if library accepts these keys
-                    subscribe: function(params){ return this.subscribeBar && this.subscribeBar(params); },
-                    unsubscribe: function(params){ return this.unsubscribeBar && this.unsubscribeBar(params); }
-                  });
-                  // Ensure loader is active by (re)setting symbol/period AFTER loader assignment
-                  try { if (typeof chart.setSymbol === 'function') { chart.setSymbol({ ticker: SYMBOL }); } } catch(_){ }
-                  try { if (typeof chart.setPeriod === 'function') { chart.setPeriod(mapPeriod(TF)); } } catch(_){ }
+                   // Mock realtime via generator
+                   var mockBars = genData(Date.now(), 800);
+                   if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                   window.__SIMPLE_KLINE__.mockBars = mockBars.slice();
+                   window.__SIMPLE_KLINE__.mockTimer = null;
+                   chart.setDataLoader({
+                     getBars: function(ctx){
+                       try {
+                         var callback = ctx && ctx.callback ? ctx.callback : function(){};
+                         callback(window.__SIMPLE_KLINE__.mockBars || []);
+                         try { post({ type: 'dataApplied' }); } catch(_){ }
+                         setTimeout(applySessionBackgrounds, 0);
+                       } catch (e) { post({ error: 'mock_getBars_failed', message: String(e && e.message || e) }); }
+                     },
+                     subscribeBar: function(params){
+                       try {
+                         var step = periodToMs(mapPeriod(TF));
+                         if (window.__SIMPLE_KLINE__.mockTimer) { try { clearInterval(window.__SIMPLE_KLINE__.mockTimer); } catch(_){} }
+                         function deliver(bar){
+                           try {
+                             if (params && typeof params.callback === 'function') { params.callback(bar); return; }
+                             if (params && typeof params.onData === 'function') { params.onData(bar); return; }
+                             if (params && typeof params.emit === 'function') { params.emit(bar); return; }
+                           } catch(_) {}
+                         }
+                         window.__SIMPLE_KLINE__.mockTimer = setInterval(function(){
+                           try {
+                             var list = window.__SIMPLE_KLINE__.mockBars || [];
+                             if (!Array.isArray(list) || list.length === 0) return;
+                             var last = list[list.length - 1];
+                             var now = Date.now();
+                             var needNew = (now - Number(last.timestamp || 0)) >= step;
+                             if (needNew) {
+                               // create new bar based on last close
+                               var basePrice = Number(last.close || last.open || 5000);
+                               var prices = [];
+                               for (var j = 0; j < 4; j++) { prices.push(basePrice + Math.random() * 60 - 30); }
+                               prices.sort(function(a,b){ return a - b; });
+                               var open = Number(prices[Math.round(Math.random() * 3)].toFixed(2));
+                               var high = Number(prices[3].toFixed(2));
+                               var low = Number(prices[0].toFixed(2));
+                               var close = Number(prices[Math.round(Math.random() * 3)].toFixed(2));
+                               var volume = Math.round(Math.random() * 100) + 10;
+                               var turnover = (open + high + low + close) / 4 * volume;
+                               var nb = { timestamp: Math.floor(now / step) * step, open: open, high: high, low: low, close: close, volume: volume, turnover: turnover };
+                               list.push(nb);
+                               deliver(nb);
+                             } else {
+                               // update last bar
+                               var deltaVal = (Math.random() * 20 - 10);
+                               last.close = Number((last.close + deltaVal).toFixed(2));
+                               last.high = Math.max(last.high, last.close);
+                               last.low = Math.min(last.low, last.close);
+                               last.volume = Number((last.volume + Math.round(Math.random() * 10)).toFixed(0));
+                               last.turnover = Number(((last.open + last.high + last.low + last.close) / 4 * last.volume).toFixed(2));
+                               deliver(Object.assign({}, last));
+                             }
+                           } catch(_){ }
+                         }, 600);
+                       } catch(e) { post({ error: 'mock_subscribe_failed', message: String(e && e.message || e) }); }
+                     },
+                     unsubscribeBar: function(params){
+                       try { if (window.__SIMPLE_KLINE__.mockTimer) { clearInterval(window.__SIMPLE_KLINE__.mockTimer); window.__SIMPLE_KLINE__.mockTimer = null; } } catch(_){ }
+                     },
+                     // backward compatibility if library accepts these keys
+                     subscribe: function(params){ return this.subscribeBar && this.subscribeBar(params); },
+                     unsubscribe: function(params){ return this.unsubscribeBar && this.unsubscribeBar(params); }
+                   });
+                   // Ensure loader is active by (re)setting symbol/period AFTER loader assignment
+                   try { if (typeof chart.setSymbol === 'function') { chart.setSymbol({ ticker: SYMBOL }); } } catch(_){ }
+                   try { if (typeof chart.setPeriod === 'function') { chart.setPeriod(mapPeriod(TF)); } } catch(_){ }
                 } else {
                   // Live data via Polygon
                   chart.setDataLoader({
@@ -1396,16 +1395,12 @@ export default function SimpleKLineChart({
               try {
                 if (price == null || isNaN(price)) return;
                 var overlayId;
-                if (isAlert) {
-                  var customOpts = { name: 'labeledHorizontalLine', lock: false, points: [{ value: Number(price) }], extendData: { label: String(label), price: Number(price), color: color, dragHintArrows: !!dragHintArrows } };
-                  try { if (chart && typeof chart.createOverlay === 'function') { overlayId = chart.createOverlay(customOpts); } } catch(_) { }
-                } else {
-                  var lineOpts = {
-                    name: 'horizontalStraightLine', lock: true, extend: 'none', points: [{ value: Number(price) }],
-                    styles: { line: { color: color, size: 1, style: 'dashed', dashedValue: [10, 6] }, text: { show: true, color: '#FFFFFF', size: 12, backgroundColor: color, borderColor: color, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, text: String(label) + ' $' + Number(price).toFixed(2) } }
-                  };
-                  if (chart && typeof chart.createOverlay === 'function') { overlayId = chart.createOverlay(lineOpts); }
-                }
+                // Use a single unified overlay type for all lines (alerts and strategy levels)
+                var lineOpts = {
+                  name: 'horizontalStraightLine', lock: true, extend: 'none', points: [{ value: Number(price) }],
+                  styles: { line: { color: color, size: 1, style: 'dashed', dashedValue: [10, 6] }, text: { show: true, color: '#FFFFFF', size: 12, backgroundColor: color, borderColor: color, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, text: String(label) + ' $' + Number(price).toFixed(2) } }
+                };
+                if (chart && typeof chart.createOverlay === 'function') { overlayId = chart.createOverlay(lineOpts); }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 var ids = [overlayId].filter(function(id) { return id !== undefined; });
                 if (isAlert) { window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids); }
@@ -1437,12 +1432,14 @@ export default function SimpleKLineChart({
                     var color = '#F59E0B';
                     var label = 'Alert ' + (i + 1);
                     var aid = String(alert.id || ('alert_' + (i + 1)));
-                    var showArrows = editId != null && String(editId) === aid;
+                    var showArrows = false;
                     addPriceLine(alert.price, color, label, !!showArrows, true);
                     registry.push({ id: aid, price: Number(alert.price) });
                   }
                 });
                 window.__SIMPLE_KLINE__.alertsRegistry = registry;
+                // Track how many alert overlays were actually drawn for persistence checks
+                try { window.__SIMPLE_KLINE__.lastAlertCount = (window.__SIMPLE_KLINE__.alertOverlayIds || []).length; } catch(_){ }
               } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
             }
 
@@ -1460,50 +1457,169 @@ export default function SimpleKLineChart({
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 window.__SIMPLE_KLINE__.levelOverlayIds = [];
                 
-                // Apply new levels
+                // Persist last levels for re-application on timeframe/theme changes
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.lastLevels = levels;
+
+                // Normalize incoming levels to avoid duplicates (entry + entries, exit + exits, tps + targets)
+                function normalize(list) {
+                  var seen = {};
+                  return (Array.isArray(list) ? list : []).filter(function(v){
+                    var ok = (typeof v === 'number') && isFinite(v) && !isNaN(v);
+                    if (!ok) return false;
+                    if (seen[v]) return false; seen[v] = true; return true;
+                  });
+                }
+                function coerce(val){
+                  if (Array.isArray(val)) return val;
+                  if (typeof val === 'number') return [val];
+                  return [];
+                }
+                var entriesList = normalize(coerce(levels && levels.entries));
+                var exitsList = normalize(coerce(levels && levels.exits));
+                var tpsList = normalize(coerce(levels && levels.tps));
+                var stopList = normalize(coerce(levels && levels.stop));
+                if (!exitsList.length) exitsList = stopList;
+                if (!exitsList.length && typeof levels.stop === 'number') {
+                  exitsList = [Number(levels.stop)];
+                }
+
                 var colors = {
-                  entry: '#10B981',
-                  lateEntry: '#059669', 
-                  exit: '#EF4444',
-                  lateExit: '#DC2626',
-                  stop: '#F59E0B',
-                  targets: '#8B5CF6'
+                  entries: '#10B981',
+                  exits: '#EF4444',
+                  tps: '#3B82F6'
                 };
-                
-                Object.keys(levels).forEach(function(key) {
-                  var value = levels[key];
-                  if (Array.isArray(value)) {
-                    // Handle arrays (like targets)
-                    value.forEach(function(price, i) {
-                      if (typeof price === 'number') {
-                        var id = chart.createOverlay({
-                          name: 'horizontalStraightLine',
-                          lock: true,
-                          points: [{ value: price }],
-                          styles: { line: { color: colors[key] || '#6B7280', size: 1, style: 'dashed' } }
-                        });
-                        if (id) window.__SIMPLE_KLINE__.levelOverlayIds.push(id);
-                      }
-                    });
-                  } else if (typeof value === 'number') {
-                    // Handle single values
+
+                function lineStyleFor(key){
+                  if (key === 'entries') return { style: 'dashed', dashedValue: [8, 4] };
+                  if (key === 'exits' || key === 'stop') return { style: 'dashed', dashedValue: [2, 3] };
+                  if (key === 'tps') return { style: 'dashed', dashedValue: [4, 2] };
+                  return { style: 'solid', dashedValue: undefined };
+                }
+
+                function labelFor(key, index){
+                  var suffix = (typeof index === 'number') ? ' ' + (index + 1) : '';
+                  if (key === 'entries') return 'Entry' + suffix;
+                  if (key === 'exits') return 'Exit' + suffix;
+                  if (key === 'tps') return 'TP' + suffix;
+                  if (key === 'stop') return 'Stop';
+                  return key;
+                }
+
+                function drawList(list, key){
+                  (list || []).forEach(function(price, i){
+                    if (typeof price !== 'number') return;
+                    var styleCfg = lineStyleFor(key);
+                    var col = colors[key] || '#6B7280';
                     var id = chart.createOverlay({
                       name: 'horizontalStraightLine',
                       lock: true,
-                      points: [{ value: value }],
-                      styles: { line: { color: colors[key] || '#6B7280', size: 1, style: 'solid' } }
+                      points: [{ value: price }],
+                      styles: {
+                        line: { color: col, size: 1, style: styleCfg.style, dashedValue: styleCfg.dashedValue },
+                        text: { show: true, color: '#FFFFFF', size: 11, backgroundColor: col, borderColor: col, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 4, text: labelFor(key, i) }
+                      }
                     });
                     if (id) window.__SIMPLE_KLINE__.levelOverlayIds.push(id);
-                  }
-                });
+                  });
+                }
+                drawList(entriesList, 'entries');
+                drawList(exitsList, exitsList === stopList ? 'stop' : 'exits');
+                drawList(tpsList, 'tps');
+                if (!exitsList.length && typeof levels.stop === 'number') {
+                  drawList([levels.stop], 'stop');
+                }
+
+                // Draw singles that are not covered by arrays
+                function drawSingle(value, key){
+                  if (!(typeof value === 'number')) return;
+                  var styleCfgSingle = lineStyleFor(key);
+                  var colSingle = colors[key] || '#6B7280';
+                  var id = chart.createOverlay({
+                    name: 'horizontalStraightLine',
+                    lock: true,
+                    points: [{ value: value }],
+                    styles: {
+                      line: { color: colSingle, size: 1, style: styleCfgSingle.style, dashedValue: styleCfgSingle.dashedValue },
+                      text: { show: true, color: '#FFFFFF', size: 11, backgroundColor: colSingle, borderColor: colSingle, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 4, text: labelFor(key) }
+                    }
+                  });
+                  if (id) window.__SIMPLE_KLINE__.levelOverlayIds.push(id);
+                }
+                // Only draw singles if not already included
+                if (!entriesList.length) drawSingle(levels.entry, 'entry');
+                if (!exitsList.length) drawSingle(levels.exit, 'exit');
+                drawSingle(levels.lateEntry, 'lateEntry');
+                drawSingle(levels.lateExit, 'lateExit');
+                if (!exitsList.length) drawSingle(levels.stop, 'stop');
+                // Track how many level overlays were actually drawn for persistence checks
+                try { window.__SIMPLE_KLINE__.lastLevelsCount = (window.__SIMPLE_KLINE__.levelOverlayIds || []).length; } catch(_){ }
+                if (!exitsList.length && typeof levels.stop === 'number') {
+                  drawList([levels.stop], 'stop');
+                  try { window.__SIMPLE_KLINE__.lastLevelsCount = (window.__SIMPLE_KLINE__.levelOverlayIds || []).length; } catch(_){ }
+                }
               } catch(e) {
                 post({ warn: 'applyLevels failed', message: String(e && e.message || e) });
               }
             }
 
             if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+            window.__SIMPLE_KLINE__.chart = chart;
             window.__SIMPLE_KLINE__.applyAlerts = applyAlerts;
             window.__SIMPLE_KLINE__.applyLevels = applyLevels;
+
+            // Set up periodic overlay persistence to combat chart interactions clearing them
+            var overlayPersistenceInterval = setInterval(function() {
+              try {
+                if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart) {
+                  var hasAlerts = window.__SIMPLE_KLINE__.lastAlerts && window.__SIMPLE_KLINE__.lastAlerts.length > 0;
+                  var hasLevels = window.__SIMPLE_KLINE__.lastLevels && Object.keys(window.__SIMPLE_KLINE__.lastLevels).length > 0;
+                  
+                  if (hasAlerts || hasLevels) {
+                    // Check if overlays are still present by counting expected vs actual
+                    var alertIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []);
+                    var levelIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []);
+                    
+                    var expectedAlerts = (typeof window.__SIMPLE_KLINE__.lastAlertCount === 'number')
+                      ? window.__SIMPLE_KLINE__.lastAlertCount
+                      : (hasAlerts ? window.__SIMPLE_KLINE__.lastAlerts.filter(function(a) { return a && a.isActive; }).length : 0);
+                    var expectedLevels = (typeof window.__SIMPLE_KLINE__.lastLevelsCount === 'number')
+                      ? window.__SIMPLE_KLINE__.lastLevelsCount
+                      : (function(){
+                          var count = 0;
+                          if (hasLevels) {
+                            var levels = window.__SIMPLE_KLINE__.lastLevels || {};
+                            if (Array.isArray(levels.entries)) count += levels.entries.length;
+                            if (Array.isArray(levels.exits)) count += levels.exits.length;
+                            if (Array.isArray(levels.tps)) count += levels.tps.length;
+                          }
+                          return count;
+                        })();
+                    
+                    // If overlays are missing, reapply them
+                    if (alertIds.length < expectedAlerts || levelIds.length < expectedLevels) {
+                      console.log('🔄 Overlays missing, reapplying...', {
+                        alertIds: alertIds.length, 
+                        expectedAlerts: expectedAlerts,
+                        levelIds: levelIds.length,
+                        expectedLevels: expectedLevels
+                      });
+                      if (hasAlerts && window.__SIMPLE_KLINE__.applyAlerts) {
+                        window.__SIMPLE_KLINE__.applyAlerts(window.__SIMPLE_KLINE__.lastAlerts);
+                      }
+                      if (hasLevels && window.__SIMPLE_KLINE__.applyLevels) {
+                        window.__SIMPLE_KLINE__.applyLevels(window.__SIMPLE_KLINE__.lastLevels);
+                      }
+                    }
+                  }
+                }
+              } catch(e) {
+                console.warn('Overlay persistence check failed:', e);
+              }
+            }, 700); // Check ~2x per second for snappier persistence
+
+            // Store interval for cleanup
+            window.__SIMPLE_KLINE__.overlayPersistenceInterval = overlayPersistenceInterval;
             try { if (document.fonts && document.fonts.load) { document.fonts.load('16px "Material Icons"'); } } catch(_){ }
 
             // Apply initial alerts and levels snapshot passed from React Native

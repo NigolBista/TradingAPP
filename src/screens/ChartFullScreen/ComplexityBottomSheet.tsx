@@ -47,6 +47,9 @@ export default function ComplexityBottomSheet({
 }: Props) {
   const storeProfile = useUserStore((s) => s.profile);
   const selectStrategyGroup = useUserStore((s) => s.selectStrategyGroup);
+  const saveStrategyPreferences = useUserStore(
+    (s) => s.saveStrategyPreferences
+  );
   const anim = useRef(new Animated.Value(0)).current;
   const groups = (storeProfile?.strategyGroups || []) as StrategyGroup[];
   const canShowGroups =
@@ -219,6 +222,12 @@ export default function ComplexityBottomSheet({
                         setTradeMode("day");
                         setMode("day_trade");
                         setTradePace("day");
+                        try {
+                          saveStrategyPreferences({
+                            tradeMode: "day",
+                            tradePace: "day",
+                          } as any);
+                        } catch {}
                       }}
                       style={{
                         paddingVertical: 8,
@@ -243,6 +252,12 @@ export default function ComplexityBottomSheet({
                         setTradeMode("swing");
                         setMode("swing_trade");
                         setTradePace("swing");
+                        try {
+                          saveStrategyPreferences({
+                            tradeMode: "swing",
+                            tradePace: "swing",
+                          } as any);
+                        } catch {}
                       }}
                       style={{
                         marginLeft: 4,
@@ -265,13 +280,19 @@ export default function ComplexityBottomSheet({
                     </Pressable>
                   </View>
                   <Pressable
-                    onPress={() =>
-                      setContextMode(
+                    onPress={() => {
+                      const next =
                         contextMode === "news_sentiment"
                           ? "price_action"
-                          : "news_sentiment"
-                      )
-                    }
+                          : "news_sentiment";
+                      setContextMode(next);
+                      try {
+                        saveStrategyPreferences({
+                          contextMode: next as any,
+                          newsSentimentEnabled: next === "news_sentiment",
+                        } as any);
+                      } catch {}
+                    }}
                     style={{
                       paddingHorizontal: 12,
                       paddingVertical: 8,

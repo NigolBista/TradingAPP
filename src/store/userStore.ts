@@ -42,6 +42,14 @@ export interface UserProfile {
   preferredRiskReward?: number;
   autoApplyComplexity?: boolean; // Auto-apply complexity to all analyses
 
+  // Persisted Supabase strategy preferences
+  tradeMode?: "day" | "swing";
+  tradePace?: "auto" | "day" | "scalp" | "swing";
+  contextMode?: "price_action" | "news_sentiment";
+  newsSentimentEnabled?: boolean;
+  tradeModePersistedAt?: string;
+  preferencesSyncedAt?: string;
+
   // Signal provider & strategy groups
   isSignalProvider?: boolean;
   strategyGroups?: StrategyGroup[];
@@ -61,6 +69,8 @@ export interface StrategyGroup {
 interface UserState {
   profile: UserProfile;
   setProfile: (data: Partial<UserProfile>) => void;
+  hydrateStrategyPreferences: (prefs: Partial<UserProfile>) => void;
+  saveStrategyPreferences: (prefs: Partial<UserProfile>) => void;
   createWatchlist: (name: string, description?: string) => string;
   deleteWatchlist: (id: string) => void;
   addToWatchlist: (watchlistId: string, symbol: string) => void;
@@ -111,6 +121,12 @@ const defaultProfile: UserProfile = {
   notificationsEnabled: true,
   isSignalProvider: false,
   strategyGroups: [],
+  tradeMode: "day",
+  tradePace: "auto",
+  contextMode: "price_action",
+  newsSentimentEnabled: false,
+  tradeModePersistedAt: undefined,
+  preferencesSyncedAt: undefined,
 };
 
 export const useUserStore = create<UserState>()(
@@ -119,6 +135,24 @@ export const useUserStore = create<UserState>()(
       profile: defaultProfile,
       setProfile: (data) =>
         set((s) => ({ profile: { ...s.profile, ...data } })),
+
+      hydrateStrategyPreferences: (prefs) =>
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            ...prefs,
+            preferencesSyncedAt: new Date().toISOString(),
+          },
+        })),
+
+      saveStrategyPreferences: (prefs) =>
+        set((s) => ({
+          profile: {
+            ...s.profile,
+            ...prefs,
+            tradeModePersistedAt: new Date().toISOString(),
+          },
+        })),
 
       createWatchlist: (name: string, description?: string) => {
         const id = `watchlist_${Date.now()}`;

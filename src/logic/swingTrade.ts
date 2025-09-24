@@ -40,47 +40,41 @@ export function buildSwingTradePlan(ctx: StrategyContext): TradePlanOverlay {
       : 2.0;
 
   if (biasLong) {
-    const entry = Math.max(0, currentPrice - delta);
+    const primaryEntry = Math.max(0, currentPrice - delta);
     const stopDistance = delta * stopMult;
-    const stop = Math.max(0, entry - stopDistance);
+    const stop = Math.max(0, primaryEntry - stopDistance);
     const targetDistance = stopDistance * rr;
-    const exit = entry + targetDistance;
-    const lateEntry = Math.max(0, currentPrice - delta * 1.8);
-    const lateExit = exit + targetDistance * 0.3;
+    const exit = primaryEntry + targetDistance;
+    const secondaryEntry = Math.max(0, currentPrice - delta * 1.8);
+    const extendedStop = exit + targetDistance * 0.3;
     const targets = [
-      entry + stopDistance * 1.0,
-      entry + stopDistance * rr,
+      primaryEntry + stopDistance * 1.0,
+      primaryEntry + stopDistance * rr,
     ].filter((v) => Number.isFinite(v));
     return {
       side: "long",
-      entry,
-      lateEntry,
-      exit,
-      lateExit,
-      stop,
-      targets,
+      entries: [primaryEntry, secondaryEntry].filter((v) => Number.isFinite(v)),
+      exits: [stop, extendedStop].filter((v) => Number.isFinite(v)),
+      tps: targets,
       riskReward: rr,
     };
   }
-  const entry = currentPrice + delta;
+  const primaryEntry = currentPrice + delta;
   const stopDistance = delta * stopMult;
-  const stop = entry + stopDistance;
+  const stop = primaryEntry + stopDistance;
   const targetDistance = stopDistance * rr;
-  const exit = Math.max(0, entry - targetDistance);
-  const lateEntry = currentPrice + delta * 1.8;
-  const lateExit = Math.max(0, exit - targetDistance * 0.3);
+  const exit = Math.max(0, primaryEntry - targetDistance);
+  const secondaryEntry = currentPrice + delta * 1.8;
+  const extendedStop = Math.max(0, exit - targetDistance * 0.3);
   const targets = [
-    entry - stopDistance * 1.0,
-    entry - stopDistance * rr,
+    primaryEntry - stopDistance * 1.0,
+    primaryEntry - stopDistance * rr,
   ].filter((v) => Number.isFinite(v));
   return {
     side: "short",
-    entry,
-    lateEntry,
-    exit,
-    lateExit,
-    stop,
-    targets,
+    entries: [primaryEntry, secondaryEntry].filter((v) => Number.isFinite(v)),
+    exits: [stop, extendedStop].filter((v) => Number.isFinite(v)),
+    tps: targets,
     riskReward: rr,
   };
 }

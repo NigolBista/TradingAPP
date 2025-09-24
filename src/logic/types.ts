@@ -19,25 +19,18 @@ export type TradePlanOverlay = {
   side: TradeSide;
   complexity?: StrategyComplexity;
 
-  // Entry levels
-  entry?: number;
-  lateEntry?: number; // optional secondary/late entry
-
-  // Exit levels
-  exit?: number;
-  lateExit?: number; // optional secondary/late exit
-  stop?: number;
-
-  // Take profit targets
-  targets?: number[];
+  // Unified level arrays
+  entries?: number[]; // ordered entries
+  exits?: number[]; // ordered exits / stops
+  tps?: number[]; // ordered take-profit targets
 
   // Metadata
   riskReward?: number;
   positionSizing?: {
     totalSize: number;
-    entryAllocation?: number; // % for main entry
-    lateEntryAllocation?: number; // % for late entry
-    targetAllocations?: number[]; // % for each target
+    entryAllocations?: number[]; // % for each entry
+    exitAllocations?: number[]; // % for each exit
+    targetAllocations?: number[]; // % for each TP
   };
 };
 

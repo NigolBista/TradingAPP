@@ -94,9 +94,9 @@ function generateSimplePlan(
   return {
     side,
     complexity: "simple",
-    entry: basePrice,
-    stop: isLong ? basePrice - stopDistance : basePrice + stopDistance,
-    targets: [isLong ? basePrice + targetDistance : basePrice - targetDistance],
+    entries: [basePrice],
+    exits: [isLong ? basePrice - stopDistance : basePrice + stopDistance],
+    tps: [isLong ? basePrice + targetDistance : basePrice - targetDistance],
     riskReward: 2.0,
   };
 }
@@ -116,10 +116,9 @@ function generatePartialPlan(
   return {
     side,
     complexity: "partial",
-    entry: basePrice,
-    // No separate exit - just use the targets for partial exits
-    stop: isLong ? basePrice - stopDistance : basePrice + stopDistance,
-    targets: [
+    entries: [basePrice],
+    exits: [isLong ? basePrice - stopDistance : basePrice + stopDistance],
+    tps: [
       isLong ? basePrice + target1Distance : basePrice - target1Distance,
       isLong ? basePrice + target2Distance : basePrice - target2Distance,
     ],
@@ -143,19 +142,23 @@ function generateAdvancedPlan(
   const target2Distance = stopDistance * 2.5; // 1:2.5 RR
   const target3Distance = stopDistance * 3.5; // 1:3.5 RR
 
+  const mainEntry = basePrice;
+  const secondaryEntry = isLong
+    ? basePrice + entrySpacing
+    : basePrice - entrySpacing;
+  const primaryStop = isLong
+    ? basePrice - stopDistance
+    : basePrice + stopDistance;
+  const extendedStop = isLong
+    ? basePrice - extendedStopDistance
+    : basePrice + extendedStopDistance;
+
   return {
     side,
     complexity: "advanced",
-    entry: basePrice,
-    // Late entry: ABOVE entry for long (breakout), BELOW entry for short (breakdown)
-    lateEntry: isLong ? basePrice + entrySpacing : basePrice - entrySpacing,
-    // Regular stop loss
-    stop: isLong ? basePrice - stopDistance : basePrice + stopDistance,
-    // Extended stop loss (stored in lateExit field for now, but represents extended stop)
-    lateExit: isLong
-      ? basePrice - extendedStopDistance
-      : basePrice + extendedStopDistance,
-    targets: [
+    entries: [mainEntry, secondaryEntry],
+    exits: [primaryStop, extendedStop],
+    tps: [
       isLong ? basePrice + target1Distance : basePrice - target1Distance,
       isLong ? basePrice + target2Distance : basePrice - target2Distance,
       isLong ? basePrice + target3Distance : basePrice - target3Distance,
@@ -175,22 +178,24 @@ function calculatePositionSizing(
     case "simple":
       return {
         totalSize,
-        entryAllocation: 100,
+        entryAllocations: [100],
+        exitAllocations: [100],
         targetAllocations: [100],
       };
 
     case "partial":
       return {
         totalSize,
-        entryAllocation: 100,
+        entryAllocations: [100],
+        exitAllocations: [100],
         targetAllocations: [50, 50], // Split between 2 targets
       };
 
     case "advanced":
       return {
         totalSize,
-        entryAllocation: 70, // 70% on main entry
-        lateEntryAllocation: 30, // 30% on late entry
+        entryAllocations: [70, 30],
+        exitAllocations: [70, 30],
         targetAllocations: [40, 35, 25], // Graduated exit
       };
 
@@ -226,40 +231,6 @@ function getRiskMultiplier(
 }
 
 // Validation functions
-export function validateTradePlan(plan: TradePlanOverlay): {
-  isValid: boolean;
-  errors: string[];
-} {
-  const errors: string[] = [];
-
-  if (!plan.entry) {
-    errors.push("Entry price is required");
-  }
-
-  if (!plan.stop) {
-    errors.push("Stop loss is required");
-  }
-
-  if (!plan.targets || plan.targets.length === 0) {
-    errors.push("At least one take profit target is required");
-  }
-
-  if (plan.entry && plan.stop) {
-    const isLong = plan.side === "long";
-    if (isLong && plan.stop >= plan.entry) {
-      errors.push("Stop loss must be below entry for long positions");
-    }
-    if (!isLong && plan.stop <= plan.entry) {
-      errors.push("Stop loss must be above entry for short positions");
-    }
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors,
-  };
-}
-
 export function getComplexityDescription(
   complexity: StrategyComplexity
 ): string {

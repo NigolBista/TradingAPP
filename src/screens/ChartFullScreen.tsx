@@ -70,6 +70,12 @@ import {
   getUserChartSettings,
   upsertUserChartSettings,
 } from "../services/chartSettingsService";
+import { useComposeDraftStore } from "../store/composeDraftStore";
+import useTradeDraftSync from "../hooks/useTradeDraftSync";
+import {
+  upsertUserDraftPlan,
+  deleteUserDraftPlan,
+} from "../services/draftPlanService";
 
 // Types
 type AIMeta = {
@@ -170,12 +176,121 @@ export default function ChartFullScreen() {
     Array<{ id: string; label: string }>
   >([]);
   const [composeDraft, setComposeDraft] = useState<{
-    entry?: number;
-    lateEntry?: number;
-    exit?: number;
-    lateExit?: number;
-    targets: number[];
-  }>({ targets: [] });
+    entries: number[];
+    exits: number[];
+    tps: number[];
+  }>({ entries: [], exits: [], tps: [] });
+
+  const drafts = useComposeDraftStore((s) => s.drafts);
+  const setDraftPlan = useComposeDraftStore((s) => s.setDraftPlan);
+  const clearDraftPlan = useComposeDraftStore((s) => s.clearDraftPlan);
+
+  useTradeDraftSync({ symbol, userId: user?.id });
+
+  const composeDraftFromPlan = useCallback((plan: any) => {
+    if (!plan) {
+      return { entries: [], exits: [], tps: [] };
+    }
+    return {
+      entries: Array.isArray(plan.entries) ? [...plan.entries] : [],
+      exits: Array.isArray(plan.exits) ? [...plan.exits] : [],
+      tps: Array.isArray(plan.tps) ? [...plan.tps] : [],
+    };
+  }, []);
+
+  const createDraftSignature = useCallback(
+    (draft: { entries: number[]; exits: number[]; tps: number[] }) =>
+      JSON.stringify({
+        entries: Array.isArray(draft.entries) ? draft.entries : [],
+        exits: Array.isArray(draft.exits) ? draft.exits : [],
+        tps: Array.isArray(draft.tps) ? draft.tps : [],
+      }),
+    []
+  );
+
+  const composeDraftSignature = React.useMemo(
+    () => createDraftSignature(composeDraft),
+    [composeDraft, createDraftSignature]
+  );
+  const emptyDraftSignature = React.useMemo(
+    () => createDraftSignature({ entries: [], exits: [], tps: [] }),
+    [createDraftSignature]
+  );
+  // Keep chart overlays in sync with cached signal persistence
+  const signalsMap = useSignalCacheStore((s) => s.signals);
+  const cachedPlanForSymbol = React.useMemo(() => {
+    const cached = signalsMap[symbol];
+    return cached && cached.tradePlan ? cached.tradePlan : null;
+  }, [signalsMap, symbol]);
+  const draftForSymbol = React.useMemo(() => {
+    return drafts[symbol] || null;
+  }, [drafts, symbol]);
+
+  useEffect(() => {
+    const next = composeDraftFromPlan(draftForSymbol);
+    const nextSignature = createDraftSignature(next);
+
+    if (!draftForSymbol) {
+      if (composeDraftSignature !== emptyDraftSignature) {
+        setComposeDraft({ entries: [], exits: [], tps: [] });
+        skipRemotePersistRef.current = true;
+        lastRemotePayloadRef.current = emptyDraftSignature;
+      }
+      return;
+    }
+
+    if (composeDraftSignature !== nextSignature) {
+      setComposeDraft(next);
+      skipRemotePersistRef.current = true;
+      lastRemotePayloadRef.current = nextSignature;
+    }
+  }, [
+    draftForSymbol,
+    composeDraftFromPlan,
+    composeDraftSignature,
+    createDraftSignature,
+    emptyDraftSignature,
+  ]);
+
+  useEffect(() => {
+    try {
+      if (!chartBridgeRef.current) return;
+      const plan: any = draftForSymbol || cachedPlanForSymbol;
+      if (plan) {
+        console.log("🔄 Applying levels in ChartFullScreen:", plan);
+        chartBridgeRef.current.updateLevels({
+          entries: plan.entries,
+          exits: plan.exits?.length ? plan.exits : [],
+          tps: plan.tps,
+        });
+      } else {
+        // Clear levels if no cached plan exists
+        chartBridgeRef.current.updateLevels({});
+      }
+    } catch (_) {}
+  }, [cachedPlanForSymbol, draftForSymbol]);
+
+  // Re-apply levels when timeframe changes (like alerts do)
+  useEffect(() => {
+    try {
+      if (!chartBridgeRef.current) return;
+      const plan: any = draftForSymbol || cachedPlanForSymbol;
+      if (plan) {
+        // Small delay to ensure chart has updated timeframe first
+        setTimeout(() => {
+          try {
+            if (chartBridgeRef.current) {
+              chartBridgeRef.current.updateLevels({
+                entries: plan.entries,
+                exits: plan.exits?.length ? plan.exits : [],
+                tps: plan.tps,
+              });
+            }
+          } catch (_) {}
+        }, 150);
+      }
+    } catch (_) {}
+  }, [extendedTf, draftForSymbol, cachedPlanForSymbol]);
 
   // Analysis state
   const [lastCandle, setLastCandle] = useState<Candle | null>(null);
@@ -193,7 +308,7 @@ export default function ChartFullScreen() {
   // Trading configuration
   const [tradePace, setTradePace] = useState<
     "auto" | "day" | "scalp" | "swing"
-  >((initialAnalysisContext?.tradePace as any) || "auto");
+  >((initialAnalysisContext?.tradePace as any) || profile.tradePace || "auto");
   const [contextLookback, setContextLookback] = useState<{
     mode: "auto" | "fixed";
     ms?: number;
@@ -206,8 +321,14 @@ export default function ChartFullScreen() {
   );
   const [contextMode, setContextMode] = useState<
     "price_action" | "news_sentiment"
-  >((initialAnalysisContext?.contextMode as any) || "price_action");
-  const [tradeMode, setTradeMode] = useState<"day" | "swing">("day");
+  >(
+    (initialAnalysisContext?.contextMode as any) ||
+      profile.contextMode ||
+      "price_action"
+  );
+  const [tradeMode, setTradeMode] = useState<"day" | "swing">(
+    profile.tradeMode || "day"
+  );
   const [showCustomRrModal, setShowCustomRrModal] = useState<boolean>(false);
 
   // Analysis and streaming state
@@ -275,9 +396,7 @@ export default function ChartFullScreen() {
       }
       return [
         { id: "entry", label: "Entry" },
-        { id: "lateEntry", label: "Late" },
         { id: "exit", label: "Exit" },
-        { id: "lateExit", label: "L.Exit" },
         { id: "tp1", label: "TP1" },
         { id: "tp2", label: "TP2" },
         { id: "tp3", label: "TP3" },
@@ -304,9 +423,30 @@ export default function ChartFullScreen() {
 
   const resetCompose = useCallback(() => {
     setComposeMode(false);
-    setComposeDraft({ targets: [] });
+    setComposeDraft({ entries: [], exits: [], tps: [] });
     setComposeButtons(computeComposeButtons(selectedComplexity));
-  }, [selectedComplexity, computeComposeButtons]);
+    // Clear the draft from the store
+    try {
+      clearDraftPlan(symbol);
+    } catch (_) {}
+    // Clear levels from chart
+    try {
+      chartBridgeRef.current?.updateLevels({});
+    } catch (_) {}
+    if (user?.id && /^[0-9a-fA-F-]{36}$/.test(user.id)) {
+      if (remoteSaveRef.current) {
+        clearTimeout(remoteSaveRef.current);
+        remoteSaveRef.current = null;
+      }
+      lastRemotePayloadRef.current = emptyDraftSignature;
+      deleteUserDraftPlan(user.id, symbol).catch((error) => {
+        console.warn(
+          `[ChartFullScreen] Failed to delete remote draft for ${symbol}:`,
+          error
+        );
+      });
+    }
+  }, [selectedComplexity, computeComposeButtons, clearDraftPlan, symbol]);
 
   const handleSendSignal = useCallback(() => {
     try {
@@ -321,11 +461,9 @@ export default function ChartFullScreen() {
         groupId,
         timeframe: extendedTf,
         plan: {
-          entry: composeDraft.entry,
-          lateEntry: composeDraft.lateEntry,
-          exit: composeDraft.exit,
-          lateExit: composeDraft.lateExit,
-          targets: (composeDraft.targets || []).slice(0, 3),
+          entries: composeDraft.entries,
+          exits: composeDraft.exits,
+          tps: composeDraft.tps,
         },
         createdAt: Date.now(),
       };
@@ -336,9 +474,9 @@ export default function ChartFullScreen() {
           symbol,
           strategy: "manual_signal",
           side: (aiMeta?.side as any) || (currentTradePlan?.side as any),
-          entry: payload.plan.entry,
-          exit: payload.plan.exit,
-          targets: payload.plan.targets,
+          entry: payload.plan.entries[0],
+          exit: payload.plan.exits[0],
+          targets: payload.plan.tps,
           why: [`Manual signal for group ${groupId}`, `TF: ${extendedTf}`],
           timestamp: Date.now(),
         } as any);
@@ -347,11 +485,9 @@ export default function ChartFullScreen() {
           symbol,
           groupId,
           timeframe: String(extendedTf),
-          entry: payload.plan.entry,
-          lateEntry: payload.plan.lateEntry,
-          exit: payload.plan.exit,
-          lateExit: payload.plan.lateExit,
-          targets: payload.plan.targets,
+          entries: payload.plan.entries,
+          exits: payload.plan.exits,
+          tps: payload.plan.tps,
           createdAt: payload.createdAt,
         }).catch(() => {});
       } catch (_) {}
@@ -372,6 +508,10 @@ export default function ChartFullScreen() {
 
   const saveDebounceRef = useRef<NodeJS.Timeout | null>(null);
   const skipSaveRef = useRef<boolean>(true);
+
+  const remoteSaveRef = useRef<NodeJS.Timeout | null>(null);
+  const lastRemotePayloadRef = useRef<string | null>(null);
+  const skipRemotePersistRef = useRef<boolean>(false);
 
   // Layout calculations
   const headerHeight = 52;
@@ -1031,7 +1171,7 @@ export default function ChartFullScreen() {
           confidence: output.confidence,
           why: output.why || [],
           notes: output.tradePlanNotes || [],
-          targets: output.targets || [],
+          targets: output.tps || [],
           riskReward: output.riskReward,
         };
         setAiMeta(newAiMeta);
@@ -1054,11 +1194,8 @@ export default function ChartFullScreen() {
             symbol: currentCached.symbol,
             strategy: currentCached.aiMeta?.strategyChosen,
             side: currentCached.aiMeta?.side,
-            entry: currentCached.tradePlan?.entry,
-            lateEntry: currentCached.tradePlan?.lateEntry,
-            exit: currentCached.tradePlan?.exit,
-            lateExit: currentCached.tradePlan?.lateExit,
-            stop: currentCached.tradePlan?.stop,
+            entry: currentCached.tradePlan?.entries[0],
+            exit: currentCached.tradePlan?.exits[0],
             targets: currentCached.aiMeta?.targets,
             riskReward: currentCached.aiMeta?.riskReward,
             confidence: currentCached.aiMeta?.confidence,
@@ -1154,7 +1291,7 @@ export default function ChartFullScreen() {
           notes: [
             "Adjust risk-reward in settings for different target distances.",
           ],
-          targets: plan.targets || [],
+          targets: plan.tps || [],
           riskReward: plan.riskReward,
         } as any;
         setAiMeta(newAiMeta);
@@ -1509,21 +1646,20 @@ export default function ChartFullScreen() {
             if (!(price > 0)) return;
             setComposeDraft((prev) => {
               const next = {
-                ...prev,
-                targets: [...(prev.targets || [])],
-              } as any;
-              if (action === "entry") next.entry = price;
-              else if (action === "lateEntry") next.lateEntry = price;
-              else if (action === "exit") next.exit = price;
-              else if (action === "lateExit") next.lateExit = price;
-              else if (action === "tp") {
-                next.targets.push(price);
-              } else if (action === "tp1") {
-                next.targets[0] = price;
+                entries: [...(prev.entries || [])],
+                exits: [...(prev.exits || [])],
+                tps: [...(prev.tps || [])],
+              };
+              if (action === "entry") {
+                next.entries.push(price);
+              } else if (action === "exit") {
+                next.exits.push(price);
+              } else if (action === "tp" || action === "tp1") {
+                next.tps[0] = price;
               } else if (action === "tp2") {
-                next.targets[1] = price;
+                next.tps[1] = price;
               } else if (action === "tp3") {
-                next.targets[2] = price;
+                next.tps[2] = price;
               } else if (action === "send") {
                 // Trigger send flow
                 try {
@@ -1533,12 +1669,57 @@ export default function ChartFullScreen() {
               // Live-preview levels while composing
               try {
                 chartBridgeRef.current?.updateLevels({
-                  entry: next.entry,
-                  lateEntry: next.lateEntry,
-                  exit: next.exit,
-                  lateExit: next.lateExit,
-                  targets: (next.targets || []).slice(0, 3),
-                } as any);
+                  entries: next.entries,
+                  exits: next.exits,
+                  tps: next.tps,
+                });
+              } catch (_) {}
+              try {
+                const updatedAt = Date.now();
+                setDraftPlan(symbol, {
+                  entries: next.entries,
+                  exits: next.exits,
+                  tps: next.tps,
+                  updatedAt,
+                });
+
+                if (user?.id && /^[0-9a-fA-F-]{36}$/.test(user.id)) {
+                  const payloadSignature = createDraftSignature(next);
+
+                  if (skipRemotePersistRef.current) {
+                    skipRemotePersistRef.current = false;
+                    lastRemotePayloadRef.current = payloadSignature;
+                  } else if (
+                    payloadSignature !== lastRemotePayloadRef.current
+                  ) {
+                    if (remoteSaveRef.current) {
+                      clearTimeout(remoteSaveRef.current);
+                    }
+
+                    remoteSaveRef.current = setTimeout(() => {
+                      (async () => {
+                        try {
+                          await upsertUserDraftPlan({
+                            userId: user.id,
+                            symbol,
+                            draft: {
+                              entries: next.entries,
+                              exits: next.exits,
+                              tps: next.tps,
+                              updatedAt,
+                            },
+                          });
+                          lastRemotePayloadRef.current = payloadSignature;
+                        } catch (error) {
+                          console.warn(
+                            `[ChartFullScreen] Failed to persist draft for ${symbol}:`,
+                            error
+                          );
+                        }
+                      })();
+                    }, 600);
+                  }
+                }
               } catch (_) {}
               return next;
             });
@@ -1561,18 +1742,19 @@ export default function ChartFullScreen() {
             try {
               if (chartBridgeRef.current) {
                 chartBridgeRef.current.updateAlerts(alertLines);
-                chartBridgeRef.current.updateLevels(
-                  currentTradePlan
-                    ? {
-                        entry: currentTradePlan.entry,
-                        lateEntry: currentTradePlan.lateEntry,
-                        exit: currentTradePlan.exit,
-                        lateExit: currentTradePlan.lateExit,
-                        stop: currentTradePlan.stop,
-                        targets: (currentTradePlan.targets || []).slice(0, 3),
-                      }
-                    : undefined
-                );
+
+                // Apply draft levels first, then cached plan, then current trade plan
+                const plan: any =
+                  draftForSymbol || cachedPlanForSymbol || currentTradePlan;
+                if (plan) {
+                  console.log("🎯 Chart ready - applying levels:", plan);
+                  chartBridgeRef.current.updateLevels({
+                    entries: plan.entries,
+                    exits: plan.exits?.length ? plan.exits : [],
+                    tps: plan.tps,
+                  });
+                }
+
                 // push display options including areaStyle and priceColors
                 chartBridgeRef.current.updateDisplayOptions({
                   showSessions,
@@ -1588,18 +1770,19 @@ export default function ChartFullScreen() {
             try {
               if (chartBridgeRef.current) {
                 chartBridgeRef.current.updateAlerts(alertLines);
-                chartBridgeRef.current.updateLevels(
-                  currentTradePlan
-                    ? {
-                        entry: currentTradePlan.entry,
-                        lateEntry: currentTradePlan.lateEntry,
-                        exit: currentTradePlan.exit,
-                        lateExit: currentTradePlan.lateExit,
-                        stop: currentTradePlan.stop,
-                        targets: (currentTradePlan.targets || []).slice(0, 3),
-                      }
-                    : undefined
-                );
+
+                // Apply draft levels first, then cached plan, then current trade plan
+                const plan: any =
+                  draftForSymbol || cachedPlanForSymbol || currentTradePlan;
+                if (plan) {
+                  console.log("📊 Data applied - reapplying levels:", plan);
+                  chartBridgeRef.current.updateLevels({
+                    entries: plan.entries,
+                    exits: plan.exits?.length ? plan.exits : [],
+                    tps: plan.tps,
+                  });
+                }
+
                 chartBridgeRef.current.updateDisplayOptions({
                   showSessions,
                   areaStyle,
@@ -1611,15 +1794,9 @@ export default function ChartFullScreen() {
           levels={
             currentTradePlan
               ? {
-                  entry: currentTradePlan.entry,
-                  lateEntry: currentTradePlan.lateEntry,
-                  exit: currentTradePlan.exit,
-                  lateExit: currentTradePlan.lateExit,
-                  stop: currentTradePlan.stop,
-                  targets: (currentTradePlan.targets || []).slice(
-                    0,
-                    3
-                  ) as number[],
+                  entries: currentTradePlan.entries,
+                  exits: currentTradePlan.exits,
+                  tps: currentTradePlan.tps,
                 }
               : undefined
           }

@@ -24,6 +24,10 @@ import {
   fetchUserWatchlist,
   syncUserWatchlist,
 } from "../services/watchlistService";
+import {
+  fetchUserStrategyPreferences,
+  upsertUserStrategyPreferences,
+} from "../services/strategyPreferencesService";
 
 export type AuthUser = { id: string; email?: string; user_metadata?: any };
 
@@ -49,6 +53,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setProfile = useUserStore((s) => s.setProfile);
   const profile = useUserStore((s) => s.profile);
   const resetProfile = useUserStore((s) => s.reset);
+  const hydrateStrategyPreferences = useUserStore(
+    (s) => s.hydrateStrategyPreferences
+  );
+  const saveStrategyPreferences = useUserStore(
+    (s) => s.saveStrategyPreferences
+  );
   const setAlerts = useAlertStore((s) => s.setAlerts);
   const upsertAlert = useAlertStore((s) => s.upsertAlert);
   const removeAlert = useAlertStore((s) => s.removeAlert);
@@ -61,6 +71,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const barUnsubsRef = useRef<Record<string, () => void>>({});
   const watchlistSaveRef = useRef<NodeJS.Timeout | null>(null);
   const skipWatchlistSaveRef = useRef<boolean>(true);
+  const strategyPrefsSaveRef = useRef<NodeJS.Timeout | null>(null);
+  const skipStrategyPrefsSaveRef = useRef<boolean>(true);
 
   useEffect(() => {
     // Ask permissions early
@@ -170,6 +182,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           skipWatchlistSaveRef.current = false;
         }
 
+        // hydrate strategy preferences
+        try {
+          const canPersist = !!(u.id && /^[0-9a-fA-F-]{36}$/.test(u.id));
+          if (canPersist) {
+            const prefs = await fetchUserStrategyPreferences(u.id);
+            if (isMounted && prefs) {
+              hydrateStrategyPreferences({
+                selectedStrategyGroupId:
+                  prefs.selected_strategy_group_id ?? undefined,
+                tradeMode: prefs.trade_mode,
+                tradePace: prefs.trade_pace,
+                contextMode: prefs.context_mode,
+                strategyComplexity: prefs.strategy_complexity,
+                autoApplyComplexity: prefs.auto_apply_complexity,
+                newsSentimentEnabled: prefs.news_sentiment_enabled,
+              });
+            }
+          }
+        } catch (error) {
+          console.warn(
+            "[AuthProvider] Failed to hydrate strategy prefs",
+            error
+          );
+        } finally {
+          skipStrategyPrefsSaveRef.current = false;
+        }
+
         // start realtime
         const stop = alertsService.startRealtime(u.id, {
           onTradeSignal: async (sig: TradeSignalRow) => {
@@ -241,8 +280,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setAlerts([]);
       skipWatchlistSaveRef.current = true;
+      skipStrategyPrefsSaveRef.current = true;
       try {
         if (watchlistSaveRef.current) clearTimeout(watchlistSaveRef.current);
+      } catch {}
+      try {
+        if (strategyPrefsSaveRef.current)
+          clearTimeout(strategyPrefsSaveRef.current);
       } catch {}
     }
 
@@ -280,6 +324,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {}
     };
   }, [user?.id, profile.watchlists, profile.favorites]);
+
+  useEffect(() => {
+    const canPersist = !!(user?.id && /^[0-9a-fA-F-]{36}$/.test(user.id));
+    if (!canPersist || skipStrategyPrefsSaveRef.current) return;
+
+    try {
+      if (strategyPrefsSaveRef.current)
+        clearTimeout(strategyPrefsSaveRef.current);
+    } catch {}
+
+    strategyPrefsSaveRef.current = setTimeout(() => {
+      const payload = {
+        user_id: user!.id,
+        trade_mode: profile.tradeMode || "day",
+        trade_pace: profile.tradePace || "auto",
+        context_mode: profile.contextMode || "price_action",
+        strategy_complexity: profile.strategyComplexity || "advanced",
+        auto_apply_complexity: !!profile.autoApplyComplexity,
+        news_sentiment_enabled: !!profile.newsSentimentEnabled,
+        selected_strategy_group_id:
+          profile.selectedStrategyGroupId ?? undefined,
+      } as const;
+
+      upsertUserStrategyPreferences(payload)
+        .then((row) => {
+          saveStrategyPreferences({
+            tradeMode: row.trade_mode,
+            tradePace: row.trade_pace,
+            contextMode: row.context_mode,
+            strategyComplexity: row.strategy_complexity,
+            autoApplyComplexity: row.auto_apply_complexity,
+            newsSentimentEnabled: row.news_sentiment_enabled,
+            selectedStrategyGroupId:
+              row.selected_strategy_group_id ?? undefined,
+          });
+        })
+        .catch((error) => {
+          console.warn(
+            "[AuthProvider] Failed to persist strategy prefs",
+            error
+          );
+        });
+    }, 600);
+
+    return () => {
+      try {
+        if (strategyPrefsSaveRef.current)
+          clearTimeout(strategyPrefsSaveRef.current);
+      } catch {}
+    };
+  }, [
+    user?.id,
+    profile.tradeMode,
+    profile.tradePace,
+    profile.contextMode,
+    profile.strategyComplexity,
+    profile.autoApplyComplexity,
+    profile.newsSentimentEnabled,
+    profile.selectedStrategyGroupId,
+  ]);
 
   // Subscribe to realtime bars for symbols with active alerts and update local lastPrice
   useEffect(() => {

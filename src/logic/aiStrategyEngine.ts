@@ -35,12 +35,9 @@ export type AIStrategyInput = {
 export type AIStrategyOutput = {
   strategyChosen: StrategyKey | string;
   side: TradeSide;
-  entry: number;
-  lateEntry?: number;
-  exit: number;
-  lateExit?: number;
-  stop: number;
-  targets?: number[];
+  entries?: number[];
+  exits?: number[];
+  tps?: number[];
   confidence: number;
   riskReward?: number;
   why: string[];
@@ -176,41 +173,49 @@ export async function runAIStrategy(
         console.log("❌ NO VALID PARSED RESULT - CONTINUING TO NEXT STRATEGY");
         continue;
       }
-      const desiredComplexity = (input.context?.complexity || "advanced") as
-        | "simple"
-        | "partial"
-        | "advanced";
-      const requireExit = desiredComplexity === "advanced";
+      if (!Array.isArray(parsed.entries) || parsed.entries.length === 0) {
+        console.log("❌ MISSING ENTRIES - CONTINUING TO NEXT STRATEGY");
+        continue;
+      }
+      const primaryEntry = parsed.entries?.[0];
+      const primaryExit = parsed.exits?.[0];
+      const primaryStop = parsed.exits?.[0];
       if (
-        !Number.isFinite(parsed.entry) ||
-        !Number.isFinite(parsed.stop) ||
-        (requireExit && !Number.isFinite(parsed.exit))
+        typeof primaryEntry !== "number" ||
+        !Number.isFinite(primaryEntry) ||
+        typeof primaryStop !== "number" ||
+        !Number.isFinite(primaryStop)
       ) {
         console.log("❌ INVALID NUMERIC VALUES - CONTINUING TO NEXT STRATEGY");
         console.log(
           "Entry:",
-          parsed.entry,
+          primaryEntry,
           "Exit:",
-          parsed.exit,
+          primaryStop,
           "Stop:",
-          parsed.stop
+          primaryStop
         );
         continue;
       }
       // Ensure at least one target for partial/advanced. For partial, prefer two.
-      if (!parsed.targets || parsed.targets.length === 0) {
+      if (!parsed.tps || parsed.tps.length === 0) {
         // Derive default targets from entry/stop distances
         try {
           const isLong = (parsed.side || "long") === "long";
-          const stopDistance = Math.abs(parsed.entry - parsed.stop);
+          const stopDistance = Math.abs(primaryEntry - primaryStop);
           const t1 = isLong
-            ? parsed.entry + stopDistance * 1.5
-            : parsed.entry - stopDistance * 1.5;
+            ? primaryEntry + stopDistance * 1.5
+            : primaryEntry - stopDistance * 1.5;
           const t2 = isLong
-            ? parsed.entry + stopDistance * 2.5
-            : parsed.entry - stopDistance * 2.5;
-          parsed.targets = desiredComplexity === "partial" ? [t1, t2] : [t1];
+            ? primaryEntry + stopDistance * 2.5
+            : primaryEntry - stopDistance * 2.5;
+          parsed.tps =
+            input.context?.complexity === "partial" ? [t1, t2] : [t1];
         } catch {}
+      }
+      // Default exits to stop if none provided
+      if (!parsed.exits || parsed.exits.length === 0) {
+        parsed.exits = [];
       }
       console.log("🎉 FINAL SUCCESSFUL RESULT:");
       console.log(JSON.stringify(parsed, null, 2));
@@ -232,12 +237,9 @@ export function aiOutputToTradePlan(
 ): TradePlanOverlay {
   const basePlan: TradePlanOverlay = {
     side: output.side,
-    entry: output.entry,
-    lateEntry: output.lateEntry,
-    exit: output.exit,
-    lateExit: output.lateExit,
-    stop: output.stop,
-    targets: output.targets,
+    entries: output.entries,
+    exits: output.exits,
+    tps: output.tps,
     riskReward: output.riskReward,
     complexity: complexity || "advanced", // Default to advanced if not specified
   };
@@ -259,53 +261,21 @@ function applyComplexityConstraints(
 
   switch (complexity) {
     case "simple": {
-      // Simple: Only entry, stop, and first target
-      constrainedPlan.lateEntry = undefined;
-      constrainedPlan.exit = undefined;
-      constrainedPlan.lateExit = undefined;
-      constrainedPlan.targets = plan.targets?.slice(0, 1) || [];
+      constrainedPlan.entries = plan.entries?.slice(0, 1) || [];
+      constrainedPlan.exits = plan.exits?.slice(0, 1) || [];
+      constrainedPlan.tps = plan.tps?.slice(0, 1) || [];
       break;
     }
     case "partial": {
-      // Partial: Entry, stop, and up to 2 targets (no separate exit levels)
-      constrainedPlan.lateEntry = undefined;
-      constrainedPlan.exit = undefined;
-      constrainedPlan.lateExit = undefined;
-      constrainedPlan.targets = plan.targets?.slice(0, 2) || [];
+      constrainedPlan.entries = plan.entries?.slice(0, 1) || [];
+      constrainedPlan.exits = plan.exits?.slice(0, 1) || [];
+      constrainedPlan.tps = plan.tps?.slice(0, 2) || [];
       break;
     }
     case "advanced": {
-      // Advanced: Entry + Late Entry (breakout/breakdown), Stop + Extended Stop, up to 3 targets
-      constrainedPlan.targets = plan.targets?.slice(0, 3) || [];
-
-      const { entry, stop } = constrainedPlan;
-      if (entry != null && stop != null) {
-        const isLong = (constrainedPlan.side || "long") === "long";
-        const stopDistance = Math.abs(entry - stop);
-
-        // Ensure lateEntry direction is correct: ABOVE entry for long, BELOW for short
-        const desiredLateEntry = isLong
-          ? entry + stopDistance * 0.3
-          : entry - stopDistance * 0.3;
-        if (
-          constrainedPlan.lateEntry == null ||
-          (isLong && constrainedPlan.lateEntry <= entry) ||
-          (!isLong && constrainedPlan.lateEntry >= entry)
-        ) {
-          constrainedPlan.lateEntry = desiredLateEntry;
-        }
-
-        // Remove explicit exit levels in advanced; compute extended stop instead
-        constrainedPlan.exit = undefined;
-        const extendedMultiplier = 1.3;
-        const extendedStopDistance = stopDistance * extendedMultiplier;
-        constrainedPlan.lateExit = isLong
-          ? entry - extendedStopDistance
-          : entry + extendedStopDistance;
-      } else {
-        // If entry/stop missing, still remove exit to avoid confusing lines
-        constrainedPlan.exit = undefined;
-      }
+      constrainedPlan.entries = plan.entries?.slice() || [];
+      constrainedPlan.exits = plan.exits?.slice() || [];
+      constrainedPlan.tps = plan.tps?.slice(0, 3) || [];
       break;
     }
   }

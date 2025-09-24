@@ -2,11 +2,9 @@ export type OutgoingSignal = {
   symbol: string;
   groupId: string;
   timeframe: string;
-  entry?: number;
-  lateEntry?: number;
-  exit?: number;
-  lateExit?: number;
-  targets?: number[];
+  entries: number[];
+  exits: number[];
+  tps: number[];
   createdAt: number;
 };
 
