@@ -44,7 +44,10 @@ import { sendLocalNotification } from "../services/notifications";
 import { searchStocksAutocomplete } from "../services/stockData";
 import { useTimeframeStore } from "../store/timeframeStore";
 import { useChatStore, ChatMessage } from "../store/chatStore";
-import { useSignalCacheStore, CachedSignal } from "../store/signalCacheStore";
+import {
+  useSignalCacheStore,
+  type CachedSignal,
+} from "../store/signalCacheStore";
 import { useAlertStore } from "../store/alertStore";
 import { runAIStrategy, aiOutputToTradePlan } from "../logic/aiStrategyEngine";
 import { type SimpleQuote, fetchSingleQuote } from "../services/quotes";
@@ -606,12 +609,28 @@ export default function StockDetailScreen() {
     // Reset symbol-specific state when symbol changes
     setAnalysis(null);
     setNews([]);
-    setCachedSignal(null);
     load();
     loadStockName().catch((error) => {
       console.error("Stock name loading failed:", error);
     });
   }, [symbol]);
+
+  useEffect(() => {
+    const cached = getCachedSignal(symbol);
+    if (
+      cached?.tradePlan &&
+      ((cached.tradePlan.entries && cached.tradePlan.entries.length) ||
+        (cached.tradePlan.exits && cached.tradePlan.exits.length) ||
+        (cached.tradePlan.tps && cached.tradePlan.tps.length))
+    ) {
+      setCachedSignal(cached);
+      chartBridgeRef.current?.updateLevels({
+        entries: cached.tradePlan.entries || [],
+        exits: cached.tradePlan.exits || [],
+        tps: cached.tradePlan.tps || [],
+      });
+    }
+  }, [symbol, getCachedSignal]);
 
   // Load latest regular session daily close for after-hours calculations
   useEffect(() => {
@@ -1133,9 +1152,6 @@ export default function StockDetailScreen() {
   const clearDraftPlan = useComposeDraftStore((s) => s.clearDraftPlan);
 
   useTradeDraftSync({ symbol, userId: user?.id, readOnly: true });
-
-
-
 
   // Re-apply levels when timeframe changes (like alerts do)
   useEffect(() => {

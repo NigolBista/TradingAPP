@@ -26,6 +26,17 @@ export interface CachedSignal {
   };
   // Raw analysis data for reuse
   rawAnalysisOutput?: any;
+  notificationMeta?: {
+    groupId?: string;
+    groupName?: string | null;
+    providerUserId?: string | null;
+    providerName?: string | null;
+    side?: "buy" | "sell" | null;
+    confidence?: number | null;
+    rationale?: string | null;
+    timeframe?: string | null;
+    notifiedAt?: number;
+  };
 }
 
 interface SignalCacheState {

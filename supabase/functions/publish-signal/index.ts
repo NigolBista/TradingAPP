@@ -56,6 +56,13 @@ function buildSignalNotificationPayload(payload: PublishSignalPayload) {
       exits: payload.exits,
       tps: payload.tps,
       groupId: payload.groupId,
+      groupName: payload.groupName ?? null,
+      providerUserId: payload.providerUserId,
+      providerName: payload.providerName ?? null,
+      side: payload.side ?? null,
+      confidence: payload.confidence ?? null,
+      rationale: payload.rationale ?? null,
+      timestamp: Date.now(),
     },
   };
 }

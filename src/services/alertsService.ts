@@ -40,6 +40,15 @@ export type TradeSignalRow = {
   targets: number[] | null;
   rationale: string | null;
   unique_key: string | null;
+  metadata: {
+    group_id?: string;
+    group_name?: string | null;
+    provider_user_id?: string | null;
+    provider_name?: string | null;
+    entries?: number[];
+    exits?: number[];
+    tps?: number[];
+  } | null;
   created_at: string;
 };
 
@@ -143,6 +152,28 @@ export const alertsService = {
       .eq("id", id)
       .eq("user_id", userId);
     if (error) throw error;
+  },
+
+  async fetchLatestSignal(
+    userId: string,
+    symbol: string,
+    options?: { groupId?: string | null }
+  ): Promise<TradeSignalRow | null> {
+    let query = supabase
+      .from("trade_signals")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("symbol", symbol)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (options?.groupId) {
+      query = query.contains("metadata", { group_id: options.groupId } as any);
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (error && error.code !== "PGRST116") throw error;
+    return (data as TradeSignalRow | null) ?? null;
   },
 
   async registerDeviceToken(userId: string, expoPushToken: string) {

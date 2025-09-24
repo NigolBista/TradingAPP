@@ -13,6 +13,7 @@ export type OutgoingSignal = {
   rationale?: string | null;
   groupName?: string;
   providerName?: string;
+  providerUserId?: string;
 };
 
 export async function sendSignal(

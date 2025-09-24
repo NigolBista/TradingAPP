@@ -226,10 +226,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           },
           onAlertEvent: async (evt) => {
             try {
-              await sendLocalNotification(
-                `${evt.symbol} Alert`,
-                `${evt.condition.replace("_", " ")}: $${evt.price.toFixed(2)}`
-              );
+              // Avoid duplicate notifications (remote push already sent by backend)
+              if (__DEV__) {
+                await sendLocalNotification(
+                  `${evt.symbol} Alert`,
+                  `${evt.condition.replace("_", " ")}: $${evt.price.toFixed(2)}`
+                );
+              }
             } catch (e) {}
           },
           onAlertChange: (row: AlertRow) => {

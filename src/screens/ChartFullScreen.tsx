@@ -300,7 +300,15 @@ export default function ChartFullScreen() {
     try {
       if (!chartBridgeRef.current) return;
       const plan: any =
-        draftForSymbol || cachedPlanForSymbol || currentTradePlan;
+        (draftForSymbol &&
+        Array.isArray(draftForSymbol.entries) &&
+        (draftForSymbol.entries.length ||
+          draftForSymbol.exits?.length ||
+          draftForSymbol.tps?.length)
+          ? draftForSymbol
+          : null) ||
+        cachedPlanForSymbol ||
+        currentTradePlan;
       if (plan) {
         console.log("🔄 Applying levels in ChartFullScreen:", plan);
         chartBridgeRef.current.updateLevels({
@@ -320,7 +328,15 @@ export default function ChartFullScreen() {
     try {
       if (!chartBridgeRef.current) return;
       const plan: any =
-        draftForSymbol || cachedPlanForSymbol || currentTradePlan;
+        (draftForSymbol &&
+        Array.isArray(draftForSymbol.entries) &&
+        (draftForSymbol.entries.length ||
+          draftForSymbol.exits?.length ||
+          draftForSymbol.tps?.length)
+          ? draftForSymbol
+          : null) ||
+        cachedPlanForSymbol ||
+        currentTradePlan;
       if (plan) {
         // Small delay to ensure chart has updated timeframe first
         setTimeout(() => {
