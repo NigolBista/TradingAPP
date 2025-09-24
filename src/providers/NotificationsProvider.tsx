@@ -2,9 +2,7 @@ import React, { useEffect, useRef } from "react";
 import * as Notifications from "expo-notifications";
 import { navigate, navigationRef } from "../navigation";
 import alertsService from "../services/alertsService";
-import { fetchSignalsForUser } from "../services/signalService";
 import { useAlertStore } from "../store/alertStore";
-import { useSignalCacheStore } from "../store/signalCacheStore";
 import { useAuth } from "./AuthProvider";
 
 type NotificationData = {
@@ -43,27 +41,15 @@ export function NotificationsProvider({
 }) {
   const { user } = useAuth();
   const setAlerts = useAlertStore((s) => s.setAlerts);
-  const cacheSignal = useSignalCacheStore((s) => s.cacheSignal);
   const receivedListenerRef = useRef<Notifications.Subscription | null>(null);
   const responseListenerRef = useRef<Notifications.Subscription | null>(null);
 
   useEffect(() => {
-    async function loadSignals() {
-      if (!user) return;
-      try {
-        const latest = await fetchSignalsForUser(user.id);
-        latest.forEach((sig) => cacheSignal(sig));
-      } catch (error) {
-        console.warn("[NotificationsProvider] Failed to load signals", error);
-      }
-    }
-
     async function syncAlerts() {
       if (!user) return;
       try {
         const serverAlerts = await alertsService.fetchAlerts(user.id);
         setAlerts(serverAlerts);
-        await loadSignals();
       } catch {
         // ignore sync errors
       }

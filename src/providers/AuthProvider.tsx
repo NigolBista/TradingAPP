@@ -9,7 +9,6 @@ import React, {
 import {
   registerForPushNotificationsAsync,
   sendLocalNotification,
-  sendSignalPushNotification,
 } from "../services/notifications";
 import { useUserStore } from "../store/userStore";
 import { supabase } from "../lib/supabase";

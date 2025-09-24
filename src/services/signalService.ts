@@ -1,4 +1,3 @@
-import { sendSignalPushNotification } from "./notifications";
 import { supabase } from "../lib/supabase";
 
 export type OutgoingSignal = {
@@ -75,24 +74,6 @@ export async function sendSignal(
     return { ok: Boolean((data as any)?.ok) };
   } catch (e) {
     console.warn("[signalService] sendSignal failed", e);
-    try {
-      notifySubscribers({
-        symbol: signal.symbol,
-        groupId: signal.groupId,
-        timeframe: signal.timeframe,
-        entries: signal.entries,
-        exits: signal.exits,
-        tps: signal.tps,
-        createdAt: signal.createdAt,
-        groupName: signal.groupName,
-        ownerName: signal.providerName,
-        side: signal.side,
-        confidence: signal.confidence,
-        rationale: signal.rationale,
-      });
-    } catch (err) {
-      console.warn("[signalService] fallback notify failed", err);
-    }
     return { ok: false };
   }
 }
@@ -122,9 +103,4 @@ export function notifySubscribers(signal: SignalPayload) {
       console.warn("[signalService] listener error", e);
     }
   });
-  try {
-    void sendSignalPushNotification(signal);
-  } catch (error) {
-    console.warn("[signalService] push notify error", error);
-  }
 }
