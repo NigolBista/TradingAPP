@@ -183,6 +183,48 @@ export default function ChartFullScreen() {
     tps: number[];
   }>({ entries: [], exits: [], tps: [] });
 
+  const selectedStrategyGroupId = profile.selectedStrategyGroupId;
+  const ownedGroupIds = React.useMemo(() => {
+    const groups = Array.isArray(profile.strategyGroups)
+      ? (profile.strategyGroups as any[])
+      : [];
+    return groups.reduce<string[]>((acc, group: any) => {
+      if (!group || typeof group.id !== "string") {
+        return acc;
+      }
+      const ownerId =
+        group.owner_user_id ??
+        group.ownerUserId ??
+        group.ownerId ??
+        group.owner ??
+        null;
+      if (ownerId) {
+        if (!user?.id || ownerId !== user.id) {
+          return acc;
+        }
+      }
+      acc.push(group.id);
+      return acc;
+    }, []);
+  }, [profile.strategyGroups, user?.id]);
+
+  const canCompose = React.useMemo(() => {
+    if (!selectedStrategyGroupId) return false;
+    return ownedGroupIds.includes(selectedStrategyGroupId);
+  }, [selectedStrategyGroupId, ownedGroupIds]);
+
+  useEffect(() => {
+    if (!canCompose && composeMode) {
+      setComposeMode(false);
+    }
+  }, [canCompose, composeMode]);
+
+  useEffect(() => {
+    if (!canCompose && composeMode) {
+      setComposeMode(false);
+    }
+  }, [canCompose, composeMode]);
+
   const drafts = useComposeDraftStore((s) => s.drafts);
   const setDraftPlan = useComposeDraftStore((s) => s.setDraftPlan);
   const clearDraftPlan = useComposeDraftStore((s) => s.clearDraftPlan);
@@ -1642,8 +1684,9 @@ export default function ChartFullScreen() {
           priceColors={priceColors}
           composeMode={composeMode}
           composeButtons={composeButtons}
+          allowCompose={canCompose}
           onComposeAction={({ action, price }) => {
-            if (!composeMode) return;
+            if (!composeMode || !canCompose) return;
             if (action === "back") {
               setComposeMode(false);
               setComposeButtons(computeComposeButtons(selectedComplexity));
@@ -1802,6 +1845,9 @@ export default function ChartFullScreen() {
             });
           }}
           onCrosshairClick={() => {
+            if (!canCompose) {
+              return;
+            }
             setComposeMode(true);
             setComposeButtons(computeComposeButtons(selectedComplexity));
           }}

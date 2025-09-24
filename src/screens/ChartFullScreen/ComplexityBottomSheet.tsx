@@ -52,12 +52,10 @@ export default function ComplexityBottomSheet({
   );
   const anim = useRef(new Animated.Value(0)).current;
   const ownedGroups = (storeProfile?.strategyGroups || []) as StrategyGroup[];
-  const subscribedGroups = (storeProfile?.subscribedStrategyGroups || []) as StrategyGroup[];
+  const subscribedGroups = (storeProfile?.subscribedStrategyGroups ||
+    []) as StrategyGroup[];
   const groups = [...ownedGroups, ...subscribedGroups];
-  const canShowGroups =
-    groups.length > 0 ||
-    !!storeProfile?.selectedStrategyGroupId ||
-    !!storeProfile?.isSignalProvider;
+  const canShowGroups = groups.length > 0;
   useEffect(() => {
     if (visible) {
       Animated.timing(anim, {

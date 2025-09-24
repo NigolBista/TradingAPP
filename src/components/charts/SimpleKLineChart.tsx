@@ -99,6 +99,7 @@ interface Props {
     backgroundColor?: any;
   };
   priceColors?: { up: string; down: string; noChange?: string };
+  allowCompose?: boolean;
 }
 
 export interface IndicatorConfig {
@@ -141,6 +142,7 @@ export default function SimpleKLineChart({
   onCrosshairClick,
   composeMode = false,
   composeButtons = [],
+  allowCompose = true,
   onComposeAction,
   onChartReady,
   onDataApplied,
@@ -225,9 +227,13 @@ export default function SimpleKLineChart({
   );
   const setComposeModeOnWeb = useCallback(
     (enabled: boolean) => {
-      sendToWebView({ type: "setComposeMode", enabled });
+      sendToWebView({
+        type: "setComposeMode",
+        enabled,
+        allowed: allowCompose,
+      });
     },
-    [sendToWebView]
+    [sendToWebView, allowCompose]
   );
 
   // Expose bridge methods to parent component
@@ -710,7 +716,10 @@ export default function SimpleKLineChart({
                 var buttonsContainer = document.getElementById('crosshair-buttons');
                 if (!buttonsContainer) return;
                 window.__SIMPLE_KLINE__ = window.__SIMPLE_KLINE__ || {};
-                if (!window.__SIMPLE_KLINE__.composeMode) return;
+                if (!isComposeAllowed() || !window.__SIMPLE_KLINE__.composeMode) {
+                  buttonsContainer.innerHTML = '';
+                  return;
+                }
                 var arr = Array.isArray(data.buttons) ? data.buttons.filter(function(btn){
                   return typeof btn === 'object' && btn && typeof btn.id === 'string';
                 }) : [];
@@ -743,7 +752,9 @@ export default function SimpleKLineChart({
             } else if (data.type === 'setComposeMode') {
               try {
                 window.__SIMPLE_KLINE__ = window.__SIMPLE_KLINE__ || {};
-                window.__SIMPLE_KLINE__.composeMode = !!data.enabled;
+                var composeAllowed = data && typeof data.allowed === 'boolean' ? data.allowed : true;
+                window.__SIMPLE_KLINE__.composeAllowed = composeAllowed;
+                window.__SIMPLE_KLINE__.composeMode = composeAllowed && !!data.enabled;
                 var buttonsContainer = document.getElementById('crosshair-buttons');
                 if (!buttonsContainer) return;
                 if (!window.__SIMPLE_KLINE__.composeMode) {
@@ -755,13 +766,15 @@ export default function SimpleKLineChart({
                     var measureBtn = document.createElement('button');
                     measureBtn.className = 'custom-button'; measureBtn.id = 'btn-measure'; measureBtn.title = 'Measure'; measureBtn.innerText = 'straighten';
                     buttonsContainer.appendChild(measureBtn);
-                    var crosshairBtn = document.createElement('button');
-                    crosshairBtn.className = 'custom-button'; crosshairBtn.id = 'btn-crosshair'; crosshairBtn.title = 'Crosshair'; crosshairBtn.innerText = 'add';
-                    buttonsContainer.appendChild(crosshairBtn);
                     // bind defaults
                     try { alertBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { var price = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice; if (typeof price === 'number' && window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'alertClick', price: price })); } } catch(err){} }); } catch(_){ }
                     try { measureBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'measureClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
-                    try { crosshairBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'crosshairClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
+                    if (isComposeAllowed()) {
+                      var crosshairBtn = document.createElement('button');
+                      crosshairBtn.className = 'custom-button'; crosshairBtn.id = 'btn-crosshair'; crosshairBtn.title = 'Crosshair'; crosshairBtn.innerText = 'add';
+                      buttonsContainer.appendChild(crosshairBtn);
+                      try { crosshairBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'crosshairClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
+                    }
                   }
                 }
               } catch(e){ post({ error: 'setComposeMode_failed', message: String(e && e.message || e) }); }
@@ -820,6 +833,18 @@ export default function SimpleKLineChart({
         var SERVER_OFFSET_MS = ${JSON.stringify(
           typeof serverOffsetMs === "number" ? serverOffsetMs : 0
         )};
+        var COMPOSE_ALLOWED = ${JSON.stringify(allowCompose)};
+        function isComposeAllowed() {
+          try {
+            if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+            if (typeof window.__SIMPLE_KLINE__.composeAllowed === 'boolean') {
+              return window.__SIMPLE_KLINE__.composeAllowed !== false;
+            }
+            var allowed = (typeof COMPOSE_ALLOWED === 'boolean') ? COMPOSE_ALLOWED : true;
+            window.__SIMPLE_KLINE__.composeAllowed = allowed;
+            return allowed !== false;
+          } catch (_) { return true; }
+        }
 
         function mapPeriod(tf){
           try {
@@ -1884,12 +1909,14 @@ export default function SimpleKLineChart({
                   var measureBtn = document.createElement('button');
                   measureBtn.className = 'custom-button'; measureBtn.id = 'btn-measure'; measureBtn.title = 'Measure'; measureBtn.innerText = 'straighten';
                   buttonsContainer.appendChild(measureBtn);
-                  var crosshairBtn = document.createElement('button');
-                  crosshairBtn.className = 'custom-button'; crosshairBtn.id = 'btn-crosshair'; crosshairBtn.title = 'Crosshair'; crosshairBtn.innerText = 'add';
-                  buttonsContainer.appendChild(crosshairBtn);
                   try { alertBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { var price = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice; if (typeof price === 'number' && window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'alertClick', price: price })); } } catch(err){} }); } catch(_){ }
                   try { measureBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'measureClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
-                  try { crosshairBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'crosshairClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
+                  if (isComposeAllowed()) {
+                    var crosshairBtn = document.createElement('button');
+                    crosshairBtn.className = 'custom-button'; crosshairBtn.id = 'btn-crosshair'; crosshairBtn.title = 'Crosshair'; crosshairBtn.innerText = 'add';
+                    buttonsContainer.appendChild(crosshairBtn);
+                    try { crosshairBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'crosshairClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
+                  }
                 }
                 buildDefaults();
               } catch(e) { post({ warn: 'Custom button setup failed', message: String(e && e.message || e) }); }
