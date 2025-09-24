@@ -257,7 +257,8 @@ export default function ChartFullScreen() {
   useEffect(() => {
     try {
       if (!chartBridgeRef.current) return;
-      const plan: any = draftForSymbol || cachedPlanForSymbol;
+      const plan: any =
+        draftForSymbol || cachedPlanForSymbol || currentTradePlan;
       if (plan) {
         console.log("🔄 Applying levels in ChartFullScreen:", plan);
         chartBridgeRef.current.updateLevels({
@@ -270,13 +271,14 @@ export default function ChartFullScreen() {
         chartBridgeRef.current.updateLevels({});
       }
     } catch (_) {}
-  }, [cachedPlanForSymbol, draftForSymbol]);
+  }, [cachedPlanForSymbol, currentTradePlan, draftForSymbol]);
 
   // Re-apply levels when timeframe changes (like alerts do)
   useEffect(() => {
     try {
       if (!chartBridgeRef.current) return;
-      const plan: any = draftForSymbol || cachedPlanForSymbol;
+      const plan: any =
+        draftForSymbol || cachedPlanForSymbol || currentTradePlan;
       if (plan) {
         // Small delay to ensure chart has updated timeframe first
         setTimeout(() => {
@@ -292,7 +294,7 @@ export default function ChartFullScreen() {
         }, 150);
       }
     } catch (_) {}
-  }, [extendedTf, draftForSymbol, cachedPlanForSymbol]);
+  }, [cachedPlanForSymbol, currentTradePlan, draftForSymbol, extendedTf]);
 
   // Analysis state
   const [lastCandle, setLastCandle] = useState<Candle | null>(null);

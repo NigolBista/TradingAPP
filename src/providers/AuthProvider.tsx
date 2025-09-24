@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import {
   registerForPushNotificationsAsync,
-  scheduleSignalAlert,
   sendLocalNotification,
   sendSignalPushNotification,
 } from "../services/notifications";
@@ -213,21 +212,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // start realtime
         const stop = alertsService.startRealtime(u.id, {
-          onTradeSignal: async (sig: TradeSignalRow) => {
+          onTradeSignal: (sig: TradeSignalRow) => {
             try {
-              if (sig.entry_price && sig.confidence) {
-                await scheduleSignalAlert(
-                  sig.symbol,
-                  sig.action,
-                  sig.confidence,
-                  sig.entry_price
-                );
-              } else {
-                await sendLocalNotification(
-                  `${sig.symbol} ${sig.kind}`,
-                  `${sig.action.toUpperCase()} signal received`
-                );
-              }
               notifySubscribers({
                 symbol: sig.symbol,
                 groupId: sig.user_id,

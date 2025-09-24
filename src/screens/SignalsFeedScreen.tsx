@@ -141,7 +141,7 @@ const STRATEGY_FILTERS = [
 ];
 
 export default function SignalsFeedScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const profile = useUserStore((s) => s.profile);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -265,8 +265,7 @@ export default function SignalsFeedScreen() {
         </Text>
 
         <Text style={[styles.signalDetails, { marginTop: 4 }]}>
-          Size {signal.tradePlan.positionSize} • Risk $
-          {signal.tradePlan.maxRiskAmount?.toFixed(0) || "N/A"}
+          Size {signal.tradePlan.positionSize}
         </Text>
       </Pressable>
     );
