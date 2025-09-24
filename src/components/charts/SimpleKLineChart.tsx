@@ -982,17 +982,111 @@ export default function SimpleKLineChart({
                 var upColor = PRICE_COLORS.up || '#10B981';
                 var downColor = PRICE_COLORS.down || '#EF4444';
                 var noChangeColor = PRICE_COLORS.noChange || (THEME === 'dark' ? '#C7CDD7' : '#666666');
-                
+                var upBorder = PRICE_COLORS.upBorder || upColor;
+                var downBorder = PRICE_COLORS.downBorder || downColor;
+                var noChangeBorder = PRICE_COLORS.noChangeBorder || noChangeColor;
+                var upWick = PRICE_COLORS.upWick || upBorder;
+                var downWick = PRICE_COLORS.downWick || downBorder;
+                var noChangeWick = PRICE_COLORS.noChangeWick || noChangeBorder;
+                var upAreaLine = PRICE_COLORS.areaLineUp || upColor;
+                var downAreaLine = PRICE_COLORS.areaLineDown || downColor;
+                var upAreaFill = PRICE_COLORS.areaFillUp || 'rgba(33, 150, 243, 0.2)';
+                var downAreaFill = PRICE_COLORS.areaFillDown || 'rgba(33, 150, 243, 0.2)';
+                var upAreaFillTop = PRICE_COLORS.areaFillUpTop || 'rgba(33, 150, 243, 0.01)';
+                var downAreaFillTop = PRICE_COLORS.areaFillDownTop || 'rgba(33, 150, 243, 0.01)';
+                var areaGradientFor = function(colorTop, colorBottom){
+                  try {
+                    if (Array.isArray(colorBottom)) {
+                      return colorBottom;
+                    }
+                    return [
+                      { offset: 0, color: colorTop },
+                      { offset: 1, color: colorBottom }
+                    ];
+                  } catch(_) {
+                    return [
+                      { offset: 0, color: colorTop },
+                      { offset: 1, color: colorBottom }
+                    ];
+                  }
+                };
                 // Apply at root candle level
                 opts.candle.upColor = upColor;
                 opts.candle.downColor = downColor;
                 opts.candle.noChangeColor = noChangeColor;
-                
+                opts.candle.upBorderColor = upBorder;
+                opts.candle.downBorderColor = downBorder;
+                opts.candle.noChangeBorderColor = noChangeBorder;
+                opts.candle.upWickColor = upWick;
+                opts.candle.downWickColor = downWick;
+                opts.candle.noChangeWickColor = noChangeWick;
                 // Apply at style level
                 if (!opts.candle.style) opts.candle.style = {};
                 opts.candle.style.upColor = upColor;
                 opts.candle.style.downColor = downColor;
                 opts.candle.style.noChangeColor = noChangeColor;
+                opts.candle.style.upBorderColor = upBorder;
+                opts.candle.style.downBorderColor = downBorder;
+                opts.candle.style.noChangeBorderColor = noChangeBorder;
+                opts.candle.style.upWickColor = upWick;
+                opts.candle.style.downWickColor = downWick;
+                opts.candle.style.noChangeWickColor = noChangeWick;
+                opts.candle.style.upArea = {
+                  lineColor: upAreaLine,
+                  backgroundColor: areaGradientFor(upAreaFillTop, upAreaFill)
+                };
+                opts.candle.style.downArea = {
+                  lineColor: downAreaLine,
+                  backgroundColor: areaGradientFor(downAreaFillTop, downAreaFill)
+                };
+                opts.candle.style.noChangeArea = {
+                  lineColor: opts.candle.style.noChangeColor,
+                  backgroundColor: areaGradientFor('rgba(102, 102, 102, 0.01)', opts.candle.style.noChangeColor)
+                };
+                opts.candle.bar = opts.candle.bar || {};
+                opts.candle.bar.upColor = upColor;
+                opts.candle.bar.downColor = downColor;
+                opts.candle.bar.noChangeColor = noChangeColor;
+                opts.candle.bar.upBorderColor = upBorder;
+                opts.candle.bar.downBorderColor = downBorder;
+                opts.candle.bar.noChangeBorderColor = noChangeBorder;
+                opts.candle.bar.upWickColor = upWick;
+                opts.candle.bar.downWickColor = downWick;
+                opts.candle.bar.noChangeWickColor = noChangeWick;
+                // Provide fallback for third-party property naming
+                opts.candle.colors = Object.assign({}, opts.candle.colors || {}, {
+                  up: upColor,
+                  down: downColor,
+                  noChange: noChangeColor,
+                  upBorder: upBorder,
+                  downBorder: downBorder,
+                  noChangeBorder: noChangeBorder,
+                  upWick: upWick,
+                  downWick: downWick,
+                  noChangeWick: noChangeWick
+                });
+                opts.candle.compareRule = PRICE_COLORS.compareRule || 'current_open';
+                opts.candle.areaUp = {
+                  lineSize: 2,
+                  lineColor: upAreaLine,
+                  backgroundColor: areaGradientFor(upAreaFillTop, upAreaFill),
+                  smooth: false,
+                  value: 'close'
+                };
+                opts.candle.areaDown = {
+                  lineSize: 2,
+                  lineColor: downAreaLine,
+                  backgroundColor: areaGradientFor(downAreaFillTop, downAreaFill),
+                  smooth: false,
+                  value: 'close'
+                };
+                opts.candle.areaNoChange = {
+                  lineSize: 2,
+                  lineColor: opts.candle.style.noChangeColor,
+                  backgroundColor: areaGradientFor('rgba(102, 102, 102, 0.01)', opts.candle.style.noChangeColor),
+                  smooth: false,
+                  value: 'close'
+                };
               }
             } catch(_) {}
             

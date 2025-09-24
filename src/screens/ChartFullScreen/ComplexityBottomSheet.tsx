@@ -52,9 +52,7 @@ export default function ComplexityBottomSheet({
   );
   const anim = useRef(new Animated.Value(0)).current;
   const ownedGroups = (storeProfile?.strategyGroups || []) as StrategyGroup[];
-  const subscribedGroups = (storeProfile?.subscribedStrategyGroups ||
-    []) as StrategyGroup[];
-  const groups = [...ownedGroups, ...subscribedGroups];
+  const groups = ownedGroups;
   const canShowGroups = groups.length > 0;
   useEffect(() => {
     if (visible) {
@@ -314,17 +312,6 @@ export default function ComplexityBottomSheet({
                   </Pressable>
                 </View>
               </View>
-
-              <Text
-                style={{
-                  fontSize: 14,
-                  color: "#888",
-                  textAlign: "center",
-                  marginBottom: 20,
-                }}
-              >
-                Choose your preferred trading strategy complexity level
-              </Text>
 
               {Object.entries(STRATEGY_COMPLEXITY_CONFIGS).map(
                 ([key, config]) => {
