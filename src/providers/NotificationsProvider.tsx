@@ -8,6 +8,10 @@ import { useAuth } from "./AuthProvider";
 type NotificationData = {
   screen?: string;
   symbol?: string;
+  timeframe?: string;
+  entries?: number[];
+  exits?: number[];
+  tps?: number[];
   condition?: string;
   price?: number;
   [key: string]: unknown;
@@ -76,7 +80,27 @@ export function NotificationsProvider({
         }
 
         if (typeof data.symbol === "string" && data.symbol.length > 0) {
-          navigateWhenReady("StockDetail", { symbol: data.symbol });
+          const params: Record<string, unknown> = { symbol: data.symbol };
+          if (typeof data.timeframe === "string") {
+            params.initialTimeframe = data.timeframe;
+          }
+          if (
+            Array.isArray(data.entries) ||
+            Array.isArray(data.exits) ||
+            Array.isArray(data.tps)
+          ) {
+            params.tradePlan = {
+              entries: Array.isArray(data.entries) ? data.entries : [],
+              exits: Array.isArray(data.exits) ? data.exits : [],
+              tps: Array.isArray(data.tps) ? data.tps : [],
+            };
+          }
+          const hasLevels =
+            Array.isArray(params.tradePlan?.entries) ||
+            Array.isArray(params.tradePlan?.exits) ||
+            Array.isArray(params.tradePlan?.tps);
+          const targetScreen = hasLevels ? "ChartFullScreen" : "StockDetail";
+          navigateWhenReady(targetScreen, params);
           return;
         }
       } catch {

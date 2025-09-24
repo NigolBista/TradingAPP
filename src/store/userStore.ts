@@ -54,6 +54,7 @@ export interface UserProfile {
   isSignalProvider?: boolean;
   strategyGroups?: StrategyGroup[];
   selectedStrategyGroupId?: string;
+  subscribedStrategyGroups?: StrategyGroup[];
 }
 
 export interface StrategyGroup {

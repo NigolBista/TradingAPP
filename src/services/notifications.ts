@@ -122,3 +122,33 @@ export async function scheduleSignalAlert(
     trigger: null,
   });
 }
+
+export async function sendSignalPushNotification(payload: {
+  symbol: string;
+  groupId: string;
+  entries: number[];
+  exits: number[];
+  tps: number[];
+  timeframe: string;
+  groupName?: string;
+  ownerName?: string;
+}) {
+  const title = `${payload.groupName || "Strategy"} shared ${payload.symbol}`;
+  const body = `New strategy update (${payload.timeframe}). Tap to view levels.`;
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body,
+      data: {
+        screen: "ChartFullScreen",
+        symbol: payload.symbol,
+        timeframe: payload.timeframe,
+        entries: payload.entries,
+        exits: payload.exits,
+        tps: payload.tps,
+        groupId: payload.groupId,
+      },
+    },
+    trigger: null,
+  });
+}

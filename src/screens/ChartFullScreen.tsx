@@ -8,6 +8,7 @@ import {
   useColorScheme,
   Modal,
   TextInput,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -55,6 +56,7 @@ import alertsService from "../services/alertsService";
 import { useAuth } from "../providers/AuthProvider";
 import { StrategyComplexity } from "../logic/types";
 import { sendSignal } from "../services/signalService";
+import { STRATEGY_COMPLEXITY_CONFIGS } from "../logic/strategyComplexity";
 import { fetchSingleQuote, type SimpleQuote } from "../services/quotes";
 // removed unused federalReserve import
 import {
@@ -173,7 +175,7 @@ export default function ChartFullScreen() {
   // Compose mode state for crosshair actions
   const [composeMode, setComposeMode] = useState<boolean>(false);
   const [composeButtons, setComposeButtons] = useState<
-    Array<{ id: string; label: string }>
+    Array<{ id: string; label: string; icon?: string }>
   >([]);
   const [composeDraft, setComposeDraft] = useState<{
     entries: number[];
@@ -376,31 +378,14 @@ export default function ChartFullScreen() {
 
   // Compose buttons per complexity
   const computeComposeButtons = useCallback(
-    (complexity: StrategyComplexity): Array<{ id: string; label: string }> => {
-      if (complexity === "simple") {
-        return [
-          { id: "entry", label: "Entry" },
-          { id: "exit", label: "Exit" },
-          { id: "tp", label: "TP" },
-          { id: "send", label: "Send" },
-        ];
-      }
-      if (complexity === "partial") {
-        return [
-          { id: "entry", label: "Entry" },
-          { id: "exit", label: "Exit" },
-          { id: "tp1", label: "TP1" },
-          { id: "tp2", label: "TP2" },
-          { id: "send", label: "Send" },
-        ];
-      }
+    (
+      _complexity: StrategyComplexity
+    ): Array<{ id: string; label: string; icon?: string }> => {
       return [
         { id: "entry", label: "Entry" },
         { id: "exit", label: "Exit" },
-        { id: "tp1", label: "TP1" },
-        { id: "tp2", label: "TP2" },
-        { id: "tp3", label: "TP3" },
-        { id: "send", label: "Send" },
+        { id: "tp", label: "TP" },
+        { id: "back", label: "Back", icon: "arrow_back" },
       ];
     },
     []
@@ -1643,30 +1628,104 @@ export default function ChartFullScreen() {
           composeButtons={composeButtons}
           onComposeAction={({ action, price }) => {
             if (!composeMode) return;
+            if (action === "back") {
+              setComposeMode(false);
+              setComposeButtons(computeComposeButtons(selectedComplexity));
+              return;
+            }
+
             if (!(price > 0)) return;
+
             setComposeDraft((prev) => {
+              const sanitize = (arr?: number[]) =>
+                Array.isArray(arr)
+                  ? arr.filter(
+                      (value) =>
+                        typeof value === "number" && Number.isFinite(value)
+                    )
+                  : [];
+
               const next = {
-                entries: [...(prev.entries || [])],
-                exits: [...(prev.exits || [])],
-                tps: [...(prev.tps || [])],
+                entries: sanitize(prev.entries),
+                exits: sanitize(prev.exits),
+                tps: sanitize(prev.tps),
               };
+
+              const config = STRATEGY_COMPLEXITY_CONFIGS[selectedComplexity];
+              const allowMultipleEntries = !!config?.features.multipleEntries;
+              const allowMultipleExits = !!config?.features.multipleExits;
+              const maxTargets = config?.features.maxTargets ?? 1;
+
+              const notifyLimitReached = (label: string) => {
+                Alert.alert(
+                  "Limit reached",
+                  `The ${selectedComplexity} strategy allows only ${label}.`
+                );
+              };
+
+              const addEntry = () => {
+                if (allowMultipleEntries) {
+                  next.entries = [...next.entries, price];
+                  return true;
+                }
+                if (next.entries.length >= 1) {
+                  notifyLimitReached("one entry level");
+                  return false;
+                }
+                next.entries = [price];
+                return true;
+              };
+
+              const addExit = () => {
+                if (allowMultipleExits) {
+                  next.exits = [...next.exits, price];
+                  return true;
+                }
+                if (next.exits.length >= 1) {
+                  notifyLimitReached("one exit level");
+                  return false;
+                }
+                next.exits = [price];
+                return true;
+              };
+
+              const addTarget = () => {
+                if (maxTargets <= 0) {
+                  notifyLimitReached("take profit levels");
+                  return false;
+                }
+
+                if (next.tps.length >= maxTargets) {
+                  notifyLimitReached(
+                    maxTargets === 1
+                      ? "one take profit level"
+                      : `${maxTargets} take profit levels`
+                  );
+                  return false;
+                }
+
+                if (maxTargets === 1) {
+                  next.tps = [price];
+                } else {
+                  next.tps = [...next.tps, price];
+                }
+                return true;
+              };
+
+              let didChange = false;
+
               if (action === "entry") {
-                next.entries.push(price);
+                didChange = addEntry();
               } else if (action === "exit") {
-                next.exits.push(price);
-              } else if (action === "tp" || action === "tp1") {
-                next.tps[0] = price;
-              } else if (action === "tp2") {
-                next.tps[1] = price;
-              } else if (action === "tp3") {
-                next.tps[2] = price;
-              } else if (action === "send") {
-                // Trigger send flow
-                try {
-                  handleSendSignal();
-                } catch (_) {}
+                didChange = addExit();
+              } else if (action === "tp") {
+                didChange = addTarget();
               }
-              // Live-preview levels while composing
+
+              if (!didChange) {
+                return prev;
+              }
+
               try {
                 chartBridgeRef.current?.updateLevels({
                   entries: next.entries,
@@ -1674,6 +1733,7 @@ export default function ChartFullScreen() {
                   tps: next.tps,
                 });
               } catch (_) {}
+
               try {
                 const updatedAt = Date.now();
                 setDraftPlan(symbol, {
@@ -1721,6 +1781,7 @@ export default function ChartFullScreen() {
                   }
                 }
               } catch (_) {}
+
               return next;
             });
           }}

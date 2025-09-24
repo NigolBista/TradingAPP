@@ -10,6 +10,7 @@ import {
   registerForPushNotificationsAsync,
   scheduleSignalAlert,
   sendLocalNotification,
+  sendSignalPushNotification,
 } from "../services/notifications";
 import { useUserStore } from "../store/userStore";
 import { supabase } from "../lib/supabase";
@@ -18,6 +19,7 @@ import alertsService, {
   type AlertRow,
   type TradeSignalRow,
 } from "../services/alertsService";
+import { notifySubscribers } from "../services/signalService";
 import { useAlertStore } from "../store/alertStore";
 import barsService from "../services/barsService";
 import {
@@ -226,6 +228,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                   `${sig.action.toUpperCase()} signal received`
                 );
               }
+              notifySubscribers({
+                symbol: sig.symbol,
+                groupId: sig.user_id,
+                timeframe: sig.timeframe,
+                entries: sig.entry_price ? [sig.entry_price] : [],
+                exits: sig.stop_loss ? [sig.stop_loss] : [],
+                tps: Array.isArray(sig.targets) ? sig.targets : [],
+                createdAt: Date.now(),
+              });
             } catch (e) {}
           },
           onAlertEvent: async (evt) => {

@@ -7,6 +7,7 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../providers/AuthProvider";
@@ -14,7 +15,9 @@ import { useUserStore } from "../store/userStore";
 import {
   createStrategyGroup,
   listMyStrategyGroups,
+  listAvailableStrategyGroups,
   subscribeToGroup,
+  deleteStrategyGroup,
 } from "../services/strategyGroupsService";
 
 export default function StrategySettingsScreen() {
@@ -24,7 +27,11 @@ export default function StrategySettingsScreen() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
-  const [groups, setGroups] = useState<any[]>([]);
+  const [ownedGroups, setOwnedGroups] = useState<any[]>([]);
+  const [subscribedGroups, setSubscribedGroups] = useState<any[]>([]);
+  const [availableGroups, setAvailableGroups] = useState<any[]>([]);
+  const [loadingPublic, setLoadingPublic] = useState(false);
+  const [errorPublic, setErrorPublic] = useState<string | null>(null);
 
   const canCreate = useMemo(
     () => !!user?.id && name.trim().length > 0,
@@ -36,18 +43,28 @@ export default function StrategySettingsScreen() {
     (async () => {
       if (!user?.id) return;
       try {
-        const list = await listMyStrategyGroups(user.id);
-        if (mounted) setGroups(list || []);
-        // sync into store so other screens (like bottom sheet) can read it
-        if (list && list.length > 0) {
-          setProfile({ strategyGroups: list as any });
-        }
+        await refreshMyGroups();
+        await refreshAvailable();
       } catch {}
     })();
     return () => {
       mounted = false;
     };
   }, [user?.id]);
+
+  const refreshAvailable = async () => {
+    if (!user?.id) return;
+    try {
+      setLoadingPublic(true);
+      setErrorPublic(null);
+      const list = await listAvailableStrategyGroups(user.id);
+      setAvailableGroups(list || []);
+    } catch (e: any) {
+      setErrorPublic(e?.message || "Failed to load public groups");
+    } finally {
+      setLoadingPublic(false);
+    }
+  };
 
   async function handleCreate() {
     if (!user?.id) return;
@@ -59,7 +76,7 @@ export default function StrategySettingsScreen() {
         name: name.trim(),
         description: description.trim() || undefined,
       });
-      setGroups((prev) => [g, ...prev]);
+      setOwnedGroups((prev) => [g, ...prev]);
       setName("");
       setDescription("");
       setProfile({
@@ -80,24 +97,88 @@ export default function StrategySettingsScreen() {
     try {
       await subscribeToGroup({ userId: user.id, groupId });
       // ensure it's present in store list and selected
-      const existing = (profile.strategyGroups || []).find(
+      const existingOwned = (profile.strategyGroups || []).find(
         (x: any) => x.id === groupId
       );
-      const selected = groups.find((x) => x.id === groupId) || existing;
+      const existingSubscribed = (profile.subscribedStrategyGroups || []).find(
+        (x: any) => x.id === groupId
+      );
+      const ownedSelected = ownedGroups.find((x) => x.id === groupId);
+      const subscribedSelected = subscribedGroups.find(
+        (x) => x.id === groupId
+      );
+      const selected =
+        ownedSelected || subscribedSelected || existingOwned || existingSubscribed;
       setProfile({
         selectedStrategyGroupId: groupId,
-        strategyGroups: selected
+        strategyGroups: ownedSelected
           ? [
-              selected,
+              ownedSelected,
               ...((profile.strategyGroups || []).filter(
                 (x: any) => x.id !== groupId
               ) as any[]),
             ]
           : (profile.strategyGroups as any[]),
+        subscribedStrategyGroups: subscribedSelected
+          ? [
+              subscribedSelected,
+              ...((profile.subscribedStrategyGroups || []).filter(
+                (x: any) => x.id !== groupId
+              ) as any[]),
+            ]
+          : (profile.subscribedStrategyGroups as any[]),
       });
       Alert.alert("Subscribed", "You are now a member of this group");
+      await refreshAvailable();
+      await refreshMyGroups();
     } catch (e: any) {
       Alert.alert("Error", e?.message || "Failed to subscribe");
+    }
+  }
+
+  async function refreshMyGroups() {
+    if (!user?.id) return;
+    try {
+      const list = await listMyStrategyGroups(user.id);
+      const owned = (list || []).filter((g: any) => g.owner_user_id === user.id);
+      const subscribed = (list || []).filter(
+        (g: any) => g.owner_user_id !== user.id
+      );
+      setOwnedGroups(owned);
+      setSubscribedGroups(subscribed);
+      setProfile({
+        strategyGroups: owned as any,
+        subscribedStrategyGroups: subscribed as any,
+      });
+    } catch (e) {
+      console.warn("Failed to refresh groups", e);
+    }
+  }
+
+  async function handleDeleteGroup(groupId: string) {
+    if (!user?.id) return;
+    try {
+      await deleteStrategyGroup({ userId: user.id, groupId });
+      const nextOwned = ownedGroups.filter((g) => g.id !== groupId);
+      setOwnedGroups(nextOwned);
+      const nextSubscribed = subscribedGroups.filter((g) => g.id !== groupId);
+      setSubscribedGroups(nextSubscribed);
+      const updates: any = {
+        strategyGroups: (profile.strategyGroups || []).filter(
+          (g: any) => g.id !== groupId
+        ),
+        subscribedStrategyGroups: (profile.subscribedStrategyGroups || []).filter(
+          (g: any) => g.id !== groupId
+        ),
+      };
+      if (profile.selectedStrategyGroupId === groupId) {
+        updates.selectedStrategyGroupId =
+          nextOwned[0]?.id || nextSubscribed[0]?.id || undefined;
+      }
+      setProfile(updates);
+      Alert.alert("Deleted", "Strategy group deleted successfully");
+    } catch (e: any) {
+      Alert.alert("Error", e?.message || "Failed to delete group");
     }
   }
 
@@ -146,7 +227,88 @@ export default function StrategySettingsScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>My Groups</Text>
           <View style={{ gap: 8 }}>
-            {(groups || []).map((g) => {
+            {(ownedGroups || []).length === 0 ? (
+              <Text style={{ color: "#9CA3AF" }}>
+                You have not created any groups yet.
+              </Text>
+            ) : null}
+            {(ownedGroups || []).map((g) => {
+              const selected = profile.selectedStrategyGroupId === g.id;
+              return (
+                <View key={g.id} style={styles.groupRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.groupName}>{g.name}</Text>
+                    {g.description ? (
+                      <Text style={styles.groupDesc}>{g.description}</Text>
+                    ) : null}
+                  </View>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <Pressable
+                      onPress={() =>
+                        selected ? undefined : setProfile({
+                              selectedStrategyGroupId: g.id,
+                            })
+                      }
+                      style={[
+                        styles.smallBtn,
+                        {
+                          backgroundColor: selected ? "#00D4AA" : "#1f2937",
+                          borderColor: selected ? "#00D4AA" : "#374151",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: selected ? "#000" : "#fff",
+                          fontWeight: "700",
+                        }}
+                      >
+                        {selected ? "Default" : "Set Default"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() =>
+                        Alert.alert(
+                          "Delete Group",
+                          "Deleting this group will remove all members. This cannot be undone.",
+                          [
+                            { text: "Cancel", style: "cancel" },
+                            {
+                              text: "Delete",
+                              style: "destructive",
+                              onPress: () => handleDeleteGroup(g.id),
+                            },
+                          ]
+                        )
+                      }
+                      style={[
+                        styles.smallBtn,
+                        {
+                          backgroundColor: "#7F1D1D",
+                          borderColor: "#EF4444",
+                        },
+                      ]}
+                    >
+                      <Text style={{ color: "#fff", fontWeight: "700" }}>
+                        Delete
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Subscribed Groups</Text>
+          <View style={{ gap: 8 }}>
+            {(subscribedGroups || []).length === 0 ? (
+              <Text style={{ color: "#9CA3AF" }}>
+                You have not subscribed to any groups yet.
+              </Text>
+            ) : null}
+            {(subscribedGroups || []).map((g) => {
               const selected = profile.selectedStrategyGroupId === g.id;
               return (
                 <View key={g.id} style={styles.groupRow}>
@@ -158,7 +320,9 @@ export default function StrategySettingsScreen() {
                   </View>
                   <Pressable
                     onPress={() =>
-                      selected ? undefined : handleSubscribe(g.id)
+                      selected ? undefined : setProfile({
+                            selectedStrategyGroupId: g.id,
+                          })
                     }
                     style={[
                       styles.smallBtn,
@@ -174,13 +338,93 @@ export default function StrategySettingsScreen() {
                         fontWeight: "700",
                       }}
                     >
-                      {selected ? "Selected" : "Join"}
+                      {selected ? "Default" : "Set Default"}
                     </Text>
                   </Pressable>
                 </View>
               );
             })}
           </View>
+        </View>
+
+        <View style={styles.card}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 8,
+            }}
+          >
+            <Text style={styles.sectionTitle}>Public Groups</Text>
+            <Pressable
+              onPress={refreshAvailable}
+              style={[
+                styles.smallBtn,
+                { flexDirection: "row", alignItems: "center" },
+              ]}
+            >
+              <Ionicons
+                name="refresh"
+                size={16}
+                color="#fff"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={{ color: "#fff", fontWeight: "700" }}>Refresh</Text>
+            </Pressable>
+          </View>
+
+          {loadingPublic ? (
+            <View style={{ paddingVertical: 16, alignItems: "center" }}>
+              <ActivityIndicator color="#00D4AA" />
+            </View>
+          ) : errorPublic ? (
+            <Text style={{ color: "#F87171" }}>{errorPublic}</Text>
+          ) : (availableGroups || []).length === 0 ? (
+            <Text style={{ color: "#9CA3AF" }}>
+              No public groups available right now. Pull to refresh or check
+              back later.
+            </Text>
+          ) : (
+            <View style={{ gap: 8 }}>
+              {availableGroups.map((g) => {
+                const joined = (profile.strategyGroups || []).some(
+                  (x: any) => x.id === g.id
+                );
+                return (
+                  <View key={g.id} style={styles.groupRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.groupName}>{g.name}</Text>
+                      {g.description ? (
+                        <Text style={styles.groupDesc}>{g.description}</Text>
+                      ) : null}
+                    </View>
+                    <Pressable
+                      onPress={() =>
+                        joined ? undefined : handleSubscribe(g.id)
+                      }
+                      style={[
+                        styles.smallBtn,
+                        {
+                          backgroundColor: joined ? "#00D4AA" : "#1f2937",
+                          borderColor: joined ? "#00D4AA" : "#374151",
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={{
+                          color: joined ? "#000" : "#fff",
+                          fontWeight: "700",
+                        }}
+                      >
+                        {joined ? "Joined" : "Subscribe"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                );
+              })}
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>

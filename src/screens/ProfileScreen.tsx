@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigation } from "@react-navigation/native";
 import {
   View,
   Text,
@@ -25,7 +26,8 @@ import {
   cancelAllScheduledNotifications,
 } from "../services/notifications";
 
-export default function ProfileScreen({ navigation }: any) {
+export default function ProfileScreen() {
+  const navigation = useNavigation<any>();
   const { user, logout } = useAuth();
   const profile = useUserStore((state) => state.profile);
   const setProfile = useUserStore((state) => state.setProfile);
@@ -136,6 +138,18 @@ export default function ProfileScreen({ navigation }: any) {
         profile?.subscriptionTier as keyof typeof subscriptionFeatures
       ] || subscriptionFeatures.Free
     );
+  };
+
+  const ownedGroups = profile?.strategyGroups || [];
+  const subscribedGroups = profile?.subscribedStrategyGroups || [];
+
+  const showPublicGroupsCTA =
+    !profile?.isSignalProvider &&
+    ownedGroups.length === 0 &&
+    subscribedGroups.length === 0;
+
+  const handleDiscoverGroups = () => {
+    navigation.navigate("StrategySettings");
   };
 
   return (
@@ -1150,4 +1164,12 @@ const createStyles = (theme: any) =>
     },
     segmentText: { fontSize: 14, color: theme.colors.text },
     segmentTextActive: { color: "#ffffff", fontWeight: "600" },
+    primaryButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 12,
+      borderRadius: 10,
+    },
+    primaryButtonText: { color: "#000", fontWeight: "700" },
   });

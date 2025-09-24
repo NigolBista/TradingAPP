@@ -84,7 +84,7 @@ interface Props {
   onCrosshairClick?: (price: number) => void;
   // New: compose mode for crosshair buttons
   composeMode?: boolean;
-  composeButtons?: Array<{ id: string; label: string }>;
+  composeButtons?: Array<{ id: string; label: string; icon?: string }>;
   onComposeAction?: (payload: { action: string; price: number }) => void;
   onChartReady?: () => void;
   onDataApplied?: () => void;
@@ -218,7 +218,7 @@ export default function SimpleKLineChart({
 
   // New: dynamic crosshair buttons and compose mode bridge
   const updateCrosshairButtons = useCallback(
-    (buttons: Array<{ id: string; label: string }>) => {
+    (buttons: Array<{ id: string; label: string; icon?: string }>) => {
       sendToWebView({ type: "updateCrosshairButtons", buttons });
     },
     [sendToWebView]
@@ -486,6 +486,20 @@ export default function SimpleKLineChart({
         color: ${JSON.stringify(theme === "dark" ? "#E5E7EB" : "#111827")};
       }
 
+      .custom-button-icon[data-action] {
+        width: 36px;
+        min-width: 36px;
+        height: 36px;
+        padding: 0;
+        border-radius: 8px;
+        font-family: 'Material Icons';
+        font-size: 20px;
+        font-weight: 400;
+        letter-spacing: normal;
+        background: ${JSON.stringify(theme === "dark" ? "#111827" : "#D1D5DB")};
+        color: ${JSON.stringify(theme === "dark" ? "#F9FAFB" : "#111827")};
+      }
+
       /* Make the alert button circular and match the alert line color */
       #btn-alert {
         background: #F59E0B;
@@ -697,13 +711,23 @@ export default function SimpleKLineChart({
                 if (!buttonsContainer) return;
                 window.__SIMPLE_KLINE__ = window.__SIMPLE_KLINE__ || {};
                 if (!window.__SIMPLE_KLINE__.composeMode) return;
-                var arr = Array.isArray(data.buttons) ? data.buttons : [];
+                var arr = Array.isArray(data.buttons) ? data.buttons.filter(function(btn){
+                  return typeof btn === 'object' && btn && typeof btn.id === 'string';
+                }) : [];
                 buttonsContainer.innerHTML = '';
                 arr.forEach(function(b){
                   var btn = document.createElement('button');
                   btn.className = 'custom-button';
                   btn.setAttribute('data-action', String(b.id));
-                  btn.innerText = String(b.label || b.id);
+                  var label = String(b.label || b.id);
+                  if (b.icon) {
+                    btn.classList.add('custom-button-icon');
+                    btn.innerText = String(b.icon);
+                    btn.setAttribute('aria-label', label);
+                    btn.setAttribute('title', label);
+                  } else {
+                    btn.innerText = label;
+                  }
                   btn.addEventListener('click', function(e){
                     try { e.preventDefault(); e.stopPropagation(); } catch(_){}
                     try {
@@ -1382,13 +1406,21 @@ export default function SimpleKLineChart({
             }
 
             // Levels helpers
-            function clearLevels(){
+            function clearPriceLines(){
               try {
-                var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.levelOverlayIds) || [];
-                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') { ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} }); }
-                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                window.__SIMPLE_KLINE__.levelOverlayIds = [];
-              } catch(_){ }
+                var chart = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart;
+                var alertIds = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.alertOverlayIds) || [];
+                var levelIds = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.levelOverlayIds) || [];
+                var allIds = alertIds.concat(levelIds);
+                if (allIds.length && chart && typeof chart.removeOverlay === 'function') {
+                  allIds.forEach(function(id){
+                    try { chart.removeOverlay(id); } catch(_){}
+                  });
+                }
+              } catch(_){}
+              if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+              window.__SIMPLE_KLINE__.alertOverlayIds = [];
+              window.__SIMPLE_KLINE__.levelOverlayIds = [];
             }
 
             function addPriceLine(price, color, label, dragHintArrows, isAlert){
@@ -1408,66 +1440,41 @@ export default function SimpleKLineChart({
               } catch(e){ post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); }
             }
 
-            function clearAlerts(){
+            function renderPriceLines(){
               try {
-                var chart = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart;
-                var ids = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.alertOverlayIds) || [];
-                if (ids && ids.length && chart && typeof chart.removeOverlay === 'function') { ids.forEach(function(id){ try { chart.removeOverlay(id); } catch(_){} }); }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                window.__SIMPLE_KLINE__.alertOverlayIds = [];
-              } catch(_){ }
-            }
+                var chart = window.__SIMPLE_KLINE__.chart;
+                if (!chart || typeof chart.createOverlay !== 'function') return;
 
-            function applyAlerts(alerts){
-              try {
-                clearAlerts();
-                var chart = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart;
-                if (!alerts || !Array.isArray(alerts) || !chart) return;
-                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                window.__SIMPLE_KLINE__.lastAlerts = alerts.slice();
+                var alerts = Array.isArray(window.__SIMPLE_KLINE__.lastAlerts)
+                  ? window.__SIMPLE_KLINE__.lastAlerts
+                  : [];
+                var levels = window.__SIMPLE_KLINE__.lastLevels || {};
+
+                clearPriceLines();
+
+                // Alerts
                 var registry = [];
-                var editId = (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.editModeAlertId) || null;
                 alerts.forEach(function(alert, i) {
                   if (alert && typeof alert.price === 'number' && alert.isActive) {
-                    var color = '#F59E0B';
                     var label = 'Alert ' + (i + 1);
-                    var aid = String(alert.id || ('alert_' + (i + 1)));
-                    var showArrows = false;
-                    addPriceLine(alert.price, color, label, !!showArrows, true);
-                    registry.push({ id: aid, price: Number(alert.price) });
+                    addPriceLine(alert.price, '#F59E0B', label, false, true);
+                    registry.push({ id: String(alert.id || ('alert_' + (i + 1))), price: Number(alert.price) });
                   }
                 });
                 window.__SIMPLE_KLINE__.alertsRegistry = registry;
-                // Track how many alert overlays were actually drawn for persistence checks
-                try { window.__SIMPLE_KLINE__.lastAlertCount = (window.__SIMPLE_KLINE__.alertOverlayIds || []).length; } catch(_){ }
-              } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
-            }
+                try {
+                  window.__SIMPLE_KLINE__.lastAlertCount = (window.__SIMPLE_KLINE__.alertOverlayIds || []).length;
+                } catch(_){}
 
-            // Define applyLevels function (final implementation)
-            function applyLevels(levels) {
-              try {
-                var chart = window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.chart;
-                if (!levels || typeof levels !== 'object' || !chart) return;
-                // Clear existing level overlays
-                if (window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.levelOverlayIds) {
-                  window.__SIMPLE_KLINE__.levelOverlayIds.forEach(function(id) {
-                    try { chart.removeOverlay(id); } catch(_) {}
-                  });
-                }
-                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                window.__SIMPLE_KLINE__.levelOverlayIds = [];
-                
-                // Persist last levels for re-application on timeframe/theme changes
-                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
-                window.__SIMPLE_KLINE__.lastLevels = levels;
-
-                // Normalize incoming levels to avoid duplicates (entry + entries, exit + exits, tps + targets)
+                // Strategy / level lines
                 function normalize(list) {
                   var seen = {};
                   return (Array.isArray(list) ? list : []).filter(function(v){
                     var ok = (typeof v === 'number') && isFinite(v) && !isNaN(v);
-                    if (!ok) return false;
-                    if (seen[v]) return false; seen[v] = true; return true;
+                    if (!ok || seen[v]) return false;
+                    seen[v] = true;
+                    return true;
                   });
                 }
                 function coerce(val){
@@ -1475,6 +1482,7 @@ export default function SimpleKLineChart({
                   if (typeof val === 'number') return [val];
                   return [];
                 }
+
                 var entriesList = normalize(coerce(levels && levels.entries));
                 var exitsList = normalize(coerce(levels && levels.exits));
                 var tpsList = normalize(coerce(levels && levels.tps));
@@ -1523,6 +1531,7 @@ export default function SimpleKLineChart({
                     if (id) window.__SIMPLE_KLINE__.levelOverlayIds.push(id);
                   });
                 }
+
                 drawList(entriesList, 'entries');
                 drawList(exitsList, exitsList === stopList ? 'stop' : 'exits');
                 drawList(tpsList, 'tps');
@@ -1530,9 +1539,8 @@ export default function SimpleKLineChart({
                   drawList([levels.stop], 'stop');
                 }
 
-                // Draw singles that are not covered by arrays
                 function drawSingle(value, key){
-                  if (!(typeof value === 'number')) return;
+                  if (typeof value !== 'number') return;
                   var styleCfgSingle = lineStyleFor(key);
                   var colSingle = colors[key] || '#6B7280';
                   var id = chart.createOverlay({
@@ -1546,18 +1554,34 @@ export default function SimpleKLineChart({
                   });
                   if (id) window.__SIMPLE_KLINE__.levelOverlayIds.push(id);
                 }
-                // Only draw singles if not already included
-                if (!entriesList.length) drawSingle(levels.entry, 'entry');
-                if (!exitsList.length) drawSingle(levels.exit, 'exit');
-                drawSingle(levels.lateEntry, 'lateEntry');
-                drawSingle(levels.lateExit, 'lateExit');
-                if (!exitsList.length) drawSingle(levels.stop, 'stop');
-                // Track how many level overlays were actually drawn for persistence checks
-                try { window.__SIMPLE_KLINE__.lastLevelsCount = (window.__SIMPLE_KLINE__.levelOverlayIds || []).length; } catch(_){ }
-                if (!exitsList.length && typeof levels.stop === 'number') {
-                  drawList([levels.stop], 'stop');
-                  try { window.__SIMPLE_KLINE__.lastLevelsCount = (window.__SIMPLE_KLINE__.levelOverlayIds || []).length; } catch(_){ }
-                }
+
+                if (!entriesList.length) drawSingle(levels && levels.entry, 'entry');
+                if (!exitsList.length) drawSingle(levels && levels.exit, 'exit');
+                drawSingle(levels && levels.lateEntry, 'lateEntry');
+                drawSingle(levels && levels.lateExit, 'lateExit');
+                if (!exitsList.length) drawSingle(levels && levels.stop, 'stop');
+
+                try {
+                  window.__SIMPLE_KLINE__.lastLevelsCount = (window.__SIMPLE_KLINE__.levelOverlayIds || []).length;
+                } catch(_){}
+              } catch(e) {
+                post({ warn: 'renderPriceLines failed', message: String(e && e.message || e) });
+              }
+            }
+
+            function applyAlerts(alerts){
+              try {
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.lastAlerts = Array.isArray(alerts) ? alerts.slice() : [];
+                renderPriceLines();
+              } catch(e){ post({ warn: 'applyAlerts failed', message: String(e && e.message || e) }); }
+            }
+
+            function applyLevels(levels) {
+              try {
+                if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                window.__SIMPLE_KLINE__.lastLevels = levels && typeof levels === 'object' ? levels : {};
+                renderPriceLines();
               } catch(e) {
                 post({ warn: 'applyLevels failed', message: String(e && e.message || e) });
               }
