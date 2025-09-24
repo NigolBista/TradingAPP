@@ -1,4 +1,5 @@
 import { sendSignalPushNotification } from "./notifications";
+import { supabase } from "../lib/supabase";
 
 export type OutgoingSignal = {
   symbol: string;
@@ -8,17 +9,90 @@ export type OutgoingSignal = {
   exits: number[];
   tps: number[];
   createdAt: number;
+  side?: "buy" | "sell";
+  confidence?: number | null;
+  rationale?: string | null;
+  groupName?: string;
+  providerName?: string;
 };
 
-// Stub: send signal to group subscribers (to be replaced with Supabase/Push)
 export async function sendSignal(
   signal: OutgoingSignal
 ): Promise<{ ok: boolean }> {
   try {
-    console.log("[signalService] sendSignal", signal);
-    notifySubscribers({ ...signal });
-    return { ok: true };
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const providerUserId = session?.user?.id ?? null;
+    const providerName =
+      signal.providerName ??
+      session?.user?.user_metadata?.full_name ??
+      session?.user?.email ??
+      null;
+
+    const payload = {
+      providerUserId,
+      providerName,
+      groupId: signal.groupId,
+      groupName: signal.groupName ?? null,
+      symbol: signal.symbol,
+      timeframe: signal.timeframe,
+      entries: signal.entries,
+      exits: signal.exits,
+      tps: signal.tps,
+      side: signal.side,
+      confidence: signal.confidence ?? null,
+      rationale: signal.rationale ?? null,
+    };
+
+    if (!payload.providerUserId) {
+      throw new Error("Missing provider user id");
+    }
+
+    const { data, error } = await supabase.functions.invoke("publish-signal", {
+      body: payload,
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    notifySubscribers({
+      symbol: signal.symbol,
+      groupId: signal.groupId,
+      timeframe: signal.timeframe,
+      entries: signal.entries,
+      exits: signal.exits,
+      tps: signal.tps,
+      createdAt: signal.createdAt,
+      groupName: signal.groupName,
+      ownerName: payload.providerName ?? undefined,
+      side: signal.side,
+      confidence: signal.confidence,
+      rationale: signal.rationale,
+    });
+
+    return { ok: Boolean((data as any)?.ok) };
   } catch (e) {
+    console.warn("[signalService] sendSignal failed", e);
+    try {
+      notifySubscribers({
+        symbol: signal.symbol,
+        groupId: signal.groupId,
+        timeframe: signal.timeframe,
+        entries: signal.entries,
+        exits: signal.exits,
+        tps: signal.tps,
+        createdAt: signal.createdAt,
+        groupName: signal.groupName,
+        ownerName: signal.providerName,
+        side: signal.side,
+        confidence: signal.confidence,
+        rationale: signal.rationale,
+      });
+    } catch (err) {
+      console.warn("[signalService] fallback notify failed", err);
+    }
     return { ok: false };
   }
 }

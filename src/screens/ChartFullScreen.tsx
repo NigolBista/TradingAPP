@@ -451,6 +451,15 @@ export default function ChartFullScreen() {
           tps: composeDraft.tps,
         },
         createdAt: Date.now(),
+        side: (aiMeta?.side as any) || (currentTradePlan?.side as any),
+        confidence: (aiMeta as any)?.confidence ?? undefined,
+        rationale: (aiMeta as any)?.why?.join("\n") ?? undefined,
+        groupName: profile.strategyGroups?.find((g) => g.id === groupId)?.name,
+        providerName:
+          user?.user_metadata?.full_name ||
+          user?.email ||
+          profile?.email ||
+          undefined,
       };
       // TODO: replace with real backend call. For now, fire local notification via Alerts
       try {
@@ -474,6 +483,11 @@ export default function ChartFullScreen() {
           exits: payload.plan.exits,
           tps: payload.plan.tps,
           createdAt: payload.createdAt,
+          side: payload.side === "short" ? "sell" : "buy",
+          confidence: payload.confidence,
+          rationale: payload.rationale,
+          groupName: payload.groupName,
+          providerName: payload.providerName,
         }).catch(() => {});
       } catch (_) {}
       resetCompose();

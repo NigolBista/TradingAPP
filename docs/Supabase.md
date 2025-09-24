@@ -107,6 +107,11 @@ This file is the single source of truth for our backend schema so the LLM can re
     - Pulls queued/retrying jobs, locks and sends push via Expo using tokens from `user_devices`.
     - Updates job `status` to `succeeded` or `retrying` with backoff; marks `failed` if no devices.
 
+- `publish-signal` edge function:
+  - Validates the sender belongs to the strategy group.
+  - Inserts trade signal rows for each member (even the sender) with group metadata attached.
+  - Enqueues push notifications for each recipient into `notifications_queue`.
+
 ### SQL
 
 Run in Supabase SQL editor:
@@ -247,6 +252,7 @@ create table if not exists public.trade_signals (
   stop_loss numeric,
   targets numeric[],
   rationale text,
+  metadata jsonb,
   unique_key text unique,
   created_at timestamptz not null default now()
 );
@@ -382,6 +388,7 @@ create policy "usp_delete_own" on public.user_strategy_preferences for delete us
 
 - `supabase/functions/evaluate-alerts/index.ts`: evaluates active alerts, writes `alert_events`, updates `alerts`, and enqueues `notifications_queue`, then invokes `notify`.
 - `supabase/functions/notify/index.ts`: processes the queue and sends Expo pushes from `user_devices`.
+- `supabase/functions/publish-signal/index.ts`: validates sender, inserts trade signals, and enqueues notifications.
 
 ### Clients
 
