@@ -1836,9 +1836,6 @@ export default function SimpleKLineChart({
                 var ids = [overlayId].filter(function(id) { return id !== undefined; });
                 if (type === 'alert') { window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids); }
                 else { window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids); }
-                window.__SIMPLE_KLINE__.lastEntryPrice = (lineType === 'entry') ? Number(price) : window.__SIMPLE_KLINE__.lastEntryPrice;
-                window.__SIMPLE_KLINE__.lastExitPrice = (lineType === 'exit' || lineType === 'stop') ? Number(price) : window.__SIMPLE_KLINE__.lastExitPrice;
-                window.__SIMPLE_KLINE__.lastTpPrice = (lineType === 'tp') ? Number(price) : window.__SIMPLE_KLINE__.lastTpPrice;
               } catch(e){ post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); }
             }
 
@@ -1876,24 +1873,67 @@ export default function SimpleKLineChart({
                   for (var i = 0; i < list.length; i++) {
                     var raw = list[i];
                     var num = Number(raw);
-                    if (typeof num === 'number' && isFinite(num) && !isNaN(num)) {
+                    if (typeof num === "number" && isFinite(num) && !isNaN(num)) {
                       out.push(num);
                     }
                   }
                   return out;
                 }
-                function coerce(val){
+                function coerce(val) {
                   if (Array.isArray(val)) return val;
-                  if (typeof val === 'number') return [val];
+                  if (typeof val === "number") return [val];
                   return [];
                 }
+                function uniqueNumbers(list) {
+                  var seen = Object.create(null);
+                  var out = [];
+                  (list || []).forEach(function (val) {
+                    var num = Number(val);
+                    if (!isFinite(num)) return;
+                    var key = num.toFixed(8);
+                    if (!seen[key]) {
+                      seen[key] = true;
+                      out.push(num);
+                    }
+                  });
+                  return out;
+                }
+                function detectMatrix(candidate) {
+                  try {
+                    if (!candidate) return null;
+                    if (!Array.isArray(candidate) || !candidate.length) return null;
+                    if (!Array.isArray(candidate[0])) return null;
+                    var matrix = [];
+                    for (var i = 0; i < candidate.length; i++) {
+                      matrix.push(normalize(candidate[i]));
+                    }
+                    var hasValues = matrix.some(function (row) {
+                      return row.length > 0;
+                    });
+                    return hasValues ? matrix : null;
+                  } catch (_) {
+                    return null;
+                  }
+                }
+                function flattenMatrix(matrix) {
+                  var out = [];
+                  (matrix || []).forEach(function (row) {
+                    if (!Array.isArray(row)) return;
+                    row.forEach(function (val) {
+                      if (typeof val === "number" && isFinite(val)) {
+                        out.push(Number(val));
+                      }
+                    });
+                  });
+                  return out;
+                }
 
-                var entriesList = normalize(coerce(levels && (levels.entries || levels.entryLevels)));
-                var exitsList = normalize(coerce(levels && (levels.exits || levels.exitLevels)));
-                var tpsList = normalize(coerce(levels && (levels.tps || levels.takeProfits || levels.targets)));
-                var stopList = normalize(coerce(levels && levels.stop));
-                if (!exitsList.length) exitsList = stopList;
-                if (!exitsList.length && typeof levels.stop === 'number') {
+                var entriesList = uniqueNumbers(normalize(coerce(levels && (levels.entries || levels.entryLevels))));
+                var exitsList = uniqueNumbers(normalize(coerce(levels && (levels.exits || levels.exitLevels))));
+                var tpsList = uniqueNumbers(normalize(coerce(levels && (levels.tps || levels.takeProfits || levels.targets))));
+                var stopList = uniqueNumbers(normalize(coerce(levels && levels.stop)));
+                if (!exitsList.length) exitsList = stopList.slice();
+                if (!exitsList.length && typeof levels.stop === "number") {
                   exitsList = [Number(levels.stop)];
                 }
 
@@ -1936,16 +1976,16 @@ export default function SimpleKLineChart({
 
                 function addZoneBetweenPrices(priceA, priceB, color){
                   try {
-                    if (typeof priceA !== 'number' || typeof priceB !== 'number') return;
+                    if (typeof priceA !== "number" || typeof priceB !== "number") return;
                     if (priceA === priceB) return;
-                    if (!chart || typeof chart.createOverlay !== 'function') return;
+                    if (!chart || typeof chart.createOverlay !== "function") return;
                     var top = Math.max(Number(priceA), Number(priceB));
                     var bottom = Math.min(Number(priceA), Number(priceB));
                     if (!isFinite(top) || !isFinite(bottom)) return;
                     var zoneId = chart.createOverlay({
-                      name: 'levelZone',
+                      name: "levelZone",
                       lock: true,
-                      mode: 'decoration',
+                      mode: "decoration",
                       points: [
                         { value: top },
                         { value: bottom }
@@ -1956,31 +1996,75 @@ export default function SimpleKLineChart({
                     if (zoneId !== undefined) {
                       window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat([zoneId]);
                     }
-                  } catch(_) {}
+                  } catch (_) {}
                 }
 
                 function drawZones(){
                   try {
-                    if (!entriesList.length) return;
-                    var exitColor = 'rgba(239, 68, 68, 0.12)';
-                    var tpColor = 'rgba(16, 185, 129, 0.12)';
-                    entriesList.forEach(function(entryPrice, idx){
-                      if (typeof entryPrice !== 'number') return;
-                      var pairedExit = (typeof exitsList[idx] === 'number') ? exitsList[idx]
-                        : (exitsList.length ? exitsList[exitsList.length - 1] : undefined);
-                      if (typeof pairedExit !== 'number' && stopList.length) {
-                        pairedExit = stopList[Math.min(idx, stopList.length - 1)];
+                    var exitColor = "rgba(239, 68, 68, 0.12)";
+                    var tpColor = "rgba(16, 185, 129, 0.12)";
+
+                    function valuesFromMatrix(matrix, idx) {
+                      if (!matrix || !matrix.length) return [];
+                      var row = matrix[Math.min(idx, matrix.length - 1)] || [];
+                      return Array.isArray(row) ? row : [];
+                    }
+
+                    var entryMatrix = detectMatrix((levels && (levels.entryLevels || levels.entries)) || null);
+                    var exitMatrix = detectMatrix((levels && (levels.exitLevels || levels.exits)) || null);
+                    var tpMatrix = detectMatrix((levels && (levels.tpLevels || levels.tps || levels.targets)) || null);
+
+                    var entryGroups = [];
+                    if (entryMatrix && entryMatrix.length) {
+                      entryMatrix.forEach(function (row) {
+                        var uniqRow = uniqueNumbers(row);
+                        if (uniqRow.length) entryGroups.push(uniqRow);
+                      });
+                    }
+                    if (!entryGroups.length && entriesList.length) {
+                      entryGroups = entriesList.map(function (val) {
+                        return [val];
+                      });
+                    }
+                    if (!entryGroups.length && typeof levels.entry === "number" && isFinite(levels.entry)) {
+                      entryGroups = [[Number(levels.entry)]];
+                    }
+                    if (!entryGroups.length) return;
+
+                    entryGroups.forEach(function (entryRow, idx) {
+                      var exitValues = uniqueNumbers(valuesFromMatrix(exitMatrix, idx).concat(exitsList).concat(stopList));
+                      if (!exitValues.length && exitMatrix && exitMatrix.length) {
+                        exitValues = uniqueNumbers(flattenMatrix(exitMatrix).concat(stopList));
                       }
-                      if (typeof pairedExit === 'number') {
-                        addZoneBetweenPrices(entryPrice, pairedExit, exitColor);
+                      if (!exitValues.length && typeof levels.exit === "number" && isFinite(levels.exit)) {
+                        exitValues = uniqueNumbers(exitValues.concat([Number(levels.exit)]));
                       }
-                      var pairedTp = (typeof tpsList[idx] === 'number') ? tpsList[idx]
-                        : (tpsList.length ? tpsList[Math.min(idx, tpsList.length - 1)] : undefined);
-                      if (typeof pairedTp === 'number') {
-                        addZoneBetweenPrices(entryPrice, pairedTp, tpColor);
+
+                      var tpValues = uniqueNumbers(valuesFromMatrix(tpMatrix, idx).concat(tpsList));
+                      if (!tpValues.length && Array.isArray(levels && levels.tps)) {
+                        tpValues = uniqueNumbers(tpValues.concat(normalize(levels.tps)));
                       }
+                      if (!tpValues.length && Array.isArray(levels && levels.targets)) {
+                        tpValues = uniqueNumbers(tpValues.concat(normalize(levels.targets)));
+                      }
+                      if (!tpValues.length && typeof levels.tp === "number" && isFinite(levels.tp)) {
+                        tpValues = uniqueNumbers(tpValues.concat([Number(levels.tp)]));
+                      }
+                      if (!tpValues.length && tpMatrix && tpMatrix.length) {
+                        tpValues = uniqueNumbers(tpValues.concat(flattenMatrix(tpMatrix)));
+                      }
+
+                      entryRow.forEach(function (entryPrice) {
+                        if (typeof entryPrice !== "number" || !isFinite(entryPrice)) return;
+                        exitValues.forEach(function (exitVal) {
+                          addZoneBetweenPrices(entryPrice, exitVal, exitColor);
+                        });
+                        tpValues.forEach(function (tpVal) {
+                          addZoneBetweenPrices(entryPrice, tpVal, tpColor);
+                        });
+                      });
                     });
-                  } catch(_) {}
+                  } catch (_) {}
                 }
 
                 drawZones();
