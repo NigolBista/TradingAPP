@@ -1143,9 +1143,147 @@ export default function SimpleKLineChart({
           try {
             if (!window.klinecharts || !window.klinecharts.init) { return false; }
 
-            // Overlays
+        // Overlays
+        if (window.klinecharts.registerOverlay && !window.__LABELED_PRICE_REGISTERED__) {
+          window.klinecharts.registerOverlay({
+            name: 'labeledPriceLine',
+            totalStep: 1,
+            createPointFigures: function({ coordinates, overlay }) {
+              var point = coordinates && coordinates[0];
+              if (!point) return [];
 
-            if (window.klinecharts.registerOverlay && !window.__SESSION_BG_REGISTERED__) {
+              var extendData = overlay && overlay.extendData ? overlay.extendData : {};
+              var label = typeof extendData.label === 'string' ? extendData.label : '';
+              var price = extendData.price;
+              var color = extendData.color || '#F59E0B';
+              var showDragArrows = !!extendData.dragHintArrows;
+              var icon = typeof extendData.icon === 'string' ? extendData.icon : null;
+              var iconFamily = typeof extendData.iconFamily === 'string' ? extendData.iconFamily : 'Material Icons';
+              var iconColor = extendData.iconColor || '#FFFFFF';
+              var iconBackgroundColor = extendData.iconBackgroundColor || color;
+              var iconBorderColor = extendData.iconBorderColor || iconBackgroundColor;
+              var iconBorderSize = typeof extendData.iconBorderSize === 'number' ? extendData.iconBorderSize : 1;
+              var iconBorderRadius = typeof extendData.iconBorderRadius === 'number' ? extendData.iconBorderRadius : 999;
+              var iconSize = typeof extendData.iconSize === 'number' ? extendData.iconSize : 13;
+              var lineStyle = extendData.lineStyle === 'solid' ? 'solid' : 'dashed';
+              var dashedValue = Array.isArray(extendData.dashedValue)
+                ? extendData.dashedValue
+                : (lineStyle === 'dashed' ? [10, 6] : undefined);
+              var lineSize = typeof extendData.lineSize === 'number' ? extendData.lineSize : 1;
+              var textColor = extendData.textColor || '#FFFFFF';
+              var textBackgroundColor = extendData.textBackgroundColor || color;
+              var textBorderColor = extendData.textBorderColor || textBackgroundColor;
+              var textBorderRadius = typeof extendData.textBorderRadius === 'number' ? extendData.textBorderRadius : 4;
+              var textBorderSize = typeof extendData.textBorderSize === 'number' ? extendData.textBorderSize : 1;
+              var textSize = typeof extendData.textSize === 'number' ? extendData.textSize : 11;
+              var textPadding = extendData.textPadding || {};
+              var paddingLeft = typeof textPadding.left === 'number' ? textPadding.left : 6;
+              var paddingRight = typeof textPadding.right === 'number' ? textPadding.right : 6;
+              var paddingTop = typeof textPadding.top === 'number' ? textPadding.top : 3;
+              var paddingBottom = typeof textPadding.bottom === 'number' ? textPadding.bottom : 3;
+              var showPrice = extendData.showPrice !== false;
+              var pricePrecision = typeof extendData.pricePrecision === 'number' && extendData.pricePrecision >= 0
+                ? extendData.pricePrecision
+                : 2;
+              var pricePrefix = typeof extendData.pricePrefix === 'string' ? extendData.pricePrefix : '$';
+
+              var figures = [
+                {
+                  type: 'line',
+                  attrs: {
+                    coordinates: [
+                      { x: 0, y: point.y },
+                      { x: 9999, y: point.y }
+                    ]
+                  },
+                  styles: {
+                    color: color,
+                    size: lineSize,
+                    style: lineStyle,
+                    dashedValue: dashedValue
+                  }
+                }
+              ];
+
+              if (showDragArrows) {
+                figures.push(
+                  {
+                    type: 'text',
+                    attrs: { x: 6, y: point.y - 2, text: '\u25B2', baseline: 'bottom', align: 'left' },
+                    styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' }
+                  },
+                  {
+                    type: 'text',
+                    attrs: { x: 6, y: point.y + 2, text: '\u25BC', baseline: 'top', align: 'left' },
+                    styles: { color: '#C7CDD7', size: 8, backgroundColor: 'transparent' }
+                  }
+                );
+              }
+
+              if (!showDragArrows && icon) {
+                figures.push({
+                  type: 'text',
+                  attrs: { x: 8, y: point.y, text: icon, baseline: 'middle', align: 'left' },
+                  styles: {
+                    color: iconColor,
+                    family: iconFamily,
+                    size: iconSize,
+                    backgroundColor: iconBackgroundColor,
+                    borderColor: iconBorderColor,
+                    borderSize: iconBorderSize,
+                    borderRadius: iconBorderRadius,
+                    paddingLeft: 4,
+                    paddingRight: 4,
+                    paddingTop: 3,
+                    paddingBottom: 3
+                  }
+                });
+              }
+
+              try {
+                var parts = [];
+                if (label && label.trim().length > 0) parts.push(label.trim());
+                if (showPrice && typeof price === 'number' && isFinite(price)) {
+                  var fixed = Number(price).toFixed(pricePrecision);
+                  parts.push(pricePrefix + fixed);
+                }
+                if (parts.length) {
+                  var offset = 12;
+                  if (showDragArrows) offset = 22;
+                  else if (icon) offset = 30;
+
+                  figures.push({
+                    type: 'text',
+                    attrs: {
+                      x: offset,
+                      y: point.y,
+                      text: parts.join(' '),
+                      baseline: 'middle',
+                      align: 'left'
+                    },
+                    styles: {
+                      color: textColor,
+                      size: textSize,
+                      backgroundColor: textBackgroundColor,
+                      borderColor: textBorderColor,
+                      borderSize: textBorderSize,
+                      borderRadius: textBorderRadius,
+                      paddingLeft: paddingLeft,
+                      paddingRight: paddingRight,
+                      paddingTop: paddingTop,
+                      paddingBottom: paddingBottom
+                    }
+                  });
+                }
+              } catch(_) {}
+
+              return figures;
+            }
+          });
+          window.__LABELED_PRICE_REGISTERED__ = true;
+        }
+
+        if (window.klinecharts.registerOverlay && !window.__SESSION_BG_REGISTERED__) {
               window.klinecharts.registerOverlay({
                 name: 'sessionBg',
                 totalStep: 0,
@@ -1542,19 +1680,108 @@ export default function SimpleKLineChart({
               window.__SIMPLE_KLINE__.levelOverlayIds = [];
             }
 
-            function addPriceLine(price, color, label, dragHintArrows, isAlert){
+            function addPriceLine(price, color, label, dragHintArrows, type){
               try {
                 if (price == null || isNaN(price)) return;
+                var lineType = String(type || 'level');
+                var config = (function(){
+                  switch (lineType) {
+                    case 'alert':
+                      return {
+                        icon: '\\uE7F4',
+                        lineStyle: 'dashed',
+                        dashedValue: [10, 6],
+                        pricePrefix: '$',
+                        pricePrecision: 2,
+                        textColor: '#FFFFFF',
+                        showPrice: false
+                      };
+                    case 'entry':
+                      return {
+                        lineStyle: 'dashed',
+                        dashedValue: [8, 4],
+                        pricePrefix: '$',
+                        pricePrecision: 2,
+                        textPadding: { left: 6, right: 6, top: 2, bottom: 2 }
+                      };
+                    case 'exit':
+                    case 'stop':
+                      return {
+                        lineStyle: 'dashed',
+                        dashedValue: [2, 3],
+                        pricePrefix: '$',
+                        pricePrecision: 2,
+                        textPadding: { left: 6, right: 6, top: 2, bottom: 2 }
+                      };
+                    case 'tp':
+                      return {
+                        lineStyle: 'dashed',
+                        dashedValue: [4, 2],
+                        pricePrefix: '$',
+                        pricePrecision: 2,
+                        textPadding: { left: 6, right: 6, top: 2, bottom: 2 }
+                      };
+                    case 'lateEntry':
+                    case 'lateExit':
+                      return {
+                        lineStyle: 'dashed',
+                        dashedValue: [6, 3],
+                        pricePrefix: '$',
+                        pricePrecision: 2,
+                        textPadding: { left: 6, right: 6, top: 2, bottom: 2 }
+                      };
+                    default:
+                      return {
+                        lineStyle: 'dashed',
+                        dashedValue: [10, 6],
+                        pricePrefix: '$',
+                        pricePrecision: 2
+                      };
+                  }
+                })();
+
+                var labelText = String(label || '');
+                if (lineType === 'alert') {
+                  labelText = '';
+                }
+
                 var overlayId;
-                // Use a single unified overlay type for all lines (alerts and strategy levels)
                 var lineOpts = {
-                  name: 'horizontalStraightLine', lock: true, extend: 'none', points: [{ value: Number(price) }],
-                  styles: { line: { color: color, size: 1, style: 'dashed', dashedValue: [10, 6] }, text: { show: true, color: '#FFFFFF', size: 12, backgroundColor: color, borderColor: color, paddingLeft: 6, paddingRight: 6, paddingTop: 3, paddingBottom: 3, borderRadius: 4, text: String(label) + ' $' + Number(price).toFixed(2) } }
+                  name: 'labeledPriceLine',
+                  lock: true,
+                  extend: 'none',
+                  points: [{ value: Number(price) }],
+                  extendData: {
+                    label: labelText,
+                    price: Number(price),
+                    color: color,
+                    dragHintArrows: !!dragHintArrows,
+                    icon: config.icon || null,
+                    iconColor: config.iconColor || '#FFFFFF',
+                    iconBackgroundColor: config.iconBackgroundColor || color,
+                    iconBorderColor: config.iconBorderColor || color,
+                    iconBorderSize: typeof config.iconBorderSize === 'number' ? config.iconBorderSize : 1,
+                    iconBorderRadius: typeof config.iconBorderRadius === 'number' ? config.iconBorderRadius : 999,
+                    iconSize: typeof config.iconSize === 'number' ? config.iconSize : 13,
+                    lineStyle: config.lineStyle || 'dashed',
+                    dashedValue: config.dashedValue,
+                    lineSize: typeof config.lineSize === 'number' ? config.lineSize : 1,
+                    textColor: config.textColor || '#FFFFFF',
+                    textBackgroundColor: config.textBackgroundColor || color,
+                    textBorderColor: config.textBorderColor || color,
+                    textBorderSize: typeof config.textBorderSize === 'number' ? config.textBorderSize : 1,
+                    textBorderRadius: typeof config.textBorderRadius === 'number' ? config.textBorderRadius : 4,
+                    textSize: typeof config.textSize === 'number' ? config.textSize : 11,
+                    textPadding: config.textPadding || { left: 6, right: 6, top: 3, bottom: 3 },
+                    pricePrefix: config.pricePrefix || '$',
+                    pricePrecision: typeof config.pricePrecision === 'number' ? config.pricePrecision : 2,
+                    showPrice: config.showPrice !== false
+                  }
                 };
                 if (chart && typeof chart.createOverlay === 'function') { overlayId = chart.createOverlay(lineOpts); }
                 if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
                 var ids = [overlayId].filter(function(id) { return id !== undefined; });
-                if (isAlert) { window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids); }
+                if (type === 'alert') { window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids); }
                 else { window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids); }
               } catch(e){ post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); }
             }
@@ -1577,7 +1804,7 @@ export default function SimpleKLineChart({
                 alerts.forEach(function(alert, i) {
                   if (alert && typeof alert.price === 'number' && alert.isActive) {
                     var label = 'Alert ' + (i + 1);
-                    addPriceLine(alert.price, '#F59E0B', label, false, true);
+                    addPriceLine(alert.price, '#F59E0B', label, false, 'alert');
                     registry.push({ id: String(alert.id || ('alert_' + (i + 1))), price: Number(alert.price) });
                   }
                 });
@@ -1588,13 +1815,16 @@ export default function SimpleKLineChart({
 
                 // Strategy / level lines
                 function normalize(list) {
-                  var seen = {};
-                  return (Array.isArray(list) ? list : []).filter(function(v){
-                    var ok = (typeof v === 'number') && isFinite(v) && !isNaN(v);
-                    if (!ok || seen[v]) return false;
-                    seen[v] = true;
-                    return true;
-                  });
+                  if (!Array.isArray(list)) return [];
+                  var out = [];
+                  for (var i = 0; i < list.length; i++) {
+                    var raw = list[i];
+                    var num = Number(raw);
+                    if (typeof num === 'number' && isFinite(num) && !isNaN(num)) {
+                      out.push(num);
+                    }
+                  }
+                  return out;
                 }
                 function coerce(val){
                   if (Array.isArray(val)) return val;
@@ -1602,9 +1832,9 @@ export default function SimpleKLineChart({
                   return [];
                 }
 
-                var entriesList = normalize(coerce(levels && levels.entries));
-                var exitsList = normalize(coerce(levels && levels.exits));
-                var tpsList = normalize(coerce(levels && levels.tps));
+                var entriesList = normalize(coerce(levels && (levels.entries || levels.entryLevels)));
+                var exitsList = normalize(coerce(levels && (levels.exits || levels.exitLevels)));
+                var tpsList = normalize(coerce(levels && (levels.tps || levels.takeProfits || levels.targets)));
                 var stopList = normalize(coerce(levels && levels.stop));
                 if (!exitsList.length) exitsList = stopList;
                 if (!exitsList.length && typeof levels.stop === 'number') {
@@ -1614,7 +1844,10 @@ export default function SimpleKLineChart({
                 var colors = {
                   entries: '#10B981',
                   exits: '#EF4444',
-                  tps: '#3B82F6'
+                  tps: '#3B82F6',
+                  stop: '#F97316',
+                  lateEntry: '#059669',
+                  lateExit: '#DC2626'
                 };
 
                 function lineStyleFor(key){
@@ -1630,6 +1863,18 @@ export default function SimpleKLineChart({
                   if (key === 'exits') return 'Exit' + suffix;
                   if (key === 'tps') return 'TP' + suffix;
                   if (key === 'stop') return 'Stop';
+                  if (key === 'lateEntry') return 'Late Entry';
+                  if (key === 'lateExit') return 'Late Exit';
+                  return key;
+                }
+
+                function mappedType(key){
+                  if (key === 'entries') return 'entry';
+                  if (key === 'exits') return 'exit';
+                  if (key === 'tps') return 'tp';
+                  if (key === 'stop') return 'stop';
+                  if (key === 'lateEntry') return 'lateEntry';
+                  if (key === 'lateExit') return 'lateExit';
                   return key;
                 }
 
@@ -1638,16 +1883,7 @@ export default function SimpleKLineChart({
                     if (typeof price !== 'number') return;
                     var styleCfg = lineStyleFor(key);
                     var col = colors[key] || '#6B7280';
-                    var id = chart.createOverlay({
-                      name: 'horizontalStraightLine',
-                      lock: true,
-                      points: [{ value: price }],
-                      styles: {
-                        line: { color: col, size: 1, style: styleCfg.style, dashedValue: styleCfg.dashedValue },
-                        text: { show: true, color: '#FFFFFF', size: 11, backgroundColor: col, borderColor: col, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 4, text: labelFor(key, i) }
-                      }
-                    });
-                    if (id) window.__SIMPLE_KLINE__.levelOverlayIds.push(id);
+                    addPriceLine(price, col, labelFor(key, i), false, mappedType(key));
                   });
                 }
 
@@ -1655,27 +1891,17 @@ export default function SimpleKLineChart({
                 drawList(exitsList, exitsList === stopList ? 'stop' : 'exits');
                 drawList(tpsList, 'tps');
                 if (!exitsList.length && typeof levels.stop === 'number') {
-                  drawList([levels.stop], 'stop');
+                  addPriceLine(Number(levels.stop), colors.stop || colors.exits, labelFor('stop'), false, 'stop');
                 }
 
                 function drawSingle(value, key){
                   if (typeof value !== 'number') return;
-                  var styleCfgSingle = lineStyleFor(key);
                   var colSingle = colors[key] || '#6B7280';
-                  var id = chart.createOverlay({
-                    name: 'horizontalStraightLine',
-                    lock: true,
-                    points: [{ value: value }],
-                    styles: {
-                      line: { color: colSingle, size: 1, style: styleCfgSingle.style, dashedValue: styleCfgSingle.dashedValue },
-                      text: { show: true, color: '#FFFFFF', size: 11, backgroundColor: colSingle, borderColor: colSingle, paddingLeft: 4, paddingRight: 4, paddingTop: 2, paddingBottom: 2, borderRadius: 4, text: labelFor(key) }
-                    }
-                  });
-                  if (id) window.__SIMPLE_KLINE__.levelOverlayIds.push(id);
+                  addPriceLine(Number(value), colSingle, labelFor(key), false, mappedType(key));
                 }
 
-                if (!entriesList.length) drawSingle(levels && levels.entry, 'entry');
-                if (!exitsList.length) drawSingle(levels && levels.exit, 'exit');
+                if (!entriesList.length) drawSingle(levels && levels.entry, 'entries');
+                if (!exitsList.length) drawSingle(levels && levels.exit, 'exits');
                 drawSingle(levels && levels.lateEntry, 'lateEntry');
                 drawSingle(levels && levels.lateExit, 'lateExit');
                 if (!exitsList.length) drawSingle(levels && levels.stop, 'stop');
