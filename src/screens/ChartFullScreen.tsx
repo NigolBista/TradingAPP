@@ -1699,7 +1699,7 @@ export default function ChartFullScreen() {
           areaStyle={areaStyle}
           priceColors={priceColors}
           composeMode={composeMode}
-          composeButtons={composeButtons}
+          composeButtons={composeMode ? composeButtons : []}
           allowCompose={canCompose}
           onComposeAction={({ action, price }) => {
             if (!composeMode || !canCompose) return;

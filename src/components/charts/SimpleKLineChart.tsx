@@ -316,14 +316,14 @@ export default function SimpleKLineChart({
 
   // New: handle compose mode and custom buttons updates
   useEffect(() => {
-    if (isReadyRef.current) {
-      try {
-        setComposeModeOnWeb(!!composeMode);
-      } catch (_) {}
-      try {
-        updateCrosshairButtons(composeButtons || []);
-      } catch (_) {}
-    }
+    if (!isReadyRef.current) return;
+    try {
+      setComposeModeOnWeb(!!composeMode);
+    } catch (_) {}
+    if (!composeMode) return;
+    try {
+      updateCrosshairButtons(composeButtons || []);
+    } catch (_) {}
   }, [
     composeMode,
     composeButtons,
