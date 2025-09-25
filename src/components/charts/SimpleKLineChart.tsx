@@ -478,10 +478,10 @@ export default function SimpleKLineChart({
 
       /* Compose action buttons (Entry/Exit/TP/Send) are text chips, not Material Icons */
       .custom-button[data-action] {
-        width: auto;
-        min-width: 36px;
+        width: 48px;
+        min-width: 48px;
         height: 28px;
-        padding: 0 10px;
+        padding: 0 8px;
         border-radius: 14px;
         /* Use normal text fonts so labels like "TP" render correctly */
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Ubuntu, Cantarell, "Noto Sans", Arial, sans-serif;
@@ -490,6 +490,9 @@ export default function SimpleKLineChart({
         letter-spacing: 0.2px;
         background: ${JSON.stringify(theme === "dark" ? "#1F2937" : "#E6E9EE")};
         color: ${JSON.stringify(theme === "dark" ? "#E5E7EB" : "#111827")};
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .custom-button-icon[data-action] {
@@ -504,6 +507,22 @@ export default function SimpleKLineChart({
         letter-spacing: normal;
         background: ${JSON.stringify(theme === "dark" ? "#111827" : "#D1D5DB")};
         color: ${JSON.stringify(theme === "dark" ? "#F9FAFB" : "#111827")};
+      }
+
+      /* Specific colors for compose action buttons */
+      .custom-button[data-action="entry"] {
+        background: #10B981;
+        color: #FFFFFF;
+      }
+      
+      .custom-button[data-action="exit"] {
+        background: #EF4444;
+        color: #FFFFFF;
+      }
+      
+      .custom-button[data-action="tp"] {
+        background: #3B82F6;
+        color: #FFFFFF;
       }
 
       /* Make the alert button circular and match the alert line color */
@@ -771,7 +790,7 @@ export default function SimpleKLineChart({
                     try { measureBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'measureClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
                     if (isComposeAllowed()) {
                       var crosshairBtn = document.createElement('button');
-                      crosshairBtn.className = 'custom-button'; crosshairBtn.id = 'btn-crosshair'; crosshairBtn.title = 'Crosshair'; crosshairBtn.innerText = 'add';
+                      crosshairBtn.className = 'custom-button'; crosshairBtn.id = 'btn-crosshair'; crosshairBtn.title = 'Add Level/Signal'; crosshairBtn.innerText = 'add_circle';
                       buttonsContainer.appendChild(crosshairBtn);
                       try { crosshairBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'crosshairClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
                     }
@@ -1234,8 +1253,6 @@ export default function SimpleKLineChart({
                     borderRadius: iconBorderRadius,
                     paddingLeft: 4,
                     paddingRight: 4,
-                    paddingTop: 3,
-                    paddingBottom: 3
                   }
                 });
               }
@@ -1690,7 +1707,7 @@ export default function SimpleKLineChart({
                       return {
                         icon: '\\uE7F4',
                         lineStyle: 'dashed',
-                        dashedValue: [10, 6],
+                        dashedValue: [2, 2],
                         pricePrefix: '$',
                         pricePrecision: 2,
                         textColor: '#FFFFFF',
@@ -1699,36 +1716,36 @@ export default function SimpleKLineChart({
                     case 'entry':
                       return {
                         lineStyle: 'dashed',
-                        dashedValue: [8, 4],
+                        dashedValue: [2, 2],
                         pricePrefix: '$',
                         pricePrecision: 2,
-                        textPadding: { left: 6, right: 6, top: 2, bottom: 2 }
+                        textPadding: { left: 4, right: 4, top: 4, bottom: 4 },
                       };
                     case 'exit':
                     case 'stop':
                       return {
                         lineStyle: 'dashed',
-                        dashedValue: [2, 3],
+                        dashedValue: [2, 2],
                         pricePrefix: '$',
                         pricePrecision: 2,
-                        textPadding: { left: 6, right: 6, top: 2, bottom: 2 }
+                        textPadding: { left: 4, right: 4, top: 4, bottom: 4 }
                       };
                     case 'tp':
                       return {
                         lineStyle: 'dashed',
-                        dashedValue: [4, 2],
+                        dashedValue: [2, 2],
                         pricePrefix: '$',
                         pricePrecision: 2,
-                        textPadding: { left: 6, right: 6, top: 2, bottom: 2 }
+                        textPadding: { left: 4, right: 4, top: 4, bottom: 4 }
                       };
                     case 'lateEntry':
                     case 'lateExit':
                       return {
                         lineStyle: 'dashed',
-                        dashedValue: [6, 3],
+                        dashedValue: [2, 2],
                         pricePrefix: '$',
                         pricePrecision: 2,
-                        textPadding: { left: 6, right: 6, top: 2, bottom: 2 }
+                        textPadding: { left: 4, right: 4, top: 4 , bottom: 4 }
                       };
                     default:
                       return {
@@ -1772,7 +1789,7 @@ export default function SimpleKLineChart({
                     textBorderSize: typeof config.textBorderSize === 'number' ? config.textBorderSize : 1,
                     textBorderRadius: typeof config.textBorderRadius === 'number' ? config.textBorderRadius : 4,
                     textSize: typeof config.textSize === 'number' ? config.textSize : 11,
-                    textPadding: config.textPadding || { left: 6, right: 6, top: 3, bottom: 3 },
+                    textPadding: config.textPadding || { left: 4, right: 6, top: 4, bottom: 4 },
                     pricePrefix: config.pricePrefix || '$',
                     pricePrecision: typeof config.pricePrecision === 'number' ? config.pricePrecision : 2,
                     showPrice: config.showPrice !== false
@@ -2233,7 +2250,7 @@ export default function SimpleKLineChart({
                   try { measureBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'measureClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
                   if (isComposeAllowed()) {
                     var crosshairBtn = document.createElement('button');
-                    crosshairBtn.className = 'custom-button'; crosshairBtn.id = 'btn-crosshair'; crosshairBtn.title = 'Crosshair'; crosshairBtn.innerText = 'add';
+                    crosshairBtn.className = 'custom-button'; crosshairBtn.id = 'btn-crosshair'; crosshairBtn.title = 'Add Level/Signal'; crosshairBtn.innerText = 'add_circle';
                     buttonsContainer.appendChild(crosshairBtn);
                     try { crosshairBtn.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); try { if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'crosshairClick', price: window.__SIMPLE_KLINE__ && window.__SIMPLE_KLINE__.lastCrosshairPrice })); } } catch(err){} }); } catch(_){ }
                   }

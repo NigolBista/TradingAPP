@@ -182,6 +182,10 @@ export default function ChartFullScreen() {
     exits: number[];
     tps: number[];
   }>({ entries: [], exits: [], tps: [] });
+  const hasComposeDraft =
+    (composeDraft.entries && composeDraft.entries.length > 0) ||
+    (composeDraft.exits && composeDraft.exits.length > 0) ||
+    (composeDraft.tps && composeDraft.tps.length > 0);
 
   const selectedStrategyGroupId = profile.selectedStrategyGroupId;
   const ownedGroupIds = React.useMemo(() => {
@@ -445,7 +449,6 @@ export default function ChartFullScreen() {
         { id: "entry", label: "Entry" },
         { id: "exit", label: "Exit" },
         { id: "tp", label: "TP" },
-        { id: "back", label: "Back", icon: "arrow_back" },
       ];
     },
     []
@@ -462,7 +465,6 @@ export default function ChartFullScreen() {
   }, [profile.strategyComplexity, selectedComplexity]);
 
   useEffect(() => {
-    // Refresh compose buttons when complexity changes
     setComposeButtons(computeComposeButtons(selectedComplexity));
   }, [selectedComplexity, computeComposeButtons]);
 
@@ -492,6 +494,14 @@ export default function ChartFullScreen() {
       });
     }
   }, [selectedComplexity, computeComposeButtons, clearDraftPlan, symbol]);
+
+  const handleComposeCancel = () => {
+    resetCompose();
+  };
+
+  const handleComposeBack = () => {
+    setComposeMode(false);
+  };
 
   const handleSendSignal = useCallback(() => {
     try {
@@ -2016,45 +2026,19 @@ export default function ChartFullScreen() {
             </View>
           </View>
         )}
-
         {/* Dragging is handled in-chart; removed separate overlay controls */}
-        {showReasonIcon ? (
-          composeMode ? (
-            <>
-              {/* Send button on bottom-left (replaces reasoning) */}
-              <Pressable
-                onPress={handleSendSignal}
-                style={styles.reasoningFloatInChart}
-                hitSlop={8}
-              >
-                <Ionicons name="send" size={18} color="#00D4AA" />
-              </Pressable>
-              {/* Cancel button at lower-right */}
-              <Pressable
-                onPress={resetCompose}
-                style={[
-                  styles.reasoningFloatInChart,
-                  { right: 8, left: undefined },
-                ]}
-                hitSlop={8}
-              >
-                <Ionicons name="close-circle" size={20} color="#EF4444" />
-              </Pressable>
-            </>
-          ) : (
-            <Pressable
-              onPress={() => setShowReasoningBottomSheet(true)}
-              style={styles.reasoningFloatInChart}
-              hitSlop={8}
-            >
-              <Ionicons
-                name={reasoningIconName as any}
-                size={20}
-                color={reasoningIconColor}
-              />
-            </Pressable>
-          )
-        ) : null}
+        <Pressable
+          onPress={() => setShowReasoningBottomSheet(true)}
+          style={styles.reasoningFloatInChart}
+          hitSlop={8}
+        >
+          <Ionicons
+            name={reasoningIconName as any}
+            size={20}
+            color={reasoningIconColor}
+          />
+        </Pressable>
+        )
       </View>
       {/* Timeframe Chips */}
       <TimeframeBar
@@ -2104,71 +2088,144 @@ export default function ChartFullScreen() {
         streamingText={streamingText}
       />
       {/* Floating Reasoning Bulb moved inside chart */}
-      {/* Bottom Navigation: Chat, Analyze, Strategy */}
-      <View style={styles.bottomNav}>
-        <View style={styles.bottomNavContent}>
-          {/* Chat */}
-          <Pressable
-            onPress={() => navigation.navigate("ChartChat" as any, { symbol })}
-            style={styles.bottomNavButton}
-            hitSlop={8}
-          >
-            <Ionicons
-              name="chatbubble-outline"
-              size={16}
-              color="rgba(255,255,255,0.9)"
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.bottomNavButtonText}>Chat</Text>
-          </Pressable>
-
-          {/* Analyze */}
-          <Pressable
-            onPress={handleAnalyzePress}
-            disabled={analyzing}
-            style={[
-              styles.analyzeButton,
-              {
-                backgroundColor: analyzing
-                  ? "rgba(0,122,255,0.3)"
-                  : "rgba(0,122,255,0.9)",
-                shadowOpacity: analyzing ? 0.4 : 0.8,
-                shadowRadius: analyzing ? 8 : 12,
-              },
-            ]}
-            hitSlop={10}
-          >
-            {analyzing ? (
-              <Text style={styles.analyzeButtonText}>Analyzing…</Text>
-            ) : (
-              <>
-                <Ionicons
-                  name="analytics"
-                  size={16}
-                  color="#fff"
-                  style={{ marginRight: 8 }}
-                />
-                <Text style={styles.analyzeButtonText}>Analyze</Text>
-              </>
-            )}
-          </Pressable>
-
-          {/* Strategy */}
-          <Pressable
-            onPress={showComplexityBottomSheetWithTab}
-            style={styles.bottomNavButton}
-            hitSlop={8}
-          >
-            <Ionicons name="settings-outline" size={16} color="#fff" />
-            <Text
-              style={[styles.bottomNavButtonText, { marginLeft: 6 }]}
-              numberOfLines={1}
+      {/* Bottom Navigation / Compose Actions */}
+      {composeMode && canCompose ? (
+        <View style={styles.composeActionBar}>
+          <View style={styles.bottomNavContent}>
+            <Pressable
+              onPress={handleComposeBack}
+              style={styles.bottomNavButton}
+              hitSlop={8}
             >
-              Strategy
-            </Text>
-          </Pressable>
+              <Ionicons
+                name="arrow-back"
+                size={16}
+                color="rgba(255,255,255,0.9)"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.bottomNavButtonText}>Back</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={handleSendSignal}
+              disabled={!hasComposeDraft || analyzing}
+              style={[
+                styles.analyzeButton,
+                {
+                  backgroundColor:
+                    !hasComposeDraft || analyzing
+                      ? "rgba(0,122,255,0.3)"
+                      : "rgba(0,122,255,0.9)",
+                  shadowOpacity: !hasComposeDraft || analyzing ? 0.4 : 0.8,
+                  shadowRadius: !hasComposeDraft || analyzing ? 8 : 12,
+                },
+              ]}
+              hitSlop={10}
+            >
+              <Ionicons
+                name="paper-plane"
+                size={16}
+                color={
+                  !hasComposeDraft || analyzing
+                    ? "rgba(255,255,255,0.7)"
+                    : "#fff"
+                }
+                style={{ marginRight: 8 }}
+              />
+              <Text
+                style={[
+                  styles.analyzeButtonText,
+                  (!hasComposeDraft || analyzing) && {
+                    color: "rgba(255,255,255,0.85)",
+                  },
+                ]}
+              >
+                {analyzing ? "Sending…" : "Send"}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={handleComposeCancel}
+              style={styles.bottomNavButton}
+              hitSlop={8}
+            >
+              <Ionicons
+                name="close-circle-outline"
+                size={16}
+                color="rgba(255,255,255,0.9)"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.bottomNavButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
+      ) : (
+        <View style={styles.bottomNav}>
+          <View style={styles.bottomNavContent}>
+            {/* Chat */}
+            <Pressable
+              onPress={() =>
+                navigation.navigate("ChartChat" as any, { symbol })
+              }
+              style={styles.bottomNavButton}
+              hitSlop={8}
+            >
+              <Ionicons
+                name="chatbubble-outline"
+                size={16}
+                color="rgba(255,255,255,0.9)"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.bottomNavButtonText}>Chat</Text>
+            </Pressable>
+
+            {/* Analyze */}
+            <Pressable
+              onPress={handleAnalyzePress}
+              disabled={analyzing}
+              style={[
+                styles.analyzeButton,
+                {
+                  backgroundColor: analyzing
+                    ? "rgba(0,122,255,0.3)"
+                    : "rgba(0,122,255,0.9)",
+                  shadowOpacity: analyzing ? 0.4 : 0.8,
+                  shadowRadius: analyzing ? 8 : 12,
+                },
+              ]}
+              hitSlop={10}
+            >
+              {analyzing ? (
+                <Text style={styles.analyzeButtonText}>Analyzing…</Text>
+              ) : (
+                <>
+                  <Ionicons
+                    name="analytics"
+                    size={16}
+                    color="#fff"
+                    style={{ marginRight: 8 }}
+                  />
+                  <Text style={styles.analyzeButtonText}>Analyze</Text>
+                </>
+              )}
+            </Pressable>
+
+            {/* Strategy */}
+            <Pressable
+              onPress={showComplexityBottomSheetWithTab}
+              style={styles.bottomNavButton}
+              hitSlop={8}
+            >
+              <Ionicons name="settings-outline" size={16} color="#fff" />
+              <Text
+                style={[styles.bottomNavButtonText, { marginLeft: 6 }]}
+                numberOfLines={1}
+              >
+                Strategy
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
       {/* Strategy Complexity Bottom Sheet */}
       <ComplexityBottomSheet
         visible={showComplexityBottomSheet}
@@ -2348,6 +2405,14 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "600",
     fontSize: 12,
+  },
+  composeActionBar: {
+    borderTopWidth: 1,
+    borderTopColor: "#2a2a2a",
+    backgroundColor: "#0a0a0a",
+    paddingTop: 8,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
   },
   analyzeButton: {
     flexDirection: "row",
