@@ -1317,6 +1317,40 @@ export default function SimpleKLineChart({
               window.__SESSION_BG_REGISTERED__ = true;
             }
 
+            if (window.klinecharts.registerOverlay && !window.__LEVEL_ZONE_REGISTERED__) {
+              window.klinecharts.registerOverlay({
+                name: 'levelZone',
+                totalStep: 0,
+                needDefaultMouseEvent: false,
+                needCrosshair: false,
+                createPointFigures: function({ coordinates, overlay }) {
+                  try {
+                    var top = coordinates && coordinates[0];
+                    var bottom = coordinates && coordinates[1];
+                    if (!top || !bottom) return [];
+                    var y1 = typeof top.y === 'number' ? top.y : null;
+                    var y2 = typeof bottom.y === 'number' ? bottom.y : null;
+                    if (y1 == null || y2 == null || y1 === y2) return [];
+                    var minY = Math.min(y1, y2);
+                    var height = Math.abs(y1 - y2);
+                    if (!isFinite(height) || height <= 0) return [];
+                    var color = (overlay && overlay.extendData && overlay.extendData.color) || 'rgba(255,255,255,0.08)';
+                    return [
+                      {
+                        type: 'rect',
+                        attrs: { x: 0, y: minY, width: 9999, height: height },
+                        styles: { color: color, style: 'fill' },
+                        ignoreEvent: true
+                      }
+                    ];
+                  } catch (_) {
+                    return [];
+                  }
+                }
+              });
+              window.__LEVEL_ZONE_REGISTERED__ = true;
+            }
+
             var chart = window.klinecharts.init('k-line-chart');
             // Register custom VWAP indicator if available API present
             try {
@@ -1720,6 +1754,7 @@ export default function SimpleKLineChart({
                         pricePrefix: '$',
                         pricePrecision: 2,
                         textPadding: { left: 4, right: 4, top: 4, bottom: 4 },
+                        zoneColor: 'rgba(16, 185, 129, 0.12)'
                       };
                     case 'exit':
                     case 'stop':
@@ -1728,7 +1763,8 @@ export default function SimpleKLineChart({
                         dashedValue: [2, 2],
                         pricePrefix: '$',
                         pricePrecision: 2,
-                        textPadding: { left: 4, right: 4, top: 4, bottom: 4 }
+                        textPadding: { left: 4, right: 4, top: 4, bottom: 4 },
+                        zoneColor: 'rgba(239, 68, 68, 0.12)'
                       };
                     case 'tp':
                       return {
@@ -1800,6 +1836,9 @@ export default function SimpleKLineChart({
                 var ids = [overlayId].filter(function(id) { return id !== undefined; });
                 if (type === 'alert') { window.__SIMPLE_KLINE__.alertOverlayIds = (window.__SIMPLE_KLINE__.alertOverlayIds || []).concat(ids); }
                 else { window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat(ids); }
+                window.__SIMPLE_KLINE__.lastEntryPrice = (lineType === 'entry') ? Number(price) : window.__SIMPLE_KLINE__.lastEntryPrice;
+                window.__SIMPLE_KLINE__.lastExitPrice = (lineType === 'exit' || lineType === 'stop') ? Number(price) : window.__SIMPLE_KLINE__.lastExitPrice;
+                window.__SIMPLE_KLINE__.lastTpPrice = (lineType === 'tp') ? Number(price) : window.__SIMPLE_KLINE__.lastTpPrice;
               } catch(e){ post({ error: 'addPriceLine failed', message: String(e && e.message || e), stack: e.stack }); }
             }
 
@@ -1894,6 +1933,57 @@ export default function SimpleKLineChart({
                   if (key === 'lateExit') return 'lateExit';
                   return key;
                 }
+
+                function addZoneBetweenPrices(priceA, priceB, color){
+                  try {
+                    if (typeof priceA !== 'number' || typeof priceB !== 'number') return;
+                    if (priceA === priceB) return;
+                    if (!chart || typeof chart.createOverlay !== 'function') return;
+                    var top = Math.max(Number(priceA), Number(priceB));
+                    var bottom = Math.min(Number(priceA), Number(priceB));
+                    if (!isFinite(top) || !isFinite(bottom)) return;
+                    var zoneId = chart.createOverlay({
+                      name: 'levelZone',
+                      lock: true,
+                      mode: 'decoration',
+                      points: [
+                        { value: top },
+                        { value: bottom }
+                      ],
+                      extendData: { color: color }
+                    });
+                    if (!window.__SIMPLE_KLINE__) window.__SIMPLE_KLINE__ = {};
+                    if (zoneId !== undefined) {
+                      window.__SIMPLE_KLINE__.levelOverlayIds = (window.__SIMPLE_KLINE__.levelOverlayIds || []).concat([zoneId]);
+                    }
+                  } catch(_) {}
+                }
+
+                function drawZones(){
+                  try {
+                    if (!entriesList.length) return;
+                    var exitColor = 'rgba(239, 68, 68, 0.12)';
+                    var tpColor = 'rgba(16, 185, 129, 0.12)';
+                    entriesList.forEach(function(entryPrice, idx){
+                      if (typeof entryPrice !== 'number') return;
+                      var pairedExit = (typeof exitsList[idx] === 'number') ? exitsList[idx]
+                        : (exitsList.length ? exitsList[exitsList.length - 1] : undefined);
+                      if (typeof pairedExit !== 'number' && stopList.length) {
+                        pairedExit = stopList[Math.min(idx, stopList.length - 1)];
+                      }
+                      if (typeof pairedExit === 'number') {
+                        addZoneBetweenPrices(entryPrice, pairedExit, exitColor);
+                      }
+                      var pairedTp = (typeof tpsList[idx] === 'number') ? tpsList[idx]
+                        : (tpsList.length ? tpsList[Math.min(idx, tpsList.length - 1)] : undefined);
+                      if (typeof pairedTp === 'number') {
+                        addZoneBetweenPrices(entryPrice, pairedTp, tpColor);
+                      }
+                    });
+                  } catch(_) {}
+                }
+
+                drawZones();
 
                 function drawList(list, key){
                   (list || []).forEach(function(price, i){
