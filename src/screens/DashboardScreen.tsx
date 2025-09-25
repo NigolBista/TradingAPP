@@ -20,7 +20,7 @@ import DecalpXMini from "../components/insights/DecalpXMini";
 import PerformanceCard from "../components/insights/PerformanceCard";
 import TopGainersCard from "../components/insights/TopGainersCard";
 import AccountsList from "../components/insights/AccountsList";
-import { useTheme } from "../providers/ThemeProvider";
+import { useTheme, type Theme } from "../providers/ThemeProvider";
 
 const { width } = Dimensions.get("window");
 
@@ -31,6 +31,7 @@ interface DashboardData {
 export default function DashboardScreen() {
   const navigation = useNavigation();
   const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   // Use centralized store for market data too
   const { getSentimentSummary } = useAppDataStore();
 
@@ -296,8 +297,6 @@ export default function DashboardScreen() {
 
   // Avoid whole-screen loading: show content skeletons/partials instead
 
-  const styles = createStyles(theme);
-
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView
@@ -399,29 +398,36 @@ export default function DashboardScreen() {
   );
 }
 
-const createStyles = (theme: any) =>
+const createStyles = (theme: Theme) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.colors.background },
-    content: { flex: 1 },
+    content: { flex: 1, backgroundColor: theme.colors.background },
 
     // Mock Data Banner
     mockDataBanner: {
-      backgroundColor: "#FFA500",
+      backgroundColor: theme.mode === "dark" ? "#9A6700" : "#FFF7E6",
       paddingVertical: 8,
       paddingHorizontal: 16,
       alignItems: "center",
     },
     mockDataText: {
-      color: "#000000",
+      color: theme.mode === "dark" ? "#FCD34D" : "#9A6700",
       fontSize: 12,
       fontWeight: "600",
     },
-    centered: { justifyContent: "center", alignItems: "center" },
-    loadingText: { color: "#888888", marginTop: 16, fontSize: 16 },
+    centered: {
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    loadingText: {
+      color: theme.colors.textSecondary,
+      marginTop: 16,
+      fontSize: 16,
+    },
 
     // Portfolio Header
     portfolioHeader: {
-      backgroundColor: "#1a1a1a",
+      backgroundColor: theme.mode === "dark" ? "#1a1a1a" : theme.colors.surface,
       paddingHorizontal: 20,
       paddingTop: 60,
       paddingBottom: 24,
@@ -430,7 +436,7 @@ const createStyles = (theme: any) =>
     portfolioValue: {
       fontSize: 36,
       fontWeight: "bold",
-      color: "#ffffff",
+      color: theme.colors.text,
       marginBottom: 8,
     },
     portfolioChange: {
@@ -441,17 +447,17 @@ const createStyles = (theme: any) =>
       fontSize: 18,
       fontWeight: "600",
     },
-    positive: { color: "#00D4AA" },
-    negative: { color: "#FF5722" },
+    positive: { color: theme.colors.success },
+    negative: { color: theme.colors.error },
     portfolioSubtext: {
-      color: "#888888",
+      color: theme.colors.textSecondary,
       fontSize: 14,
       marginTop: 8,
     },
 
     // Chart
     chartContainer: {
-      backgroundColor: "#1a1a1a",
+      backgroundColor: theme.mode === "dark" ? "#1a1a1a" : theme.colors.surface,
       marginHorizontal: 16,
       marginTop: 16,
       borderRadius: 12,
@@ -462,13 +468,13 @@ const createStyles = (theme: any) =>
       paddingVertical: 40,
     },
     chartText: {
-      color: "#ffffff",
+      color: theme.colors.text,
       fontSize: 18,
       fontWeight: "600",
       marginTop: 12,
     },
     chartSubtext: {
-      color: "#888888",
+      color: theme.colors.textSecondary,
       fontSize: 14,
       marginTop: 4,
     },
@@ -493,10 +499,27 @@ const createStyles = (theme: any) =>
       paddingVertical: 8,
       borderRadius: 999,
     },
-    pillBull: { backgroundColor: "#16a34a" },
-    pillBear: { backgroundColor: "#dc2626" },
-    pillNeutral: { backgroundColor: "#6b7280" },
-    pillText: { color: "#ffffff", fontWeight: "700", letterSpacing: 0.3 },
+    pillBull: {
+      backgroundColor:
+        theme.mode === "dark" ? "rgba(22,163,74,0.2)" : "rgba(34,197,94,0.12)",
+    },
+    pillBear: {
+      backgroundColor:
+        theme.mode === "dark"
+          ? "rgba(220,38,38,0.2)"
+          : "rgba(248,113,113,0.12)",
+    },
+    pillNeutral: {
+      backgroundColor:
+        theme.mode === "dark"
+          ? "rgba(107,114,128,0.2)"
+          : "rgba(148,163,184,0.12)",
+    },
+    pillText: {
+      color: theme.colors.text,
+      fontWeight: "700",
+      letterSpacing: 0.3,
+    },
     sectionHeader: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -504,10 +527,11 @@ const createStyles = (theme: any) =>
       marginBottom: 16,
     },
     sectionTitle: {
-      fontSize: 16,
+      fontSize: 18,
       fontWeight: "700",
-      color: "#ffffff",
-      marginBottom: 12,
+      color: theme.colors.text,
+      marginBottom: 14,
+      letterSpacing: 0.2,
     },
     viewAllButton: {
       flexDirection: "row",
@@ -516,7 +540,7 @@ const createStyles = (theme: any) =>
       paddingVertical: 4,
     },
     viewAllText: {
-      color: "#00D4AA",
+      color: theme.colors.primary,
       fontSize: 14,
       fontWeight: "600",
       marginRight: 4,
@@ -524,7 +548,7 @@ const createStyles = (theme: any) =>
 
     // Market Brief
     briefText: {
-      color: "#cccccc",
+      color: theme.colors.textSecondary,
       fontSize: 16,
       lineHeight: 22,
       marginBottom: 16,
@@ -537,18 +561,19 @@ const createStyles = (theme: any) =>
       alignItems: "center",
     },
     statLabel: {
-      color: "#888888",
+      color: theme.colors.textSecondary,
       fontSize: 12,
       marginBottom: 4,
     },
     statValue: {
       fontSize: 16,
       fontWeight: "600",
+      color: theme.colors.text,
     },
 
     // Watchlist
     emptyText: {
-      color: "#888888",
+      color: theme.colors.textSecondary,
       fontSize: 16,
       textAlign: "center",
       paddingVertical: 20,
@@ -559,18 +584,18 @@ const createStyles = (theme: any) =>
       alignItems: "center",
       paddingVertical: 12,
       borderBottomWidth: 1,
-      borderBottomColor: "#2a2a2a",
+      borderBottomColor: theme.colors.border,
     },
     watchlistLeft: {
       flex: 1,
     },
     watchlistSymbol: {
-      color: "#ffffff",
+      color: theme.colors.text,
       fontSize: 16,
       fontWeight: "600",
     },
     watchlistName: {
-      color: "#888888",
+      color: theme.colors.textSecondary,
       fontSize: 14,
       marginTop: 2,
     },
@@ -578,7 +603,7 @@ const createStyles = (theme: any) =>
       alignItems: "flex-end",
     },
     watchlistPrice: {
-      color: "#ffffff",
+      color: theme.colors.text,
       fontSize: 16,
       fontWeight: "600",
     },
@@ -588,7 +613,7 @@ const createStyles = (theme: any) =>
       marginTop: 2,
     },
     marketOverviewButton: {
-      backgroundColor: "#1a1a1a",
+      backgroundColor: theme.mode === "dark" ? "#1a1a1a" : theme.colors.surface,
       borderRadius: 12,
       padding: 16,
       flexDirection: "row",
@@ -600,12 +625,12 @@ const createStyles = (theme: any) =>
       alignItems: "center",
     },
     marketOverviewTitle: {
-      color: "#ffffff",
+      color: theme.colors.text,
       fontSize: 16,
       fontWeight: "600",
     },
     marketOverviewSubtitle: {
-      color: "#9ca3af",
+      color: theme.colors.textSecondary,
       fontSize: 12,
       marginTop: 2,
     },
@@ -634,9 +659,12 @@ const createStyles = (theme: any) =>
       alignItems: "center",
       marginRight: 8,
       minWidth: 100,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
     accountTabActive: {
       backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
     },
     accountTabText: {
       color: theme.colors.textSecondary,
@@ -644,7 +672,7 @@ const createStyles = (theme: any) =>
       fontWeight: "500",
     },
     accountTabTextActive: {
-      color: "#ffffff",
+      color: theme.mode === "dark" ? "#ffffff" : theme.colors.background,
       fontWeight: "600",
     },
   });

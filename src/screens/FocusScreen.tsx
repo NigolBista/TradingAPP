@@ -10,7 +10,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import OpenAI from "openai";
-import { useTheme } from "../providers/ThemeProvider";
+import { useTheme, type Theme } from "../providers/ThemeProvider";
+import { COLORS } from "../constants/colors";
 import {
   getGlobalMarketData,
   refreshGlobalCache,
@@ -39,216 +40,6 @@ interface WatchlistInsight {
   newsCount: number;
   latestHeadline?: string;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#0A0F1C",
-  },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 24,
-  },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  headerTitle: {
-    color: "#FFFFFF",
-    fontSize: 24,
-    fontWeight: "700",
-  },
-  headerSubtitle: {
-    color: "#9CA3AF",
-    fontSize: 13,
-    marginTop: 2,
-  },
-  section: {
-    marginTop: 16,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  sectionTitle: {
-    color: "#E5E7EB",
-    fontSize: 16,
-    fontWeight: "700",
-    marginLeft: 6,
-  },
-  eventsContainer: {
-    marginTop: 6,
-    gap: 8,
-  },
-  eventsCard: {
-    backgroundColor: "#0F1629",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#1F2937",
-  },
-  eventsHeaderText: {
-    color: "#E5E7EB",
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 6,
-  },
-  eventLineText: {
-    color: "#B6C0CA",
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  summaryCard: {
-    backgroundColor: "#0F1629",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#1F2937",
-    marginBottom: 10,
-  },
-  summaryHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 6,
-  },
-  summaryHeaderText: {
-    color: "#E5E7EB",
-    fontSize: 14,
-    fontWeight: "700",
-    marginLeft: 6,
-  },
-  summaryText: {
-    color: "#B6C0CA",
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  metricsCard: {
-    backgroundColor: "#0F1629",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#1F2937",
-    marginBottom: 10,
-  },
-  metricsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  metricsHeaderText: {
-    color: "#E5E7EB",
-    fontSize: 14,
-    fontWeight: "700",
-    marginLeft: 6,
-  },
-  metricsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  metricItem: {
-    backgroundColor: "#1F2937",
-    borderRadius: 6,
-    padding: 8,
-    minWidth: 100,
-    flex: 1,
-  },
-  metricLabel: {
-    color: "#9CA3AF",
-    fontSize: 11,
-    marginBottom: 2,
-  },
-  metricValue: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  metricChange: {
-    fontSize: 11,
-    fontWeight: "500",
-  },
-  metricPositive: {
-    color: "#10B981",
-  },
-  metricNegative: {
-    color: "#EF4444",
-  },
-  watchlistCard: {
-    backgroundColor: "#0F1629",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#1F2937",
-    marginBottom: 10,
-  },
-  watchlistHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  watchlistHeaderText: {
-    color: "#E5E7EB",
-    fontSize: 14,
-    fontWeight: "700",
-    marginLeft: 6,
-  },
-  watchlistGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  watchlistItem: {
-    backgroundColor: "#1F2937",
-    borderRadius: 6,
-    padding: 8,
-    minWidth: 100,
-    flex: 1,
-  },
-  watchlistSymbol: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  watchlistNews: {
-    color: "#9CA3AF",
-    fontSize: 11,
-    marginBottom: 2,
-  },
-  watchlistSentiment: {
-    fontSize: 11,
-    fontWeight: "500",
-  },
-  eventCard: {
-    backgroundColor: "#0F1629",
-    borderRadius: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#1F2937",
-  },
-  eventTitle: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  eventMeta: {
-    color: "#9CA3AF",
-    fontSize: 12,
-  },
-  emptyText: {
-    color: "#6B7280",
-    fontSize: 13,
-    marginTop: 6,
-  },
-});
-
 function startOfDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -376,6 +167,7 @@ function bucketize(
 
 export default function FocusScreen() {
   const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [fedEvents, setFedEvents] = useState<FedEvent[]>([]);
   const [marketEvents, setMarketEvents] = useState<MarketEvent[]>([]);
@@ -637,7 +429,7 @@ Summary: <one-sentence>
                     ? styles.metricPositive
                     : stock.sentiment === "Negative"
                     ? styles.metricNegative
-                    : { color: "#9CA3AF" },
+                    : styles.metricNeutral,
                 ]}
               >
                 {stock.sentiment}
@@ -782,3 +574,216 @@ Summary: <one-sentence>
     </SafeAreaView>
   );
 }
+
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    content: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 24,
+    },
+    header: {
+      paddingHorizontal: 16,
+      paddingTop: 8,
+      paddingBottom: 8,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    headerTitle: {
+      color: theme.colors.text,
+      fontSize: 24,
+      fontWeight: "700",
+    },
+    headerSubtitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      marginTop: 2,
+    },
+    section: {
+      marginTop: 16,
+    },
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    sectionTitle: {
+      color: theme.colors.text,
+      fontSize: 16,
+      fontWeight: "700",
+      marginLeft: 6,
+    },
+    eventsCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 10,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginTop: 6,
+    },
+    eventsHeaderText: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "700",
+      marginBottom: 6,
+    },
+    eventLineText: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    summaryCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 10,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginBottom: 10,
+    },
+    summaryHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 6,
+    },
+    summaryHeaderText: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "700",
+      marginLeft: 6,
+    },
+    summaryText: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    metricsCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 10,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginBottom: 10,
+    },
+    metricsHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    metricsHeaderText: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "700",
+      marginLeft: 6,
+    },
+    metricsGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    metricItem: {
+      backgroundColor:
+        theme.mode === "dark" ? "#1F2937" : "rgba(15, 23, 42, 0.06)",
+      borderRadius: 6,
+      padding: 8,
+      minWidth: 100,
+      flex: 1,
+    },
+    metricLabel: {
+      color: theme.colors.textSecondary,
+      fontSize: 11,
+      marginBottom: 2,
+    },
+    metricValue: {
+      color: theme.colors.text,
+      fontSize: 13,
+      fontWeight: "600",
+    },
+    metricChange: {
+      fontSize: 11,
+      fontWeight: "500",
+    },
+    metricPositive: {
+      color: COLORS.POSITIVE,
+    },
+    metricNegative: {
+      color: COLORS.NEGATIVE,
+    },
+    metricNeutral: {
+      color: theme.colors.textSecondary,
+    },
+    eventCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 10,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginBottom: 8,
+    },
+    eventTitle: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "700",
+      marginBottom: 4,
+    },
+    eventMeta: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+    },
+    watchlistCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 10,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      marginBottom: 10,
+    },
+    watchlistHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 8,
+    },
+    watchlistHeaderText: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "700",
+      marginLeft: 6,
+    },
+    watchlistGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    watchlistItem: {
+      backgroundColor:
+        theme.mode === "dark" ? "#1F2937" : "rgba(15, 23, 42, 0.06)",
+      borderRadius: 6,
+      padding: 8,
+      minWidth: 100,
+      flex: 1,
+    },
+    watchlistSymbol: {
+      color: theme.colors.text,
+      fontSize: 13,
+      fontWeight: "600",
+      marginBottom: 2,
+    },
+    watchlistNews: {
+      color: theme.colors.textSecondary,
+      fontSize: 11,
+      marginBottom: 2,
+    },
+    watchlistSentiment: {
+      fontSize: 11,
+      fontWeight: "500",
+    },
+    emptyText: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      marginTop: 6,
+    },
+  });

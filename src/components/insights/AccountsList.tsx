@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useTheme } from "../../providers/ThemeProvider";
+import { useTheme, type Theme } from "../../providers/ThemeProvider";
 
 interface Account {
   id: string;
@@ -107,6 +107,8 @@ export default function AccountsList({
     return isInvestment;
   };
 
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
   return (
     <View style={styles.container}>
       {accounts.map((account) => (
@@ -115,7 +117,10 @@ export default function AccountsList({
           style={[
             styles.accountCard,
             {
-              backgroundColor: "rgba(17, 24, 39, 0.5)",
+              backgroundColor:
+                theme.mode === "dark"
+                  ? "rgba(17, 24, 39, 0.75)"
+                  : "rgba(15, 23, 42, 0.06)",
               borderColor: theme.colors.border,
             },
           ]}
@@ -196,7 +201,10 @@ export default function AccountsList({
         style={[
           styles.addAccountCard,
           {
-            backgroundColor: "rgba(17, 24, 39, 0.5)",
+            backgroundColor:
+              theme.mode === "dark"
+                ? "rgba(17, 24, 39, 0.75)"
+                : "rgba(15, 23, 42, 0.06)",
             borderColor: theme.colors.border,
           },
         ]}
@@ -206,7 +214,12 @@ export default function AccountsList({
           <View
             style={[
               styles.addIconContainer,
-              { backgroundColor: theme.colors.primary + "20" },
+              {
+                backgroundColor:
+                  theme.mode === "dark"
+                    ? theme.colors.primary + "26"
+                    : theme.colors.primary + "14",
+              },
             ]}
           >
             <Ionicons name="add" size={24} color={theme.colors.primary} />
@@ -237,117 +250,118 @@ export default function AccountsList({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    gap: 8,
-  },
-  title: {
-    color: "#ffffff",
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 12,
-  },
-  accountCard: {
-    backgroundColor: "#111827",
-    borderRadius: 8,
-    padding: 12,
-    marginHorizontal: 0,
-  },
-  accountHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 8,
-  },
-  providerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  providerIcon: {
-    marginRight: 8,
-  },
-  providerName: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  accountName: {
-    color: "#9ca3af",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  statusContainer: {
-    alignItems: "flex-end",
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 4,
-  },
-  statusConnected: {
-    backgroundColor: "#10B981",
-  },
-  statusDisconnected: {
-    backgroundColor: "#EF4444",
-  },
-  lastSync: {
-    color: "#6b7280",
-    fontSize: 10,
-  },
-  accountBody: {
-    marginTop: 4,
-  },
-  balanceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  balance: {
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  dayChange: {
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  accountType: {
-    fontSize: 11,
-  },
-  up: {
-    color: "#10B981",
-  },
-  down: {
-    color: "#EF4444",
-  },
-  addAccountCard: {
-    borderRadius: 8,
-    padding: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: 1,
-    borderStyle: "dashed",
-  },
-  addAccountContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  addIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  addAccountTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  addAccountSubtitle: {
-    fontSize: 12,
-    marginTop: 2,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      gap: 8,
+    },
+    title: {
+      color: theme.colors.text,
+      fontSize: 16,
+      fontWeight: "700",
+      marginBottom: 12,
+    },
+    accountCard: {
+      borderRadius: 8,
+      padding: 12,
+      marginHorizontal: 0,
+      borderWidth: 1,
+    },
+    accountHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 8,
+    },
+    providerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    providerIcon: {
+      marginRight: 8,
+    },
+    providerName: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    accountName: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    statusContainer: {
+      alignItems: "flex-end",
+    },
+    statusDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      marginBottom: 4,
+    },
+    statusConnected: {
+      backgroundColor: theme.colors.success,
+    },
+    statusDisconnected: {
+      backgroundColor: theme.colors.error,
+    },
+    lastSync: {
+      color: theme.colors.textSecondary,
+      fontSize: 10,
+    },
+    accountBody: {
+      marginTop: 4,
+    },
+    balanceRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 4,
+    },
+    balance: {
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    dayChange: {
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    accountType: {
+      fontSize: 11,
+    },
+    up: {
+      color: theme.colors.success,
+    },
+    down: {
+      color: theme.colors.error,
+    },
+    addAccountCard: {
+      borderRadius: 8,
+      padding: 12,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      borderWidth: 1,
+      borderStyle: "dashed",
+    },
+    addAccountContent: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    addIconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+    addAccountTitle: {
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    addAccountSubtitle: {
+      fontSize: 12,
+      marginTop: 2,
+    },
+  });

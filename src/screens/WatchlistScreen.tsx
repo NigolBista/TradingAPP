@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   View,
   Text,
@@ -64,29 +64,36 @@ const createStyles = (theme: any) =>
 
     // Watchlist selector
     watchlistSelector: {
-      backgroundColor: "transparent",
       paddingHorizontal: 16,
-      paddingBottom: 16, // Add proper bottom padding
+      paddingBottom: 16,
     },
     watchlistChip: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
       borderRadius: 16,
-      marginRight: 8,
+      marginRight: 10,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      backgroundColor: "transparent",
+      backgroundColor:
+        theme.mode === "dark" ? "rgba(31,41,55,0.6)" : theme.colors.surface,
+      flexDirection: "row",
+      alignItems: "center",
     },
     watchlistChipActive: {
       borderColor: theme.colors.primary,
-      backgroundColor: theme.colors.primary + "20",
+      backgroundColor:
+        theme.mode === "dark"
+          ? theme.colors.primary + "33"
+          : theme.colors.primary + "1A",
     },
     watchlistChipText: {
-      fontSize: 12,
-      color: theme.colors.text,
-      fontWeight: "500",
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      fontWeight: "600",
     },
-    watchlistChipTextActive: { color: theme.colors.primary },
+    watchlistChipTextActive: {
+      color: theme.colors.primary,
+    },
 
     // Chart section
     chartSection: {
@@ -237,6 +244,11 @@ const createStyles = (theme: any) =>
       textAlign: "center",
       marginTop: 12,
     },
+    watchlistContent: {
+      paddingTop: 16,
+      paddingBottom: 32,
+      gap: 12,
+    },
   });
 
 interface StockData extends ScanResult {
@@ -260,7 +272,7 @@ export default function WatchlistScreen() {
   const isGlobalFavorite = useUserStore((s) => s.isGlobalFavorite);
   const setActiveWatchlist = useUserStore((s) => s.setActiveWatchlist);
 
-  const styles = createStyles(theme);
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const marketStatus = useMarketStatus();
 
   const [loading, setLoading] = useState(true);
@@ -857,7 +869,7 @@ export default function WatchlistScreen() {
               tintColor={theme.colors.primary}
             />
           }
-          contentContainerStyle={{ paddingTop: 16, paddingBottom: 32 }}
+          contentContainerStyle={styles.watchlistContent}
         >
           {stockData.length === 0 && loading ? (
             <View style={styles.emptyState}>

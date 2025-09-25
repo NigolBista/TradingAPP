@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -10,17 +10,19 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
-import { COLORS } from "../constants/colors";
 import MarketOverview from "../components/insights/MarketOverview";
 import IndexStrip from "../components/insights/IndexStrip";
 import ETFStrip from "../components/insights/ETFStrip";
 import RecentEarningsCard from "../components/insights/RecentEarningsCard";
 import UpcomingEarningsCard from "../components/insights/UpcomingEarningsCard";
 import { useAppDataStore } from "../store/appDataStore";
+import { useTheme, type Theme } from "../providers/ThemeProvider";
 // Remove marketOverviewStore to prevent loops
 
 export default function MarketOverviewPage() {
   const navigation = useNavigation();
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
 
   // Use centralized store - no loading states needed!
   const {
@@ -96,7 +98,7 @@ export default function MarketOverviewPage() {
           )}
         </View>
         <Pressable onPress={handleDecalpXPress} style={styles.decalpxButton}>
-          <Ionicons name="analytics" size={20} color={COLORS.BLUE_BASE} />
+          <Ionicons name="analytics" size={20} color={theme.colors.primary} />
         </Pressable>
       </View>
 
@@ -141,87 +143,104 @@ export default function MarketOverviewPage() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000000",
-  },
-  liveDataBanner: {
-    backgroundColor: "#1a4d3a",
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    alignItems: "center",
-  },
-  liveDataText: {
-    color: "#4ade80",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 16,
-    backgroundColor: "#1a1a1a",
-    borderBottomWidth: 1,
-    borderBottomColor: "#2a2a2a",
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerCenter: {
-    flex: 1,
-    alignItems: "center",
-  },
-  headerTitle: {
-    color: "#ffffff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  headerSubtitle: {
-    color: "#9CA3AF",
-    fontSize: 12,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  sentimentBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    marginTop: 4,
-  },
-  badgeBull: { backgroundColor: "#16a34a" },
-  badgeBear: { backgroundColor: "#dc2626" },
-  badgeNeutral: { backgroundColor: "#6b7280" },
-  sentimentText: {
-    color: "#ffffff",
-    fontSize: 10,
-    fontWeight: "600",
-  },
-  decalpxButton: {
-    padding: 8,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  indexSection: {
-    marginHorizontal: 16,
-    marginTop: 12,
-  },
-  etfSection: {
-    marginHorizontal: 16,
-    marginTop: 16,
-  },
-  marketOverviewSection: {
-    marginHorizontal: 16,
-    marginTop: 16,
-  },
-  earningsSection: {
-    marginHorizontal: 16,
-    marginTop: 16,
-  },
-});
+const createStyles = (theme: Theme) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    liveDataBanner: {
+      backgroundColor:
+        theme.mode === "dark"
+          ? "rgba(16, 185, 129, 0.16)"
+          : "rgba(16, 185, 129, 0.12)",
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      alignItems: "center",
+    },
+    liveDataText: {
+      color: theme.colors.success,
+      fontSize: 12,
+      fontWeight: "600",
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 16,
+      paddingTop: 16,
+      paddingBottom: 16,
+      backgroundColor: theme.mode === "dark" ? "#1a1a1a" : theme.colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    backButton: {
+      padding: 8,
+    },
+    headerCenter: {
+      flex: 1,
+      alignItems: "center",
+    },
+    headerTitle: {
+      color: theme.colors.text,
+      fontSize: 18,
+      fontWeight: "700",
+    },
+    headerSubtitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      fontWeight: "500",
+      marginTop: 2,
+    },
+    sentimentBadge: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+      marginTop: 4,
+    },
+    badgeBull: {
+      backgroundColor:
+        theme.mode === "dark" ? "rgba(22,163,74,0.25)" : "rgba(22,163,74,0.14)",
+    },
+    badgeBear: {
+      backgroundColor:
+        theme.mode === "dark"
+          ? "rgba(220,38,38,0.25)"
+          : "rgba(248,113,113,0.14)",
+    },
+    badgeNeutral: {
+      backgroundColor:
+        theme.mode === "dark"
+          ? "rgba(107,114,128,0.3)"
+          : "rgba(148,163,184,0.16)",
+    },
+    sentimentText: {
+      color: theme.colors.text,
+      fontSize: 10,
+      fontWeight: "600",
+    },
+    decalpxButton: {
+      padding: 8,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    indexSection: {
+      marginHorizontal: 16,
+      marginTop: 12,
+    },
+    etfSection: {
+      marginHorizontal: 16,
+      marginTop: 16,
+    },
+    marketOverviewSection: {
+      marginHorizontal: 16,
+      marginTop: 16,
+    },
+    earningsSection: {
+      marginHorizontal: 16,
+      marginTop: 16,
+    },
+  });

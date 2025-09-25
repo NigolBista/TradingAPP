@@ -5,7 +5,7 @@ import { COLORS } from "../constants/colors";
 
 export type ThemeMode = "system" | "light" | "dark";
 
-interface Theme {
+export interface Theme {
   mode: ThemeMode;
   colors: {
     background: string;
