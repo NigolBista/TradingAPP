@@ -13,6 +13,7 @@ export type NewsItem = {
   imageUrl?: string;
   topics?: string[];
   tickers?: string[];
+  importance?: "high" | "medium" | "low";
 };
 
 // caching to avoid repeated calls

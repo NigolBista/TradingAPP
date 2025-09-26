@@ -2,6 +2,7 @@ import "react-native-gesture-handler";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import RootNavigation from "./src/navigation";
 import { ThemeProvider } from "./src/providers/ThemeProvider";
 import { StripeProvider } from "./src/providers/StripeProvider";
@@ -17,19 +18,21 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <StripeProvider>
-          <AuthProvider>
-            <NotificationsProvider>
-              <OverlayProvider>
-                <StatusBar style="auto" />
-                <RootNavigation />
-              </OverlayProvider>
-            </NotificationsProvider>
-          </AuthProvider>
-        </StripeProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <StripeProvider>
+            <AuthProvider>
+              <NotificationsProvider>
+                <OverlayProvider>
+                  <StatusBar style="auto" />
+                  <RootNavigation />
+                </OverlayProvider>
+              </NotificationsProvider>
+            </AuthProvider>
+          </StripeProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

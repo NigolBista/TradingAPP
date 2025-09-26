@@ -39,22 +39,18 @@ export interface CachedSignal {
   };
 }
 
+export type SignalStatus = "open" | "closed";
+export type SignalRecord = CachedSignal & { status?: SignalStatus };
+
 interface SignalCacheState {
-  signals: Record<string, CachedSignal>; // keyed by symbol
+  signals: Record<string, SignalRecord>; // keyed by symbol
+  signalHistory: SignalRecord[];
 
-  // Cache a signal for a symbol
-  cacheSignal: (signal: CachedSignal) => void;
-
-  // Get cached signal for a symbol
-  getCachedSignal: (symbol: string) => CachedSignal | null;
-
-  // Check if signal is fresh (less than 5 minutes old)
+  cacheSignal: (signal: CachedSignal, status?: SignalStatus) => void;
+  getCachedSignal: (symbol: string) => SignalRecord | null;
+  getSignalsByStatus: (status: SignalStatus) => SignalRecord[];
   isSignalFresh: (symbol: string) => boolean;
-
-  // Clear cache for a symbol
   clearSignal: (symbol: string) => void;
-
-  // Clear all cached signals
   clearAll: () => void;
 }
 
@@ -64,22 +60,46 @@ export const useSignalCacheStore = create<SignalCacheState>()(
   persist(
     (set, get) => ({
       signals: {},
+      signalHistory: [],
 
-      cacheSignal: (signal: CachedSignal) => {
-        set((state) => ({
-          signals: {
+      cacheSignal: (signal: CachedSignal, status: SignalStatus = "open") => {
+        const record: SignalRecord = {
+          ...signal,
+          status,
+          timestamp: Date.now(),
+        };
+
+        set((state) => {
+          const nextSignals = {
             ...state.signals,
-            [signal.symbol]: {
-              ...signal,
-              timestamp: Date.now(),
-            },
-          },
-        }));
+            [signal.symbol]: record,
+          };
+
+          const existingIndex = state.signalHistory.findIndex(
+            (item) => item.symbol === signal.symbol
+          );
+          const nextHistory = [...state.signalHistory];
+          if (existingIndex !== -1) {
+            nextHistory.splice(existingIndex, 1, record);
+          } else {
+            nextHistory.unshift(record);
+          }
+
+          return {
+            signals: nextSignals,
+            signalHistory: nextHistory.slice(0, 100),
+          };
+        });
       },
 
       getCachedSignal: (symbol: string) => {
         const signals = get().signals;
         return signals[symbol] || null;
+      },
+
+      getSignalsByStatus: (status) => {
+        const { signalHistory } = get();
+        return signalHistory.filter((record) => record.status === status);
       },
 
       isSignalFresh: (symbol: string) => {
@@ -94,18 +114,24 @@ export const useSignalCacheStore = create<SignalCacheState>()(
         set((state) => {
           const newSignals = { ...state.signals };
           delete newSignals[symbol];
-          return { signals: newSignals };
+          const nextHistory = state.signalHistory.filter(
+            (item) => item.symbol !== symbol
+          );
+          return { signals: newSignals, signalHistory: nextHistory };
         });
       },
 
       clearAll: () => {
-        set({ signals: {} });
+        set({ signals: {}, signalHistory: [] });
       },
     }),
     {
       name: "signal-cache-store",
       storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({ signals: state.signals }),
+      partialize: (state) => ({
+        signals: state.signals,
+        signalHistory: state.signalHistory,
+      }),
     }
   )
 );

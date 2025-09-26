@@ -306,7 +306,7 @@ export default function ProfileScreen() {
             </Pressable>
 
             <Pressable
-              onPress={() => navigation.navigate("BrokerageAccounts")}
+              onPress={() => navigation.navigate("AccountsOverview")}
               style={styles.actionItem}
             >
               <View style={styles.actionLeft}>
@@ -317,15 +317,15 @@ export default function ProfileScreen() {
                   ]}
                 >
                   <Ionicons
-                    name="trending-up"
+                    name="wallet"
                     size={20}
                     color={theme.colors.success}
                   />
                 </View>
                 <View>
-                  <Text style={styles.actionTitle}>Brokerage Accounts</Text>
+                  <Text style={styles.actionTitle}>Accounts</Text>
                   <Text style={styles.actionSubtitle}>
-                    Connect your brokerage accounts
+                    View and manage connected accounts
                   </Text>
                 </View>
               </View>

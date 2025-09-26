@@ -22,6 +22,7 @@ import JourneyScreen from "../screens/JourneyScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 // Portfolio functionality moved to Dashboard
 import BrokerageAccountsScreen from "../screens/BrokerageAccountsScreen";
+import AccountsOverviewScreen from "../screens/AccountsOverviewScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
 import MarketScreenerScreen from "../screens/MarketScreenerScreen";
@@ -166,6 +167,11 @@ export default function RootNavigation() {
             component={BrokerageAccountsScreen}
           />
           <RootStack.Screen
+            name="AccountsOverview"
+            component={AccountsOverviewScreen}
+            options={{ headerShown: false }}
+          />
+          <RootStack.Screen
             name="MarketOverview"
             component={MarketOverviewScreen}
             options={{ headerShown: true, title: "Market Overview" }}
@@ -209,6 +215,11 @@ export default function RootNavigation() {
             name="StrategySettings"
             component={StrategySettingsScreen}
             options={{ headerShown: true, title: "Strategy Settings" }}
+          />
+          <RootStack.Screen
+            name="SignalsFeed"
+            component={SignalsFeedScreen}
+            options={{ headerShown: false }}
           />
         </RootStack.Navigator>
       ) : (

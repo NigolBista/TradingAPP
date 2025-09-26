@@ -20,6 +20,11 @@ interface Props {
   netWorthChangePercent: number;
   selected: Period;
   onChange: (p: Period) => void;
+  title?: string;
+  changeLabel?: string;
+  onHeaderPress?: () => void;
+  showChangeRow?: boolean;
+  showCycleHint?: boolean;
 }
 
 export default function PerformanceCard({
@@ -29,6 +34,11 @@ export default function PerformanceCard({
   netWorthChangePercent,
   selected,
   onChange,
+  title = "Total Net Worth",
+  changeLabel = "Today",
+  onHeaderPress,
+  showChangeRow = true,
+  showCycleHint = false,
 }: Props) {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -90,26 +100,39 @@ export default function PerformanceCard({
 
   const periods: Period[] = ["1D", "1W", "1M", "3M", "YTD", "1Y", "ALL"];
   const styles = createStyles(theme);
+  const HeaderComponent = onHeaderPress ? Pressable : View;
 
   return (
     <View style={styles.card}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Total Net Worth</Text>
+      <HeaderComponent
+        onPress={onHeaderPress}
+        style={({ pressed }: { pressed?: boolean }) => [
+          styles.header,
+          onHeaderPress ? styles.headerPressable : null,
+          pressed ? styles.headerPressed : null,
+        ]}
+      >
+        <Text style={styles.title}>{title}</Text>
         <Text style={styles.netWorth}>{formatCurrency(safeNetWorth)}</Text>
-        <View style={styles.changeRow}>
-          <Text
-            style={[
-              styles.change,
-              safeNetWorthChangePercent >= 0 ? styles.up : styles.down,
-            ]}
-          >
-            {safeNetWorthChangePercent >= 0 ? "▲" : "▼"}{" "}
-            {formatCurrency(Math.abs(safeNetWorthChange))} (
-            {Math.abs(safeNetWorthChangePercent).toFixed(2)}%)
-          </Text>
-          <Text style={styles.period}>Today</Text>
-        </View>
-      </View>
+        {showChangeRow && (
+          <View style={styles.changeRow}>
+            <Text
+              style={[
+                styles.change,
+                safeNetWorthChangePercent >= 0 ? styles.up : styles.down,
+              ]}
+            >
+              {safeNetWorthChangePercent >= 0 ? "▲" : "▼"}{" "}
+              {formatCurrency(Math.abs(safeNetWorthChange))} (
+              {Math.abs(safeNetWorthChangePercent).toFixed(2)}%)
+            </Text>
+            <Text style={styles.period}>{changeLabel}</Text>
+          </View>
+        )}
+        {showCycleHint && (
+          <Text style={styles.cycleHint}>Tap header to cycle metrics</Text>
+        )}
+      </HeaderComponent>
 
       <View style={styles.chartContainer}>
         <SimpleKLineChart
@@ -154,6 +177,7 @@ export default function PerformanceCard({
           </Pressable>
         ))}
       </View>
+      <View style={styles.separator} />
     </View>
   );
 }
@@ -167,6 +191,8 @@ const createStyles = (theme: any) =>
       minHeight: 220,
     },
     header: { alignItems: "flex-start" },
+    headerPressable: { alignItems: "flex-start", borderRadius: 12, padding: 4 },
+    headerPressed: { opacity: 0.85 },
     title: {
       color: theme.colors.textSecondary,
       fontSize: 14,
@@ -188,6 +214,12 @@ const createStyles = (theme: any) =>
     period: { color: theme.colors.textSecondary, fontSize: 12 },
     up: { color: "#10B981" },
     down: { color: "#EF4444" },
+    cycleHint: {
+      marginTop: 8,
+      color: theme.colors.textSecondary,
+      fontSize: 11,
+      letterSpacing: 0.3,
+    },
     chartContainer: {
       marginTop: 12,
       height: 120,
@@ -211,4 +243,11 @@ const createStyles = (theme: any) =>
       textAlign: "center",
     },
     tabTextActive: { color: "#fff", fontWeight: "700" },
+    separator: {
+      height: 2,
+      width: "100%",
+      backgroundColor: theme.colors.border,
+      marginTop: 12,
+      opacity: theme.mode === "dark" ? 0.35 : 0.5,
+    },
   });

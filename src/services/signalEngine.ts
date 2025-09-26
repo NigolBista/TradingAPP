@@ -255,3 +255,9 @@ export async function generateSignalSummary(
     allSignals: enriched,
   };
 }
+
+export function sortSignalsByFreshness(
+  signals: SignalSummary[]
+): SignalSummary[] {
+  return [...signals].sort((a, b) => b.timestamp - a.timestamp);
+}
