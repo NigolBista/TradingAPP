@@ -16,6 +16,7 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import {
@@ -23,7 +24,8 @@ import {
   type SignalSummary,
   convertSignalToTradePlan,
 } from "../services/signalEngine";
-import { useUserStore } from "../store/userStore";
+import { useUserStore, type StrategyGroup } from "../store/userStore";
+import { useStrategyBuilderStore } from "../store/strategyBuilderStore";
 import { useSignalCacheStore } from "../store/signalCacheStore";
 import {
   runManagedScan,
@@ -36,19 +38,106 @@ const MIN_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
   header: {
-    backgroundColor: "#1a1a1a",
+    backgroundColor: "#0a0a0a",
     paddingHorizontal: 16,
-    paddingTop: 48,
-    paddingBottom: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  headerTitle: { fontSize: 24, fontWeight: "bold", color: "#ffffff" },
-  headerSubtitle: { color: "#888888", fontSize: 14, marginTop: 4 },
-  headerActions: {
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  headerLeft: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
   },
-  reScanButton: {
+  backButton: {
+    padding: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  headerTitle: { fontSize: 24, fontWeight: "bold", color: "#ffffff" },
+  headerSubtitle: { color: "#888888", fontSize: 14, marginTop: 4 },
+  headerStrip: {
+    marginTop: 8,
+    backgroundColor: "#141414",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+  },
+  stripRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  stripText: { color: "#cbd5e1", fontSize: 12 },
+  stripMeta: { color: "#94a3b8", fontSize: 12 },
+  metadataRow: {
+    paddingTop: 12,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  metadataItem: { color: "#94a3b8", fontSize: 12 },
+  controlsRow: {
+    marginTop: 16,
+    marginHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  dropdown: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    backgroundColor: "#161616",
+  },
+  dropdownText: {
+    color: "#e5e7eb",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  filterTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2a2a2a",
+    backgroundColor: "#161616",
+  },
+  filterTriggerText: { color: "#e5e7eb", fontSize: 14, fontWeight: "600" },
+  filtersOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-start",
+    paddingTop: 120,
+  },
+  filtersCard: {
+    marginHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "#111827",
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    overflow: "hidden",
+  },
+  scanButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -56,11 +145,11 @@ const styles = StyleSheet.create({
     borderColor: "#00D4AA",
     backgroundColor: "#00D4AA",
   },
-  reScanDisabled: {
+  scanDisabled: {
     backgroundColor: "#1f3a36",
     borderColor: "#1f3a36",
   },
-  reScanText: {
+  scanText: {
     color: "#000000",
     fontSize: 14,
     fontWeight: "600",
@@ -82,9 +171,34 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 16,
-    flexWrap: "wrap",
+    alignItems: "center",
   },
+  filterTabs: {
+    marginTop: 12,
+  },
+  filterTabsContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  scopeToggle: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  scopeBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#2f2f2f",
+    backgroundColor: "#0f0f0f",
+  },
+  scopeBtnActive: { backgroundColor: "#00D4AA", borderColor: "#00D4AA" },
+  scopeBtnText: { color: "#e5e7eb", fontSize: 12, fontWeight: "600" },
+  scopeBtnTextActive: { color: "#111827" },
   filterChip: {
     paddingHorizontal: 12,
     paddingVertical: 6,
@@ -99,32 +213,32 @@ const styles = StyleSheet.create({
   signalCard: {
     backgroundColor: "#2a2a2a",
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 12,
+    marginBottom: 8,
   },
   signalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  signalSymbol: { fontSize: 18, fontWeight: "bold", color: "#ffffff" },
+  signalSymbol: { fontSize: 16, fontWeight: "bold", color: "#ffffff" },
   signalAction: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: "600",
     textTransform: "uppercase",
   },
   buyAction: { color: "#00D4AA" },
   sellAction: { color: "#FF5722" },
-  signalType: { fontSize: 12, color: "#888888", marginBottom: 8 },
-  signalDetails: { fontSize: 12, color: "#cccccc", marginTop: 6 },
+  signalType: { fontSize: 11, color: "#888888", marginBottom: 6 },
+  signalDetails: { fontSize: 11, color: "#cccccc", marginTop: 4 },
   confidenceBadge: {
     backgroundColor: "#00D4AA",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 5,
   },
-  confidenceText: { fontSize: 12, fontWeight: "600", color: "#000000" },
+  confidenceText: { fontSize: 10, fontWeight: "600", color: "#000000" },
   strategyModal: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.8)",
@@ -150,8 +264,195 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#333333",
   },
+  strategyItemActive: {
+    backgroundColor: "rgba(0, 212, 170, 0.08)",
+  },
   strategyName: { fontSize: 16, fontWeight: "600", color: "#ffffff" },
   strategyDesc: { fontSize: 14, color: "#888888", marginTop: 4 },
+  modalSectionTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  groupMeta: {
+    color: "#64748b",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  configModal: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "flex-end",
+    alignItems: "stretch",
+  },
+  configCard: {
+    width: "100%",
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    backgroundColor: "#111827",
+    padding: 20,
+  },
+  configTitle: {
+    fontSize: 20,
+    color: "#f8fafc",
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+  configLabel: {
+    fontSize: 13,
+    color: "#94a3b8",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  pickerTrigger: {
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: "#0f172a",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  pickerValue: { color: "#e2e8f0", fontSize: 14, fontWeight: "600" },
+  pickerList: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  pickerOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: "#0b1220",
+    borderBottomWidth: 1,
+    borderBottomColor: "#1f2937",
+  },
+  pickerOptionActive: {
+    backgroundColor: "rgba(0, 212, 170, 0.12)",
+  },
+  pickerOptionText: { color: "#e2e8f0", fontSize: 14, fontWeight: "600" },
+  pickerOptionSub: { color: "#94a3b8", fontSize: 12, marginTop: 4 },
+  pickerRow: { marginBottom: 20 },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 10,
+  },
+  checkboxBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#00D4AA",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "transparent",
+  },
+  checkboxBoxActive: {
+    backgroundColor: "#00D4AA",
+  },
+  checkboxLabel: { color: "#e2e8f0", fontSize: 14, fontWeight: "600" },
+  checkboxDescription: { color: "#94a3b8", fontSize: 12, marginTop: 2 },
+  configActions: {
+    marginTop: 8,
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  configAction: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#1f2937",
+  },
+  configActionPrimary: {
+    backgroundColor: "#00D4AA",
+    borderColor: "#00D4AA",
+  },
+  configActionText: { color: "#94a3b8", fontSize: 14, fontWeight: "600" },
+  configActionTextPrimary: {
+    color: "#0f172a",
+    fontWeight: "700",
+  },
+  bottomMetaRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#1f2937",
+    backgroundColor: "#0a0a0a",
+  },
+  navPrimaryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    shadowColor: "#00D4AA",
+    shadowOffset: { width: 0, height: 0 },
+    minWidth: 120,
+    flex: 1.2,
+    marginHorizontal: 6,
+    backgroundColor: "#00D4AA",
+  },
+  navPrimaryButtonText: {
+    color: "#0f172a",
+    fontWeight: "700",
+  },
+  bottomNav: {
+    borderTopWidth: 1,
+    borderTopColor: "#2a2a2a",
+    backgroundColor: "#0a0a0a",
+    paddingTop: 8,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
+  },
+  bottomNavContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  bottomMetaText: {
+    marginTop: 6,
+    color: "#94a3b8",
+    fontSize: 11,
+    textAlign: "center",
+  },
+  bottomNavButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "transparent",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    minWidth: 110,
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  bottomNavButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 12,
+  },
+  bottomMetaText: {
+    color: "#888888",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 8,
+  },
 });
 
 const STRATEGY_FILTERS = [
@@ -210,6 +511,7 @@ function getFilterForStrategy(strategy: string) {
 export default function SignalsFeedScreen() {
   const navigation = useNavigation<any>();
   const profile = useUserStore((s) => s.profile);
+  const setProfile = useUserStore((s) => s.setProfile);
   const cacheSignal = useSignalCacheStore((s) => s.cacheSignal);
   const getStoredScan = useTradingSignalsStore((s) => s.getScan);
   const saveStoredScan = useTradingSignalsStore((s) => s.saveScan);
@@ -217,12 +519,71 @@ export default function SignalsFeedScreen() {
   const setLastSavedFilter = useTradingSignalsStore(
     (s) => s.setLastSelectedFilter
   );
+  const ensureGroupDefaults = useStrategyBuilderStore(
+    (s) => s.ensureGroupDefaults
+  );
 
+  const strategyGroups = useMemo<StrategyGroup[]>(() => {
+    const owned = Array.isArray(profile.strategyGroups)
+      ? (profile.strategyGroups as StrategyGroup[])
+      : [];
+    const subscribed = Array.isArray(profile.subscribedStrategyGroups)
+      ? (profile.subscribedStrategyGroups as StrategyGroup[])
+      : [];
+
+    const merged = [...owned, ...subscribed];
+    const byId = new Map<string, StrategyGroup>();
+    merged.forEach((group) => {
+      if (group?.id) {
+        byId.set(group.id, group);
+      }
+    });
+
+    const defaultGroup: StrategyGroup = {
+      id: "default",
+      name: "Default Strategy",
+      description: "Use your default AI trading strategy",
+    };
+
+    if (byId.has("default")) {
+      const existing = byId.get("default")!;
+      byId.set("default", { ...defaultGroup, ...existing });
+    } else {
+      byId.set("default", defaultGroup);
+    }
+
+    return Array.from(byId.values()).sort((a, b) => {
+      if (a.id === "default") return -1;
+      if (b.id === "default") return 1;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+  }, [profile.strategyGroups, profile.subscribedStrategyGroups]);
+
+  const [selectedGroupId, setSelectedGroupId] = useState(() => {
+    if (
+      profile.selectedStrategyGroupId &&
+      strategyGroups.some(
+        (group) => group.id === profile.selectedStrategyGroupId
+      )
+    ) {
+      return profile.selectedStrategyGroupId;
+    }
+    return "default";
+  });
   const [signals, setSignals] = useState<SignalSummary[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState(
     lastSavedFilter || "all"
   );
   const [showStrategyModal, setShowStrategyModal] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
+  const [showGroupPicker, setShowGroupPicker] = useState(false);
+  const [useFavorites, setUseFavorites] = useState(true);
+  const [useGroupWatchlist, setUseGroupWatchlist] = useState(true);
+  const [pendingConfig, setPendingConfig] = useState({
+    groupId: selectedGroupId,
+    useFavorites: true,
+    useGroupWatchlist: true,
+  });
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [remainingRuns, setRemainingRuns] = useState<number | null>(null);
@@ -231,6 +592,7 @@ export default function SignalsFeedScreen() {
     null
   );
   const [now, setNow] = useState(Date.now());
+  const [showFilters, setShowFilters] = useState(false);
 
   const isMountedRef = useRef(false);
 
@@ -259,10 +621,27 @@ export default function SignalsFeedScreen() {
       }
 
       try {
+        const isDefaultGroup = selectedGroupId === "default";
+        const scope = (() => {
+          if (useFavorites && useGroupWatchlist && !isDefaultGroup) {
+            return "group";
+          }
+          if (useGroupWatchlist && !isDefaultGroup) {
+            return "group";
+          }
+          return "favorites";
+        })();
+
         const response = await runManagedScan({
           filters: getFilterForStrategy(strategyId),
+          scope,
+          groupId: isDefaultGroup ? undefined : selectedGroupId,
+          symbols:
+            scope === "favorites" && useFavorites && useGroupWatchlist
+              ? undefined
+              : undefined,
           force,
-          cacheKey: `signals|${strategyId}`,
+          cacheKey: `signals|${selectedGroupId}|${strategyId}|${scope}`,
           cacheTtlMs: MIN_SCAN_INTERVAL_MS,
         });
 
@@ -301,8 +680,9 @@ export default function SignalsFeedScreen() {
         setRemainingRuns(response.remainingRuns);
         setUsedRuns(response.usedRuns);
 
-        saveStoredScan(strategyId, {
+        saveStoredScan(`${selectedGroupId}|${strategyId}`, {
           filterId: strategyId,
+          groupId: selectedGroupId,
           timestamp: response.cacheTimestamp,
           signals: filtered,
           remainingRuns: response.remainingRuns,
@@ -330,12 +710,16 @@ export default function SignalsFeedScreen() {
       profile.riskPerTradePct,
       profile.signalConfidenceThreshold,
       saveStoredScan,
+      selectedGroupId,
+      useFavorites,
+      useGroupWatchlist,
     ]
   );
 
   const hydrateFromCache = useCallback(
-    async (strategyId: string) => {
-      const cached = getStoredScan(strategyId);
+    async (strategyId: string, groupId: string) => {
+      const cacheKey = `${groupId}|${strategyId}`;
+      const cached = getStoredScan(cacheKey);
       if (cached) {
         setSignals(cached.signals);
         setLastScanTimestamp(cached.timestamp);
@@ -376,7 +760,7 @@ export default function SignalsFeedScreen() {
     async function run() {
       await loadQuota();
       if (cancelled) return;
-      await hydrateFromCache(selectedStrategy);
+      await hydrateFromCache(selectedStrategy, selectedGroupId);
     }
 
     run();
@@ -384,7 +768,7 @@ export default function SignalsFeedScreen() {
     return () => {
       cancelled = true;
     };
-  }, [selectedStrategy, loadQuota, hydrateFromCache]);
+  }, [selectedStrategy, selectedGroupId, loadQuota, hydrateFromCache]);
 
   const timeSinceLastScan = useMemo(() => {
     if (!lastScanTimestamp) return null;
@@ -444,40 +828,91 @@ export default function SignalsFeedScreen() {
       return;
     }
 
-    await triggerScan(selectedStrategy, { force: true, showRefreshing: true });
+    await triggerScan(selectedStrategy, {
+      force: true,
+      showRefreshing: true,
+    });
   }, [canRunNewScan, cooldownLabel, selectedStrategy, triggerScan]);
 
-  const handleReScan = useCallback(async () => {
-    if (!canRunNewScan) {
-      Alert.alert(
-        "Please wait",
-        cooldownLabel
-          ? `Next scan available in ${cooldownLabel}.`
-          : "Scans are cooling down; try again shortly."
-      );
+  useEffect(() => {
+    if (showConfigModal) {
+      setPendingConfig({
+        groupId: selectedGroupId,
+        useFavorites,
+        useGroupWatchlist,
+      });
+    }
+  }, [showConfigModal, selectedGroupId, useFavorites, useGroupWatchlist]);
+
+  const handleSelectStrategy = useCallback(
+    (strategyId: string) => {
+      if (strategyId === selectedStrategy) {
+        return;
+      }
+      setSelectedStrategy(strategyId);
+      setLastSavedFilter(strategyId);
+      hydrateFromCache(strategyId, selectedGroupId).catch((error) => {
+        console.error("Failed to hydrate scan for filter change", error);
+        triggerScan(strategyId, { showRefreshing: false });
+      });
+    },
+    [
+      selectedStrategy,
+      selectedGroupId,
+      setLastSavedFilter,
+      hydrateFromCache,
+      triggerScan,
+    ]
+  );
+
+  const handleSelectGroup = useCallback(
+    (groupId: string) => {
+      if (groupId === selectedGroupId) {
+        setShowStrategyModal(false);
+        return;
+      }
+
+      setSelectedGroupId(groupId);
+      setShowStrategyModal(false);
+
+      if (!isMountedRef.current) return;
+      setInitialLoading(true);
+
+      hydrateFromCache(selectedStrategy, groupId).catch((error) => {
+        console.error("Failed to hydrate scan for new group", error);
+        triggerScan(selectedStrategy, { showRefreshing: false });
+      });
+    },
+    [selectedGroupId, selectedStrategy, hydrateFromCache, triggerScan]
+  );
+
+  const handleApplyConfig = useCallback(() => {
+    setSelectedGroupId(pendingConfig.groupId);
+    setUseFavorites(pendingConfig.useFavorites);
+    setUseGroupWatchlist(pendingConfig.useGroupWatchlist);
+    setShowConfigModal(false);
+  }, [pendingConfig]);
+
+  useEffect(() => {
+    if (selectedGroupId === "default") {
+      setProfile({ selectedStrategyGroupId: undefined });
       return;
     }
 
-    await triggerScan(selectedStrategy, {
-      force: true,
-      showRefreshing: signals.length > 0,
+    const group = strategyGroups.find((g) => g.id === selectedGroupId);
+    setProfile({ selectedStrategyGroupId: selectedGroupId });
+
+    ensureGroupDefaults(selectedGroupId, {
+      groupName: group?.name,
+      tradeMode: selectedStrategy === "intraday" ? "day" : "swing",
     });
   }, [
-    canRunNewScan,
-    cooldownLabel,
+    selectedGroupId,
     selectedStrategy,
-    signals.length,
-    triggerScan,
+    setProfile,
+    ensureGroupDefaults,
+    strategyGroups,
   ]);
-
-  const selectStrategy = useCallback(
-    (strategyId: string) => {
-      if (strategyId === selectedStrategy) return;
-      setSelectedStrategy(strategyId);
-      setLastSavedFilter(strategyId);
-    },
-    [selectedStrategy, setLastSavedFilter]
-  );
 
   const renderSignal = useCallback(
     (summary: SignalSummary) => {
@@ -548,7 +983,7 @@ export default function SignalsFeedScreen() {
             </View>
           </View>
 
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Text
               style={[
                 styles.signalAction,
@@ -558,7 +993,8 @@ export default function SignalsFeedScreen() {
               {signal.action}
             </Text>
             <Text style={styles.signalType}>
-              {signal.type.toUpperCase()} • R/R {signal.riskReward}:1
+              {signal.type.toUpperCase()} • R/R {signal.riskReward}:1 • Size{" "}
+              {signal.tradePlan.positionSize}
             </Text>
           </View>
 
@@ -566,10 +1002,6 @@ export default function SignalsFeedScreen() {
             Entry ${signal.entry.toFixed(2)} • Stop $
             {signal.stopLoss.toFixed(2)}• Targets{" "}
             {signal.targets.map((t) => t.toFixed(2)).join(", ")}
-          </Text>
-
-          <Text style={[styles.signalDetails, { marginTop: 4 }]}>
-            Size {signal.tradePlan.positionSize}
           </Text>
         </Pressable>
       );
@@ -594,102 +1026,28 @@ export default function SignalsFeedScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-          <View>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            <Pressable
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <Ionicons name="chevron-back" size={22} color="#e5e7eb" />
+            </Pressable>
             <Text style={styles.headerTitle}>Trading Signals</Text>
-            <Text style={styles.headerSubtitle}>
-              {signals.length} active signals • Last scan{" "}
-              {formatRelativeTime(lastScanTimestamp)}
-            </Text>
           </View>
-          <View style={styles.headerActions}>
-            <Pressable
-              style={[
-                styles.reScanButton,
-                (!canRunNewScan || refreshing) && styles.reScanDisabled,
-              ]}
-              disabled={!canRunNewScan || refreshing}
-              onPress={handleReScan}
-            >
-              <Text style={styles.reScanText}>
-                {canRunNewScan
-                  ? "Re-Scan"
-                  : cooldownLabel
-                  ? `Re-Scan (${cooldownLabel})`
-                  : "Re-Scan"}
-              </Text>
-            </Pressable>
-            <Pressable
-              style={{ padding: 8 }}
-              onPress={() => setShowStrategyModal(true)}
-            >
-              <Ionicons name="options" size={24} color="#00D4AA" />
-            </Pressable>
-          </View>
-        </View>
-        <View style={styles.metaRow}>
-          <Text style={styles.metaText}>
-            Scans remaining: {scansRemainingText}
-          </Text>
-          <Text style={styles.metaText}>Runs used today: {usedRuns}</Text>
-          {!canRunNewScan && cooldownLabel && (
-            <Text style={styles.metaText}>Next scan in: {cooldownLabel}</Text>
-          )}
         </View>
       </View>
 
-      {/* Strategy Filters */}
-      <View style={styles.section}>
-        <Text
-          style={{
-            color: "#ffffff",
-            fontSize: 16,
-            fontWeight: "600",
-            marginBottom: 12,
-          }}
-        >
-          Strategy Filter
-        </Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.filterRow}>
-            {STRATEGY_FILTERS.map((filter) => (
-              <Pressable
-                key={filter.id}
-                style={[
-                  styles.filterChip,
-                  selectedStrategy === filter.id && styles.filterChipActive,
-                ]}
-                onPress={() => selectStrategy(filter.id)}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selectedStrategy === filter.id &&
-                      styles.filterChipTextActive,
-                  ]}
-                >
-                  {filter.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
+      {/* Content */}
 
       {/* Signals List */}
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 180 }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -713,35 +1071,241 @@ export default function SignalsFeedScreen() {
         )}
       </ScrollView>
 
-      {/* Strategy Info Modal */}
+      {/* Bottom Nav */}
+      <View style={styles.bottomNav}>
+        <View style={styles.bottomNavContent}>
+          <Pressable
+            onPress={() => setShowFilters(true)}
+            style={styles.bottomNavButton}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="options-outline"
+              size={16}
+              color="rgba(255,255,255,0.9)"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.bottomNavButtonText} numberOfLines={1}>
+              {STRATEGY_FILTERS.find((f) => f.id === selectedStrategy)?.label ||
+                "All Signals"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            style={[
+              styles.navPrimaryButton,
+              (!canRunNewScan || refreshing) && styles.scanDisabled,
+            ]}
+            disabled={!canRunNewScan || refreshing}
+            onPress={refreshSignals}
+            hitSlop={10}
+          >
+            <Ionicons
+              name="scan-outline"
+              size={16}
+              color={!canRunNewScan || refreshing ? "#0f172a" : "#0f172a"}
+              style={{ marginRight: 8, opacity: 0.9 }}
+            />
+            <Text style={styles.navPrimaryButtonText}>
+              {canRunNewScan
+                ? "Scan"
+                : cooldownLabel
+                ? `Scan (${cooldownLabel})`
+                : "Scan"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setShowConfigModal(true)}
+            style={styles.bottomNavButton}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="settings-outline"
+              size={16}
+              color="rgba(255,255,255,0.9)"
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.bottomNavButtonText}>Settings</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.bottomMetaText} numberOfLines={1}>
+          {`Last Scan ${formatRelativeTime(
+            lastScanTimestamp
+          )} • Left Scan ${scansRemainingText} / ${usedRuns}${
+            !canRunNewScan && cooldownLabel ? ` • Next ${cooldownLabel}` : ""
+          }`}
+        </Text>
+      </View>
+
       <Modal
-        visible={showStrategyModal}
+        visible={showFilters}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowStrategyModal(false)}
+        onRequestClose={() => setShowFilters(false)}
       >
-        <View style={styles.strategyModal}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Trading Strategies</Text>
-              <Pressable onPress={() => setShowStrategyModal(false)}>
-                <Ionicons name="close" size={24} color="#888888" />
-              </Pressable>
-            </View>
-
+        <Pressable
+          style={styles.filtersOverlay}
+          onPress={() => setShowFilters(false)}
+        >
+          <View style={styles.filtersCard}>
             <ScrollView>
-              {STRATEGY_FILTERS.map((strategy) => (
-                <View key={strategy.id} style={styles.strategyItem}>
-                  <Text style={styles.strategyName}>{strategy.label}</Text>
-                  <Text style={styles.strategyDesc}>
-                    {strategy.description}
-                  </Text>
-                </View>
+              {STRATEGY_FILTERS.map((filter) => (
+                <Pressable
+                  key={filter.id}
+                  onPress={() => {
+                    setShowFilters(false);
+                    handleSelectStrategy(filter.id);
+                  }}
+                  style={[
+                    styles.strategyItem,
+                    selectedStrategy === filter.id && styles.strategyItemActive,
+                  ]}
+                >
+                  <Text style={styles.strategyName}>{filter.label}</Text>
+                  <Text style={styles.strategyDesc}>{filter.description}</Text>
+                </Pressable>
               ))}
             </ScrollView>
           </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showConfigModal}
+        transparent
+        animationType="slide"
+        onRequestClose={handleApplyConfig}
+      >
+        <View style={styles.configModal}>
+          <Pressable style={{ flex: 1 }} onPress={handleApplyConfig} />
+          <View style={[styles.configCard, { paddingBottom: 8 }]}>
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              <View
+                style={{
+                  width: 40,
+                  height: 4,
+                  borderRadius: 2,
+                  backgroundColor: "#334155",
+                }}
+              />
+            </View>
+            <Text style={styles.configTitle}>Signal Configuration</Text>
+
+            <View style={styles.pickerRow}>
+              <Text style={styles.configLabel}>Strategy Group</Text>
+              <Pressable
+                style={styles.pickerTrigger}
+                onPress={() => setShowGroupPicker((prev) => !prev)}
+              >
+                <Text style={styles.pickerValue}>
+                  {strategyGroups.find(
+                    (group) => group.id === pendingConfig.groupId
+                  )?.name || "Default Strategy"}
+                </Text>
+                <Ionicons
+                  name={showGroupPicker ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#94a3b8"
+                />
+              </Pressable>
+              {showGroupPicker && (
+                <View style={styles.pickerList}>
+                  {strategyGroups.map((group) => (
+                    <Pressable
+                      key={group.id}
+                      style={[
+                        styles.pickerOption,
+                        pendingConfig.groupId === group.id &&
+                          styles.pickerOptionActive,
+                      ]}
+                      onPress={() => {
+                        setPendingConfig((cfg) => ({
+                          ...cfg,
+                          groupId: group.id,
+                        }));
+                        setShowGroupPicker(false);
+                      }}
+                    >
+                      <Text style={styles.pickerOptionText}>{group.name}</Text>
+                      <Text style={styles.pickerOptionSub}>
+                        {group.description ||
+                          (group.id === "default"
+                            ? "System-managed strategy"
+                            : "Custom group strategy")}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View style={styles.pickerRow}>
+              <Text style={styles.configLabel}>Use Watchlists</Text>
+              <View style={styles.pickerList}>
+                <Pressable
+                  style={styles.pickerOption}
+                  onPress={() =>
+                    setPendingConfig((cfg) => ({
+                      ...cfg,
+                      useFavorites: !cfg.useFavorites,
+                    }))
+                  }
+                >
+                  <View style={styles.checkboxRow}>
+                    <View
+                      style={[
+                        styles.checkboxBox,
+                        pendingConfig.useFavorites && styles.checkboxBoxActive,
+                      ]}
+                    >
+                      {pendingConfig.useFavorites && (
+                        <Ionicons name="checkmark" size={14} color="#0f172a" />
+                      )}
+                    </View>
+                    <View>
+                      <Text style={styles.checkboxLabel}>Favorites</Text>
+                      <Text style={styles.checkboxDescription}>
+                        Scan symbols in your personal favorites/watchlists
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+
+                <Pressable
+                  style={styles.pickerOption}
+                  onPress={() =>
+                    setPendingConfig((cfg) => ({
+                      ...cfg,
+                      useGroupWatchlist: !cfg.useGroupWatchlist,
+                    }))
+                  }
+                >
+                  <View style={styles.checkboxRow}>
+                    <View
+                      style={[
+                        styles.checkboxBox,
+                        pendingConfig.useGroupWatchlist &&
+                          styles.checkboxBoxActive,
+                      ]}
+                    >
+                      {pendingConfig.useGroupWatchlist && (
+                        <Ionicons name="checkmark" size={14} color="#0f172a" />
+                      )}
+                    </View>
+                    <View>
+                      <Text style={styles.checkboxLabel}>Group Watchlist</Text>
+                      <Text style={styles.checkboxDescription}>
+                        Scan symbols from the selected strategy group
+                      </Text>
+                    </View>
+                  </View>
+                </Pressable>
+              </View>
+            </View>
+          </View>
         </View>
       </Modal>
-    </View>
+    </SafeAreaView>
   );
 }

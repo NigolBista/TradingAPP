@@ -33,12 +33,13 @@ interface CachedAnalysisEntry {
 
 interface RunScanOptions {
   filters?: ScanFilter;
-  scope?: "favorites" | "all" | "custom";
+  scope?: "favorites" | "all" | "custom" | "group";
   symbols?: string[];
   cacheKey?: string;
   force?: boolean;
   cacheTtlMs?: number;
   screener?: boolean;
+  groupId?: string;
 }
 
 export interface AnalysisRunResponse {
@@ -143,9 +144,25 @@ function collectFavoriteSymbols(
 function getAllowedSymbols(
   scope: RunScanOptions["scope"],
   plan: PlanConfig,
-  symbols?: string[]
+  symbols?: string[],
+  groupId?: string
 ): string[] {
   const profile = useUserStore.getState().profile;
+  if (scope === "group") {
+    try {
+      const {
+        useStrategyBuilderStore,
+      } = require("../store/strategyBuilderStore");
+      const selectedGroupId = groupId || profile.selectedStrategyGroupId;
+      if (selectedGroupId) {
+        const wl = useStrategyBuilderStore
+          .getState()
+          .getWatchlist(selectedGroupId);
+        if (wl?.symbols?.length)
+          return wl.symbols.map((s: string) => s.toUpperCase());
+      }
+    } catch {}
+  }
 
   if (scope === "custom" && symbols && symbols.length > 0) {
     if (plan.allowedScopes === "favorites") {
@@ -188,12 +205,13 @@ function shouldUseCache(
 function makeCacheKey(options: RunScanOptions): string {
   if (options.cacheKey) return options.cacheKey;
   const scope = options.scope ?? "favorites";
+  const groupPart = options.groupId ? `|group:${options.groupId}` : "";
   const filterKey = JSON.stringify(options.filters || {});
   const symbolsKey = (options.symbols || [])
     .map((s) => s.toUpperCase())
     .join(",");
   const type = options.screener ? "screener" : "scan";
-  return `${type}|${scope}|${filterKey}|${symbolsKey}`;
+  return `${type}|${scope}${groupPart}|${filterKey}|${symbolsKey}`;
 }
 
 function pruneCache(state: AnalysisQuotaState, limit: number = 20): void {
@@ -263,7 +281,12 @@ export async function runManagedScan(
   const scope =
     options.scope ??
     (config.allowedScopes === "favorites" ? "favorites" : "all");
-  const symbols = getAllowedSymbols(scope, config, options.symbols);
+  const symbols = getAllowedSymbols(
+    scope,
+    config,
+    options.symbols,
+    options.groupId
+  );
 
   if (symbols.length === 0) {
     throw Object.assign(
@@ -289,6 +312,7 @@ export async function runManagedScan(
   const scanOptions: ScanOptions = {
     symbols: symbolsToScan,
     batchSize: config.batchSize,
+    groupId: options.groupId,
   };
 
   const results = await MarketScanner.scanMarket(filters, scanOptions);

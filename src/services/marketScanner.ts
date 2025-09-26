@@ -5,6 +5,10 @@ import {
   TradingSignal,
 } from "./aiAnalytics";
 import { useUserStore } from "../store/userStore";
+import { useStrategyBuilderStore } from "../store/strategyBuilderStore";
+import { buildStrategySnapshots } from "./polygonIndicators";
+import type { StrategyConfig } from "../types/strategy";
+import { buildTradePlan } from "./riskManager";
 
 export interface ScanFilter {
   rsiMin?: number;
@@ -40,6 +44,7 @@ export interface MarketScreenerData {
 export interface ScanOptions {
   symbols?: string[];
   batchSize?: number;
+  groupId?: string;
 }
 
 export class MarketScanner {
@@ -54,7 +59,7 @@ export class MarketScanner {
 
       (watchlists || []).forEach((watchlist) => {
         (watchlist.items || []).forEach((item) => {
-          if (item?.isFavorite && item.symbol) {
+          if (item?.symbol) {
             symbols.add(item.symbol.toUpperCase());
           }
         });
@@ -75,9 +80,20 @@ export class MarketScanner {
     filters: ScanFilter = {},
     options: ScanOptions = {}
   ): Promise<ScanResult[]> {
+    // Resolve active group strategy & watchlist symbols
+    const profile = useUserStore.getState().profile;
+    const activeGroupId = options.groupId ?? profile.selectedStrategyGroupId;
+    const groupStore = useStrategyBuilderStore.getState();
+    const groupWatchlist = activeGroupId
+      ? groupStore.getWatchlist(activeGroupId)
+      : undefined;
+    const groupSymbols = groupWatchlist?.symbols || [];
+
     const inputSymbols =
       options.symbols && options.symbols.length > 0
         ? options.symbols
+        : groupSymbols.length > 0
+        ? groupSymbols
         : this.getDefaultSymbols();
 
     const symbols = Array.from(
@@ -101,7 +117,7 @@ export class MarketScanner {
     for (let i = 0; i < symbols.length; i += batchSize) {
       const batch = symbols.slice(i, i + batchSize);
       const batchPromises = batch.map((symbol) =>
-        this.analyzeSingleStock(symbol, filters)
+        this.analyzeSingleStock(symbol, filters, activeGroupId)
       );
 
       try {
@@ -131,7 +147,8 @@ export class MarketScanner {
 
   private static async analyzeSingleStock(
     symbol: string,
-    filters: ScanFilter
+    filters: ScanFilter,
+    groupId?: string | null
   ): Promise<ScanResult | null> {
     try {
       // Fetch multiple timeframes
@@ -157,16 +174,66 @@ export class MarketScanner {
         return null;
       }
 
-      // Perform comprehensive analysis
+      // Perform comprehensive analysis (baseline)
       const analysis = await performComprehensiveAnalysis(symbol, candleData);
+
+      // If a group strategy exists, compute strategy-driven entry/exit overlays
+      let entryExitAlerts: string[] = [];
+      try {
+        if (groupId) {
+          const store = useStrategyBuilderStore.getState();
+          const strategy: StrategyConfig | undefined =
+            store.getStrategy(groupId);
+          if (strategy && strategy.timeframes.length > 0) {
+            // Build snapshots on the strategy's timeframes
+            const tfCandles: Record<string, Candle[]> = {};
+            for (const tf of strategy.timeframes) {
+              const res = this.mapTimeframeToResolution(tf.timeframe as any);
+              try {
+                tfCandles[tf.timeframe] = await fetchCandles(symbol, {
+                  resolution: res,
+                });
+              } catch {}
+            }
+            const snapshots = await buildStrategySnapshots(
+              symbol,
+              strategy,
+              tfCandles as any
+            );
+            // Very simple derivation: use last candle of primary timeframe for entry/stop
+            const primary = snapshots[0];
+            if (primary && (primary.candles || []).length > 1) {
+              const last = primary.candles[primary.candles.length - 1];
+              const prev = primary.candles[primary.candles.length - 2];
+              if (last && prev) {
+                const bullish = last.close >= prev.close;
+                const entry = last.close;
+                const stop = bullish
+                  ? Math.min(last.low, prev.low)
+                  : Math.max(last.high, prev.high);
+                const tp = bullish
+                  ? entry + Math.abs(entry - stop) * 2
+                  : entry - Math.abs(entry - stop) * 2;
+                entryExitAlerts.push(
+                  `Strategy(${primary.timeframe}): entry ${entry.toFixed(
+                    2
+                  )} | stop ${stop.toFixed(2)} | tp ${tp.toFixed(2)}`
+                );
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Non-fatal: strategy overlay is best-effort
+      }
 
       // Apply filters
       if (!this.passesFilters(analysis, filters)) {
         return null;
       }
 
-      // Generate alerts
-      const alerts = this.generateAlerts(analysis);
+      // Generate alerts + append strategy-derived entry/exit if present
+      const alerts = [...this.generateAlerts(analysis), ...entryExitAlerts];
 
       // Calculate overall score
       const score = this.calculateScore(analysis);

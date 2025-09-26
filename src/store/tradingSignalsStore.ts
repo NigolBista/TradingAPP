@@ -7,6 +7,7 @@ const STORAGE_KEY = "trading-signals-store";
 
 export interface StoredSignalScan {
   filterId: string;
+  groupId?: string;
   timestamp: number;
   signals: SignalSummary[];
   remainingRuns: number | null;
@@ -17,8 +18,8 @@ interface TradingSignalsState {
   lastSelectedFilter: string;
   scans: Record<string, StoredSignalScan>;
   setLastSelectedFilter: (filterId: string) => void;
-  saveScan: (filterId: string, scan: StoredSignalScan) => void;
-  getScan: (filterId: string) => StoredSignalScan | null;
+  saveScan: (key: string, scan: StoredSignalScan) => void;
+  getScan: (key: string) => StoredSignalScan | null;
   clearScans: () => void;
 }
 
@@ -33,19 +34,19 @@ export const useTradingSignalsStore = create<TradingSignalsState>()(
       setLastSelectedFilter: (filterId) =>
         set({ lastSelectedFilter: filterId || DEFAULT_FILTER }),
 
-      saveScan: (filterId, scan) =>
+      saveScan: (key, scan) =>
         set((state) => ({
           scans: {
             ...state.scans,
-            [filterId]: {
+            [key]: {
               ...scan,
-              filterId,
+              filterId: scan.filterId,
             },
           },
         })),
 
-      getScan: (filterId) => {
-        const entry = get().scans[filterId];
+      getScan: (key) => {
+        const entry = get().scans[key];
         return entry ?? null;
       },
 
