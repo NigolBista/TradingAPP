@@ -6,8 +6,8 @@ import {
   TradingSignal,
 } from "./aiAnalytics";
 import { detectPatterns } from "./patternDetection";
-import { buildTradePlan } from "./riskManager";
-import type { TradePlanOverlay } from "../logic/types";
+import { buildTradePlan, TradePlan } from "./riskManager";
+import type { TradePlanOverlay, StrategyContext } from "../logic/types";
 import { buildDayTradePlan } from "../logic/dayTrade";
 import { buildSwingTradePlan } from "../logic/swingTrade";
 

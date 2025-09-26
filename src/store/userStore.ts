@@ -36,6 +36,7 @@ export interface UserProfile {
   riskPerTradePct?: number; // % of account per trade
   signalConfidenceThreshold?: number; // 0-100
   notificationsEnabled?: boolean;
+  lastAnalysisViewedAt?: string;
 
   // Strategy complexity preferences
   strategyComplexity?: "simple" | "partial" | "advanced";

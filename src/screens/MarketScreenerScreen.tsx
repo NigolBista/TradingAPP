@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,10 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { MarketScanner, MarketScreenerData, ScanResult } from "../services/marketScanner";
+import { ScanResult } from "../services/marketScanner";
+import { useAnalysisStore } from "../store/analysisStore";
+import { useUserStore } from "../store/userStore";
+import { formatDistanceToNow } from "date-fns";
 
 const { width } = Dimensions.get("window");
 
@@ -34,6 +37,11 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     color: "#888888",
     fontSize: 14,
+  },
+  headerMeta: {
+    color: "#666666",
+    fontSize: 12,
+    marginTop: 4,
   },
   section: {
     backgroundColor: "#1a1a1a",
@@ -183,38 +191,202 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginLeft: 4,
   },
+  quotaBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#00D4AA",
+    marginHorizontal: 16,
+    marginTop: 12,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  quotaBannerText: {
+    color: "#000000",
+    fontWeight: "600",
+    fontSize: 12,
+    marginLeft: 8,
+  },
+  cacheRibbon: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: "#111111",
+    borderWidth: 1,
+    borderColor: "#222222",
+  },
+  cacheRibbonTitle: {
+    color: "#888888",
+    fontSize: 12,
+    marginBottom: 8,
+    fontWeight: "600",
+    textTransform: "uppercase",
+  },
+  cacheEntry: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  cacheEntryTitle: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  cacheEntryMeta: {
+    color: "#777777",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  errorBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(249, 115, 22, 0.15)",
+    borderColor: "#F97316",
+    borderWidth: 1,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  errorBannerText: {
+    color: "#F97316",
+    marginLeft: 8,
+    fontSize: 12,
+    flex: 1,
+  },
 });
 
 export default function MarketScreenerScreen() {
-  const [screenerData, setScreenerData] = useState<MarketScreenerData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const profile = useUserStore((s) => s.profile);
+  const setProfile = useUserStore((s) => s.setProfile);
+
+  const {
+    data,
+    loading,
+    error,
+    lastUpdated,
+    loadInitialQuota,
+    loadMarketAnalysis,
+    runsUsedToday,
+    remainingRunsToday,
+    plan,
+    cachedEntries,
+    useCachedScreener,
+    fromCache,
+    lastSymbols,
+  } = useAnalysisStore();
+  const cacheEntries = useMemo(() => {
+    return Object.values(cachedEntries)
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 5);
+  }, [cachedEntries]);
+
+  const lastUpdatedLabel = useMemo(() => {
+    if (!lastUpdated) return "Never";
+    try {
+      return formatDistanceToNow(new Date(lastUpdated), { addSuffix: true });
+    } catch (error) {
+      return new Date(lastUpdated).toLocaleTimeString();
+    }
+  }, [lastUpdated]);
+
+  const remainingRunsLabel = useMemo(() => {
+    if (remainingRunsToday === null) return "Unlimited";
+    return `${remainingRunsToday} remaining`;
+  }, [remainingRunsToday]);
+
+  const quotaBannerLabel = useMemo(() => {
+    if (plan === "Free") {
+      return remainingRunsToday === 0
+        ? "Daily limit reached. Upgrade for unlimited market coverage."
+        : `Free plan · ${remainingRunsLabel}`;
+    }
+    if (plan === "Pro") {
+      return `Pro plan · ${remainingRunsLabel}`;
+    }
+    return "Elite plan · Unlimited runs";
+  }, [plan, remainingRunsLabel, remainingRunsToday]);
+
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
 
   useEffect(() => {
-    loadScreenerData();
-  }, []);
+    loadInitialQuota();
+  }, [loadInitialQuota]);
 
-  async function loadScreenerData() {
-    try {
-      setLoading(true);
-      const data = await MarketScanner.getMarketScreenerData();
-      setScreenerData(data);
-      setLastUpdateTime(new Date());
-    } catch (error) {
-      console.error("Error loading screener data:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+  const loadFavoritesAnalysis = useCallback(
+    (force = false) => loadMarketAnalysis({ scope: "favorites", force }),
+    [loadMarketAnalysis]
+  );
+
+  useEffect(() => {
+    loadFavoritesAnalysis();
+  }, [loadFavoritesAnalysis]);
+
+  useEffect(() => {
+    if (!profile.lastAnalysisViewedAt) {
+      try {
+        const now = new Date().toISOString();
+        setProfile({ lastAnalysisViewedAt: now });
+      } catch (e) {
+        console.warn("Failed to set last analysis viewed timestamp", e);
+      }
     }
-  }
+  }, [profile.lastAnalysisViewedAt, setProfile]);
 
   async function onRefresh() {
     setRefreshing(true);
-    await loadScreenerData();
+    await loadFavoritesAnalysis(true);
+    setRefreshing(false);
   }
 
-  function renderStockList(stocks: ScanResult[], title: string, icon: string, color: string, showAlert = false) {
+  function renderQuotaBanner() {
+    return (
+      <View style={styles.quotaBanner}>
+        <Ionicons name="flash" size={16} color="#000000" />
+        <Text style={styles.quotaBannerText}>{quotaBannerLabel}</Text>
+      </View>
+    );
+  }
+
+  function renderCacheRibbon() {
+    if (!cacheEntries.length) return null;
+
+    return (
+      <View style={styles.cacheRibbon}>
+        <Text style={styles.cacheRibbonTitle}>Recent Analyses</Text>
+        {cacheEntries.map((entry) => (
+          <Pressable
+            key={entry.key}
+            style={styles.cacheEntry}
+            onPress={() => useCachedScreener(entry.key)}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cacheEntryTitle}>
+                {entry.key.includes("favorites") ? "Favorites" : "Custom"}
+              </Text>
+              <Text style={styles.cacheEntryMeta}>
+                {formatDistanceToNow(new Date(entry.timestamp), {
+                  addSuffix: true,
+                })}
+                {entry.fromCache ? " • cached" : ""}
+              </Text>
+            </View>
+            <Ionicons name="download" size={16} color="#00D4AA" />
+          </Pressable>
+        ))}
+      </View>
+    );
+  }
+
+  function renderStockList(
+    stocks: ScanResult[],
+    title: string,
+    icon: string,
+    color: string,
+    showAlert = false
+  ) {
     if (!stocks || stocks.length === 0) {
       return (
         <View style={styles.section}>
@@ -229,7 +401,7 @@ export default function MarketScreenerScreen() {
               </View>
             </View>
           </View>
-          
+
           <View style={styles.emptyState}>
             <Ionicons name="analytics-outline" size={32} color="#888888" />
             <Text style={styles.emptyStateText}>
@@ -249,7 +421,9 @@ export default function MarketScreenerScreen() {
             </View>
             <View>
               <Text style={styles.sectionTitle}>{title}</Text>
-              <Text style={styles.sectionSubtitle}>{stocks.length} stocks found</Text>
+              <Text style={styles.sectionSubtitle}>
+                {stocks.length} stocks found
+              </Text>
             </View>
           </View>
         </View>
@@ -273,16 +447,24 @@ export default function MarketScreenerScreen() {
                   )}
                 </View>
                 <Text style={styles.stockMetrics}>
-                  RSI: {analysis.indicators.rsi.toFixed(0)} • 
-                  Vol: {analysis.indicators.volume.ratio.toFixed(1)}x • 
-                  Score: {score.toFixed(0)}
+                  RSI: {analysis.indicators.rsi.toFixed(0)} • Vol:{" "}
+                  {analysis.indicators.volume.ratio.toFixed(1)}x • Score:{" "}
+                  {score.toFixed(0)}
                 </Text>
               </View>
-              
+
               <View style={styles.stockRight}>
-                <Text style={styles.stockPrice}>${currentPrice.toFixed(2)}</Text>
-                <Text style={[styles.stockChange, isPositive ? styles.positiveChange : styles.negativeChange]}>
-                  {isPositive ? "+" : ""}{changePercent.toFixed(2)}%
+                <Text style={styles.stockPrice}>
+                  ${currentPrice.toFixed(2)}
+                </Text>
+                <Text
+                  style={[
+                    styles.stockChange,
+                    isPositive ? styles.positiveChange : styles.negativeChange,
+                  ]}
+                >
+                  {isPositive ? "+" : ""}
+                  {changePercent.toFixed(2)}%
                 </Text>
               </View>
             </View>
@@ -292,14 +474,14 @@ export default function MarketScreenerScreen() {
     );
   }
 
-  if (loading && !screenerData) {
+  if (loading && !data) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Market Screener</Text>
           <Text style={styles.headerSubtitle}>Loading market data...</Text>
         </View>
-        
+
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#00D4AA" />
           <Text style={styles.loadingText}>Scanning markets...</Text>
@@ -312,15 +494,39 @@ export default function MarketScreenerScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
           <View>
             <Text style={styles.headerTitle}>Market Screener</Text>
             <Text style={styles.headerSubtitle}>
-              {lastUpdateTime ? `Last updated: ${lastUpdateTime.toLocaleTimeString()}` : "Real-time market analysis"}
+              {lastUpdated
+                ? `${
+                    fromCache ? "Showing cached analysis" : "Last run"
+                  } · ${lastUpdatedLabel}`
+                : "Run the analysis to get insights"}
+            </Text>
+            <Text style={styles.headerMeta}>
+              {plan} plan • Used {runsUsedToday}{" "}
+              {remainingRunsToday !== null
+                ? `of ${runsUsedToday + remainingRunsToday}`
+                : "runs"}{" "}
+              • {remainingRunsLabel}
+            </Text>
+            <Text style={styles.headerMeta}>
+              Symbols scanned: {lastSymbols.length}
             </Text>
           </View>
-          
-          <Pressable style={styles.refreshButton} onPress={onRefresh} disabled={refreshing}>
+
+          <Pressable
+            style={styles.refreshButton}
+            onPress={onRefresh}
+            disabled={refreshing}
+          >
             <Ionicons name="refresh" size={16} color="#000000" />
             <Text style={styles.refreshButtonText}>
               {refreshing ? "Updating..." : "Refresh"}
@@ -329,22 +535,44 @@ export default function MarketScreenerScreen() {
         </View>
       </View>
 
+      {renderQuotaBanner()}
+      {renderCacheRibbon()}
+
       <ScrollView
         style={{ flex: 1 }}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00D4AA" />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#00D4AA"
+          />
         }
       >
+        {error ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="warning" size={16} color="#F97316" />
+            <Text style={styles.errorBannerText}>{error}</Text>
+          </View>
+        ) : null}
+
         {/* Market Overview */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <View style={[styles.sectionIcon, { backgroundColor: "#6366f1" }]}>
+              <View
+                style={[styles.sectionIcon, { backgroundColor: "#6366f1" }]}
+              >
                 <Ionicons name="stats-chart" size={14} color="#ffffff" />
               </View>
               <View>
                 <Text style={styles.sectionTitle}>Market Overview</Text>
-                <Text style={styles.sectionSubtitle}>Key market statistics</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {plan === "Free" && data?.topGainers?.length
+                    ? "Analyzing your favorites · Upgrade for full market coverage"
+                    : plan === "Free"
+                    ? "Add favorites to run analysis"
+                    : "Key market statistics"}
+                </Text>
               </View>
             </View>
           </View>
@@ -352,25 +580,33 @@ export default function MarketScreenerScreen() {
           <View style={styles.overviewGrid}>
             <View style={styles.overviewCard}>
               <Text style={styles.overviewTitle}>Top Gainers</Text>
-              <Text style={styles.overviewValue}>{screenerData?.topGainers?.length || 0}</Text>
+              <Text style={styles.overviewValue}>
+                {data?.topGainers?.length || 0}
+              </Text>
               <Text style={styles.overviewSubvalue}>Strong performers</Text>
             </View>
-            
+
             <View style={styles.overviewCard}>
               <Text style={styles.overviewTitle}>High Volume</Text>
-              <Text style={styles.overviewValue}>{screenerData?.highVolume?.length || 0}</Text>
+              <Text style={styles.overviewValue}>
+                {data?.highVolume?.length || 0}
+              </Text>
               <Text style={styles.overviewSubvalue}>Active trading</Text>
             </View>
-            
+
             <View style={styles.overviewCard}>
               <Text style={styles.overviewTitle}>Breakouts</Text>
-              <Text style={styles.overviewValue}>{screenerData?.breakouts?.length || 0}</Text>
+              <Text style={styles.overviewValue}>
+                {data?.breakouts?.length || 0}
+              </Text>
               <Text style={styles.overviewSubvalue}>Technical patterns</Text>
             </View>
-            
+
             <View style={styles.overviewCard}>
               <Text style={styles.overviewTitle}>Signal Alerts</Text>
-              <Text style={styles.overviewValue}>{screenerData?.signalAlerts?.length || 0}</Text>
+              <Text style={styles.overviewValue}>
+                {data?.signalAlerts?.length || 0}
+              </Text>
               <Text style={styles.overviewSubvalue}>AI recommendations</Text>
             </View>
           </View>
@@ -378,7 +614,7 @@ export default function MarketScreenerScreen() {
 
         {/* Top Gainers */}
         {renderStockList(
-          screenerData?.topGainers || [],
+          data?.topGainers || [],
           "Top Gainers",
           "trending-up",
           "#00D4AA"
@@ -386,7 +622,7 @@ export default function MarketScreenerScreen() {
 
         {/* High Volume */}
         {renderStockList(
-          screenerData?.highVolume || [],
+          data?.highVolume || [],
           "High Volume",
           "pulse",
           "#3B82F6"
@@ -394,7 +630,7 @@ export default function MarketScreenerScreen() {
 
         {/* Breakouts */}
         {renderStockList(
-          screenerData?.breakouts || [],
+          data?.breakouts || [],
           "Breakouts",
           "arrow-up-circle",
           "#8B5CF6"
@@ -402,7 +638,7 @@ export default function MarketScreenerScreen() {
 
         {/* Oversold Opportunities */}
         {renderStockList(
-          screenerData?.oversold || [],
+          data?.oversold || [],
           "Oversold Opportunities",
           "arrow-down-circle",
           "#10B981"
@@ -410,7 +646,7 @@ export default function MarketScreenerScreen() {
 
         {/* Signal Alerts */}
         {renderStockList(
-          screenerData?.signalAlerts || [],
+          data?.signalAlerts || [],
           "AI Signal Alerts",
           "notifications",
           "#F59E0B",
@@ -419,7 +655,7 @@ export default function MarketScreenerScreen() {
 
         {/* Top Losers */}
         {renderStockList(
-          screenerData?.topLosers || [],
+          data?.topLosers || [],
           "Top Losers",
           "trending-down",
           "#EF4444"
@@ -427,7 +663,7 @@ export default function MarketScreenerScreen() {
 
         {/* Overbought Stocks */}
         {renderStockList(
-          screenerData?.overbought || [],
+          data?.overbought || [],
           "Overbought Stocks",
           "warning",
           "#F97316"
