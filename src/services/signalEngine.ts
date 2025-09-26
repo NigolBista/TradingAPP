@@ -6,10 +6,10 @@ import {
   TradingSignal,
 } from "./aiAnalytics";
 import { detectPatterns } from "./patternDetection";
-import { buildTradePlan, TradePlan } from "./riskManager";
+import { buildTradePlan } from "./riskManager";
+import type { TradePlanOverlay } from "../logic/types";
 import { buildDayTradePlan } from "../logic/dayTrade";
 import { buildSwingTradePlan } from "../logic/swingTrade";
-import { TradePlanOverlay, StrategyContext } from "../logic/types";
 
 export interface SignalContext {
   symbol: string;
@@ -34,6 +34,7 @@ export interface EnhancedSignal extends TradingSignal {
   tradePlan: TradePlan;
   overlay?: TradePlanOverlay;
   decalpX?: DecalpXData;
+  analysisSummary?: string;
 }
 
 export interface SignalSummary {
@@ -260,4 +261,48 @@ export function sortSignalsByFreshness(
   signals: SignalSummary[]
 ): SignalSummary[] {
   return [...signals].sort((a, b) => b.timestamp - a.timestamp);
+}
+
+export function convertSignalToTradePlan(
+  signal: EnhancedSignal,
+  accountSize?: number,
+  riskPct?: number
+): TradePlanOverlay & { entry: number; stop: number } {
+  const sizingAccount = accountSize ?? 10000;
+  const sizingRisk = riskPct ?? 1;
+
+  const basePlan = buildTradePlan(
+    signal.entry,
+    signal.stopLoss,
+    signal.targets,
+    sizingAccount,
+    sizingRisk
+  );
+
+  const overlay = signal.overlay || {
+    side: signal.action === "buy" ? "long" : "short",
+    entries: [signal.entry],
+    exits: [signal.stopLoss],
+    tps: signal.targets,
+    riskReward: signal.riskReward,
+  };
+
+  return {
+    side: overlay.side ?? (signal.action === "buy" ? "long" : "short"),
+    entries:
+      overlay.entries && overlay.entries.length > 0
+        ? overlay.entries
+        : [signal.entry],
+    exits:
+      overlay.exits && overlay.exits.length > 0
+        ? overlay.exits
+        : [signal.stopLoss],
+    tps: overlay.tps && overlay.tps.length > 0 ? overlay.tps : signal.targets,
+    riskReward: overlay.riskReward ?? signal.riskReward,
+    positionSizing: {
+      totalSize: basePlan.positionSize,
+    },
+    entry: signal.entry,
+    stop: signal.stopLoss,
+  };
 }

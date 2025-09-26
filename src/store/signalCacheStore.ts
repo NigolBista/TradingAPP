@@ -1,12 +1,15 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { TradePlanOverlay } from "../components/charts/LightweightCandles";
+import { TradePlanOverlay } from "../logic/types";
 
 export interface CachedSignal {
   symbol: string;
   timestamp: number;
-  tradePlan?: TradePlanOverlay;
+  tradePlan?: TradePlanOverlay & {
+    entry?: number;
+    stop?: number;
+  };
   aiMeta?: {
     strategyChosen?: string;
     side?: "long" | "short";
@@ -46,7 +49,10 @@ interface SignalCacheState {
   signals: Record<string, SignalRecord>; // keyed by symbol
   signalHistory: SignalRecord[];
 
-  cacheSignal: (signal: CachedSignal, status?: SignalStatus) => void;
+  cacheSignal: (
+    signal: Omit<CachedSignal, "timestamp"> & { timestamp?: number },
+    status?: SignalStatus
+  ) => void;
   getCachedSignal: (symbol: string) => SignalRecord | null;
   getSignalsByStatus: (status: SignalStatus) => SignalRecord[];
   isSignalFresh: (symbol: string) => boolean;
@@ -62,11 +68,14 @@ export const useSignalCacheStore = create<SignalCacheState>()(
       signals: {},
       signalHistory: [],
 
-      cacheSignal: (signal: CachedSignal, status: SignalStatus = "open") => {
+      cacheSignal: (
+        signal: Omit<CachedSignal, "timestamp"> & { timestamp?: number },
+        status: SignalStatus = "open"
+      ) => {
         const record: SignalRecord = {
           ...signal,
           status,
-          timestamp: Date.now(),
+          timestamp: signal.timestamp ?? Date.now(),
         };
 
         set((state) => {

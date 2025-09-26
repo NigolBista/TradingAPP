@@ -15,8 +15,10 @@ import { MarketScanner, type ScanResult } from "../services/marketScanner";
 import {
   generateSignalSummary,
   type SignalSummary,
+  convertSignalToTradePlan,
 } from "../services/signalEngine";
 import { useUserStore } from "../store/userStore";
+import { useSignalCacheStore } from "../store/signalCacheStore";
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0a0a0a" },
@@ -148,6 +150,7 @@ export default function SignalsFeedScreen() {
   const [signals, setSignals] = useState<SignalSummary[]>([]);
   const [selectedStrategy, setSelectedStrategy] = useState("all");
   const [showStrategyModal, setShowStrategyModal] = useState(false);
+  const cacheSignal = useSignalCacheStore((s) => s.cacheSignal);
 
   useEffect(() => {
     loadSignals();
@@ -229,12 +232,55 @@ export default function SignalsFeedScreen() {
       <Pressable
         key={summary.symbol}
         style={styles.signalCard}
-        onPress={() =>
+        onPress={() => {
+          const tradePlan = convertSignalToTradePlan(
+            signal,
+            profile.accountSize,
+            profile.riskPerTradePct
+          );
+
+          cacheSignal({
+            symbol: summary.symbol,
+            tradePlan,
+            aiMeta: {
+              side: tradePlan.side,
+              confidence: signal.confidence,
+              why: signal.reasoning,
+              targets: tradePlan.tps,
+              riskReward: tradePlan.riskReward,
+            },
+            analysisContext: {
+              mode: signal.type === "intraday" ? "day_trade" : "swing_trade",
+              tradePace: signal.type === "intraday" ? "day" : "swing",
+              desiredRR: tradePlan.riskReward || signal.riskReward,
+              contextMode: "price_action",
+              isAutoAnalysis: false,
+            },
+          });
+
           navigation.navigate(
-            "StockDetail" as never,
-            { symbol: summary.symbol } as never
-          )
-        }
+            "ChartFullScreen" as never,
+            {
+              symbol: summary.symbol,
+              tradePlan,
+              ai: {
+                side: tradePlan.side,
+                confidence: signal.confidence,
+                targets: tradePlan.tps,
+                riskReward: tradePlan.riskReward,
+                why: signal.reasoning,
+              },
+              initialTimeframe: signal.type === "intraday" ? "15m" : undefined,
+              analysisContext: {
+                mode: signal.type === "intraday" ? "day_trade" : "swing_trade",
+                tradePace: signal.type === "intraday" ? "day" : "swing",
+                desiredRR: tradePlan.riskReward || signal.riskReward,
+                contextMode: "price_action",
+                isAutoAnalysis: false,
+              },
+            } as never
+          );
+        }}
       >
         <View style={styles.signalHeader}>
           <Text style={styles.signalSymbol}>{summary.symbol}</Text>

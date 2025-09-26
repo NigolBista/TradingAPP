@@ -78,6 +78,7 @@ import {
   upsertUserDraftPlan,
   deleteUserDraftPlan,
 } from "../services/draftPlanService";
+import { type TradePlanOverlay } from "../logic/types";
 
 // Types
 type AIMeta = {
@@ -105,6 +106,8 @@ export default function ChartFullScreen() {
   const initialTradePlan: any | undefined = route.params?.tradePlan;
   const initialAiMeta: AIMeta | undefined = route.params?.ai;
   const initialAnalysisContext = route.params?.analysisContext;
+  const initialPlan = route.params?.signalPlan as TradePlanOverlay | undefined;
+  const initialSignalMeta = route.params?.signalMeta;
 
   // Store hooks
   const { addAnalysisMessage } = useChatStore();
@@ -312,7 +315,8 @@ export default function ChartFullScreen() {
           ? draftForSymbol
           : null) ||
         cachedPlanForSymbol ||
-        currentTradePlan;
+        currentTradePlan ||
+        initialTradePlan;
       if (plan) {
         console.log("🔄 Applying levels in ChartFullScreen:", plan);
         chartBridgeRef.current.updateLevels({
@@ -325,7 +329,7 @@ export default function ChartFullScreen() {
         chartBridgeRef.current.updateLevels({});
       }
     } catch (_) {}
-  }, [cachedPlanForSymbol, currentTradePlan, draftForSymbol]);
+  }, [cachedPlanForSymbol, currentTradePlan, draftForSymbol, initialTradePlan]);
 
   // Re-apply levels when timeframe changes (like alerts do)
   useEffect(() => {
@@ -340,7 +344,8 @@ export default function ChartFullScreen() {
           ? draftForSymbol
           : null) ||
         cachedPlanForSymbol ||
-        currentTradePlan;
+        currentTradePlan ||
+        initialTradePlan;
       if (plan) {
         // Small delay to ensure chart has updated timeframe first
         setTimeout(() => {
@@ -356,7 +361,13 @@ export default function ChartFullScreen() {
         }, 150);
       }
     } catch (_) {}
-  }, [cachedPlanForSymbol, currentTradePlan, draftForSymbol, extendedTf]);
+  }, [
+    cachedPlanForSymbol,
+    currentTradePlan,
+    draftForSymbol,
+    extendedTf,
+    initialTradePlan,
+  ]);
 
   // Analysis state
   const [lastCandle, setLastCandle] = useState<Candle | null>(null);
@@ -1263,8 +1274,8 @@ export default function ChartFullScreen() {
             symbol: currentCached.symbol,
             strategy: currentCached.aiMeta?.strategyChosen,
             side: currentCached.aiMeta?.side,
-            entry: currentCached.tradePlan?.entries[0],
-            exit: currentCached.tradePlan?.exits[0],
+            entry: currentCached.tradePlan?.entries?.[0],
+            exit: currentCached.tradePlan?.exits?.[0],
             targets: currentCached.aiMeta?.targets,
             riskReward: currentCached.aiMeta?.riskReward,
             confidence: currentCached.aiMeta?.confidence,
@@ -1673,6 +1684,23 @@ export default function ChartFullScreen() {
       ? "#EF4444"
       : "#fff";
 
+  useEffect(() => {
+    if (initialTradePlan) {
+      cacheSignal({
+        symbol,
+        tradePlan: initialTradePlan,
+        aiMeta: initialAiMeta,
+        analysisContext: initialAnalysisContext,
+      });
+    }
+  }, [
+    initialTradePlan,
+    initialAiMeta,
+    initialAnalysisContext,
+    cacheSignal,
+    symbol,
+  ]);
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       {/* Header */}
@@ -1894,7 +1922,10 @@ export default function ChartFullScreen() {
 
                 // Apply draft levels first, then cached plan, then current trade plan
                 const plan: any =
-                  draftForSymbol || cachedPlanForSymbol || currentTradePlan;
+                  draftForSymbol ||
+                  cachedPlanForSymbol ||
+                  currentTradePlan ||
+                  initialTradePlan;
                 if (plan) {
                   console.log("🎯 Chart ready - applying levels:", plan);
                   chartBridgeRef.current.updateLevels({
@@ -1922,7 +1953,10 @@ export default function ChartFullScreen() {
 
                 // Apply draft levels first, then cached plan, then current trade plan
                 const plan: any =
-                  draftForSymbol || cachedPlanForSymbol || currentTradePlan;
+                  draftForSymbol ||
+                  cachedPlanForSymbol ||
+                  currentTradePlan ||
+                  initialTradePlan;
                 if (plan) {
                   console.log("📊 Data applied - reapplying levels:", plan);
                   chartBridgeRef.current.updateLevels({
