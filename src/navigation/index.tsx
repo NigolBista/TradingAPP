@@ -39,6 +39,7 @@ import ChatScreen from "../screens/ChatScreen";
 import ChartChatScreen from "../screens/ChartChatScreen";
 import IndicatorConfigScreen from "../screens/IndicatorConfigScreen";
 import StrategySettingsScreen from "../screens/StrategySettingsScreen";
+import StrategyBuilderScreen from "../screens/StrategyBuilderScreen";
 import { useAuth } from "../providers/AuthProvider";
 import { useTheme } from "../providers/ThemeProvider";
 
@@ -215,6 +216,11 @@ export default function RootNavigation() {
             name="StrategySettings"
             component={StrategySettingsScreen}
             options={{ headerShown: true, title: "Strategy Settings" }}
+          />
+          <RootStack.Screen
+            name="StrategyBuilder"
+            component={StrategyBuilderScreen}
+            options={{ headerShown: true, title: "Strategy Builder" }}
           />
           <RootStack.Screen
             name="SignalsFeed"

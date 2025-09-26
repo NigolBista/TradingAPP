@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useLayoutEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../providers/AuthProvider";
 import { useUserStore } from "../store/userStore";
 import {
@@ -19,8 +20,13 @@ import {
   subscribeToGroup,
   deleteStrategyGroup,
 } from "../services/strategyGroupsService";
+import { useStrategyBuilderStore } from "../store/strategyBuilderStore";
 
 export default function StrategySettingsScreen() {
+  const navigation = useNavigation<any>();
+  const ensureGroupDefaults = useStrategyBuilderStore(
+    (state) => state.ensureGroupDefaults
+  );
   const { user } = useAuth();
   const profile = useUserStore((s) => s.profile);
   const setProfile = useUserStore((s) => s.setProfile);
@@ -32,6 +38,22 @@ export default function StrategySettingsScreen() {
   const [availableGroups, setAvailableGroups] = useState<any[]>([]);
   const [loadingPublic, setLoadingPublic] = useState(false);
   const [errorPublic, setErrorPublic] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          accessibilityRole="button"
+          style={{ paddingHorizontal: 12, paddingVertical: 6 }}
+          onPress={() => setShowCreate((prev) => !prev)}
+        >
+          <Ionicons name="add-circle-outline" size={24} color="#38bdf8" />
+        </Pressable>
+      ),
+      headerTitle: "Strategy Groups",
+    });
+  }, [navigation]);
 
   const canCreate = useMemo(
     () => !!user?.id && name.trim().length > 0,
@@ -104,11 +126,12 @@ export default function StrategySettingsScreen() {
         (x: any) => x.id === groupId
       );
       const ownedSelected = ownedGroups.find((x) => x.id === groupId);
-      const subscribedSelected = subscribedGroups.find(
-        (x) => x.id === groupId
-      );
+      const subscribedSelected = subscribedGroups.find((x) => x.id === groupId);
       const selected =
-        ownedSelected || subscribedSelected || existingOwned || existingSubscribed;
+        ownedSelected ||
+        subscribedSelected ||
+        existingOwned ||
+        existingSubscribed;
       setProfile({
         selectedStrategyGroupId: groupId,
         strategyGroups: ownedSelected
@@ -140,7 +163,9 @@ export default function StrategySettingsScreen() {
     if (!user?.id) return;
     try {
       const list = await listMyStrategyGroups(user.id);
-      const owned = (list || []).filter((g: any) => g.owner_user_id === user.id);
+      const owned = (list || []).filter(
+        (g: any) => g.owner_user_id === user.id
+      );
       const subscribed = (list || []).filter(
         (g: any) => g.owner_user_id !== user.id
       );
@@ -167,9 +192,9 @@ export default function StrategySettingsScreen() {
         strategyGroups: (profile.strategyGroups || []).filter(
           (g: any) => g.id !== groupId
         ),
-        subscribedStrategyGroups: (profile.subscribedStrategyGroups || []).filter(
-          (g: any) => g.id !== groupId
-        ),
+        subscribedStrategyGroups: (
+          profile.subscribedStrategyGroups || []
+        ).filter((g: any) => g.id !== groupId),
       };
       if (profile.selectedStrategyGroupId === groupId) {
         updates.selectedStrategyGroupId =
@@ -182,50 +207,71 @@ export default function StrategySettingsScreen() {
     }
   }
 
+  const openGroupBuilder = (group: any) => {
+    setProfile({ selectedStrategyGroupId: group.id });
+    ensureGroupDefaults(group.id, {
+      groupName: group.name,
+    });
+    navigation.navigate("StrategyBuilder");
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <Text style={styles.title}>Strategy Groups</Text>
-
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Create New Group</Text>
-          <TextInput
-            placeholder="Group name"
-            placeholderTextColor="#6b7280"
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-          />
-          <TextInput
-            placeholder="Description (optional)"
-            placeholderTextColor="#6b7280"
-            style={[styles.input, { height: 80, textAlignVertical: "top" }]}
-            value={description}
-            onChangeText={setDescription}
-            multiline
-          />
-          <Pressable
-            disabled={!canCreate || loading}
-            onPress={handleCreate}
-            style={[
-              styles.button,
-              { opacity: !canCreate || loading ? 0.6 : 1 },
-            ]}
-          >
-            <Ionicons
-              name="add-circle"
-              size={18}
-              color="#000"
-              style={{ marginRight: 6 }}
+        {showCreate ? (
+          <View style={styles.card}>
+            <View style={styles.createHeader}>
+              <Text style={styles.sectionTitle}>Create New Group</Text>
+              <Pressable
+                onPress={() => setShowCreate(false)}
+                style={{ padding: 4 }}
+              >
+                <Ionicons name="close" size={18} color="#94a3b8" />
+              </Pressable>
+            </View>
+            <TextInput
+              placeholder="Group name"
+              placeholderTextColor="#6b7280"
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
             />
-            <Text style={styles.buttonText}>
-              {loading ? "Creating..." : "Create Group"}
-            </Text>
-          </Pressable>
-        </View>
+            <TextInput
+              placeholder="Description (optional)"
+              placeholderTextColor="#6b7280"
+              style={[styles.input, { height: 80, textAlignVertical: "top" }]}
+              value={description}
+              onChangeText={setDescription}
+              multiline
+            />
+            <Pressable
+              disabled={!canCreate || loading}
+              onPress={handleCreate}
+              style={[
+                styles.button,
+                { opacity: !canCreate || loading ? 0.6 : 1 },
+              ]}
+            >
+              <Ionicons
+                name="add-circle"
+                size={18}
+                color="#000"
+                style={{ marginRight: 6 }}
+              />
+              <Text style={styles.buttonText}>
+                {loading ? "Creating..." : "Create Group"}
+              </Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>My Groups</Text>
+          <View style={styles.sectionHeading}>
+            <Text style={styles.sectionTitle}>My Groups</Text>
+            <Text style={styles.sectionHint}>
+              Tap a group to manage its watchlist & strategy
+            </Text>
+          </View>
           <View style={{ gap: 8 }}>
             {(ownedGroups || []).length === 0 ? (
               <Text style={{ color: "#9CA3AF" }}>
@@ -235,19 +281,24 @@ export default function StrategySettingsScreen() {
             {(ownedGroups || []).map((g) => {
               const selected = profile.selectedStrategyGroupId === g.id;
               return (
-                <View key={g.id} style={styles.groupRow}>
+                <Pressable
+                  key={g.id}
+                  onPress={() => openGroupBuilder(g)}
+                  style={[styles.groupRow, styles.groupPressable]}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.groupName}>{g.name}</Text>
                     {g.description ? (
                       <Text style={styles.groupDesc}>{g.description}</Text>
                     ) : null}
+                    <Text style={styles.groupMeta}>Owner</Text>
                   </View>
-                  <View style={{ flexDirection: "row", gap: 8 }}>
+                  <View style={styles.groupActions}>
                     <Pressable
                       onPress={() =>
-                        selected ? undefined : setProfile({
-                              selectedStrategyGroupId: g.id,
-                            })
+                        selected
+                          ? undefined
+                          : setProfile({ selectedStrategyGroupId: g.id })
                       }
                       style={[
                         styles.smallBtn,
@@ -294,14 +345,19 @@ export default function StrategySettingsScreen() {
                       </Text>
                     </Pressable>
                   </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Subscribed Groups</Text>
+          <View style={styles.sectionHeading}>
+            <Text style={styles.sectionTitle}>Subscribed Groups</Text>
+            <Text style={styles.sectionHint}>
+              Join owners in managing shared strategies
+            </Text>
+          </View>
           <View style={{ gap: 8 }}>
             {(subscribedGroups || []).length === 0 ? (
               <Text style={{ color: "#9CA3AF" }}>
@@ -311,18 +367,23 @@ export default function StrategySettingsScreen() {
             {(subscribedGroups || []).map((g) => {
               const selected = profile.selectedStrategyGroupId === g.id;
               return (
-                <View key={g.id} style={styles.groupRow}>
+                <Pressable
+                  key={g.id}
+                  onPress={() => openGroupBuilder(g)}
+                  style={[styles.groupRow, styles.groupPressable]}
+                >
                   <View style={{ flex: 1 }}>
                     <Text style={styles.groupName}>{g.name}</Text>
                     {g.description ? (
                       <Text style={styles.groupDesc}>{g.description}</Text>
                     ) : null}
+                    <Text style={styles.groupMeta}>Member</Text>
                   </View>
                   <Pressable
                     onPress={() =>
-                      selected ? undefined : setProfile({
-                            selectedStrategyGroupId: g.id,
-                          })
+                      selected
+                        ? undefined
+                        : setProfile({ selectedStrategyGroupId: g.id })
                     }
                     style={[
                       styles.smallBtn,
@@ -341,7 +402,7 @@ export default function StrategySettingsScreen() {
                       {selected ? "Default" : "Set Default"}
                     </Text>
                   </Pressable>
-                </View>
+                </Pressable>
               );
             })}
           </View>
@@ -392,7 +453,18 @@ export default function StrategySettingsScreen() {
                   (x: any) => x.id === g.id
                 );
                 return (
-                  <View key={g.id} style={styles.groupRow}>
+                  <Pressable
+                    key={g.id}
+                    onPress={() => (joined ? undefined : handleSubscribe(g.id))}
+                    style={[
+                      styles.groupRow,
+                      styles.groupPressable,
+                      {
+                        backgroundColor: joined ? "#00D4AA" : "#1f2937",
+                        borderColor: joined ? "#00D4AA" : "#374151",
+                      },
+                    ]}
+                  >
                     <View style={{ flex: 1 }}>
                       <Text style={styles.groupName}>{g.name}</Text>
                       {g.description ? (
@@ -420,7 +492,7 @@ export default function StrategySettingsScreen() {
                         {joined ? "Joined" : "Subscribe"}
                       </Text>
                     </Pressable>
-                  </View>
+                  </Pressable>
                 );
               })}
             </View>
@@ -432,50 +504,94 @@ export default function StrategySettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0a0a0a" },
+  container: {
+    flex: 1,
+    backgroundColor: "#0f172a",
+  },
   title: { color: "#fff", fontSize: 20, fontWeight: "800", marginBottom: 12 },
   card: {
-    backgroundColor: "#111827",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+    backgroundColor: "#111c32",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#1f2937",
+    borderColor: "#1f2a44",
+  },
+  createHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
   sectionTitle: {
-    color: "#9CA3AF",
-    fontSize: 12,
+    fontSize: 18,
     fontWeight: "700",
-    marginBottom: 8,
-    textTransform: "uppercase",
+    color: "#f8fafc",
+  },
+  sectionHint: {
+    fontSize: 12,
+    color: "#94a3b8",
+  },
+  sectionHeading: {
+    marginBottom: 12,
   },
   input: {
-    backgroundColor: "#1f2937",
-    color: "#fff",
-    borderRadius: 8,
+    backgroundColor: "#0b1220",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    color: "#f8fafc",
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#374151",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   button: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#00D4AA",
+    backgroundColor: "#38bdf8",
+    borderRadius: 12,
     paddingVertical: 12,
-    borderRadius: 10,
   },
-  buttonText: { color: "#000", fontWeight: "800" },
+  buttonText: {
+    color: "#0f172a",
+    fontWeight: "700",
+    fontSize: 16,
+  },
   groupRow: {
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    borderRadius: 12,
+    padding: 14,
+    backgroundColor: "#0f172a",
+  },
+  groupPressable: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     gap: 12,
-    paddingVertical: 8,
   },
-  groupName: { color: "#fff", fontWeight: "700" },
-  groupDesc: { color: "#9CA3AF", fontSize: 12 },
+  groupActions: {
+    flexDirection: "column",
+    gap: 8,
+  },
+  groupName: {
+    color: "#f8fafc",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  groupDesc: {
+    color: "#94a3b8",
+    fontSize: 13,
+    marginTop: 4,
+  },
+  groupMeta: {
+    color: "#38bdf8",
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 6,
+    letterSpacing: 0.5,
+  },
   smallBtn: {
     paddingHorizontal: 12,
     paddingVertical: 8,

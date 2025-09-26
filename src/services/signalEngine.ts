@@ -1,4 +1,8 @@
-import { Candle, fetchCandles } from "./marketProviders";
+import {
+  Candle,
+  fetchCandles,
+  fetchCandlesForTimeframe,
+} from "./marketProviders";
 import {
   TechnicalAnalysis,
   performComprehensiveAnalysis,
@@ -10,11 +14,21 @@ import { buildTradePlan, TradePlan } from "./riskManager";
 import type { TradePlanOverlay, StrategyContext } from "../logic/types";
 import { buildDayTradePlan } from "../logic/dayTrade";
 import { buildSwingTradePlan } from "../logic/swingTrade";
+import {
+  buildStrategySnapshots,
+  StrategyIndicatorSnapshot,
+} from "./polygonIndicators";
+import { useStrategyBuilderStore } from "../store/strategyBuilderStore";
+import { useUserStore } from "../store/userStore";
+import type { StrategyConfig, StrategyTimeframe } from "../types/strategy";
 
 export interface SignalContext {
   symbol: string;
   candleData: { [timeframe: string]: Candle[] };
   analysis: MarketAnalysis;
+  strategy?: StrategyConfig;
+  strategySnapshots?: StrategyIndicatorSnapshot[];
+  groupWatchlist?: string[];
 }
 
 export interface DecalpXData {
@@ -44,28 +58,157 @@ export interface SignalSummary {
   recommendation: MarketAnalysis["overallRating"]; // score and recommendation
   topSignal?: EnhancedSignal;
   allSignals: EnhancedSignal[];
+  strategy?: StrategyConfig;
+  strategySnapshots?: StrategyIndicatorSnapshot[];
+  watchlistSymbols?: string[];
+}
+
+function resolveActiveGroupStrategy(): {
+  groupId?: string;
+  strategy?: StrategyConfig;
+  watchlistSymbols?: string[];
+} {
+  const profile = useUserStore.getState().profile;
+  const groupId = profile.selectedStrategyGroupId;
+  if (!groupId) {
+    return {};
+  }
+  const store = useStrategyBuilderStore.getState();
+  const strategy = store.ensureGroupDefaults(groupId, {
+    tradeMode: profile.tradeMode ?? "day",
+    groupName:
+      profile.strategyGroups?.find((g) => g.id === groupId)?.name ||
+      profile.subscribedStrategyGroups?.find((g) => g.id === groupId)?.name,
+  });
+  const watchlist = store.getWatchlist(groupId);
+  return {
+    groupId,
+    strategy,
+    watchlistSymbols: watchlist?.symbols ?? [],
+  };
+}
+
+function resolveFallbackStrategy(): StrategyConfig {
+  const now = Date.now();
+  return {
+    id: "fallback-global",
+    name: "Global Fallback Strategy",
+    description:
+      "Generic fallback strategy for analysis when no group is selected.",
+    tradeMode: "day",
+    timeframes: [
+      { timeframe: "5m", indicators: [] },
+      { timeframe: "15m", indicators: [] },
+      { timeframe: "30m", indicators: [] },
+      { timeframe: "1h", indicators: [] },
+      { timeframe: "4h", indicators: [] },
+    ],
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 export async function buildSignalContext(
   symbol: string
 ): Promise<SignalContext | null> {
-  const timeframes = [
-    { tf: "1d", resolution: "D" as const },
-    { tf: "1h", resolution: "1H" as const },
-    { tf: "15m", resolution: "15" as const },
-    { tf: "5m", resolution: "5" as const },
+  const { strategy, watchlistSymbols } = resolveActiveGroupStrategy();
+  const effectiveStrategy = strategy ?? resolveFallbackStrategy();
+
+  const fallbackTimeframes: StrategyTimeframe[] = [
+    "5m",
+    "15m",
+    "30m",
+    "1h",
+    "4h",
   ];
-  const candleData: { [tf: string]: Candle[] } = {};
-  for (const { tf, resolution } of timeframes) {
+  const strategyTimeframes: StrategyTimeframe[] = effectiveStrategy.timeframes
+    .length
+    ? effectiveStrategy.timeframes.map((t) => t.timeframe)
+    : fallbackTimeframes;
+
+  const candleData: Record<string, Candle[]> = {};
+  const strategyCandles: Record<StrategyTimeframe, Candle[]> = {} as Record<
+    StrategyTimeframe,
+    Candle[]
+  >;
+
+  for (const timeframe of strategyTimeframes) {
     try {
-      candleData[tf] = await fetchCandles(symbol, { resolution });
-    } catch {
+      const candles = await fetchCandlesForTimeframe(symbol, timeframe, {
+        providerOverride: "polygon",
+        includeExtendedHours: timeframe === "5m" || timeframe === "15m",
+      });
+      candleData[timeframe] = candles;
+      strategyCandles[timeframe] = candles;
+    } catch (error) {
+      console.warn(
+        "[signalEngine] Failed to fetch timeframe",
+        timeframe,
+        error
+      );
+      candleData[timeframe] = [];
+      strategyCandles[timeframe] = [];
+    }
+  }
+
+  const analysisTimeframes: Array<{
+    tf: string;
+    resolution: "D" | "1H" | "15" | "5";
+  }> = [
+    { tf: "1d", resolution: "D" },
+    { tf: "1h", resolution: "1H" },
+    { tf: "15m", resolution: "15" },
+    { tf: "5m", resolution: "5" },
+  ];
+
+  for (const { tf, resolution } of analysisTimeframes) {
+    if (candleData[tf]) continue;
+    try {
+      candleData[tf] = await fetchCandles(symbol, {
+        resolution,
+        limit: resolution === "D" ? 200 : 300,
+        providerOverride: "polygon",
+      });
+    } catch (error) {
+      console.warn(
+        "[signalEngine] Failed to fetch analysis timeframe",
+        tf,
+        error
+      );
       candleData[tf] = [];
     }
   }
-  if (!candleData["1d"] || candleData["1d"].length === 0) return null;
+
+  const primaryTf = strategyTimeframes[0];
+  const primaryCandles = primaryTf ? strategyCandles[primaryTf] ?? [] : [];
+  const dailyCandles = candleData["1d"] ?? [];
+
+  if (!primaryCandles.length && !dailyCandles.length) {
+    return null;
+  }
+
+  let strategySnapshots: StrategyIndicatorSnapshot[] = [];
+  if (effectiveStrategy) {
+    try {
+      strategySnapshots = await buildStrategySnapshots(
+        symbol,
+        effectiveStrategy,
+        strategyCandles
+      );
+    } catch (error) {
+      console.warn("[signalEngine] Failed to build strategy snapshots", error);
+    }
+  }
+
   const analysis = await performComprehensiveAnalysis(symbol, candleData);
-  return { symbol, candleData, analysis };
+  return {
+    symbol,
+    candleData,
+    analysis,
+    strategy: effectiveStrategy,
+    strategySnapshots,
+    groupWatchlist: watchlistSymbols,
+  };
 }
 
 export function getDecalpXDataFromContext(
@@ -254,6 +397,9 @@ export async function generateSignalSummary(
     recommendation: context.analysis.overallRating,
     topSignal: enriched[0],
     allSignals: enriched,
+    strategy: context.strategy,
+    strategySnapshots: context.strategySnapshots,
+    watchlistSymbols: context.groupWatchlist,
   };
 }
 

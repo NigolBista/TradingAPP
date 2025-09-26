@@ -543,10 +543,11 @@ export async function fetchCandlesForTimeframe(
     outBars?: number;
     baseCushion?: number;
     includeExtendedHours?: boolean;
+    providerOverride?: ProviderType;
   }
 ): Promise<Candle[]> {
   const { base, group } = mapExtendedTimeframe(timeframe);
-  const provider = getSelectedProvider();
+  const provider = getSelectedProvider(opts?.providerOverride as ProviderType);
 
   // How many *output* bars we want after grouping
   const outBars = opts?.outBars ?? desiredOutputBars(timeframe);
@@ -600,11 +601,12 @@ export async function fetchCandlesForTimeframeWindow(
     outBars?: number;
     baseCushion?: number;
     includeExtendedHours?: boolean;
+    providerOverride?: ProviderType;
   },
   signal?: AbortSignal
 ): Promise<Candle[]> {
   const { base, group } = mapExtendedTimeframe(timeframe);
-  const provider = getSelectedProvider();
+  const provider = getSelectedProvider(opts?.providerOverride as ProviderType);
   const outBars = opts?.outBars ?? desiredOutputBars(timeframe);
   const BASE_CUSHION = opts?.baseCushion ?? 1.2;
   const MAX_BASE = 1200;
