@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { useTheme } from "../providers/ThemeProvider";
 import {
   generateSignalSummary,
   type SignalSummary,
@@ -35,425 +36,485 @@ import { useTradingSignalsStore } from "../store/tradingSignalsStore";
 
 const MIN_SCAN_INTERVAL_MS = 5 * 60 * 1000;
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#0a0a0a" },
-  header: {
-    backgroundColor: "#0a0a0a",
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  headerLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  backButton: {
-    padding: 6,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.05)",
-  },
-  headerTitle: { fontSize: 24, fontWeight: "bold", color: "#ffffff" },
-  headerSubtitle: { color: "#888888", fontSize: 14, marginTop: 4 },
-  headerStrip: {
-    marginTop: 8,
-    backgroundColor: "#141414",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-  },
-  stripRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  stripText: { color: "#cbd5e1", fontSize: 12 },
-  stripMeta: { color: "#94a3b8", fontSize: 12 },
-  metadataRow: {
-    paddingTop: 12,
-    paddingHorizontal: 16,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  metadataItem: { color: "#94a3b8", fontSize: 12 },
-  controlsRow: {
-    marginTop: 16,
-    marginHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    justifyContent: "space-between",
-  },
-  dropdown: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    backgroundColor: "#161616",
-  },
-  dropdownText: {
-    color: "#e5e7eb",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  filterTrigger: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#2a2a2a",
-    backgroundColor: "#161616",
-  },
-  filterTriggerText: { color: "#e5e7eb", fontSize: 14, fontWeight: "600" },
-  filtersOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "flex-start",
-    paddingTop: 120,
-  },
-  filtersCard: {
-    marginHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: "#111827",
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    overflow: "hidden",
-  },
-  scanButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#00D4AA",
-    backgroundColor: "#00D4AA",
-  },
-  scanDisabled: {
-    backgroundColor: "#1f3a36",
-    borderColor: "#1f3a36",
-  },
-  scanText: {
-    color: "#000000",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  metaRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 12,
-  },
-  metaText: { color: "#888888", fontSize: 12 },
-  section: {
-    backgroundColor: "#1a1a1a",
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 12,
-    padding: 16,
-  },
-  filterRow: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
-  filterTabs: {
-    marginTop: 12,
-  },
-  filterTabsContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 4,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  scopeToggle: {
-    flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
-  },
-  scopeBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#2f2f2f",
-    backgroundColor: "#0f0f0f",
-  },
-  scopeBtnActive: { backgroundColor: "#00D4AA", borderColor: "#00D4AA" },
-  scopeBtnText: { color: "#e5e7eb", fontSize: 12, fontWeight: "600" },
-  scopeBtnTextActive: { color: "#111827" },
-  filterChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#333333",
-    backgroundColor: "transparent",
-  },
-  filterChipActive: { backgroundColor: "#00D4AA", borderColor: "#00D4AA" },
-  filterChipText: { fontSize: 12, color: "#ffffff", fontWeight: "500" },
-  filterChipTextActive: { color: "#000000" },
-  signalCard: {
-    backgroundColor: "#2a2a2a",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-  },
-  signalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 6,
-  },
-  signalSymbol: { fontSize: 16, fontWeight: "bold", color: "#ffffff" },
-  signalAction: {
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
-  },
-  buyAction: { color: "#00D4AA" },
-  sellAction: { color: "#FF5722" },
-  signalType: { fontSize: 11, color: "#888888", marginBottom: 6 },
-  signalDetails: { fontSize: 11, color: "#cccccc", marginTop: 4 },
-  confidenceBadge: {
-    backgroundColor: "#00D4AA",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 5,
-  },
-  confidenceText: { fontSize: 10, fontWeight: "600", color: "#000000" },
-  strategyModal: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 16,
-    padding: 20,
-    width: "90%",
-    maxHeight: "80%",
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  modalTitle: { fontSize: 20, fontWeight: "bold", color: "#ffffff" },
-  strategyItem: {
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
-  },
-  strategyItemActive: {
-    backgroundColor: "rgba(0, 212, 170, 0.08)",
-  },
-  strategyName: { fontSize: 16, fontWeight: "600", color: "#ffffff" },
-  strategyDesc: { fontSize: 14, color: "#888888", marginTop: 4 },
-  modalSectionTitle: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#94a3b8",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  groupMeta: {
-    color: "#64748b",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  configModal: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "flex-end",
-    alignItems: "stretch",
-  },
-  configCard: {
-    width: "100%",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-    backgroundColor: "#111827",
-    padding: 20,
-  },
-  configTitle: {
-    fontSize: 20,
-    color: "#f8fafc",
-    fontWeight: "700",
-    marginBottom: 12,
-  },
-  configLabel: {
-    fontSize: 13,
-    color: "#94a3b8",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-    marginBottom: 6,
-  },
-  pickerTrigger: {
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: "#0f172a",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  pickerValue: { color: "#e2e8f0", fontSize: 14, fontWeight: "600" },
-  pickerList: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    borderRadius: 12,
-    overflow: "hidden",
-  },
-  pickerOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#0b1220",
-    borderBottomWidth: 1,
-    borderBottomColor: "#1f2937",
-  },
-  pickerOptionActive: {
-    backgroundColor: "rgba(0, 212, 170, 0.12)",
-  },
-  pickerOptionText: { color: "#e2e8f0", fontSize: 14, fontWeight: "600" },
-  pickerOptionSub: { color: "#94a3b8", fontSize: 12, marginTop: 4 },
-  pickerRow: { marginBottom: 20 },
-  checkboxRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingVertical: 10,
-  },
-  checkboxBox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#00D4AA",
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "transparent",
-  },
-  checkboxBoxActive: {
-    backgroundColor: "#00D4AA",
-  },
-  checkboxLabel: { color: "#e2e8f0", fontSize: 14, fontWeight: "600" },
-  checkboxDescription: { color: "#94a3b8", fontSize: 12, marginTop: 2 },
-  configActions: {
-    marginTop: 8,
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    gap: 12,
-  },
-  configAction: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-  },
-  configActionPrimary: {
-    backgroundColor: "#00D4AA",
-    borderColor: "#00D4AA",
-  },
-  configActionText: { color: "#94a3b8", fontSize: 14, fontWeight: "600" },
-  configActionTextPrimary: {
-    color: "#0f172a",
-    fontWeight: "700",
-  },
-  bottomMetaRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#1f2937",
-    backgroundColor: "#0a0a0a",
-  },
-  navPrimaryButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    shadowColor: "#00D4AA",
-    shadowOffset: { width: 0, height: 0 },
-    minWidth: 120,
-    flex: 1.2,
-    marginHorizontal: 6,
-    backgroundColor: "#00D4AA",
-  },
-  navPrimaryButtonText: {
-    color: "#0f172a",
-    fontWeight: "700",
-  },
-  bottomNav: {
-    borderTopWidth: 1,
-    borderTopColor: "#2a2a2a",
-    backgroundColor: "#0a0a0a",
-    paddingTop: 8,
-    paddingBottom: 12,
-    paddingHorizontal: 12,
-  },
-  bottomNavContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  bottomMetaText: {
-    marginTop: 6,
-    color: "#94a3b8",
-    fontSize: 11,
-    textAlign: "center",
-  },
-  bottomNavButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    backgroundColor: "transparent",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    minWidth: 110,
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  bottomNavButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 12,
-  },
-  bottomMetaText: {
-    color: "#888888",
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: 8,
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.background },
+    header: {
+      backgroundColor: theme.colors.background,
+      paddingHorizontal: 16,
+      paddingTop: 12,
+      paddingBottom: 12,
+    },
+    headerRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    headerLeft: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+    },
+    backButton: {
+      padding: 6,
+      borderRadius: 999,
+      backgroundColor:
+        theme.mode === "dark" ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)",
+    },
+    headerTitle: {
+      fontSize: 24,
+      fontWeight: "bold",
+      color: theme.mode === "dark" ? theme.colors.text : "#000000",
+    },
+    headerSubtitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      marginTop: 4,
+    },
+    headerStrip: {
+      marginTop: 8,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    stripRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    stripText: { color: theme.colors.textSecondary, fontSize: 12 },
+    stripMeta: { color: theme.colors.textSecondary, fontSize: 12 },
+    metadataRow: {
+      paddingTop: 12,
+      paddingHorizontal: 16,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    metadataItem: { color: theme.colors.textSecondary, fontSize: 12 },
+    controlsRow: {
+      marginTop: 16,
+      marginHorizontal: 16,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      justifyContent: "space-between",
+    },
+    dropdown: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    dropdownText: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    filterTrigger: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    filterTriggerText: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    filtersOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "flex-end",
+      alignItems: "stretch",
+    },
+    filtersCard: {
+      width: "100%",
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+      backgroundColor: theme.colors.card,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: "hidden",
+    },
+    scanButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primary,
+    },
+    scanDisabled: {
+      backgroundColor: theme.colors.primary + "33",
+      borderColor: theme.colors.primary + "33",
+    },
+    scanText: {
+      color: "#000000",
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    metaRow: {
+      marginTop: 8,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 12,
+    },
+    metaText: { color: theme.colors.textSecondary, fontSize: 12 },
+    section: {
+      backgroundColor: theme.colors.card,
+      marginHorizontal: 16,
+      marginVertical: 8,
+      borderRadius: 12,
+      padding: 16,
+    },
+    filterRow: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+    },
+    filterTabs: {
+      marginTop: 12,
+    },
+    filterTabsContent: {
+      paddingHorizontal: 16,
+      paddingBottom: 4,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+    },
+    scopeToggle: {
+      flexDirection: "row",
+      gap: 8,
+      alignItems: "center",
+    },
+    scopeBtn: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    scopeBtnActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    scopeBtnText: { color: theme.colors.text, fontSize: 12, fontWeight: "600" },
+    scopeBtnTextActive: { color: "#0f172a" },
+    filterChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: "transparent",
+    },
+    filterChipActive: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    filterChipText: {
+      fontSize: 12,
+      color: theme.colors.text,
+      fontWeight: "500",
+    },
+    filterChipTextActive: { color: "#000000" },
+    signalCard: {
+      backgroundColor:
+        theme.mode === "dark" ? "rgba(0,0,0,0.08)" : theme.colors.surface,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
+      marginBottom: 6,
+    },
+    signalHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 6,
+    },
+    signalSymbol: {
+      fontSize: 16,
+      fontWeight: "bold",
+      color: theme.colors.text,
+    },
+    signalAction: {
+      fontSize: 12,
+      fontWeight: "600",
+      textTransform: "uppercase",
+    },
+    buyAction: { color: theme.colors.success },
+    sellAction: { color: theme.colors.error },
+    signalType: {
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      marginBottom: 6,
+    },
+    signalDetails: {
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      marginTop: 4,
+    },
+    confidenceBadge: {
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 5,
+    },
+    confidenceText: { fontSize: 10, fontWeight: "600", color: "#0f172a" },
+    strategyModal: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.8)",
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    modalContent: {
+      backgroundColor: theme.colors.card,
+      borderRadius: 16,
+      padding: 20,
+      width: "90%",
+      maxHeight: "80%",
+    },
+    modalHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 16,
+    },
+    modalTitle: { fontSize: 20, fontWeight: "bold", color: theme.colors.text },
+    strategyItem: {
+      padding: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    strategyItemActive: {
+      backgroundColor: theme.colors.primary + "14",
+    },
+    strategyName: { fontSize: 16, fontWeight: "600", color: theme.colors.text },
+    strategyDesc: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginTop: 4,
+    },
+    modalSectionTitle: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.colors.textSecondary,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+      marginBottom: 8,
+    },
+    groupMeta: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      marginTop: 4,
+    },
+    configModal: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      justifyContent: "flex-end",
+      alignItems: "stretch",
+    },
+    configCard: {
+      width: "100%",
+      borderTopLeftRadius: 16,
+      borderTopRightRadius: 16,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+      backgroundColor: theme.colors.card,
+      padding: 20,
+    },
+    configTitle: {
+      fontSize: 20,
+      color: theme.colors.text,
+      fontWeight: "700",
+      marginBottom: 12,
+    },
+    configLabel: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      textTransform: "uppercase",
+      letterSpacing: 0.5,
+      marginBottom: 6,
+    },
+    pickerTrigger: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      backgroundColor: theme.colors.surface,
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    pickerValue: { color: theme.colors.text, fontSize: 14, fontWeight: "600" },
+    pickerList: {
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: 12,
+      overflow: "hidden",
+    },
+    pickerOption: {
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.colors.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    pickerOptionActive: {
+      backgroundColor: theme.colors.primary + "1A",
+    },
+    pickerOptionText: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    pickerOptionSub: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      marginTop: 4,
+    },
+    pickerRow: { marginBottom: 20 },
+    checkboxRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      paddingVertical: 10,
+    },
+    checkboxBox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: theme.colors.primary,
+      justifyContent: "center",
+      alignItems: "center",
+      backgroundColor: "transparent",
+    },
+    checkboxBoxActive: {
+      backgroundColor: theme.colors.primary,
+    },
+    checkboxLabel: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    checkboxDescription: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    configActions: {
+      marginTop: 8,
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      gap: 12,
+    },
+    configAction: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    configActionPrimary: {
+      backgroundColor: theme.colors.primary,
+      borderColor: theme.colors.primary,
+    },
+    configActionText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      fontWeight: "600",
+    },
+    configActionTextPrimary: {
+      color: "#0f172a",
+      fontWeight: "700",
+    },
+    bottomMetaRow: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      backgroundColor: theme.colors.background,
+    },
+    navPrimaryButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      shadowColor: theme.colors.primary,
+      shadowOffset: { width: 0, height: 0 },
+      minWidth: 120,
+      flex: 1.2,
+      marginHorizontal: 6,
+      backgroundColor: theme.colors.primary,
+    },
+    navPrimaryButtonText: {
+      color: "#0f172a",
+      fontWeight: "700",
+    },
+    bottomNav: {
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      backgroundColor: theme.colors.background,
+      paddingTop: 8,
+      paddingBottom: 12,
+      paddingHorizontal: 12,
+    },
+    bottomNavContent: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    bottomNavButton: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      backgroundColor: "transparent",
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      minWidth: 110,
+      flex: 1,
+      marginHorizontal: 4,
+    },
+    bottomNavButtonText: {
+      color: theme.colors.text,
+      fontWeight: "600",
+      fontSize: 12,
+    },
+    bottomMetaText: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      textAlign: "center",
+      marginTop: 8,
+    },
+  });
 
 const STRATEGY_FILTERS = [
   { id: "all", label: "All Signals", description: "Show all trading signals" },
@@ -510,6 +571,8 @@ function getFilterForStrategy(strategy: string) {
 
 export default function SignalsFeedScreen() {
   const navigation = useNavigation<any>();
+  const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const profile = useUserStore((s) => s.profile);
   const setProfile = useUserStore((s) => s.setProfile);
   const cacheSignal = useSignalCacheStore((s) => s.cacheSignal);
@@ -646,7 +709,7 @@ export default function SignalsFeedScreen() {
         });
 
         const topSymbols = response.results
-          .filter((r) => r.analysis.signals.length > 0)
+          .filter((r) => (r.analysis?.signals || []).length > 0)
           .sort((a, b) => b.score - a.score)
           .slice(0, 20)
           .map((r) => r.symbol);
@@ -1019,7 +1082,7 @@ export default function SignalsFeedScreen() {
         <View
           style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
         >
-          <ActivityIndicator size="large" color="#00D4AA" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       </View>
     );
@@ -1035,7 +1098,11 @@ export default function SignalsFeedScreen() {
               onPress={() => navigation.goBack()}
               style={styles.backButton}
             >
-              <Ionicons name="chevron-back" size={22} color="#e5e7eb" />
+              <Ionicons
+                name="chevron-back"
+                size={22}
+                color={theme.colors.text}
+              />
             </Pressable>
             <Text style={styles.headerTitle}>Trading Signals</Text>
           </View>
@@ -1052,15 +1119,23 @@ export default function SignalsFeedScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={refreshSignals}
-            tintColor="#00D4AA"
+            tintColor={theme.colors.primary}
           />
         }
       >
         {signals.length === 0 ? (
           <View style={{ alignItems: "center", padding: 32 }}>
-            <Ionicons name="radio-outline" size={48} color="#888888" />
+            <Ionicons
+              name="radio-outline"
+              size={48}
+              color={theme.colors.textSecondary}
+            />
             <Text
-              style={{ color: "#888888", textAlign: "center", marginTop: 12 }}
+              style={{
+                color: theme.colors.textSecondary,
+                textAlign: "center",
+                marginTop: 12,
+              }}
             >
               No signals match your current filter. Try adjusting the strategy
               or check back later.
@@ -1082,7 +1157,7 @@ export default function SignalsFeedScreen() {
             <Ionicons
               name="options-outline"
               size={16}
-              color="rgba(255,255,255,0.9)"
+              color={theme.colors.text}
               style={{ marginRight: 6 }}
             />
             <Text style={styles.bottomNavButtonText} numberOfLines={1}>
@@ -1123,7 +1198,7 @@ export default function SignalsFeedScreen() {
             <Ionicons
               name="settings-outline"
               size={16}
-              color="rgba(255,255,255,0.9)"
+              color={theme.colors.text}
               style={{ marginRight: 6 }}
             />
             <Text style={styles.bottomNavButtonText}>Settings</Text>

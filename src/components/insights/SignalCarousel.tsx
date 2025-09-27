@@ -233,11 +233,7 @@ export default function SignalCarousel({
                   hitSlop={8}
                   style={{ marginLeft: 8 }}
                 >
-                  <Ionicons
-                    name="close"
-                    size={16}
-                    color={theme.colors.surface}
-                  />
+                  <Ionicons name="close" size={16} color="#FFFFFF" />
                 </Pressable>
               </View>
             </View>
@@ -318,20 +314,20 @@ function createStyles(theme: any) {
     },
     timeText: {
       fontSize: 12,
-      color: theme.colors.surface,
+      color: "#FFFFFF",
       opacity: 0.8,
       fontWeight: "500",
     },
     cardTitle: {
       fontSize: 18,
       fontWeight: "700",
-      color: theme.colors.surface,
+      color: "#FFFFFF",
       marginBottom: 8,
       lineHeight: 24,
     },
     cardDescription: {
       fontSize: 14,
-      color: theme.colors.surface,
+      color: "#FFFFFF",
       opacity: 0.85,
       lineHeight: 20,
       marginBottom: 16,
@@ -351,7 +347,7 @@ function createStyles(theme: any) {
     },
     confidenceText: {
       fontSize: 12,
-      color: theme.colors.surface,
+      color: "#FFFFFF",
       opacity: 0.8,
       fontWeight: "600",
     },

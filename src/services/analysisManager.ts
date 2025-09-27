@@ -128,12 +128,12 @@ function collectFavoriteSymbols(
 ): string[] {
   const favoritesSet = new Set<string>();
 
-  profile.favorites.forEach((symbol) => {
+  (profile.favorites || []).forEach((symbol) => {
     if (symbol) favoritesSet.add(symbol.toUpperCase());
   });
 
-  profile.watchlists.forEach((watchlist) => {
-    watchlist.items.forEach((item) => {
+  (profile.watchlists || []).forEach((watchlist) => {
+    (watchlist.items || []).forEach((item) => {
       if (item?.symbol) favoritesSet.add(item.symbol.toUpperCase());
     });
   });

@@ -91,27 +91,32 @@ export default function SwipeableStockItem({
       >
         <Pressable style={styles.stockCard} onPress={onPress}>
           <View style={styles.stockHeader}>
-            <View style={styles.stockInfo}>
-              <View style={styles.symbolRow}>
-                <Text style={styles.stockSymbol}>{symbol}</Text>
-                {isGlobalFavorite && (
-                  <Ionicons
-                    name="star"
-                    size={14}
-                    color="#FFD700"
-                    style={styles.favoriteIcon}
-                  />
+            <View style={styles.leftSection}>
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{symbol?.charAt(0) ?? ""}</Text>
+              </View>
+              <View style={styles.stockInfo}>
+                <View style={styles.symbolRow}>
+                  <Text style={styles.stockSymbol}>{symbol}</Text>
+                  {isGlobalFavorite && (
+                    <Ionicons
+                      name="star"
+                      size={14}
+                      color="#FFD700"
+                      style={styles.favoriteIcon}
+                    />
+                  )}
+                </View>
+                {companyName && companyName !== symbol && (
+                  <Text
+                    style={styles.companyName}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {companyName}
+                  </Text>
                 )}
               </View>
-              {companyName && companyName !== symbol && (
-                <Text
-                  style={styles.companyName}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {companyName}
-                </Text>
-              )}
             </View>
 
             <Pressable
@@ -170,7 +175,6 @@ const createStyles = (theme: any) =>
   StyleSheet.create({
     container: {
       marginHorizontal: 12,
-      marginBottom: 8,
     },
     leftActionsContainer: {
       flexDirection: "row",
@@ -195,16 +199,41 @@ const createStyles = (theme: any) =>
       alignItems: "center",
     },
     stockCard: {
-      backgroundColor: "rgba(17, 24, 39, 0.5)",
+      backgroundColor:
+        theme.mode === "dark"
+          ? "rgba(0,0,0,0.08)" // even lighter dark background
+          : theme.colors.surface, // subtle surface in light mode
       borderRadius: 12,
-      borderWidth: 0,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
     },
     stockHeader: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+    },
+    leftSection: {
+      flexDirection: "row",
+      alignItems: "center",
+      flex: 1,
+      marginRight: 12,
+    },
+    avatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor:
+        theme.mode === "dark" ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)",
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 10,
+    },
+    avatarText: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.colors.text,
     },
     stockInfo: {
       flex: 1,
@@ -225,7 +254,7 @@ const createStyles = (theme: any) =>
     companyName: {
       fontSize: 12,
       color: theme.colors.textSecondary,
-      marginTop: 2,
+      marginTop: 1,
     },
     priceInfo: {
       alignItems: "flex-end",
@@ -238,7 +267,7 @@ const createStyles = (theme: any) =>
     stockChange: {
       fontSize: 14,
       fontWeight: "500",
-      marginTop: 2,
+      marginTop: 0,
     },
     changeRow: {
       flexDirection: "row",

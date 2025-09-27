@@ -245,9 +245,9 @@ const createStyles = (theme: any) =>
       marginTop: 12,
     },
     watchlistContent: {
-      paddingTop: 16,
-      paddingBottom: 32,
-      gap: 12,
+      paddingTop: 8,
+      paddingBottom: 24,
+      gap: 6,
     },
   });
 
